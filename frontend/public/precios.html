@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planes BúhoLex</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://checkout.culqi.com/js/v4"></script>
+</head>
+<body class="bg-gradient-to-br from-red-100 to-yellow-50 min-h-screen">
+
+  <div class="container mx-auto py-12">
+    <h2 class="text-4xl font-bold text-center mb-10">Elige tu plan BúhoLex</h2>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+
+      <!-- PLAN FREE -->
+      <div class="bg-white rounded-2xl shadow-md p-8 flex flex-col items-center border">
+        <h3 class="text-2xl font-bold text-red-600 mb-2">Free</h3>
+        <span class="text-lg font-bold mb-4 text-gray-700">S/ 0</span>
+        <ul class="mb-6 text-gray-600 text-left space-y-2">
+          <li>✓ Chat básico</li>
+          <li>✓ Biblioteca libre</li>
+          <li>✓ Consultas legales abiertas</li>
+        </ul>
+        <button class="bg-gray-300 text-gray-700 rounded px-5 py-2 font-bold cursor-default">Ya incluido</button>
+      </div>
+
+      <!-- PLAN ESTUDIANTES -->
+      <div class="bg-white rounded-2xl shadow-md p-8 flex flex-col items-center border">
+        <h3 class="text-2xl font-bold text-blue-600 mb-2">Estudiantes</h3>
+        <span class="text-lg font-bold mb-4 text-gray-700">S/ 12</span>
+        <ul class="mb-6 text-gray-600 text-left space-y-2">
+          <li>✓ Acceso a foros legales</li>
+          <li>✓ Plantillas y modelos</li>
+          <li>✓ Biblioteca académica</li>
+          <li>✓ Certificado de participación</li>
+        </ul>
+        <button onclick="abrirCulqi('Estudiantes', 1200)" class="bg-blue-600 hover:bg-blue-700 text-white rounded px-5 py-2 font-bold">Pagar con Culqi</button>
+      </div>
+
+      <!-- PLAN EMPRESAS -->
+      <div class="bg-white rounded-2xl shadow-md p-8 flex flex-col items-center border-2 border-yellow-400 relative">
+        <div class="absolute top-0 right-0 px-3 py-1 bg-yellow-200 rounded-bl-2xl text-xs font-bold">Empresas</div>
+        <h3 class="text-2xl font-bold text-yellow-700 mb-2">Empresas</h3>
+        <span class="text-lg font-bold mb-4 text-gray-700">S/ 59</span>
+        <ul class="mb-6 text-gray-600 text-left space-y-2">
+          <li>✓ Chat legal para colaboradores</li>
+          <li>✓ Biblioteca privada</li>
+          <li>✓ Reportes y compliance</li>
+          <li>✓ LitisBot empresa</li>
+        </ul>
+        <button onclick="abrirCulqi('Empresas', 5900)" class="bg-yellow-500 hover:bg-yellow-600 text-white rounded px-5 py-2 font-bold">Pagar con Culqi</button>
+      </div>
+
+      <!-- PLAN PRO ABOGADOS -->
+      <div class="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center border-2 border-green-500 relative">
+        <div class="absolute top-0 right-0 px-3 py-1 bg-green-200 rounded-bl-2xl text-xs font-bold">¡PRO!</div>
+        <h3 class="text-2xl font-bold text-green-700 mb-2">Abogados PRO</h3>
+        <span class="text-lg font-bold mb-4 text-gray-700">S/ 29</span>
+        <ul class="mb-6 text-gray-600 text-left space-y-2">
+          <li>✓ Oficina Virtual Inteligente</li>
+          <li>✓ Gestión de expedientes y clientes</li>
+          <li>✓ LitisBot multidiomas avanzado</li>
+          <li>✓ Personalización de litigio en tiempo real</li>
+          <li>✓ Alertas por WhatsApp y email</li>
+        </ul>
+        <button onclick="abrirCulqi('Pro Abogado', 2900)" class="bg-green-600 hover:bg-green-700 text-white rounded px-5 py-2 font-bold mb-2">Pagar con Culqi</button>
+        <div class="text-sm text-gray-700 mb-2">O paga con Yape/Plin/BBVA:</div>
+        <img src="/img/qr-bbva.jpg" class="w-28 h-28 object-cover mx-auto rounded-xl border mb-2" alt="QR BBVA"/>
+        <a href="/subir-comprobante.html" class="text-blue-600 underline text-sm">Subir comprobante</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Culqi y lógica -->
+  <script>
+    function abrirCulqi(plan, monto) {
+      Culqi.publicKey = 'pk_test_xxxxxxxx'; // TU PUBLIC KEY AQUÍ
+      Culqi.settings({
+        title: 'BúhoLex - ' + plan,
+        currency: 'PEN',
+        description: plan,
+        amount: monto,
+      });
+      Culqi.open();
+      window.Culqi = Culqi;
+    }
+    // Procesar Culqi (callback): 
+    function culqi() {
+      if (Culqi.token) {
+        fetch('/api/pagos/culqi', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            token: Culqi.token.id,
+            email: Culqi.token.email,
+            amount: Culqi.settings.amount,
+            descripcion: Culqi.settings.description
+          })
+        })
+        .then(res => res.json())
+        .then(data => alert(data.message || 'Pago procesado.'))
+        .catch(() => alert('Error al procesar el pago.'));
+      }
+    }
+  </script>
+</body>
+</html>

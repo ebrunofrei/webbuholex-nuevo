@@ -1,0 +1,154 @@
+/* ==== RESET BÁSICO ==== */
+html, body, #root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  background: #fff;
+}
+
+/* ==== LAYOUT PRINCIPAL ==== */
+.layout-buholex {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  background: #fff;
+}
+
+/* ==== SIDEBAR INSTITUCIONAL ==== */
+.sidebar-buholex {
+  width: 230px;
+  min-width: 200px;
+  background: linear-gradient(180deg, #a42409 0%, #fff7f0 100%);
+  color: #5b2300;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  box-shadow: 2px 0 16px 0 #a4240933;
+  z-index: 10;
+}
+
+@media (max-width: 900px) {
+  .sidebar-buholex {
+    width: 72px;
+    min-width: 56px;
+    padding: 0;
+    font-size: 13px;
+  }
+}
+
+/* ==== CONTENIDO PRINCIPAL ==== */
+.main-content-buholex {
+  flex: 1;
+  min-height: 100vh;
+  background: #f3f7fe;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  text-align: left;
+  overflow-x: auto;
+  position: relative;
+}
+
+@media (max-width: 900px) {
+  .main-content-buholex {
+    padding: 0.5rem;
+  }
+}
+
+/* ==== NAVBAR SUPERIOR (Opcional) ==== */
+.navbar-buholex {
+  width: 100%;
+  background: #fff;
+  box-shadow: 0 4px 18px -8px #c14e1699;
+  padding: 0.6rem 1.6rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* ==== PIE DE PÁGINA ==== */
+.footer-buholex {
+  width: 100%;
+  padding: 1.1rem 1rem 0.9rem 1rem;
+  text-align: center;
+  background: #a42409;
+  color: #fff;
+  font-size: 0.93rem;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  margin-top: 18px;
+  box-shadow: 0 -4px 12px 0 #a4240933;
+}
+
+/* ==== SCROLL PERSONALIZADO ==== */
+::-webkit-scrollbar {
+  width: 8px;
+  background: #f7f7f7;
+}
+::-webkit-scrollbar-thumb {
+  background: #e7e7e7;
+  border-radius: 6px;
+}
+
+/* ==== BOTÓN DE INSTALACIÓN PWA ==== */
+.buholex-install-btn {
+  display: none !important;
+}
+
+/* ==== IMPRESIÓN LIMPIA (opcional) ==== */
+@media print {
+  .sidebar-buholex,
+  .navbar-buholex,
+  .footer-buholex {
+    display: none !important;
+  }
+  .main-content-buholex {
+    background: #fff !important;
+    padding: 0 !important;
+  }
+}
+
+/* ==== ESTILO INSTITUCIONAL ==== */
+a, a:visited {
+  color: #a42409;
+  text-decoration: none;
+  font-weight: 500;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+h1, h2, h3 {
+  color: #a42409;
+  font-weight: bold;
+  margin-top: 0;
+}
+
+.card-buholex {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 6px 32px #a4240915;
+  padding: 2rem 1.2rem;
+  margin-bottom: 1.6rem;
+}
+
+/* ===== RESPONSIVE: CELULAR ===== */
+@media (max-width: 650px) {
+  .layout-buholex {
+    flex-direction: column;
+  }
+  .sidebar-buholex {
+    width: 100vw;
+    min-width: 100vw;
+    min-height: unset;
+    box-shadow: none;
+    border-bottom: 3px solid #a42409;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .main-content-buholex {
+    padding: 0.4rem;
+  }
+}

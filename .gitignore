@@ -1,0 +1,99 @@
+# LOGS
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# DEPENDENCIAS
+node_modules/
+.pnp/
+.pnp.js
+
+# BUILD OUTPUTS
+dist/
+dist-ssr/
+build/
+out/
+coverage/
+.next/
+.vercel/output/
+
+# SISTEMA / BACKUPS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.bak
+*.tmp
+
+# CONFIGURACIONES DE EDITOR
+.vscode/
+.idea/
+*.code-workspace
+
+# ARCHIVOS DE ENTORNO Y CLAVES SENSIBLES
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.crt
+*.p12
+*.secret
+*.enc
+*.credentials
+secrets.*
+firebase-service-account.json
+firebase.json
+firestore.indexes.json
+firestore.rules
+
+# ARCHIVOS DE CONFIG PERSONAL
+*.local
+*.history
+
+# SCRIPTS DE IMPORTACIÓN QUE USAN CLAVES
+importar_normas/firebase-service-account.json
+
+# FIREBASE CONFIG FILES (custom paths también)
+src/firebase.js
+src/firebaseConfig.js
+src/config/*.js
+src/config/**/firebase*.js
+
+# TEST / HERRAMIENTAS
+*.test.*
+*.spec.*
+*.coverage.*
+.eslintcache
+jest.config.js
+
+# CACHE / DEPURACIÓN
+.cache/
+.yarn/
+.pnpm-debug.log
+
+# TEMPORALES
+tmp/
+temp/
+*.tmp
+
+# STORYBOOK
+.storybook-out/
+
+# CYPRESS
+cypress/videos/
+cypress/screenshots/
+
+# DOCKER
+docker-compose.override.yml
+
+# VERCEL PROJECT FILES (solo si no quieres subirlos)
+.vscode/
+.vercel/project.json
