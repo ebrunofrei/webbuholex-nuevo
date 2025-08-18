@@ -77,6 +77,7 @@ import AvisoCookies from "@/pages/legal/aviso-cookies";
 import CookiesBanner from "@/components/CookiesBanner";
 import PricingPage from "./pages/PricingPage";
 import LandingSaaS from "./pages/LandingSaaS"
+import OficinaPublica from "./pages/oficina/OficinaSlug";
 
 // FIREBASE AUTH + FCM
 import { getAuth, onAuthStateChanged } from "firebase/auth";
