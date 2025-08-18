@@ -225,6 +225,7 @@ function AppContent() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/oficina" element={<Navigate to="/oficinaVirtual" replace />} />
+                <Route path="/oficina" element={<Oficina />} />
                 <Route path="/servicios" element={<Servicios />} />
                 <Route path="/contacto" element={<Contacto />} />
                 <Route path="/biblioteca" element={<BibliotecaProtegida />} />
@@ -255,6 +256,7 @@ function AppContent() {
                 <Route path="/legal/aviso-cookies" element={<AvisoCookies />} />
                 <Route path="/planes" element={<PricingPage />} />
                 <Route path="/planes" element={<LandingSaaS />} />
+                <Route path="/oficina/:slug" element={<OficinaPublica />} />
                 <Route path="*" element={<Error404 />} />
               </Routes>
             </main>

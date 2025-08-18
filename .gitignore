@@ -97,3 +97,4 @@ docker-compose.override.yml
 # VERCEL PROJECT FILES (solo si no quieres subirlos)
 .vscode/
 .vercel/project.json
+.vercel

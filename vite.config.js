@@ -3,12 +3,16 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
+  base: '/', // 👈 importante para evitar errores en producción en rutas internas
   plugins: [react()],
+  build: {
+    outDir: 'dist', // por defecto, pero lo declaramos para claridad
+  },
   server: {
     proxy: {
-      // Redirige todas las rutas /api/* al microservicio de noticias en el puerto 4000
+      // Redirige todas las rutas /api/* al microservicio local
       '/api': {
-        target: 'http://localhost:4000', // <-- Cambia aquí si tu microservicio usa otro puerto
+        target: 'http://localhost:4000',
         changeOrigin: true,
         secure: false,
       },
