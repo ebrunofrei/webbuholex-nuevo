@@ -1,22 +1,24 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
+// src/firebase/index.js
+
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
+// Configuración desde variables de entorno (.env.local)
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_AUTH_DOMAIN",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_STORAGE_BUCKET",
-  messagingSenderId: "TU_MESSAGING_SENDER_ID",
-  appId: "TU_APP_ID",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// PREVIENE DUPLICADO DE APPS:
-const firebaseApp = getApps().length === 0
-  ? initializeApp(firebaseConfig)
-  : getApp();
+const app = initializeApp(firebaseConfig);
 
-const db = getFirestore(firebaseApp);
-const storage = getStorage(firebaseApp);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-export { firebaseApp, db, storage };
+export { auth, db, storage };
