@@ -1,7 +1,6 @@
 import { useParams } from "react-router-dom"; // O useRouter() en Next.js
 import { useEffect, useState } from "react";
-import { db } from "../../firebase";
-import { doc, getDoc, collection, addDoc } from "firebase/firestore";
+import { doc, getDoc, collection, addDoc } from "@/firebase";
 
 const OficinaPublica = () => {
   const { slug } = useParams();
