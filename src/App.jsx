@@ -76,8 +76,7 @@ import TerminosCondiciones from "@/pages/legal/terminos-y-condiciones";
 import AvisoCookies from "@/pages/legal/aviso-cookies";
 import CookiesBanner from "@/components/CookiesBanner";
 import PricingPage from "./pages/PricingPage";
-import LandingSaaS from "./pages/LandingSaaS"
-import OficinaPublica from "./pages/oficina/OficinaSlug";
+import LandingSaaS from "./pages/LandingSaaS";
 
 // FIREBASE AUTH + FCM
 import { getAuth, onAuthStateChanged } from "firebase/auth";
@@ -257,7 +256,6 @@ function AppContent() {
                 <Route path="/legal/aviso-cookies" element={<AvisoCookies />} />
                 <Route path="/planes" element={<PricingPage />} />
                 <Route path="/planes" element={<LandingSaaS />} />
-                <Route path="/oficina/:slug" element={<OficinaPublica />} />
                 <Route path="*" element={<Error404 />} />
               </Routes>
             </main>
