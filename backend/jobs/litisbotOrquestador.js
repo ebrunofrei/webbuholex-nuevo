@@ -2,7 +2,8 @@
 import { fetchBoletinesIDH } from "../services/scrapingBoletines.js";
 import { analizarContenidoLegal } from "../services/litisbotAI.js";
 import { enviarNotificacionesInteligentes } from "../services/litisbotNotificaciones.js";
-import { db } from "../firebaseAdmin.js";
+import { db, auth, storage } from "@/firebase";
+
 
 async function rutinaLitisBot() {
   // 1. Scraping automático

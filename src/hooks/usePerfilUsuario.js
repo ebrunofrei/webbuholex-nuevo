@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/firebase";
-
+import { db, auth, storage } from "@/firebase";
 /**
  * Hook que obtiene y escucha en tiempo real el perfil del usuario autenticado desde Firestore.
  * Solo intenta conectarse si hay usuario logueado.

@@ -18,7 +18,7 @@ import {
   deleteObject,
   uploadBytes
 } from "firebase/storage";
-import { db, storage } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 import ArchivoCard from "./ArchivoCard";
 import GrabadoraVoz from "./GrabadoraVoz";
 import ArchivoViewerModal from "./ArchivoViewerModal";

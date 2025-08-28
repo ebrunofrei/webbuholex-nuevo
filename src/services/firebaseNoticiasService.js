@@ -1,5 +1,5 @@
 // src/services/firebaseNoticiasService.js
-import { db } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 import { collection, query, orderBy, limit, getDocs, where } from "firebase/firestore";
 
 /**

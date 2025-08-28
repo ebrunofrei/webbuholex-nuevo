@@ -1,7 +1,7 @@
 // src/hooks/useNoticiasGuardadas.js
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const LOCAL_KEY = "noticiasGuardadas_buholex";

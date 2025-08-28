@@ -1,7 +1,7 @@
 // src/components/BlogListado.jsx
 import React, { useEffect, useState } from "react";
 import { collection, query, orderBy, getDocs } from "firebase/firestore";
-import { db } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 
 function Card({ articulo, onClick }) {
   return (
