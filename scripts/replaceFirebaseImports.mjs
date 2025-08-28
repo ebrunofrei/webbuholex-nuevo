@@ -2,66 +2,43 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectDir = path.resolve(__dirname, "../src");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const EXTENSIONS = [".js", ".jsx", ".ts", ".tsx"];
-const BACKUP_DIR = path.resolve(__dirname, "../__backups__");
+// Ruta de servicios y de backups
+const servicesPath = path.resolve(__dirname, "../src/services");
+const backupPath = path.resolve(__dirname, "../../__backups__");
+if (!fs.existsSync(backupPath)) fs.mkdirSync(backupPath);
 
-const PATTERNS = [
-  {
-    regex: /(["'`])@\/firebase\.js\1/g,
-    replacement: "$1./firebase.js$1",
-  },
-  {
-    regex: /(["'`])src\/firebase\.js\1/g,
-    replacement: "$1./firebase.js$1",
-  },
-  {
-    regex: /(["'`])\.\.\/firebase\.js\1/g,
-    replacement: "$1./firebase.js$1",
-  },
-];
+// Regex de importaciones antiguas de firebase
+const firebaseImportRegex = /import\s+.*?from\s+["'](@?firebase|\.\/firebase|\.\/firebaseConfig|firebaseConfig)["'];?/gm;
 
-function createBackup(filePath, content) {
-  const relative = path.relative(projectDir, filePath);
-  const backupPath = path.join(BACKUP_DIR, relative + ".bak");
+function updateFirebaseImports(filePath) {
+  const content = fs.readFileSync(filePath, "utf-8");
 
-  if (!fs.existsSync(path.dirname(backupPath))) {
-    fs.mkdirSync(path.dirname(backupPath), { recursive: true });
-  }
+  const hasOldImport = firebaseImportRegex.test(content);
+  if (!hasOldImport) return;
 
-  if (!fs.existsSync(backupPath)) {
-    fs.writeFileSync(backupPath, content, "utf8");
-  }
+  // Crear respaldo
+  const filename = path.basename(filePath);
+  const backupFile = path.join(backupPath, filename);
+  fs.writeFileSync(backupFile, content, "utf-8");
+
+  // Limpiar imports antiguos
+  const updatedContent = content
+    .replace(firebaseImportRegex, "")
+    .replace(/^\s*[\r\n]/gm, "") // líneas vacías
+    .trimStart();
+
+  const newImport = `import { db, auth, storage } from "@/firebase";\n\n`;
+  fs.writeFileSync(filePath, newImport + updatedContent, "utf-8");
+  console.log(`✅ Actualizado: ${filePath}`);
 }
 
-function processFile(filePath) {
-  const content = fs.readFileSync(filePath, "utf8");
-  let modified = content;
-
-  for (const { regex, replacement } of PATTERNS) {
-    modified = modified.replace(regex, replacement);
+// Ejecutar para todos los servicios .js
+fs.readdirSync(servicesPath).forEach((file) => {
+  if (file.endsWith(".js")) {
+    const fullPath = path.join(servicesPath, file);
+    updateFirebaseImports(fullPath);
   }
-
-  if (modified !== content) {
-    createBackup(filePath, content);
-    fs.writeFileSync(filePath, modified, "utf8");
-    console.log(`✅ Corregido: ${filePath}`);
-  }
-}
-
-function walkDir(dir) {
-  fs.readdirSync(dir).forEach((file) => {
-    const fullPath = path.join(dir, file);
-    if (fs.statSync(fullPath).isDirectory()) {
-      walkDir(fullPath);
-    } else if (EXTENSIONS.includes(path.extname(fullPath))) {
-      processFile(fullPath);
-    }
-  });
-}
-
-console.log("🔎 Buscando rutas Firebase mal formateadas...");
-walkDir(projectDir);
-console.log("✅ Reemplazo completado.");
+});

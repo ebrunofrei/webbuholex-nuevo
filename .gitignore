@@ -98,3 +98,4 @@ docker-compose.override.yml
 .vscode/
 .vercel/project.json
 .vercel
+__backups__/
