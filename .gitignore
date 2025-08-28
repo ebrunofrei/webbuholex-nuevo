@@ -62,7 +62,7 @@ firestore.rules
 importar_normas/firebase-service-account.json
 
 # FIREBASE CONFIG FILES (custom paths también)
-src/firebase.js
+# src/firebase.js  ← descomentado para subir a Vercel
 src/firebaseConfig.js
 src/config/*.js
 src/config/**/firebase*.js

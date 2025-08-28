@@ -51,7 +51,7 @@ Desktop.ini
 # ─── ARCHIVOS DE CUENTAS DE SERVICIO Y CONFIG SENSIBLE ─────────────
 firebase-service-account.json
 config.service.account.json
-src/firebase.js
+# src/firebase.js  ← descomentado para subir a Vercel
 src/firebaseConfig.js
 src/config/*.js
 src/config/**/firebase*.js
