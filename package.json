@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "fix-firebase-imports": "node scripts/replaceFirebaseImports.mjs",
+    "fix-firebase-watch": "node src/scripts/replaceFirebaseImports.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

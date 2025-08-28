@@ -1,0 +1,8 @@
+__backups__/
+scripts/
+*.bak
+node_modules/
+.vscode/
+.git/
+.gitignore
+README.md
