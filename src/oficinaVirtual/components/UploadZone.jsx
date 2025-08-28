@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage } from "../../firebase/firebase.js.bak";
+import { storage } from "@/firebase/firebase.js.bak";
 
 export default function UploadZone({ expedienteId = "expediente-demo" }) {
   const fileInputRef = useRef(null);
