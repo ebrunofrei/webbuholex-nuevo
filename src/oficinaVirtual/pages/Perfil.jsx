@@ -1,7 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import ConfigurarAlertas from "@/oficinaVirtual/components/ConfigurarAlertas";
 import { useEffect, useState } from "react";
-import { db } from "@/services/firebaseConfig";
+import { db, auth, storage } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
 export default function Perfil() {

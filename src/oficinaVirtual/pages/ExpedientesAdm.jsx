@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 import { useNavigate } from "react-router-dom";
 
 const estadoColors = {

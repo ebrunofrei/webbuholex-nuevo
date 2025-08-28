@@ -5,7 +5,7 @@ import PartesProcesales from "../components/PartesProcesales";
 import Seguimiento from "../components/Seguimiento";
 import { useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 
 const TABS = [
   { key: "documentos", label: "Documentos", icon: <FileText size={18} /> },

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { db, storage } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 import { collection, query, orderBy, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import ArchivoCard from "../components/ArchivoCard";

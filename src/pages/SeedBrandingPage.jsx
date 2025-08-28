@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/services/firebaseConfig";
+import { db, auth, storage } from "@/firebase";
 import { useAuth } from "@/context/AuthContext";
 
 const brandingSeed = {

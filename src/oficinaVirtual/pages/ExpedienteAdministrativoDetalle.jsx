@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/firebase";
+import { db, auth, storage } from "@/firebase";
 import { FolderPlus } from "lucide-react";
 
 export default function ExpedientesAdministrativos() {
