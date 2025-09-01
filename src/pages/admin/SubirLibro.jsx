@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { collection, addDoc } from "firebase/firestore";
-import { db } from "../../services/firebaseConfig";
+import { db } from "@/firebase";
 
 export default function SubirLibro() {
   const [titulo, setTitulo] = useState("");

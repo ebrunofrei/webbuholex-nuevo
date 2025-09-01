@@ -81,7 +81,7 @@ import LandingSaaS from "./pages/LandingSaaS";
 // FIREBASE AUTH + FCM
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { getMessaging, getToken } from "firebase/messaging";
-import { app } from "./services/firebaseConfig";
+import { app, db, auth, storage } from "@/firebase";
 const VAPID_KEY = "BK_FdBKoZZeavWPaEvAjEY5GZDI7gs-Kpt05ctgk4aUfp_mdT-aqDdnaefwu8pMAUvNDTaghKrhDnpI0Ej9PgUU";
 
 // Lógica FCM

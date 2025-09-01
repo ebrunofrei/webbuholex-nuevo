@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { FolderOpen, X, Download, Trash2, Share2 } from "lucide-react";
 import { collection, query, where, orderBy, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { db } from "@/services/firebaseConfig";
+import { db } from "@/firebase";
 
 export default function SidebarArchivosAnalizados({ usuarioId, show, onClose }) {
   const [archivos, setArchivos] = useState([]);

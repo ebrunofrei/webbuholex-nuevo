@@ -1,4 +1,4 @@
-import { db } from "../services/firebaseConfig";
+import { db } from "@/firebase";
 import { collection, addDoc, getDocs, updateDoc, doc, where, query, orderBy } from "firebase/firestore";
 
 // Guardar interacción del user con el bot

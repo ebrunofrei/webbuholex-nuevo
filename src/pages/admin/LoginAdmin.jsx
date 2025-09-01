@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../services/firebaseConfig"; // <-- Solo importa 'auth', no lo declares de nuevo
+import { auth } from "@/firebase"; // <-- Solo importa 'auth', no lo declares de nuevo
 import { useNavigate } from "react-router-dom";
 
 export default function LoginAdmin() {

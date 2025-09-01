@@ -1,6 +1,6 @@
 // src/oficinaVirtual/components/ConfigurarAlertas.jsx
 import { useState, useEffect } from "react";
-import { db } from "@/services/firebaseConfig";
+import { db } from "@/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
 import useLegalOSStore from "@/store/useLegalOSStore";

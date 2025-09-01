@@ -18,7 +18,7 @@ import {
   deleteObject,
   uploadBytes,
 } from "firebase/storage";
-import { db, storage } from "../../services/firebaseConfig";
+import { db, storage } from "@/firebase";
 import { ArrowDownToLine, Trash2, Edit3, Plus, Loader2 } from "lucide-react";
 
 export default function TabDocumentos({ expedienteId }) {

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { sendPasswordResetEmail, getAuth } from "firebase/auth";
-import { app } from "../services/firebaseConfig";
+import { app } from "@/firebase";
 
 export default function ModalRecuperarPassword({ abierto, onClose }) {
   const [email, setEmail] = useState("");

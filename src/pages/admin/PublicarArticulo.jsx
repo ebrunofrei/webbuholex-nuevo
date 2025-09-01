@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { db } from "../../services/firebaseConfig";
+import { db } from "@/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function PublicarArticulo() {

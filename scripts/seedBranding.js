@@ -1,5 +1,5 @@
 // src/scripts/seedBrandingCasillas.js
-import { db } from "@/services/firebaseConfig";
+import { db } from "@/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const seedCasillas = async (uid) => {

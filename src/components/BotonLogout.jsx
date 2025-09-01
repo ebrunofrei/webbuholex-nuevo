@@ -1,7 +1,7 @@
 // src/components/BotonLogout.jsx
 import React from "react";
 import { signOut } from "firebase/auth";
-import { auth } from "../services/firebaseConfig";
+import { auth } from "@/firebase";
 import { useNavigate } from "react-router-dom";
 
 export default function BotonLogout() {

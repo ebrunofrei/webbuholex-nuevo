@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../../services/firebaseConfig";
+import { db, storage } from "@/firebase";
 
 const MAX_FILE_MB = 25;
 

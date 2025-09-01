@@ -6,7 +6,7 @@ import {
   deleteObject,
   uploadBytesResumable,
 } from "firebase/storage";
-import { storage } from "../../services/firebaseConfig";
+import { storage } from "@/firebase";
 import VisorArchivoModal from "./VisorArchivoModal";
 
 const carpetas = ["documentos", "alegatos", "archivados"];

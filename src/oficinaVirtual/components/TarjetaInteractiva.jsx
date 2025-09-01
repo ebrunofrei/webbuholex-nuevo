@@ -3,7 +3,7 @@ import { DndContext, useDraggable } from "@dnd-kit/core";
 import html2canvas from "html2canvas";
 import Select from "react-select";
 import { getFirestore, collection, addDoc, getAuth } from "firebase/firestore";
-import { app } from "../../../services/firebaseConfig"; // Ajusta el path según tu proyecto
+import { app } from "@/firebase"; // Ajusta el path según tu proyecto
 
 // Fuentes disponibles (puedes agregar más)
 const FUENTES = [

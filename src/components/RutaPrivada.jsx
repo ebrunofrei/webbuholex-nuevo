@@ -1,7 +1,7 @@
 // src/components/RutaPrivada.jsx
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { auth } from "../services/firebaseConfig";
+import { auth } from "@/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 // Si quieres usar un modal de login, descomenta la línea de abajo
 // import ModalLogin from "./ModalLogin";

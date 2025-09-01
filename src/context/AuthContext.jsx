@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import {
   getAuth,
@@ -9,41 +10,31 @@ import {
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-import { app } from "../services/firebaseConfig";
+import { auth } from "@/firebase";
 
-// --- CONTEXTO ---
 const AuthContext = createContext();
 
-// HOOK: para usar el contexto de auth en cualquier parte de la app
+// Hook
 export function useAuth() {
   return useContext(AuthContext);
 }
 
-// PROVIDER
+// Provider
 export function AuthProvider({ children }) {
-  const auth = getAuth(app);
-
-  // Estados principales
   const [user, setUsuario] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isPremium, setIsPremium] = useState(false);
   const [emailVerificado, setEmailVerificado] = useState(false);
-
-  // Control modal login
   const [modalLoginOpen, setModalLoginOpen] = useState(false);
   const [modalLoginTab, setModalLoginTab] = useState("login");
-
-  // Toast global (opcional, para feedbacks visuales)
   const [toast, setToast] = useState({ show: false, message: "", type: "info" });
 
-  // --- Funciones de modal ---
   const abrirModalLogin = (tab = "login") => {
     setModalLoginTab(tab);
     setModalLoginOpen(true);
   };
   const cerrarModalLogin = () => setModalLoginOpen(false);
 
-  // --- Funciones de auth ---
   const login = async (email, password) => {
     await signInWithEmailAndPassword(auth, email, password);
     setToast({ show: true, message: "¡Bienvenido!", type: "success" });
@@ -69,36 +60,24 @@ export function AuthProvider({ children }) {
     setToast({ show: true, message: "Sesión cerrada.", type: "info" });
   };
 
-  // --- Listener user ---
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      setUsuario(user);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUsuario(u);
       setLoading(false);
-      console.log("onAuthStateChanged:", user);
-
-      if (user) {
-        setEmailVerificado(user.emailVerified || user.isAnonymous);
-        setIsPremium(false); // Puedes cambiar la lógica premium aquí
-      } else {
-        setUsuario(null);
-        setEmailVerificado(false);
-        setIsPremium(false);
-      }
+      setEmailVerificado(u?.emailVerified || u?.isAnonymous || false);
+      setIsPremium(false);
     });
     return () => unsub();
-    // eslint-disable-next-line
   }, []);
 
-  // --- Re-verificar user (útil tras registro/verificación) ---
   const refrescarUsuario = useCallback(async () => {
     if (auth.currentUser) {
       await auth.currentUser.reload();
       setUsuario({ ...auth.currentUser });
       setEmailVerificado(auth.currentUser.emailVerified || auth.currentUser.isAnonymous);
     }
-  }, [auth]);
+  }, []);
 
-  // --- Proveer contexto ---
   const value = {
     user,
     loading,
@@ -117,9 +96,5 @@ export function AuthProvider({ children }) {
     toast,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "../../services/firebaseConfig";
+import { db } from "@/firebase";
 
 export default function ConsultasAdmin() {
   const [consultas, setConsultas] = useState([]);

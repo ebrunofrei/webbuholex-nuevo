@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { db } from "../services/firebaseConfig";
+import { db } from "@/firebase";
 import { X } from "lucide-react";
 
 const materias = [

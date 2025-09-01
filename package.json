@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "prepare": "husky install",
     "fix-firebase-imports": "node scripts/replaceFirebaseImports.mjs",
-    "fix-firebase-watch": "node src/scripts/replaceFirebaseImports.js"
+    "fix-firebase-watch": "node src/scripts/replaceFirebaseImports.js",
+    "check-env": "node ./scripts/check-env.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
