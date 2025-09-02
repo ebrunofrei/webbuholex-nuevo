@@ -1,45 +1,61 @@
-import OpenAI from "openai";
 import { getApps, initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import OpenAI from "openai";
 
-// Inicializa OpenAI
+// --- Inicializa Firebase Admin una sola vez ---
+const adminApp = getApps().length
+  ? getApps()[0]
+  : initializeApp({
+      credential: process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+        ? cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON))
+        : applicationDefault(),
+    });
+
+const adminDb = getFirestore(adminApp);
+
+// --- Inicializa OpenAI ---
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Inicializa Firebase solo una vez
-if (!getApps().length) {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-    initializeApp({ credential: cert(serviceAccount) });
-  } else {
-    initializeApp({ credential: applicationDefault() });
-  }
-}
-
-const db = getFirestore();
-
+// --- Handler para Vercel ---
 export default async function handler(req, res) {
+  // --- Configuración de CORS ---
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Origin", "*"); // ⚠️ En producción cambia "*" por tu dominio
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Authorization"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Solo se permite POST" });
   }
 
   try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
     const { prompt, historial = [], userId = "invitado" } = body;
 
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ error: "Falta el parámetro 'prompt'." });
     }
 
+    // Construir historial de mensajes
     const messages = [
       ...historial
-        .filter(m => m?.role && m?.content)
-        .map(m => ({ role: m.role, content: m.content })),
+        .filter((m) => m?.role && m?.content)
+        .map((m) => ({ role: m.role, content: m.content })),
       { role: "user", content: prompt },
     ];
 
+    // Llamada a OpenAI
     const ai = await openai.chat.completions.create({
       model: "gpt-4o",
       messages,
@@ -47,10 +63,12 @@ export default async function handler(req, res) {
       max_tokens: 800,
     });
 
-    const respuesta = ai?.choices?.[0]?.message?.content?.trim() ?? "Sin respuesta del modelo.";
+    const respuesta =
+      ai?.choices?.[0]?.message?.content?.trim() ?? "Sin respuesta del modelo.";
 
-    // Guardar en Firestore (sin bloquear respuesta)
-    db.collection("litisbot_conversaciones")
+    // Guardar en Firestore (no bloquea respuesta al usuario)
+    adminDb
+      .collection("litisbot_conversaciones")
       .doc(userId)
       .collection("mensajes")
       .add({
@@ -60,7 +78,9 @@ export default async function handler(req, res) {
         model: ai?.model || "gpt-4o",
         createdAt: FieldValue.serverTimestamp(),
       })
-      .catch(e => console.warn("⚠️ No se pudo guardar en Firestore:", e?.message));
+      .catch((e) =>
+        console.warn("⚠️ No se pudo guardar en Firestore:", e?.message)
+      );
 
     return res.status(200).json({ respuesta });
   } catch (e) {
