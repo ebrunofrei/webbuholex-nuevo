@@ -1,6 +1,6 @@
 // src/services/firebaseCodigosService.js
-import { getFirestore, collection, getDocs, query, orderBy } from "firebase/firestore";
-import { firebaseApp } from "@/firebase"; // Ajusta la ruta según tu estructura real
+import { db } from "@/firebase";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 
 const db = getFirestore(firebaseApp);
 
@@ -11,10 +11,7 @@ const db = getFirestore(firebaseApp);
 export async function obtenerCodigos() {
   try {
     const codigosSnapshot = await getDocs(collection(db, "codigos"));
-    return codigosSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    return codigosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     console.error("Error al obtener códigos:", error);
     return [];

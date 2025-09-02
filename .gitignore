@@ -78,6 +78,7 @@ jest.config.js
 .cache/
 .yarn/
 .pnpm-debug.log
+index-C6tLERUj.js
 
 # TEMPORALES
 tmp/
@@ -99,3 +100,7 @@ docker-compose.override.yml
 .vercel/project.json
 .vercel
 __backups__/
+node_modules/
+dist/
+src/assets/index-*.js
+public/

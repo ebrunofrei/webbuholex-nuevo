@@ -20,9 +20,9 @@ const openai = new OpenAI({
 
 // --- Handler para Vercel ---
 export default async function handler(req, res) {
-  // --- Configuración de CORS ---
+  // --- Configuración CORS ---
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", "*"); // ⚠️ En producción cambia "*" por tu dominio
+  res.setHeader("Access-Control-Allow-Origin", "*"); // ⚠️ En producción cambia "*" por tu dominio (ej: "https://www.buholex.com")
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
   res.setHeader(
     "Access-Control-Allow-Headers",
@@ -39,15 +39,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body =
-      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
     const { prompt, historial = [], userId = "invitado" } = body;
 
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ error: "Falta el parámetro 'prompt'." });
     }
 
-    // Construir historial de mensajes
+    // --- Construir historial de conversación ---
     const messages = [
       ...historial
         .filter((m) => m?.role && m?.content)
@@ -55,7 +54,7 @@ export default async function handler(req, res) {
       { role: "user", content: prompt },
     ];
 
-    // Llamada a OpenAI
+    // --- Llamada a OpenAI ---
     const ai = await openai.chat.completions.create({
       model: "gpt-4o",
       messages,
@@ -63,10 +62,9 @@ export default async function handler(req, res) {
       max_tokens: 800,
     });
 
-    const respuesta =
-      ai?.choices?.[0]?.message?.content?.trim() ?? "Sin respuesta del modelo.";
+    const respuesta = ai?.choices?.[0]?.message?.content?.trim() ?? "Sin respuesta del modelo.";
 
-    // Guardar en Firestore (no bloquea respuesta al usuario)
+    // --- Guardar en Firestore (async, no bloquea respuesta) ---
     adminDb
       .collection("litisbot_conversaciones")
       .doc(userId)
@@ -78,10 +76,9 @@ export default async function handler(req, res) {
         model: ai?.model || "gpt-4o",
         createdAt: FieldValue.serverTimestamp(),
       })
-      .catch((e) =>
-        console.warn("⚠️ No se pudo guardar en Firestore:", e?.message)
-      );
+      .catch((e) => console.warn("⚠️ No se pudo guardar en Firestore:", e?.message));
 
+    // --- Respuesta al cliente ---
     return res.status(200).json({ respuesta });
   } catch (e) {
     console.error("❌ Error en ia-litisbotchat:", e?.message || e);

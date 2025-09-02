@@ -1,14 +1,18 @@
-// services/firebaseAdmin.js
+// backend/services/firebaseAdmin.js
+import { getApps, initializeApp, applicationDefault, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 import admin from "firebase-admin";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const serviceAccount = require("../firebase-service-account.json");
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+// --- Inicializa solo una vez ---
+if (!getApps().length) {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    initializeApp({ credential: cert(serviceAccount) });
+  } else {
+    initializeApp({ credential: applicationDefault() });
+  }
 }
 
-const firestore = admin.firestore();
-export default firestore;
+const db = getFirestore();
+
+export { db, admin };

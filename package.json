@@ -12,7 +12,8 @@
     "prepare": "husky install",
     "fix-firebase-imports": "node scripts/replaceFirebaseImports.mjs",
     "fix-firebase-watch": "node src/scripts/replaceFirebaseImports.js",
-    "check-env": "node ./scripts/check-env.mjs"
+    "check-env": "node ./scripts/check-env.mjs",
+    "deploy": "git add . && git commit -m \"deploy automático\" && git push origin main"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

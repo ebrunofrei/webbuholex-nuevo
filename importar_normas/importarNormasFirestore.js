@@ -1,21 +1,35 @@
 // importarNormasFirestore.js
-const admin = require("firebase-admin");
-const normas = require("./csvjson.json"); // Ajusta al nombre de tu archivo de normas
-const serviceAccount = require("./firebase-service-account.json"); // Ajusta al nombre de tu JSON de credenciales
+import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import normas from "./csvjson.json" assert { type: "json" };
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+// --- Inicializa Firebase Admin solo una vez ---
+if (!getApps().length) {
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    throw new Error("❌ Falta la variable FIREBASE_SERVICE_ACCOUNT_JSON en el entorno");
+  }
 
-const db = admin.firestore();
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+
+  initializeApp({
+    credential: cert(serviceAccount),
+  });
+}
+
+const db = getFirestore();
 
 async function importarNormas() {
-  for (const norma of normas) {
-    await db.collection("normas_eleperuano").add(norma); // Puedes cambiar el nombre aquí si prefieres otro
-    console.log("Norma agregada:", norma.titulo || norma.nombre || "(sin título)");
+  try {
+    for (const norma of normas) {
+      await db.collection("normas_eleperuano").add(norma); // Cambia el nombre de la colección si lo deseas
+      console.log("✔️ Norma agregada:", norma.titulo || norma.nombre || "(sin título)");
+    }
+    console.log("✅ Importación finalizada");
+    process.exit(0);
+  } catch (err) {
+    console.error("❌ Error al importar normas:", err.message);
+    process.exit(1);
   }
-  console.log("Importación finalizada");
-  process.exit(0);
 }
 
 importarNormas();

@@ -1,46 +1,78 @@
 import axios from "axios";
-import cheerio from "cheerio";
-import admin from "firebase-admin";
+import * as cheerio from "cheerio";
+import { getApps, initializeApp, cert, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-// Inicializa solo si no está inicializado
-if (!admin.apps.length) admin.initializeApp();
+// --- Inicializa Firebase Admin solo una vez ---
+if (!getApps().length) {
+  try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      initializeApp({ credential: cert(serviceAccount) });
+    } else {
+      initializeApp({ credential: applicationDefault() });
+    }
+    console.log("🔥 Firebase Admin inicializado");
+  } catch (err) {
+    console.error("❌ Error al inicializar Firebase Admin:", err.message);
+  }
+}
 
 const db = getFirestore();
 
+// --- Función principal ---
 export async function actualizarNoticiasJuridicas() {
   const noticias = [];
 
-  // Ejemplo: Scraping Poder Judicial
-  const { data: html } = await axios.get("https://www.pj.gob.pe/wps/wcm/connect/portalpjudicial/s_cnoticias/noticias/");
+  try {
+    console.log("📡 Iniciando scraping de noticias del Poder Judicial...");
 
-  const $ = cheerio.load(html);
+    // Petición HTTP con timeout preventivo
+    const { data: html } = await axios.get(
+      "https://www.pj.gob.pe/wps/wcm/connect/portalpjudicial/s_cnoticias/noticias/",
+      { timeout: 15000 }
+    );
 
-  $(".noticia").each((i, el) => {
-    const titulo = $(el).find(".titulo").text().trim();
-    const resumen = $(el).find(".descripcion").text().trim();
-    const url = $(el).find("a").attr("href");
-    const fecha = $(el).find(".fecha").text().trim();
+    const $ = cheerio.load(html);
 
-    if (titulo && url) {
-      noticias.push({
-        titulo,
-        resumen,
-        url: url.startsWith("http") ? url : `https://www.pj.gob.pe${url}`,
-        fecha: fecha || new Date().toISOString(),
-        fuente: "Poder Judicial",
-      });
+    $(".noticia").each((i, el) => {
+      const titulo = $(el).find(".titulo").text().trim();
+      const resumen = $(el).find(".descripcion").text().trim();
+      const url = $(el).find("a").attr("href");
+      const fecha = $(el).find(".fecha").text().trim();
+
+      if (titulo && url) {
+        noticias.push({
+          titulo,
+          resumen,
+          url: url.startsWith("http") ? url : `https://www.pj.gob.pe${url}`,
+          fecha: fecha || new Date().toISOString(),
+          fuente: "Poder Judicial",
+          tipo: "nacional",
+          premium: false,
+          creadoPor: "ScraperAutomático",
+          fechaRegistro: new Date().toISOString(),
+        });
+      }
+    });
+
+    console.log(`📰 Noticias extraídas: ${noticias.length}`);
+
+    // Guardar en Firestore con upsert (título + fuente como ID único)
+    for (const noticia of noticias) {
+      try {
+        const docId = `${noticia.fuente}-${Buffer.from(noticia.titulo).toString("base64")}`;
+        await db.collection("noticiasJuridicas").doc(docId).set(noticia, { merge: true });
+        console.log(`✔️ Guardada en Firestore: ${noticia.titulo}`);
+      } catch (err) {
+        console.warn(`⚠️ No se pudo guardar noticia: ${noticia.titulo}`, err.message);
+      }
     }
-  });
 
-  // Puedes agregar scraping de otras webs aquí...
-
-  // Guarda en Firestore (puedes hacer upsert para evitar duplicados)
-  for (const noticia of noticias) {
-    // Upsert por título+fuente+fecha
-    const docId = `${noticia.fuente}-${Buffer.from(noticia.titulo).toString("base64")}`;
-    await db.collection("noticiasJuridicas").doc(docId).set(noticia, { merge: true });
+    console.log(`✅ Proceso finalizado. Noticias actualizadas: ${noticias.length}`);
+    return noticias.length;
+  } catch (e) {
+    console.error("❌ Error en actualizarNoticiasJuridicas:", e.message || e);
+    return 0;
   }
-
-  return noticias.length;
 }
