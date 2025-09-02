@@ -1,5 +1,5 @@
 // src/utils/validarSlug.js
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "@/firebase";
 import { db, auth, storage } from "@/firebase";
 
 // Retorna true si el slug está disponible

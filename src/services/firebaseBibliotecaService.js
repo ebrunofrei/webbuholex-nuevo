@@ -12,8 +12,8 @@ import {
   Timestamp,
   limit,
   startAfter,
-} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+} from "@/firebase";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "@/firebase";
 
 // -------- SUBIR ARCHIVO PDF/EPUB/DOC Y OBTENER URL PÚBLICA --------
 export async function subirArchivoLibro(archivo, path) {

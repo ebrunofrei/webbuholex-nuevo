@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db, auth, storage } from "@/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "@/firebase";
 
 const LOCAL_KEY = "noticiasGuardadas_buholex";
 

@@ -1,8 +1,8 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getMessaging, isSupported } from "firebase/messaging";
+import { initializeApp, getApps, getApp } from "@/firebase";
+import { getAuth } from "@/firebase";
+import { getFirestore } from "@/firebase";
+import { getStorage } from "@/firebase";
+import { getMessaging, isSupported } from "@/firebase";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,6 +14,7 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined,
 };
 
+// Inicializa solo si no hay apps previas
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
@@ -26,8 +27,8 @@ let messaging = null;
     if (await isSupported()) {
       messaging = getMessaging(app);
     }
-  } catch {
-    // Silencioso en producción
+  } catch (e) {
+    console.warn("⚠️ Messaging no soportado:", e.message);
   }
 })();
 

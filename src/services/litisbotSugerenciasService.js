@@ -1,5 +1,5 @@
 import { db } from "@/firebase";
-import { collection, addDoc, getDocs, updateDoc, doc, where, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, getDocs, updateDoc, doc, where, query, orderBy } from "@/firebase";
 
 // Guardar interacción del user con el bot
 export async function guardarInteraccionAudiencia({ usuarioID, expedienteID, textoUsuario, respuestaBot, materia, tipo }) {

@@ -1,6 +1,6 @@
 // src/services/firebaseCodigosService.js
 import { db } from "@/firebase";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, orderBy } from "@/firebase";
 
 const db = getFirestore(firebaseApp);
 

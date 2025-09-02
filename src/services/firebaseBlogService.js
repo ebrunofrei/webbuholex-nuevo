@@ -9,8 +9,8 @@ import {
   query,
   orderBy,
   getDocs
-} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+} from "@/firebase";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "@/firebase";
 
 /**
  * Sube una portada al storage y retorna la URL pública

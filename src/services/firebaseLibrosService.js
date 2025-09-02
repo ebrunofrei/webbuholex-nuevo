@@ -1,5 +1,5 @@
 // src/services/firebaseLibrosService.js
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs } from "@/firebase";
 import { db } from "@/firebase";
 
 // Obtiene todos los libros de la colección "biblioteca"

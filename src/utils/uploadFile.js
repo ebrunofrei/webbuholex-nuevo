@@ -1,4 +1,4 @@
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "@/firebase";
 
 /**
  * Sube un archivo al storage y retorna la URL pública

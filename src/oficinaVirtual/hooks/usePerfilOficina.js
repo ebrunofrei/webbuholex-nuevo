@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"; 
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot } from "@/firebase";
 import { db, auth, storage } from "@/firebase"; // Ajusta la ruta según tu estructura real
 import { useAuth } from "../../context/AuthContext"; // Ajusta a tu auth real
 

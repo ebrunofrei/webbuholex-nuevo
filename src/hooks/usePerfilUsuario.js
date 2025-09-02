@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "@/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { db, auth, storage } from "@/firebase";
 /**

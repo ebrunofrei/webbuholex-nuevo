@@ -1,6 +1,6 @@
 // /src/services/firebaseMessaging.js
 import { messaging } from "@/firebase";
-import { getToken, onMessage } from "firebase/messaging";
+import { getToken, onMessage } from "@/firebase";
 
 // 🔑 VAPID_KEY pública para Web Push (Firebase Console → Configuración → Claves Web Push)
 const VAPID_KEY =

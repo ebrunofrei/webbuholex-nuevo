@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged } from "@/firebase";
 import { auth } from "@/firebase"; // Ajusta la ruta si es necesario
 
 export function useCurrentUser() {

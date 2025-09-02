@@ -1,6 +1,6 @@
 // src/services/firebaseNoticiasService.js
 import { db, auth, storage } from "@/firebase";
-import { collection, query, orderBy, limit, getDocs, where } from "firebase/firestore";
+import { collection, query, orderBy, limit, getDocs, where } from "@/firebase";
 
 /**
  * obtenerNoticias({ max, soloLibres, tags, ids })

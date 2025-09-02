@@ -8,7 +8,7 @@ import {
   deleteDoc,
   addDoc,
   serverTimestamp,
-} from "firebase/firestore";
+} from "@/firebase";
 import { db, auth, storage } from "@/firebase"; // Ajusta si tu export de db está en otro archivo
 
 export async function obtenerCodigos() {
