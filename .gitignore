@@ -104,3 +104,4 @@ node_modules/
 dist/
 src/assets/index-*.js
 public/
+backend/keys/*.json
