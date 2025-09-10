@@ -1,5 +1,5 @@
-import { doc, getDoc, setDoc } from "@/firebase";
 import { db } from "@/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 /**
  * Carga el perfil legal (branding/casillas/modulos) del usuario

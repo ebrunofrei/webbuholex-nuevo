@@ -8,6 +8,8 @@ import { LitisBotChatProvider } from "./context/LitisBotChatContext";
 import { NoticiasProvider } from "./context/NoticiasContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LitisBotProvider } from "./context/LitisBotContext";
+import { ToastProvider } from "@/components/ui/use-toast";
+import { GoogleAuthRootProvider } from "@/context/GoogleAuthContext";
 
 // COMPONENTES GENERALES
 import Navbar from "./components/ui/Navbar";
@@ -18,7 +20,6 @@ import NoticiasSlider from "./components/NoticiasSlider";
 import NoticiasBotonFlotante from "./components/ui/NoticiasBotonFlotante";
 import ModalLogin from "./components/ModalLogin";
 import RecuperarPassword from "./components/RecuperarPassword";
-import Toast from "./components/ui/Toast";
 import PersonalizacionView from "./views/PersonalizacionView";
 
 // LITISBOT
@@ -70,7 +71,6 @@ import MiCuenta from "./pages/MiCuenta";
 import HistorialArchivos from "./pages/HistorialArchivos";
 import BibliotecaDrive from "./components/BibliotecaDrive";
 import LitisBotBubbleChat from "@/components/ui/LitisBotBubbleChat";
-import { GoogleAuthRootProvider } from "@/context/GoogleAuthContext";
 import PoliticaPrivacidad from "@/pages/legal/politica-de-privacidad";
 import TerminosCondiciones from "@/pages/legal/terminos-y-condiciones";
 import AvisoCookies from "@/pages/legal/aviso-cookies";
@@ -78,35 +78,8 @@ import CookiesBanner from "@/components/CookiesBanner";
 import PricingPage from "./pages/PricingPage";
 import LandingSaaS from "./pages/LandingSaaS";
 
-// FIREBASE AUTH + FCM
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { getMessaging, getToken } from "firebase/messaging";
-import { app, db, auth, storage } from "@/firebase";
-const VAPID_KEY = "BK_FdBKoZZeavWPaEvAjEY5GZDI7gs-Kpt05ctgk4aUfp_mdT-aqDdnaefwu8pMAUvNDTaghKrhDnpI0Ej9PgUU";
-
-// Lógica FCM
-function useFirebaseAuthAndFcm() {
-  React.useEffect(() => {
-    const auth = getAuth(app);
-    const messaging = getMessaging(app);
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user && !user.isAnonymous) {
-        try {
-          if (window.Notification && Notification.permission !== "granted") {
-            await Notification.requestPermission();
-          }
-          const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-          if (token) {
-            console.log("FCM Token:", token);
-          }
-        } catch (err) {
-          console.warn("No se pudo obtener el token FCM: " + err.message);
-        }
-      }
-    });
-    return () => unsub();
-  }, []);
-}
+// 🔔 Hook centralizado para FCM
+import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
 
 function OficinaVirtualLayout({ children }) {
   return (
@@ -179,8 +152,13 @@ function LitisBotPageIntegrada() {
 // -----------------------------------------------
 
 function AppContent() {
-  useFirebaseAuthAndFcm();
-  const { user, loading, abrirLogin, toast, setToast } = useAuth?.() || {};
+  // 🔔 ÚNICO punto de entrada para FCM (token + mensajes foreground)
+  useFirebaseMessaging((payload) => {
+    console.log("📩 Notificación recibida via hook:", payload);
+    // Aquí puedes disparar toast / UI según payload
+  });
+
+  const { user, loading, abrirLogin } = useAuth?.() || {};
   const location = useLocation();
   const esLitisBot = location.pathname === "/litisbot";
   const enOficinaVirtual = /^\/oficinaVirtual(\/|$)/.test(location.pathname);
@@ -212,11 +190,8 @@ function AppContent() {
   return (
     <div
       className="relative min-h-screen w-full"
-      style={{
-        background: "#fff"
-      }}
+      style={{ background: "#fff" }}
     >
-      <Toast toast={toast} setToast={setToast} />
       {!enOficinaVirtual && (
         <>
           {!hideNavbar && <Navbar />}
@@ -305,18 +280,20 @@ function AppContent() {
 export default function App() {
   return (
     <GoogleAuthRootProvider>
-    <LitisBotChatProvider>
-      <NoticiasProvider>
-        <AuthProvider>
-          <LitisBotProvider>
-            <Router>
-              <AppContent />
-            </Router>
-            <LitisBotBubbleChat />
-          </LitisBotProvider>
-        </AuthProvider>
-      </NoticiasProvider>
-    </LitisBotChatProvider>
+      <LitisBotChatProvider>
+        <NoticiasProvider>
+          <AuthProvider>
+            <LitisBotProvider>
+              <ToastProvider>
+                <Router>
+                  <AppContent />
+                </Router>
+                <LitisBotBubbleChat />
+              </ToastProvider>
+            </LitisBotProvider>
+          </AuthProvider>
+        </NoticiasProvider>
+      </LitisBotChatProvider>
     </GoogleAuthRootProvider>
   );
 }

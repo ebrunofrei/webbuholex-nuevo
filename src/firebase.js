@@ -1,9 +1,42 @@
-import { initializeApp, getApps, getApp } from "@/firebase";
-import { getAuth } from "@/firebase";
-import { getFirestore } from "@/firebase";
-import { getStorage } from "@/firebase";
-import { getMessaging, isSupported } from "@/firebase";
+// src/firebase.js
+import { initializeApp, getApps, getApp } from "firebase/app";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  addDoc,
+  arrayUnion,
+  arrayRemove,
+  deleteDoc,
+  onSnapshot,
+  Timestamp,
+  serverTimestamp,
+  orderBy,
+  limit,
+  startAfter,
+} from "firebase/firestore";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import {
+  getStorage,
+  ref,              // 👈 agregado solo aquí
+  uploadBytes,
+  deleteObject,
+  getDownloadURL,
+} from "firebase/storage";
+import {
+  getMessaging,
+  isSupported,
+  getToken,
+  onMessage,
+} from "firebase/messaging";
 
+// --- Configuración ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -11,25 +44,56 @@ const firebaseConfig = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined,
 };
 
-// Inicializa solo si no hay apps previas
+// Inicializar solo si no hay apps previas
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-const auth = getAuth(app);
 const db = getFirestore(app);
+const auth = getAuth(app);
 const storage = getStorage(app);
 
 let messaging = null;
 (async () => {
-  try {
-    if (await isSupported()) {
-      messaging = getMessaging(app);
-    }
-  } catch (e) {
-    console.warn("⚠️ Messaging no soportado:", e.message);
+  if (await isSupported()) {
+    messaging = getMessaging(app);
   }
 })();
 
-export { app, auth, db, storage, messaging };
+// --- Exportar todo sin duplicados ---
+export {
+  app,
+  db,
+  auth,
+  storage,
+  messaging,
+  // firestore
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  addDoc,
+  arrayUnion,
+  arrayRemove,
+  deleteDoc,
+  onSnapshot,
+  Timestamp,
+  serverTimestamp,
+  orderBy,
+  limit,
+  startAfter,
+  // storage
+  ref,             // 👈 ref ahora viene solo de storage
+  uploadBytes,
+  deleteObject,
+  getDownloadURL,
+  // auth
+  onAuthStateChanged,
+  // messaging
+  getToken,
+  onMessage,
+};

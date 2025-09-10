@@ -24,7 +24,31 @@ import iaLitisBotChat from "./api/ia-litisbotchat.js";
 
 // 4. Crea la app de Express
 const app = express();
-app.use(cors());
+
+// --- Configuración avanzada de CORS ---
+const corsOptions = {
+  origin: [
+    "http://localhost:5173",
+    "http://127.0.0.1",
+    "https://buholex.com",
+    "https://www.buholex.com",
+    /\.vercel\.app$/ // cualquier subdominio *.vercel.app
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false
+};
+app.use(cors(corsOptions));
+
+// Manejo explícito de preflight
+app.options("*", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return res.sendStatus(204);
+});
+
+// --- Middlewares ---
 app.use(express.json());
 app.use(bodyParser.json({ limit: "3mb" }));
 
@@ -40,11 +64,11 @@ app.use("/api", whatsappRouter);
 app.use("/api", noticiasRouter);
 
 // 6. NUEVA RUTA DIRECTA para IA LitisBot Chat (POST)
-app.post("/api/ia-litisbotchat", iaLitisBotChat); // <-- ¡Clave!
+app.post("/api/ia-litisbotchat", iaLitisBotChat);
 
 // 7. Endpoint raíz (opcional)
 app.get("/", (req, res) => {
-  res.send("LitisBot backend API 🦉 está corriendo.");
+  res.send("🦉 LitisBot backend API está corriendo.");
 });
 
 // 8. Levanta el servidor
@@ -59,4 +83,3 @@ app.listen(PORT, () => {
     throw err;
   }
 });
-

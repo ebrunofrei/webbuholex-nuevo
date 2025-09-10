@@ -1,9 +1,14 @@
-// BlogPublicarEditarModal.jsx
 import React, { useState, useRef } from "react";
-import { publicarArticuloBlog, editarArticuloBlog, subirPortadaBlog } from "@/services/firebaseBlogService";
-import toast from "react-hot-toast";
+import {
+  publicarArticuloBlog,
+  editarArticuloBlog,
+  subirPortadaBlog,
+} from "@/services/firebaseBlogService";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function BlogPublicarEditarModal({ articulo, onClose, onSave }) {
+  const { toast } = useToast();
+
   // Si es edición, precarga datos
   const [form, setForm] = useState({
     titulo: articulo?.titulo || "",
@@ -18,19 +23,19 @@ export default function BlogPublicarEditarModal({ articulo, onClose, onSave }) {
   const portadaInputRef = useRef();
 
   // Cambios en campos
-  const handleChange = e => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm(f => ({ ...f, [name]: value }));
+    setForm((f) => ({ ...f, [name]: value }));
   };
 
   // Guardar cambios
-  const handleSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setSubiendo(true);
 
     try {
       let urlPortada = form.urlPortada;
-      if (portadaInputRef.current.files[0]) {
+      if (portadaInputRef.current?.files[0]) {
         urlPortada = await subirPortadaBlog(
           portadaInputRef.current.files[0],
           `blog/portadas/${Date.now()}_${portadaInputRef.current.files[0].name}`
@@ -42,39 +47,56 @@ export default function BlogPublicarEditarModal({ articulo, onClose, onSave }) {
         contenido: form.contenido.trim(),
         autor: form.autor.trim(),
         categoria: form.categoria.trim(),
-        tags: form.tags.split(",").map(tag => tag.trim()).filter(Boolean),
+        tags: form.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
         urlPortada,
       };
       if (articulo?.id) {
-        // Edición
         await editarArticuloBlog(articulo.id, data);
-        toast.success("Artículo actualizado correctamente");
+        toast({
+          title: "Éxito",
+          description: "Artículo actualizado correctamente",
+        });
       } else {
-        // Nuevo
         await publicarArticuloBlog(data);
-        toast.success("Artículo publicado correctamente");
+        toast({
+          title: "Éxito",
+          description: "Artículo publicado correctamente",
+        });
       }
       onSave && onSave();
       onClose();
     } catch (err) {
-      toast.error("Error al guardar el artículo");
+      toast({
+        title: "Error",
+        description: "No fue posible guardar el artículo",
+      });
     } finally {
       setSubiendo(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-40 p-2 sm:p-4">
       <form
-        className="bg-white rounded-xl max-w-lg w-full p-6 shadow-lg relative"
+        className="bg-white rounded-xl w-full max-w-sm sm:max-w-lg p-4 sm:p-6 shadow-lg relative"
         onSubmit={handleSubmit}
       >
+        {/* Botón cerrar */}
         <button
           type="button"
-          className="absolute right-4 top-4 text-xl"
+          className="absolute right-4 top-4 text-xl text-gray-600 hover:text-red-500"
           onClick={onClose}
-        >✕</button>
-        <h2 className="text-xl font-bold mb-4 text-[#7a2518]">{articulo?.id ? "Editar artículo" : "Nuevo artículo"}</h2>
+        >
+          ✕
+        </button>
+
+        <h2 className="text-lg sm:text-xl font-bold mb-4 text-[#7a2518] text-center">
+          {articulo?.id ? "Editar artículo" : "Nuevo artículo"}
+        </h2>
+
         <input
           name="titulo"
           value={form.titulo}
@@ -131,9 +153,13 @@ export default function BlogPublicarEditarModal({ articulo, onClose, onSave }) {
         <button
           type="submit"
           disabled={subiendo}
-          className="w-full bg-[#7a2518] text-white font-bold py-2 rounded mt-2"
+          className="w-full bg-[#7a2518] text-white font-bold py-2 rounded mt-2 hover:bg-[#3e2723] transition-colors"
         >
-          {subiendo ? "Guardando..." : articulo?.id ? "Actualizar" : "Publicar"}
+          {subiendo
+            ? "Guardando..."
+            : articulo?.id
+            ? "Actualizar"
+            : "Publicar"}
         </button>
       </form>
     </div>
