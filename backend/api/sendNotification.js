@@ -1,16 +1,16 @@
-import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { db, auth, admin } from "../services/firebaseAdmin.js";
+
 import { getMessaging } from "firebase-admin/messaging";
 
 // --- Inicializa Firebase Admin solo una vez ---
-if (!getApps().length) {
+if (! {
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     throw new Error("❌ Falta la variable FIREBASE_SERVICE_ACCOUNT_JSON en el entorno");
   }
 
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
-  initializeApp({
-    credential: cert(serviceAccount),
+  ,
   });
 }
 

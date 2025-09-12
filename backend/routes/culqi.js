@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // routes/culqi.js
 import { Router } from "express";
 import axios from "axios";

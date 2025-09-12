@@ -1,3 +1,4 @@
+import { db, auth, admin } from "./firebaseAdmin.js";
 // buholex-backend-nuevo/services/openaiService.js
 import axios from "axios";
 

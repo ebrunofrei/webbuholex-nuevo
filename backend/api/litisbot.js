@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // src/routes/ia-litisbotchat.js  (o el path de tu handler)
 import { guardarConsultaFirestore } from "./_utils/firestore-log.js";
 import { traducirTextoGoogle, getCodigoGoogleIdioma } from "../utils/translateHelper.js";

@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // routes/elperuano.js
 import { Router } from "express";
 import puppeteer from "puppeteer";

@@ -1,20 +1,20 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // jobs/litisbotScraper.js
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { getApps, initializeApp, cert } from "firebase-admin/app";
+
 import { getFirestore } from "firebase-admin/firestore";
 import OpenAI from "openai";
 
 // --- INICIALIZAR FIREBASE ADMIN ---
-if (!getApps().length) {
+if (! {
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     throw new Error("❌ Falta FIREBASE_SERVICE_ACCOUNT_JSON en las variables de entorno");
   }
 
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
-  initializeApp({
-    credential: cert(serviceAccount),
+  ,
   });
 }
 const db = getFirestore();

@@ -1,3 +1,4 @@
+import { db, auth, admin } from "./services/firebaseAdmin.js";
 // index.js (buholex-backend-nuevo)
 
 import express from "express";

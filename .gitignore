@@ -39,8 +39,7 @@ Desktop.ini
 
 # ARCHIVOS DE ENTORNO Y CLAVES SENSIBLES
 .env
-.env.*
-*.env
+.env.local
 *.key
 *.pem
 *.crt
@@ -50,9 +49,6 @@ Desktop.ini
 *.credentials
 secrets.*
 firebase-service-account.json
-firebase.json
-firestore.indexes.json
-firestore.rules
 
 # ARCHIVOS DE CONFIG PERSONAL
 *.local

@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 import { Router } from "express";
 import { callOpenAI } from "../services/openaiService.js";
 import { obtenerHistorialUsuario, guardarHistorial } from "../services/memoryService.js";

@@ -1,3 +1,4 @@
+import { db, auth, admin } from "./firebaseAdmin.js";
 // whatsappService.js
 import twilio from "twilio";
 

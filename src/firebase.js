@@ -46,13 +46,15 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Inicializar solo si no hay apps previas
+// ✅ Inicializar solo si no hay apps previas (evita error de duplicado)
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+// --- Servicios principales ---
 const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
+// --- Inicialización segura de Messaging ---
 let messaging = null;
 (async () => {
   if (await isSupported()) {

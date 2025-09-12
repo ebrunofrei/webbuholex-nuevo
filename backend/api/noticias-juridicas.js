@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 export default async function handler(req, res) {
   try {
     const response = await fetch("https://proxy.buholex.com/noticias"); // URL real del backend con scraping o API

@@ -36,8 +36,7 @@ Desktop.ini
 
 # ─── VARIABLES DE ENTORNO Y ARCHIVOS SENSIBLES ─────────────────────
 .env
-.env.*
-*.env
+.env.local
 *.key
 *.pem
 *.crt
@@ -51,12 +50,9 @@ Desktop.ini
 # ─── ARCHIVOS DE CUENTAS DE SERVICIO Y CONFIG SENSIBLE ─────────────
 firebase-service-account.json
 config.service.account.json
-# src/firebase.js  ← descomentado para subir a Vercel
-src/firebaseConfig.js
-src/config/*.js
-src/config/**/firebase*.js
 importar_normas/firebase-service-account.json
 importar_normas/config.service.account.json
+backend/keys/*.json
 
 # ─── TEMPORALES Y ARCHIVOS DE USUARIO ──────────────────────────────
 *.local
@@ -94,3 +90,4 @@ cypress/screenshots/
 
 # ─── VERCEL ─────────────────────────────────────────────────────────
 .vercel/project.json
+backend/keys/*.json

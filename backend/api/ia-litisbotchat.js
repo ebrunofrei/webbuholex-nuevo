@@ -1,13 +1,11 @@
-import { getApps, initializeApp, applicationDefault, cert } from "firebase-admin/app";
+import { db, auth, admin } from "../services/firebaseAdmin.js";
+
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import OpenAI from "openai";
 
 // --- Inicializa Firebase Admin una sola vez ---
-const adminApp = getApps().length
-  ? getApps()[0]
-  : initializeApp({
-      credential: process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-        ? cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON))
+const adminApp = [0]
+  : )
         : applicationDefault(),
     });
 

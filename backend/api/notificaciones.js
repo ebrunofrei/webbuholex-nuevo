@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // backend/api/notificaciones.js
 import admin from "firebase-admin";
 
@@ -30,8 +31,7 @@ if (!serviceAccount) {
 
 // 🔹 Inicializa Firebase Admin solo una vez
 if (!admin.apps.length && serviceAccount) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+  admin.,
   });
 }
 

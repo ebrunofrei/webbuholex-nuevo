@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // routes/noticias.js
 import express from "express";
 import Parser from "rss-parser";

@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 import { OpenAI } from "openai";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";

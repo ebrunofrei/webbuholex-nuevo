@@ -1,16 +1,17 @@
+import { db, auth, admin } from "./firebaseAdmin.js";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { getApps, initializeApp, applicationDefault, cert } from "firebase-admin/app";
+
 import { getFirestore } from "firebase-admin/firestore";
 
 // --- Inicializa Firebase Admin solo una vez ---
-if (!getApps().length) {
+if (! {
   try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-      initializeApp({ credential: cert(serviceAccount) });
+       });
     } else {
-      initializeApp({ credential: applicationDefault() });
+       });
     }
     console.log("🔥 Firebase Admin inicializado");
   } catch (err) {

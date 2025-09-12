@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 import { Router } from "express";
 import { db } from "../utils/firebase-admin.js"; // O tu conector MongoDB
 

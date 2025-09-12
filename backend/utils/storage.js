@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // /utils/storage.js
 
 import { Storage } from "@google-cloud/storage";

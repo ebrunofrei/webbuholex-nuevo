@@ -1,3 +1,4 @@
+import { db, auth, admin } from "./firebaseAdmin.js";
 // services/fuenteLegalService.js
 
 import firestore from "./firebaseAdmin.js";

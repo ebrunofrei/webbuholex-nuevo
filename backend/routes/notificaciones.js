@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // buholex-backend/routes/notificaciones.js
 import express from "express";
 const router = express.Router();

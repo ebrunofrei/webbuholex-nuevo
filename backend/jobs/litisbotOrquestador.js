@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // backend/jobs/litisbotOrquestador.js
 import { fetchBoletinesIDH } from "../services/scrapingBoletines.js";
 import { analizarContenidoLegal } from "../services/litisbotAI.js";

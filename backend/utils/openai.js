@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // /utils/openai.js
 
 import OpenAI from "openai";

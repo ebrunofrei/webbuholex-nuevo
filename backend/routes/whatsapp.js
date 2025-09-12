@@ -1,3 +1,4 @@
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 // whatsapp.js
 import express from "express";
 import { enviarWhatsApp } from "../services/whatsappService.js";

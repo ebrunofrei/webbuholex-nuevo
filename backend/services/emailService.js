@@ -1,3 +1,4 @@
+import { db, auth, admin } from "./firebaseAdmin.js";
 import nodemailer from "nodemailer";
 import { enviarWhatsApp } from "./whatsappService.js";
 import { enviarTelegram } from "./telegramService.js";
