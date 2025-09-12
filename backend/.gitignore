@@ -36,7 +36,7 @@ Desktop.ini
 
 # ─── VARIABLES DE ENTORNO Y ARCHIVOS SENSIBLES ─────────────────────
 .env
-.env.local
+.env.*              # Ignora todas las variantes (.env.local, .env.development, etc.)
 *.key
 *.pem
 *.crt
@@ -52,7 +52,8 @@ firebase-service-account.json
 config.service.account.json
 importar_normas/firebase-service-account.json
 importar_normas/config.service.account.json
-backend/keys/*.json
+backend/keys/
+backend/keys/**     # Ignora todo lo que haya dentro de la carpeta keys
 
 # ─── TEMPORALES Y ARCHIVOS DE USUARIO ──────────────────────────────
 *.local
@@ -89,5 +90,5 @@ cypress/screenshots/
 *.pid.lock
 
 # ─── VERCEL ─────────────────────────────────────────────────────────
+.vercel/
 .vercel/project.json
-backend/keys/*.json
