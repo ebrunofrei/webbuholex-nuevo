@@ -1,5 +1,5 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
-import { OpenAI } from "openai";
+import { db } from "../backend/services/firebaseAdmin.js";
+import { openai } from "../backend/services/openaiService.js"
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import XLSX from "xlsx";

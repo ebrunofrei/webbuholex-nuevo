@@ -1,7 +1,6 @@
 // /api/ia-litisbotchat.js
-import { getFirestore } from "firebase-admin/firestore";
-import { initializeApp, applicationDefault, getApps } from "firebase-admin/app";
-import OpenAI from "openai";
+import { db } from "../backend/services/firebaseAdmin.js";
+import { openai } from "../backend/services/openaiService.js";
 
 // --- Inicializar Firebase Admin ---
 if (!getApps().length) {

@@ -1,4 +1,4 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+import { db } from "../backend/services/firebaseAdmin.js";
 // api/consulta.js
 import { OpenAIApi, Configuration } from "openai";
 const openai = new OpenAIApi(new Configuration({ apiKey: process.env.OPENAI_API_KEY }));

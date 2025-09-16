@@ -1,6 +1,7 @@
 // backend/api/notificaciones.js
 import { getMessaging } from "firebase-admin/messaging";
-import { admin } from "../services/firebaseAdmin.js";
+import { admin } from "../backend/services/firebaseAdmin.js";
+import { sendNotification } from "../backend/services/notificacionService.js";
 
 /**
  * Endpoint para enviar notificación push con FCM

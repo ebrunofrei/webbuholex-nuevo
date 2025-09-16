@@ -1,4 +1,4 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+import { db, auth, admin } from "../backend/services/firebaseAdmin.js";
 import { OpenAI } from "openai";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
