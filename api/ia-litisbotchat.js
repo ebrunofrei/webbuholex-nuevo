@@ -1,5 +1,5 @@
-import { callOpenAI } from "../services/openaiService.js";
-import { db } from "../services/firebaseAdmin.js";
+import { callOpenAI } from "../backend/services/openaiService.js";
+import { db } from "../backend/services/firebaseAdmin.js";
 
 export default async function handler(req, res) {
   try {
