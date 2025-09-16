@@ -1,36 +1,25 @@
-import { getApps, initializeApp, cert } from "firebase-admin/app";
+// backend/services/firebaseAdmin.js
+import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-import admin from "firebase-admin";
+import { getStorage } from "firebase-admin/storage";
 
-// --- Inicializa solo una vez ---
-if (!getApps().length) {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-    try {
-      // Decodifica la variable Base64 a JSON
-      const serviceAccount = JSON.parse(
-        Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8")
-      );
+// Para evitar inicializar la app más de una vez en serverless (Vercel)
+const app = !global._firebaseAdminApp
+  ? initializeApp({
+      credential: applicationDefault(), // Usa GOOGLE_APPLICATION_CREDENTIALS o la cred en base64
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+    })
+  : global._firebaseAdminApp;
 
-      initializeApp({
-        credential: cert(serviceAccount),
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-      });
-
-      console.log("✅ Firebase Admin inicializado correctamente");
-    } catch (error) {
-      console.error("❌ Error al decodificar FIREBASE_SERVICE_ACCOUNT_BASE64:", error);
-      throw error;
-    }
-  } else {
-    throw new Error("❌ Falta la variable FIREBASE_SERVICE_ACCOUNT_BASE64 en el entorno");
-  }
+// Guardar referencia global (fix para Vercel hot reload / serverless)
+if (!global._firebaseAdminApp) {
+  global._firebaseAdminApp = app;
 }
 
-// --- Instancias únicas ---
-const db = getFirestore();
-const auth = getAuth();
+// Inicializar servicios
+const db = getFirestore(app);
+const auth = getAuth(app);
+const storage = getStorage(app);
 
-// --- Exporta todo desde aquí ---
-export { admin, db, auth };
+export { db, auth, storage };
