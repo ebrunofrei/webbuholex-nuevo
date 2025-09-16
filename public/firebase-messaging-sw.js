@@ -1,4 +1,4 @@
-// Firebase Service Worker para notificaciones push
+// 🔔 Firebase Service Worker para notificaciones push
 importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js");
 
@@ -7,10 +7,10 @@ firebase.initializeApp({
   apiKey: "AIzaSyAlxd5_JKB7Fw5b9XES4bxECXQwvZjEu64",
   authDomain: "buholex-ab588.firebaseapp.com",
   projectId: "buholex-ab588",
-  storageBucket: "buholex-ab588.appspot.com", // ✅ corregido
+  storageBucket: "buholex-ab588.appspot.com",
   messagingSenderId: "608453552779",
-  appId: "1:608453552779:web:8ca82b34b76bf7de5b428e",
-  measurementId: "G-NQQZ7P48YX",
+  appId: "1:608453552779:web:8cab32b4b76b7de5b428e", // 👈 corregido
+  measurementId: "G-NQ27P4V8XY", // 👈 corregido
 });
 
 // Inicializa Firebase Messaging en el SW
@@ -24,24 +24,25 @@ messaging.onBackgroundMessage((payload) => {
   const notificationOptions = {
     body: payload.notification?.body || "Tienes una nueva notificación",
     icon: "/favicon.ico",
-    badge: "/favicon.ico", // 🔔 icono pequeño en la barra de estado
-    data: payload.data || {}, // incluye data para navegación
+    badge: "/favicon.ico", // icono pequeño en la barra de estado
+    data: payload.data || {}, // datos extra (para deep linking)
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
-// 📌 Manejo de clics en notificación (opcional)
+// 📌 Manejo de clics en notificación
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  // Abre la app si está cerrada o enfoca si ya está abierta
+
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       if (clientList.length > 0) {
-        const client = clientList[0];
-        return client.focus();
+        // Reutiliza la pestaña abierta
+        return clientList[0].focus();
       }
-      return clients.openWindow("/"); // 🔗 cambia "/" por la ruta de destino
+      // O abre una nueva pestaña hacia tu app
+      return clients.openWindow("/");
     })
   );
 });

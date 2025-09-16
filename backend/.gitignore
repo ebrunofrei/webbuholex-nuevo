@@ -89,6 +89,9 @@ cypress/screenshots/
 *.pid
 *.pid.lock
 
-# ─── VERCEL ─────────────────────────────────────────────────────────
+# Ignorar carpeta local de Vercel CLI
 .vercel/
-.vercel/project.json
+
+# NO ignores vercel.json (configuración de proyecto)
+!vercel.json
+
