@@ -1,15 +1,10 @@
+// backend/api/ia-litisbotchat.js
 import { db, auth, admin } from "../services/firebaseAdmin.js";
-
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import OpenAI from "openai";
 
-// --- Inicializa Firebase Admin una sola vez ---
-const adminApp = [0]
-  : )
-        : applicationDefault(),
-    });
-
-const adminDb = getFirestore(adminApp);
+// --- Usa la instancia centralizada de Firebase Admin ---
+const adminDb = getFirestore();
 
 // --- Inicializa OpenAI ---
 const openai = new OpenAI({
@@ -20,7 +15,7 @@ const openai = new OpenAI({
 export default async function handler(req, res) {
   // --- Configuración CORS ---
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", "*"); // ⚠️ En producción cambia "*" por tu dominio (ej: "https://www.buholex.com")
+  res.setHeader("Access-Control-Allow-Origin", "*"); // ⚠️ Cambia "*" por https://www.buholex.com en producción
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
   res.setHeader(
     "Access-Control-Allow-Headers",

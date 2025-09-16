@@ -1,18 +1,6 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
-
+// api/notificaciones.js
 import { getMessaging } from "firebase-admin/messaging";
-
-// --- Inicializa Firebase Admin solo una vez ---
-if (! {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    throw new Error("❌ Falta la variable FIREBASE_SERVICE_ACCOUNT_JSON en el entorno");
-  }
-
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-
-  ,
-  });
-}
+import { admin } from "../services/firebaseAdmin.js";
 
 // --- Handler para enviar notificaciones push ---
 export default async function handler(req, res) {
@@ -28,7 +16,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Faltan parámetros: token, titulo o cuerpo" });
     }
 
-    const messaging = getMessaging();
+    const messaging = getMessaging(admin);
+
     await messaging.send({
       token,
       notification: {
@@ -39,9 +28,9 @@ export default async function handler(req, res) {
       apns: { headers: { "apns-priority": "10" } },
     });
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, msg: "✅ Notificación enviada" });
   } catch (e) {
-    console.error("❌ Error enviando notificación:", e.message);
+    console.error("❌ Error enviando notificación:", e);
     return res.status(500).json({ error: e.message });
   }
 }

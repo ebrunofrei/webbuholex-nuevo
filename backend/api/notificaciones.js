@@ -1,39 +1,6 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
 // backend/api/notificaciones.js
-import admin from "firebase-admin";
-
-// =============================
-//  Cargar credenciales Firebase
-// =============================
-let serviceAccount = null;
-
-// 🔹 Producción (Vercel) → desde variable de entorno
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  try {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  } catch (err) {
-    console.error("❌ Error parseando FIREBASE_SERVICE_ACCOUNT:", err);
-  }
-}
-
-// 🔹 Desarrollo local → usa el archivo físico
-if (!serviceAccount) {
-  try {
-    serviceAccount = (
-      await import("../keys/buholex-service-account.json", {
-        assert: { type: "json" },
-      })
-    ).default;
-  } catch (err) {
-    console.error("⚠️ No se pudo cargar el archivo local de credenciales:", err);
-  }
-}
-
-// 🔹 Inicializa Firebase Admin solo una vez
-if (!admin.apps.length && serviceAccount) {
-  admin.,
-  });
-}
+import { getMessaging } from "firebase-admin/messaging";
+import { admin } from "../services/firebaseAdmin.js";
 
 /**
  * Endpoint para enviar notificación push con FCM
@@ -43,6 +10,7 @@ if (!admin.apps.length && serviceAccount) {
  */
 export default async function handler(req, res) {
   if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Método no permitido" });
   }
 
@@ -59,16 +27,18 @@ export default async function handler(req, res) {
         title: titulo || "BúhoLex",
         body: cuerpo || "Tienes una nueva notificación",
       },
+      android: { priority: "high" },
+      apns: { headers: { "apns-priority": "10" } },
     };
 
-    const response = await admin.messaging().send(message);
+    const response = await getMessaging(admin).send(message);
     console.log("✅ Notificación enviada:", response);
 
     return res.status(200).json({ ok: true, response });
   } catch (error) {
     console.error("❌ Error enviando notificación:", error);
-    return res
-      .status(500)
-      .json({ error: "No se pudo enviar la notificación" });
+    return res.status(500).json({
+      error: error.message || "No se pudo enviar la notificación",
+    });
   }
 }
