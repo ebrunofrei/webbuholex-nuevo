@@ -1,5 +1,5 @@
-import { openai } from "../../services/openaiService.js";
-import { db } from "../../services/firebaseAdmin.js";
+import { openai } from "../services/openaiService.js";
+import { db } from "../services/firebaseAdmin.js";
 
 export default async function handler(req, res) {
   try {
