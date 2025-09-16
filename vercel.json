@@ -1,7 +1,8 @@
-{
+echo '{
+  "version": 2,
   "functions": {
-    "backend/api/**/*.js": {
-      "runtime": "nodejs18.x"
+    "api/**/*.js": {
+      "runtime": "nodejs20.x"
     }
   }
-}
+}' > vercel.json
