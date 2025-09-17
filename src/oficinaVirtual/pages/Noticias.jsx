@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNoticiasGuardadas } from "@/oficinaVirtual/hooks/useNoticiasGuardadas";
 import { useAuth } from "@/context/AuthContext";
+import { asAbsoluteUrl } from "@/utils/apiUrl";
 
 // Endpoint configurable → usa el de Vercel si no está definido en entorno
 const BASE_URL =
@@ -69,7 +70,9 @@ export default function NoticiasOficina() {
       ? (busquedaAfin?.trim() || especialidad)
       : `${especialidad}+derecho+site:.pe`;
 
-    fetch(`${BASE_URL}?q=${encodeURIComponent(query)}`)
+    const url = asAbsoluteUrl(`${BASE_URL}?q=${encodeURIComponent(query)}`);
+
+    fetch(url)
       .then(res => {
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
         return res.json();

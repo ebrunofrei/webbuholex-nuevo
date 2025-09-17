@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
+import { asAbsoluteUrl } from "@/utils/apiUrl";
 
 // Permite configurar endpoint desde variables de entorno o usa fallback en Vercel
 const BASE_URL =
-  import.meta.env.VITE_NEWS_API_URL ||
-  "/api/noticias-juridicas"; // en producción se recomienda usar el serverless de Vercel
+  import.meta.env.VITE_NEWS_API_URL || "/api/noticias-juridicas";
 
 const NOTICIAS_POR_PAGINA = 8;
 
-export default function NoticiasEspecialidadBotonFlotante({ especialidad = "penal" }) {
+export default function NoticiasEspecialidadBotonFlotante({
+  especialidad = "penal",
+}) {
   const [open, setOpen] = useState(false);
   const [noticias, setNoticias] = useState([]);
   const [page, setPage] = useState(1);
@@ -17,43 +19,62 @@ export default function NoticiasEspecialidadBotonFlotante({ especialidad = "pena
   const [hayNuevas, setHayNuevas] = useState(false);
   const sidebarRef = useRef();
 
-  // Construye query dinámicamente
-  const QUERY = encodeURIComponent(`${especialidad} derecho site:.pe`);
+  // Reset cuando cambia la especialidad
+  useEffect(() => {
+    setNoticias([]);
+    setPage(1);
+    setHasMore(true);
+    fetchNoticias(1);
+    setHayNuevas(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [especialidad]);
 
   const fetchNoticias = async (nextPage = 1) => {
     setLoading(true);
+    const controller = new AbortController();
     try {
-      const url = `${BASE_URL}?q=${QUERY}`;
-      const response = await fetch(url, { method: "GET" });
+      const query = encodeURIComponent(`${especialidad} derecho site:.pe`);
+      const url = asAbsoluteUrl(`${BASE_URL}?q=${query}`);
+
+      const response = await fetch(url, { method: "GET", signal: controller.signal });
       if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
+
       const items = await response.json();
-      const nuevas = items.slice(0, nextPage * NOTICIAS_POR_PAGINA);
+
+      // de-dup por enlace/título por si la fuente trae repetidos
+      const uniques = Array.from(
+        new Map(items.map((n) => [n.enlace || n.titulo, n])).values()
+      );
+
+      const nuevas = uniques.slice(0, nextPage * NOTICIAS_POR_PAGINA);
       setNoticias(nuevas);
-      setHasMore(items.length > nuevas.length);
+      setHasMore(uniques.length > nuevas.length);
     } catch (err) {
       console.error("❌ Error cargando noticias:", err);
       setHasMore(false);
     } finally {
       setLoading(false);
     }
+    return () => controller.abort();
   };
 
-  useEffect(() => {
-    fetchNoticias(1);
-    setHayNuevas(true);
-    // eslint-disable-next-line
-  }, [especialidad]);
-
+  // Scroll infinito en sidebar
   useEffect(() => {
     if (!open) return;
     const el = sidebarRef.current;
     if (!el) return;
+
     const handleScroll = () => {
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 32 && hasMore && !loading) {
+      if (
+        el.scrollTop + el.clientHeight >= el.scrollHeight - 32 &&
+        hasMore &&
+        !loading
+      ) {
         fetchNoticias(page + 1);
         setPage((p) => p + 1);
       }
     };
+
     el.addEventListener("scroll", handleScroll);
     return () => el.removeEventListener("scroll", handleScroll);
   }, [open, hasMore, loading, page]);
@@ -112,7 +133,7 @@ export default function NoticiasEspecialidadBotonFlotante({ especialidad = "pena
           >
             {noticias?.length > 0 ? (
               noticias.map((n, idx) => (
-                <div key={idx} className="mb-3">
+                <div key={n.enlace || idx} className="mb-3">
                   <div className="bg-[#f7f4ef] rounded-xl p-3 shadow-md border border-[#e8d3c3] hover:shadow-lg transition">
                     <div className="flex items-center mb-2">
                       <span className="text-xs bg-[#b03a1a]/80 text-white px-2 py-0.5 rounded-full font-medium mr-2">

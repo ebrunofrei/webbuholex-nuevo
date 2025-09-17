@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
+import { asAbsoluteUrl } from "@/utils/apiUrl";
 
-// Usa variable de entorno para mayor flexibilidad
-const PROXY =
-  import.meta.env.VITE_NEWS_API_URL ||
-  "/api/noticias-juridicas"; // fallback a tu serverless en Vercel
+// Configurable: usa variable de entorno o el serverless de Vercel
+const BASE_URL = import.meta.env.VITE_NEWS_API_URL || "/api/noticias-juridicas";
 
 const NOTICIAS_POR_PAGINA = 8;
 
@@ -19,19 +18,31 @@ export default function NoticiasBotonFlotante() {
 
   const fetchNoticias = async (nextPage = 1) => {
     setLoading(true);
+    const controller = new AbortController();
     try {
-      const response = await fetch(PROXY, { method: "GET" });
+      const url = asAbsoluteUrl(BASE_URL); // evita rutas relativas tipo "api/..."
+      const response = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+      });
       if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
+
       const items = await response.json();
-      const nuevas = items.slice(0, nextPage * NOTICIAS_POR_PAGINA);
+      // de-dup por enlace por si la fuente trae repetidos
+      const uniques = Array.from(
+        new Map(items.map((n) => [n.enlace || n.titulo, n])).values()
+      );
+
+      const nuevas = uniques.slice(0, nextPage * NOTICIAS_POR_PAGINA);
       setNoticias(nuevas);
-      setHasMore(items.length > nuevas.length);
+      setHasMore(uniques.length > nuevas.length);
     } catch (err) {
       console.error("❌ Error cargando noticias:", err);
       setHasMore(false);
     } finally {
       setLoading(false);
     }
+    return () => controller.abort();
   };
 
   useEffect(() => {
@@ -103,9 +114,7 @@ export default function NoticiasBotonFlotante() {
           style={{ maxWidth: "340px" }}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b bg-[#b03a1a]/10">
-            <h2 className="font-bold text-[#b03a1a] text-lg">
-              Noticias jurídicas
-            </h2>
+            <h2 className="font-bold text-[#b03a1a] text-lg">Noticias jurídicas</h2>
             <button
               onClick={() => setOpen(false)}
               className="text-2xl font-bold hover:text-[#b03a1a]"
@@ -116,22 +125,18 @@ export default function NoticiasBotonFlotante() {
           <div
             className="p-3 overflow-y-auto flex-1"
             ref={sidebarRef}
-            style={{
-              scrollbarWidth: "thin",
-              scrollbarColor: "#b03a1a #f7e4d5",
-            }}
+            style={{ scrollbarWidth: "thin", scrollbarColor: "#b03a1a #f7e4d5" }}
           >
             {noticias?.length > 0 ? (
               noticias.map((n, idx) => (
-                <div key={idx} className="mb-3">
+                <div key={n.enlace || idx} className="mb-3">
                   <div className="bg-[#fff6f3] rounded-xl p-3 shadow-md border border-[#e8d3c3] hover:shadow-lg transition">
                     <div className="flex items-center mb-2">
                       <span className="text-xs bg-[#b03a1a]/80 text-white px-2 py-0.5 rounded-full font-medium mr-2">
                         {n.fuente}
                       </span>
                       <span className="ml-auto text-[11px] text-[#b03a1a] opacity-70">
-                        {n.fecha &&
-                          new Date(n.fecha).toLocaleDateString("es-PE")}
+                        {n.fecha && new Date(n.fecha).toLocaleDateString("es-PE")}
                       </span>
                     </div>
                     <a
