@@ -14,7 +14,8 @@
     "importar-normas": "node backend/importar_normas/importarNormasFirestore.js",
     "sync-firebase": "node scripts/sync-firebase-exports.mjs",
     "check-setup": "dotenv -e .env.local -- node scripts/check-setup.js",
-    "fix-imports": "node ./scripts/fix-imports.js"
+    "fix-imports": "node ./scripts/fix-imports.js",
+    "deploy": "git add . && git commit -m 'deploy automático' && git push origin main"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
