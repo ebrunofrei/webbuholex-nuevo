@@ -16,7 +16,10 @@ export default function useOpenAI() {
         throw new Error("El parámetro 'messages' debe ser un array válido.");
       }
 
-      const res = await fetch("/api/openai", {
+      // Usa la URL definida en .env (VITE_API_URL) o fallback
+      const apiUrl = import.meta.env.VITE_API_URL || "/api/openai";
+
+      const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages, model }),
