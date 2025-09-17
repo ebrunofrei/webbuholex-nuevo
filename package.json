@@ -9,7 +9,6 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "prepare": "husky install",
-    "deploy": "git add . && git commit -m \"deploy automático\" && git push origin main",
     "seed-branding": "node scripts/seedBranding.js",
     "importar-normas": "node backend/importar_normas/importarNormasFirestore.js",
     "sync-firebase": "node scripts/sync-firebase-exports.mjs",
