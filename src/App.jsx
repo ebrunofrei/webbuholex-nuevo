@@ -77,6 +77,7 @@ import AvisoCookies from "@/pages/legal/aviso-cookies";
 import CookiesBanner from "@/components/CookiesBanner";
 import PricingPage from "./pages/PricingPage";
 import LandingSaaS from "./pages/LandingSaaS";
+import ChatTest from "@/components/ChatTest";
 
 // 🔔 Hook centralizado para FCM
 import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
@@ -232,6 +233,7 @@ function AppContent() {
                 <Route path="/planes" element={<PricingPage />} />
                 <Route path="/planes" element={<LandingSaaS />} />
                 <Route path="*" element={<Error404 />} />
+                <Route path="/chat-test" element={<ChatTest />} />
               </Routes>
             </main>
             {!hideNavbar && (
