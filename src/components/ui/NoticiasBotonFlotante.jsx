@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
 
-const PROXY = "https://buholex-news-proxy-production.up.railway.app/api/noticias-juridicas"; // O usa /api/noticias-juridicas en producción
+// Usa variable de entorno para mayor flexibilidad
+const PROXY =
+  import.meta.env.VITE_NEWS_API_URL ||
+  "/api/noticias-juridicas"; // fallback a tu serverless en Vercel
+
 const NOTICIAS_POR_PAGINA = 8;
 
 export default function NoticiasBotonFlotante() {
@@ -16,12 +20,14 @@ export default function NoticiasBotonFlotante() {
   const fetchNoticias = async (nextPage = 1) => {
     setLoading(true);
     try {
-      const response = await fetch(PROXY);
+      const response = await fetch(PROXY, { method: "GET" });
+      if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
       const items = await response.json();
       const nuevas = items.slice(0, nextPage * NOTICIAS_POR_PAGINA);
       setNoticias(nuevas);
       setHasMore(items.length > nuevas.length);
     } catch (err) {
+      console.error("❌ Error cargando noticias:", err);
       setHasMore(false);
     } finally {
       setLoading(false);
@@ -39,14 +45,17 @@ export default function NoticiasBotonFlotante() {
     const el = sidebarRef.current;
     if (!el) return;
     const handleScroll = () => {
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 32 && hasMore && !loading) {
+      if (
+        el.scrollTop + el.clientHeight >= el.scrollHeight - 32 &&
+        hasMore &&
+        !loading
+      ) {
         fetchNoticias(page + 1);
         setPage((p) => p + 1);
       }
     };
     el.addEventListener("scroll", handleScroll);
     return () => el.removeEventListener("scroll", handleScroll);
-    // eslint-disable-next-line
   }, [open, hasMore, loading, page]);
 
   const handleOpen = () => {
@@ -76,21 +85,42 @@ export default function NoticiasBotonFlotante() {
           "
           aria-label="Abrir noticias"
         >
-          <Megaphone size={22} className={`text-white ${hayNuevas ? "animate-bell" : ""}`} />
+          <Megaphone
+            size={22}
+            className={`text-white ${hayNuevas ? "animate-bell" : ""}`}
+          />
           <span className="hidden sm:inline">Noticias</span>
-          {hayNuevas && <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-yellow-400 animate-ping"></span>}
+          {hayNuevas && (
+            <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-yellow-400 animate-ping"></span>
+          )}
         </button>
       </div>
-      {/* Sidebar mejorado */}
+
+      {/* Sidebar */}
       {open && (
-        <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[100] flex flex-col animate-slide-in"
-          style={{ maxWidth: "340px" }}>
+        <div
+          className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[100] flex flex-col animate-slide-in"
+          style={{ maxWidth: "340px" }}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b bg-[#b03a1a]/10">
-            <h2 className="font-bold text-[#b03a1a] text-lg">Noticias jurídicas</h2>
-            <button onClick={() => setOpen(false)} className="text-2xl font-bold hover:text-[#b03a1a]">&times;</button>
+            <h2 className="font-bold text-[#b03a1a] text-lg">
+              Noticias jurídicas
+            </h2>
+            <button
+              onClick={() => setOpen(false)}
+              className="text-2xl font-bold hover:text-[#b03a1a]"
+            >
+              &times;
+            </button>
           </div>
-          <div className="p-3 overflow-y-auto flex-1" ref={sidebarRef}
-            style={{ scrollbarWidth: "thin", scrollbarColor: "#b03a1a #f7e4d5" }}>
+          <div
+            className="p-3 overflow-y-auto flex-1"
+            ref={sidebarRef}
+            style={{
+              scrollbarWidth: "thin",
+              scrollbarColor: "#b03a1a #f7e4d5",
+            }}
+          >
             {noticias?.length > 0 ? (
               noticias.map((n, idx) => (
                 <div key={idx} className="mb-3">
@@ -100,7 +130,8 @@ export default function NoticiasBotonFlotante() {
                         {n.fuente}
                       </span>
                       <span className="ml-auto text-[11px] text-[#b03a1a] opacity-70">
-                        {n.fecha && new Date(n.fecha).toLocaleDateString()}
+                        {n.fecha &&
+                          new Date(n.fecha).toLocaleDateString("es-PE")}
                       </span>
                     </div>
                     <a
@@ -121,14 +152,19 @@ export default function NoticiasBotonFlotante() {
             ) : (
               <div className="text-center text-gray-500">Sin noticias.</div>
             )}
-            {loading && <div className="text-center text-[#b03a1a] py-3">Cargando...</div>}
+            {loading && (
+              <div className="text-center text-[#b03a1a] py-3">Cargando...</div>
+            )}
             {!hasMore && !loading && (
-              <div className="text-center text-xs text-[#bbb] py-2">No hay más noticias.</div>
+              <div className="text-center text-xs text-[#bbb] py-2">
+                No hay más noticias.
+              </div>
             )}
           </div>
         </div>
       )}
-      {/* Animaciones y scroll personalizado */}
+
+      {/* Animaciones y scroll */}
       <style>
         {`
         .animate-slide-in {
@@ -150,7 +186,6 @@ export default function NoticiasBotonFlotante() {
           75% { transform: rotate(-5deg);}
           85% { transform: rotate(5deg);}
         }
-        /* Custom scroll para el sidebar */
         .overflow-y-auto::-webkit-scrollbar {
           width: 7px;
         }

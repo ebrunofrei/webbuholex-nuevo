@@ -2,7 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNoticiasGuardadas } from "@/oficinaVirtual/hooks/useNoticiasGuardadas";
 import { useAuth } from "@/context/AuthContext";
 
-const PROXY = "https://buholex-news-proxy-production.up.railway.app/api/noticias-juridicas";
+// Endpoint configurable → usa el de Vercel si no está definido en entorno
+const BASE_URL =
+  import.meta.env.VITE_NEWS_API_URL || "/api/noticias-juridicas";
+
 const PAGE_SIZE = 12;
 
 const AREAS = [
@@ -61,29 +64,32 @@ export default function NoticiasOficina() {
     setLoading(true);
     setPage(1);
 
-    // Por defecto, búsqueda afín o por especialidad
-    let query = modoAfin
+    // Query: especialidad o tema afín
+    const query = modoAfin
       ? (busquedaAfin?.trim() || especialidad)
       : `${especialidad}+derecho+site:.pe`;
 
-    fetch(`${PROXY}?q=${encodeURIComponent(query)}`)
-      .then(res => res.json())
+    fetch(`${BASE_URL}?q=${encodeURIComponent(query)}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => { if (!cancelado) setNoticias(data || []); })
+      .catch(err => console.error("❌ Error cargando noticias:", err))
       .finally(() => { if (!cancelado) setLoading(false); });
 
     return () => { cancelado = true; };
   }, [especialidad, modoAfin, busquedaAfin]);
 
   // Filtro local por búsqueda y tags
-  let filtradas = noticias
-    .filter(n =>
-      (soloGuardadas || esReciente(n.fecha)) &&
-      (
-        n.titulo?.toLowerCase().includes(busqueda.toLowerCase()) ||
-        n.resumen?.toLowerCase().includes(busqueda.toLowerCase()) ||
-        (n.tagsAI && n.tagsAI.some(tag => tag.toLowerCase().includes(busqueda.toLowerCase())))
-      )
-    );
+  const filtradas = noticias.filter(n =>
+    (soloGuardadas || esReciente(n.fecha)) &&
+    (
+      n.titulo?.toLowerCase().includes(busqueda.toLowerCase()) ||
+      n.resumen?.toLowerCase().includes(busqueda.toLowerCase()) ||
+      (n.tagsAI && n.tagsAI.some(tag => tag.toLowerCase().includes(busqueda.toLowerCase())))
+    )
+  );
 
   // Paginación
   const total = filtradas.length;
@@ -94,6 +100,7 @@ export default function NoticiasOficina() {
       <h2 className="text-3xl sm:text-4xl font-extrabold text-center mb-2 tracking-tight text-[#b03a1a]">
         Noticias Jurídicas Inteligentes
       </h2>
+
       {/* Botones de especialidad */}
       <div className="flex flex-wrap justify-center gap-2 mb-6">
         {AREAS.map(area => (
@@ -103,8 +110,7 @@ export default function NoticiasOficina() {
             className={`px-4 py-2 rounded-xl font-bold border shadow transition-all
               ${especialidad === area && !modoAfin
                 ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow-lg scale-105"
-                : "bg-[#fdf5ee] text-[#b03a1a] border-[#b03a1a] hover:bg-[#f3ece9]"}
-            `}
+                : "bg-[#fdf5ee] text-[#b03a1a] border-[#b03a1a] hover:bg-[#f3ece9]"}`}
           >
             {AREAS_LABEL[area]}
           </button>
@@ -127,8 +133,7 @@ export default function NoticiasOficina() {
           className={`px-4 py-2 rounded-xl font-bold border transition ml-3
             ${soloGuardadas
               ? "bg-blue-700 text-white border-blue-700 shadow"
-              : "bg-[#fdf5ee] text-[#164a8a] border-blue-700 hover:bg-[#e5ecfa]"}
-          `}
+              : "bg-[#fdf5ee] text-[#164a8a] border-blue-700 hover:bg-[#e5ecfa]"}`}
         >
           {soloGuardadas ? "Ver Recientes" : "Ver Guardadas"}
         </button>
@@ -149,8 +154,7 @@ export default function NoticiasOficina() {
               className={`px-4 py-2 rounded-xl font-semibold border transition
                 ${especialidad === area && !modoAfin
                   ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow"
-                  : "bg-white text-[#b03a1a] border-[#b03a1a] hover:bg-[#ffe6d6]"}
-              `}
+                  : "bg-white text-[#b03a1a] border-[#b03a1a] hover:bg-[#ffe6d6]"}`}
             >
               {area.charAt(0).toUpperCase() + area.slice(1)}
             </button>
@@ -158,7 +162,7 @@ export default function NoticiasOficina() {
         </div>
       )}
 
-      {/* Modal/box de Temas afines */}
+      {/* Modal de Temas afines */}
       {afinesOpen && modoAfin && (
         <div className="flex flex-col items-center gap-3 mb-6 animate-fade-in bg-white/95 px-4 py-6 rounded-xl shadow-lg border border-[#b03a1a]/15 max-w-lg mx-auto">
           <div className="flex justify-between items-center w-full mb-2">
@@ -192,8 +196,7 @@ export default function NoticiasOficina() {
                   setEspecialidad(sug);
                   setAfinesOpen(false);
                 }}
-                className="px-3 py-1 bg-[#e5ecfa] text-[#164a8a] rounded-full font-semibold hover:bg-[#d6e0f7]"
-              >
+                className="px-3 py-1 bg-[#e5ecfa] text-[#164a8a] rounded-full font-semibold hover:bg-[#d6e0f7]">
                 {sug}
               </button>
             ))}
@@ -212,7 +215,7 @@ export default function NoticiasOficina() {
         />
       </div>
 
-      {/* Noticias en grid responsive */}
+      {/* Noticias */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
         {loading ? (
           <div className="col-span-full text-center text-2xl py-10 text-gray-500">Cargando noticias...</div>

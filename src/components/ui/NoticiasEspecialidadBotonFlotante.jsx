@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
 
-const PROXY = "https://buholex-news-proxy-production.up.railway.app/api/noticias-juridicas"; // Cambia a tu endpoint cloud si está desplegado
+// Permite configurar endpoint desde variables de entorno o usa fallback en Vercel
+const BASE_URL =
+  import.meta.env.VITE_NEWS_API_URL ||
+  "/api/noticias-juridicas"; // en producción se recomienda usar el serverless de Vercel
+
+const NOTICIAS_POR_PAGINA = 8;
 
 export default function NoticiasEspecialidadBotonFlotante({ especialidad = "penal" }) {
   const [open, setOpen] = useState(false);
@@ -12,19 +17,21 @@ export default function NoticiasEspecialidadBotonFlotante({ especialidad = "pena
   const [hayNuevas, setHayNuevas] = useState(false);
   const sidebarRef = useRef();
 
-  // Construye la query según especialidad
-  const QUERY = encodeURIComponent(`${especialidad}+derecho+site:.pe`);
+  // Construye query dinámicamente
+  const QUERY = encodeURIComponent(`${especialidad} derecho site:.pe`);
 
   const fetchNoticias = async (nextPage = 1) => {
     setLoading(true);
     try {
-      const response = await fetch('https://buholex-news-proxy-production.up.railway.app/api/noticias-juridicas?q=penal+derecho+site:.pe');
+      const url = `${BASE_URL}?q=${QUERY}`;
+      const response = await fetch(url, { method: "GET" });
+      if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
       const items = await response.json();
-      console.log(items);
-      const nuevas = items.slice(0, nextPage * 8);
+      const nuevas = items.slice(0, nextPage * NOTICIAS_POR_PAGINA);
       setNoticias(nuevas);
       setHasMore(items.length > nuevas.length);
     } catch (err) {
+      console.error("❌ Error cargando noticias:", err);
       setHasMore(false);
     } finally {
       setLoading(false);
@@ -49,7 +56,6 @@ export default function NoticiasEspecialidadBotonFlotante({ especialidad = "pena
     };
     el.addEventListener("scroll", handleScroll);
     return () => el.removeEventListener("scroll", handleScroll);
-    // eslint-disable-next-line
   }, [open, hasMore, loading, page]);
 
   const handleOpen = () => {
@@ -77,23 +83,33 @@ export default function NoticiasEspecialidadBotonFlotante({ especialidad = "pena
             hover:bg-[#a87247] transition active:scale-95
             relative
           "
-          aria-label="Abrir noticias"
+          aria-label={`Abrir noticias de ${especialidad}`}
         >
           <Megaphone size={22} className={`text-white ${hayNuevas ? "animate-bell" : ""}`} />
           <span className="hidden sm:inline">Noticias {especialidad}</span>
-          {hayNuevas && <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-yellow-400 animate-ping"></span>}
+          {hayNuevas && (
+            <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-yellow-400 animate-ping"></span>
+          )}
         </button>
       </div>
+
       {/* Sidebar premium */}
       {open && (
-        <div className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[100] flex flex-col animate-slide-in"
-          style={{ maxWidth: "340px" }}>
+        <div
+          className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[100] flex flex-col animate-slide-in"
+          style={{ maxWidth: "340px" }}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b bg-[#b03a1a]/10">
             <h2 className="font-bold text-[#b03a1a] text-lg">Noticias {especialidad}</h2>
-            <button onClick={() => setOpen(false)} className="text-2xl font-bold hover:text-[#b03a1a]">&times;</button>
+            <button onClick={() => setOpen(false)} className="text-2xl font-bold hover:text-[#b03a1a]">
+              &times;
+            </button>
           </div>
-          <div className="p-3 overflow-y-auto flex-1" ref={sidebarRef}
-            style={{ scrollbarWidth: "thin", scrollbarColor: "#b03a1a #f7e4d5" }}>
+          <div
+            className="p-3 overflow-y-auto flex-1"
+            ref={sidebarRef}
+            style={{ scrollbarWidth: "thin", scrollbarColor: "#b03a1a #f7e4d5" }}
+          >
             {noticias?.length > 0 ? (
               noticias.map((n, idx) => (
                 <div key={idx} className="mb-3">
@@ -103,7 +119,7 @@ export default function NoticiasEspecialidadBotonFlotante({ especialidad = "pena
                         {n.fuente}
                       </span>
                       <span className="ml-auto text-[11px] text-[#b03a1a] opacity-70">
-                        {n.fecha && new Date(n.fecha).toLocaleDateString()}
+                        {n.fecha && new Date(n.fecha).toLocaleDateString("es-PE")}
                       </span>
                     </div>
                     <a
@@ -131,6 +147,7 @@ export default function NoticiasEspecialidadBotonFlotante({ especialidad = "pena
           </div>
         </div>
       )}
+
       {/* Animaciones y scroll personalizado */}
       <style>
         {`
