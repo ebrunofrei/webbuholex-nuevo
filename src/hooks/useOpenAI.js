@@ -3,24 +3,27 @@ import { useState } from "react";
 import { asAbsoluteUrl } from "@/utils/apiUrl";
 
 export default function useOpenAI() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
   const [response, setResponse] = useState(null);
 
   const sendMessage = async (messages, model = "gpt-4o-mini") => {
-    setLoading(true); setError(null); setResponse(null);
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+
     try {
-      if (!Array.isArray(messages)) throw new Error("El parámetro 'messages' debe ser un array válido.");
+      if (!Array.isArray(messages)) {
+        throw new Error("El parámetro 'messages' debe ser un array válido.");
+      }
 
-      // 1) toma VITE_API_URL si existe; 2) /api/openai; 3) fallback /api/ja-litisbotchat
-      const endpoint =
-        import.meta.env.VITE_API_URL ||
-        "/api/openai" ||
-        "/api/ja-litisbotchat";
+      // 1) Usa VITE_API_URL si viene definida.
+      // 2) Fallback: en prod -> /api/ia-litisbotchat ; en dev -> /api/openai
+      const endpointFromEnv = import.meta.env.VITE_API_URL?.trim();
+      const fallback = import.meta.env.PROD ? "/api/ia-litisbotchat" : "/api/openai";
+      const endpoint = asAbsoluteUrl(endpointFromEnv || fallback);
 
-      const url = asAbsoluteUrl(endpoint);
-
-      const res = await fetch(url, {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages, model }),
@@ -32,13 +35,18 @@ export default function useOpenAI() {
       }
 
       const data = await res.json();
-      if (!data || !data.data) throw new Error("Respuesta inválida desde la API de OpenAI");
+      // Acepta { data }, { respuesta } o el cuerpo directo
+      const payload = data?.data ?? data?.respuesta ?? data;
 
-      setResponse(data.data);
-      return data.data;
+      if (!payload) {
+        throw new Error("Respuesta inválida desde la API de OpenAI");
+      }
+
+      setResponse(payload);
+      return payload;
     } catch (err) {
       console.error("❌ Error en useOpenAI:", err);
-      setError(err.message);
+      setError(err.message || "Error inesperado");
       return null;
     } finally {
       setLoading(false);

@@ -1,30 +1,68 @@
-import { db, auth, admin } from "./firebaseAdmin.js";
+// backend/services/openaiService.js
 import axios from "axios";
 
-/**
- * Llama al endpoint de OpenAI Chat Completion.
- * @param {Array} messages - Mensajes del chat [{ role: "user", content: "..." }]
- * @returns {Promise<string>} Respuesta generada por OpenAI
- */
-export async function callOpenAI(messages) {
-  const apiKey = process.env.OPENAI_API_KEY; // 🔑 Asegúrate que en Vercel sea OPENAI_API_KEY
+// Reutilizamos un cliente Axios con headers y timeout sensatos
+const API_KEY = process.env.OPENAI_API_KEY;
+const openaiHttp = axios.create({
+  baseURL: "https://api.openai.com/v1",
+  timeout: 25000,
+  headers: {
+    Authorization: `Bearer ${API_KEY || ""}`,
+    "Content-Type": "application/json",
+  },
+});
 
-  if (!apiKey) {
-    throw new Error("Falta configurar la variable OPENAI_API_KEY en el entorno");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Llama al endpoint de Chat Completions de OpenAI.
+ * @param {Array<{role:'system'|'user'|'assistant', content:string}>} messages
+ * @param {{model?:string, max_tokens?:number, temperature?:number}} [opts]
+ * @returns {Promise<{text: string, raw: any}>}
+ */
+export async function callOpenAI(
+  messages,
+  { model = "gpt-4o-mini", max_tokens = 1024, temperature = 0.3 } = {}
+) {
+  if (!API_KEY) {
+    throw new Error("Falta configurar OPENAI_API_KEY en el entorno");
+  }
+  if (!Array.isArray(messages) || messages.length === 0) {
+    throw new Error("El parámetro 'messages' debe ser un array con al menos un mensaje.");
   }
 
-  const resp = await axios.post(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      model: "gpt-4o", // o gpt-4o-mini si quieres ahorrar tokens
-      messages,
-      max_tokens: 1024,
-      temperature: 0.3,
-    },
-    {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    }
-  );
+  const payload = { model, messages, max_tokens, temperature };
 
-  return resp.data.choices[0].message.content;
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data } = await openaiHttp.post("/chat/completions", payload);
+      const text = data?.choices?.[0]?.message?.content ?? "";
+      return { text, raw: data };
+    } catch (err) {
+      lastErr = err;
+      const status = err?.response?.status;
+
+      // Reintentos simples para 429 o 5xx
+      if (status === 429 || (status >= 500 && status < 600)) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+
+      const detail = err?.response?.data || err.message || "Error desconocido";
+      throw new Error(
+        typeof detail === "string" ? detail : JSON.stringify(detail)
+      );
+    }
+  }
+
+  const status = lastErr?.response?.status ?? "unknown";
+  const body = lastErr?.response?.data ?? lastErr?.message ?? "Error desconocido";
+  throw new Error(
+    `OpenAI error (status ${status}): ${
+      typeof body === "string" ? body : JSON.stringify(body)
+    }`
+  );
 }
+
+export { openaiHttp };

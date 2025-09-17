@@ -1,65 +1,75 @@
 // /api/ia-litisbotchat.js
-import { db } from "../backend/services/firebaseAdmin.js";
-import { openai } from "../backend/services/openaiService.js";
+import { db } from "../backend/services/firebaseAdmin.js";      // tu singleton de Firestore (admin)
+import { openai } from "../backend/services/openaiService.js";  // tu cliente de OpenAI
 
-// --- Inicializar Firebase Admin ---
-if (!getApps().length) {
-  initializeApp({
-    credential: applicationDefault(),
-  });
-}
-const db = getFirestore();
-
-// --- Inicializar OpenAI ---
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// --- Handler Vercel ---
 export default async function handler(req, res) {
-  // Configuración CORS
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  // ---- CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,OPTIONS,PATCH,DELETE,POST,PUT"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
-  );
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST,OPTIONS");
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   try {
-    const { pregunta, userId } = req.body || {};
+    const body = req.body || {};
+    const { model = "gpt-4o-mini", userId = "anonimo" } = body;
 
-    if (!pregunta) {
-      return res.status(400).json({ error: "Falta el campo 'pregunta'" });
+    // Acepta messages[] o pregunta
+    let messages = [];
+    if (Array.isArray(body.messages) && body.messages.length) {
+      messages = body.messages;
+    } else if (typeof body.pregunta === "string" && body.pregunta.trim()) {
+      messages = [{ role: "user", content: body.pregunta.trim() }];
+    } else {
+      return res.status(400).json({
+        error: "Envía 'messages' (array) o 'pregunta' (string).",
+      });
     }
 
-    // --- Generar respuesta con OpenAI ---
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: pregunta }],
-    });
+    // ---- Llamada a OpenAI (usa tu cliente; fallback con fetch si no existe el método)
+    let completion;
+    if (openai?.chat?.completions?.create) {
+      completion = await openai.chat.completions.create({ model, messages });
+    } else {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({ model, messages }),
+      });
+      const j = await r.json();
+      if (!r.ok) return res.status(502).json({ error: j });
+      completion = j;
+    }
 
-    const respuesta =
-      completion.choices?.[0]?.message?.content || "No se generó respuesta";
+    const answer = completion.choices?.[0]?.message ?? { role: "assistant", content: "" };
+    const text = answer.content || "";
 
-    // --- Guardar en Firestore ---
-    await db.collection("conversaciones").add({
-      userId: userId || "anonimo",
-      pregunta,
-      respuesta,
-      timestamp: new Date(),
-    });
+    // ---- Persistencia en Firestore (no bloqueante si falla)
+    try {
+      if (db) {
+        await db.collection("conversaciones").add({
+          userId,
+          model,
+          messages,
+          respuesta: text,
+          createdAt: new Date(),
+        });
+      }
+    } catch (e) {
+      console.warn("No se pudo guardar en Firestore:", e?.message || e);
+    }
 
-    return res.status(200).json({ respuesta });
+    // Respuesta normalizada para tu hook useOpenAI
+    return res.status(200).json({ data: answer });
   } catch (error) {
     console.error("Error en /api/ia-litisbotchat:", error);
-    return res.status(500).json({ error: error.message || "Error interno" });
+    return res.status(500).json({ error: "Error generando respuesta del asistente." });
   }
 }
