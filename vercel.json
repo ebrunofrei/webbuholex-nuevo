@@ -1,22 +1,20 @@
 {
+  "version": 2,
   "builds": [
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } },
     { "src": "api/**/*.js", "use": "@vercel/node" }
   ],
+  "functions": {
+    "api/**/*.js": { "runtime": "nodejs20.x" }
+  },
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/assets/(.*)", "dest": "/assets/$1" },
-    { "src": "/favicon.ico", "dest": "/favicon.ico" },
-    { "src": "/firebase-messaging-sw.js", "dest": "/firebase-messaging-sw.js" },
+    { "src": "^/api/(.*)$", "dest": "/api/$1" },
+
+    { "src": "^/firebase-messaging-sw\\.js$", "headers": { "Cache-Control": "no-cache" }, "dest": "/firebase-messaging-sw.js" },
+
+    { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
+    { "src": "^/favicon\\.ico$", "dest": "/favicon.ico" },
+
     { "src": "/(.*)", "dest": "/index.html" }
-  ],
-  "headers": [
-    {
-      "source": "/firebase-messaging-sw.js",
-      "headers": [
-        { "key": "Service-Worker-Allowed", "value": "/" },
-        { "key": "Cache-Control", "value": "no-store" }
-      ]
-    }
   ]
 }
