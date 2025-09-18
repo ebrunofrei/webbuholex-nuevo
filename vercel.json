@@ -4,16 +4,16 @@
     { "src": "api/**/*.js", "use": "@vercel/node" },
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
   ],
-  "functions": {
-    "api/**/*.js": { "runtime": "nodejs20.x" }
-  },
+  "functions": { "api/**.js": { "runtime": "nodejs20.x" } },
   "routes": [
     { "handle": "filesystem" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
 
     {
       "src": "^/firebase-messaging-sw\\.js$",
-      "headers": { "Cache-Control": "no-store, max-age=0, must-revalidate" },
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
+      ],
       "dest": "/firebase-messaging-sw.js"
     },
 
