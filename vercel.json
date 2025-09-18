@@ -1,20 +1,22 @@
 {
   "version": 2,
   "builds": [
-    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } },
-    { "src": "api/**/*.js", "use": "@vercel/node" }
+    { "src": "api/**/*.js", "use": "@vercel/node" },
+    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
   ],
   "functions": {
-    "api/**/*.js": { "runtime": "nodejs20.x" }
+    "api/**.js": { "runtime": "nodejs20.x" }
   },
   "routes": [
-    { "src": "^/api/(.*)$", "dest": "/api/$1" },
-
-    { "src": "^/firebase-messaging-sw\\.js$", "headers": { "Cache-Control": "no-cache" }, "dest": "/firebase-messaging-sw.js" },
-
-    { "src": "^/assets/(.*)$", "dest": "/assets/$1" },
-    { "src": "^/favicon\\.ico$", "dest": "/favicon.ico" },
-
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "handle": "filesystem" },
+    { "src": "^/api/(.*)", "dest": "/api/$1" },
+    {
+      "src": "^/firebase-messaging-sw\\.js$",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
+      ],
+      "dest": "/firebase-messaging-sw.js"
+    },
+    { "src": "^/(.*)$", "dest": "/index.html" }
   ]
 }
