@@ -21,19 +21,19 @@ import HerramientaLiquidacionLaboral from "./Herramientas/HerramientaLiquidacion
 ============================================================ */
 const buildIaUrl = () => {
   const raw = (import.meta.env.VITE_API_URL || "").trim();
-  if (!raw) return "/api/ia-litisbotchat"; // fallback local
+  if (!raw) return "/api/ai?action=chat"; // fallback local
 
   // Si ya viene con /api/... o es ruta absoluta completa
   if (/^https?:\/\//i.test(raw)) {
     // Si raw ya apunta al propio endpoint, úsalo tal cual
     if (/\/api\/.+/i.test(raw)) return raw.replace(/\/+$/, "");
     // Si es solo dominio/base, añade el endpoint
-    return raw.replace(/\/+$/, "") + "/api/ia-litisbotchat";
+    return raw.replace(/\/+$/, "") + "/api/ai?action=chat";
   }
 
   // Rutas relativas
   if (raw.startsWith("/api/")) return raw; // ya es endpoint relativo
-  return raw.replace(/\/+$/, "") + "/api/ia-litisbotchat";
+  return raw.replace(/\/+$/, "") + "/api/ai?action=chat";
 };
 
 /* ============================================================
