@@ -8,18 +8,23 @@ const openai = new OpenAI({
 export default async function handler(req, res) {
   const { action } = req.query;
 
-  try {
-    if (action === "chat" && req.method === "POST") {
-      // Aquí usarías la API de OpenAI
-      res.json({ response: "Respuesta de la IA" });
+  if (req.method === "POST" && action === "chat") {
+    try {
+      const { prompt, historial } = req.body;
 
-    } else if (action === "summarize" && req.method === "POST") {
-      res.json({ summary: "Resumen generado" });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini", // o el que uses
+        messages: [
+          ...(historial || []),
+          { role: "user", content: prompt },
+        ],
+      });
 
-    } else {
-      res.status(400).json({ error: "Acción no soportada en AI" });
+      res.status(200).json({ respuesta: completion.choices[0].message.content });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } else {
+    res.status(404).json({ error: "Acción no soportada en AI" });
   }
 }
