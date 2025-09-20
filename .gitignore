@@ -105,6 +105,7 @@ index-C6tLERUj.js
 tmp/
 temp/
 *.tmp
+scripts
 
 # ============================
 # STORYBOOK
@@ -134,6 +135,20 @@ docker-compose.override.yml
 # ============================
 # FRONTEND BUILD / PUBLIC
 # ============================
+# Ignorar solo bundles generados
 src/assets/index-*.js
-public/
+
+# Ignorar temporales dentro de public
+public/*.map
+public/*.tmp
+public/*.bak
+
+# Mantener archivos críticos
+!public/firebase-messaging-sw.js
+!public/favicon.ico
+!public/manifest.json
+
+# ============================
+# BACKEND KEYS
+# ============================
 backend/keys/*.json

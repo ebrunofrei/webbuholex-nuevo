@@ -1,4 +1,4 @@
-# ─── LOGS ───────────────────────────────────────────────────────────
+# ─── LOGS ─────────────────────────────────────────────────────────── 
 logs
 *.log
 npm-debug.log*
@@ -28,6 +28,7 @@ Desktop.ini
 *.sw?
 *.bak
 *.tmp
+__backups__/
 
 # ─── CONFIGURACIÓN DE EDITORES ─────────────────────────────────────
 .vscode/
@@ -61,6 +62,7 @@ backend/keys/**     # Ignora todo lo que haya dentro de la carpeta keys
 tmp/
 temp/
 *.tmp
+scripts/            # scripts auxiliares de migración o pruebas
 
 # ─── ARCHIVOS DE PRUEBA / TEST / TOOLS ─────────────────────────────
 *.test.*
@@ -89,9 +91,9 @@ cypress/screenshots/
 *.pid
 *.pid.lock
 
+# ─── VERCEL / DEPLOY ───────────────────────────────────────────────
 # Ignorar carpeta local de Vercel CLI
 .vercel/
 
-# NO ignores vercel.json (configuración de proyecto)
+# ⚠️ NO ignores vercel.json (configuración de proyecto)
 !vercel.json
-

@@ -10,7 +10,7 @@ export default function Noticias() {
     async function fetchNoticias() {
       setLoading(true);
       try {
-        const res = await fetch("/api/noticias-juridicas");
+        const res = await fetch("/api/utils?action=news");
         const datos = await res.json();
         setNoticias(datos);
       } catch (e) {

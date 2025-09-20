@@ -1,4 +1,4 @@
-import { db, auth, admin } from "../backend/services/firebaseAdmin.js";
+import { db, auth, admin } from "../services/firebaseAdmin.js";
 import fs from "fs";
 import path from "path";
 import multer from "multer";

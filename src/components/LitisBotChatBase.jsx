@@ -11,8 +11,7 @@ import {
 } from "react-icons/fa";
 import { MdSend } from "react-icons/md";
 
-// --- Herramientas integradas en este archivo (mock UI simples).
-// Mantengo tu estructura; puedes separarlas cuando gustes.
+// Herramientas (mock/simples). Mantengo tu estructura y rutas.
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
 import HerramientaLiquidacionLaboral from "./Herramientas/HerramientaLiquidacionLaboral";
 
@@ -21,19 +20,17 @@ import HerramientaLiquidacionLaboral from "./Herramientas/HerramientaLiquidacion
 ============================================================ */
 const buildIaUrl = () => {
   const raw = (import.meta.env.VITE_API_URL || "").trim();
-  if (!raw) return "/api/ai?action=chat"; // fallback local
+  if (!raw) return "/api/ia-litisbotchat"; // fallback local
 
   // Si ya viene con /api/... o es ruta absoluta completa
   if (/^https?:\/\//i.test(raw)) {
-    // Si raw ya apunta al propio endpoint, úsalo tal cual
     if (/\/api\/.+/i.test(raw)) return raw.replace(/\/+$/, "");
-    // Si es solo dominio/base, añade el endpoint
-    return raw.replace(/\/+$/, "") + "/api/ai?action=chat";
+    return raw.replace(/\/+$/, "") + "/api/ia-litisbotchat";
   }
 
   // Rutas relativas
-  if (raw.startsWith("/api/")) return raw; // ya es endpoint relativo
-  return raw.replace(/\/+$/, "") + "/api/ai?action=chat";
+  if (raw.startsWith("/api/")) return raw;
+  return raw.replace(/\/+$/, "") + "/api/ia-litisbotchat";
 };
 
 /* ============================================================
@@ -336,7 +333,7 @@ function HerramientaTraducir() {
 }
 
 /* ============================================================
-   Modal de Herramientas (con cierre por X, overlay y Escape)
+   Modal de Herramientas (overlay + fullscreen en móvil)
 ============================================================ */
 function ModalHerramientas({
   onClose,
@@ -351,8 +348,8 @@ function ModalHerramientas({
     { label: "Modo Audiencia", key: "audiencia", pro: true, desc: "Guía de objeciones, alegatos y tips de litigio para audiencias (PRO)." },
     { label: "Analizar Archivo", key: "analizador", pro: true, desc: "Sube archivos PDF, Word o audio para análisis legal (PRO)." },
     { label: "Traducir", key: "traducir", pro: false, desc: "Traduce textos o documentos legales." },
-    { label: "Agenda", key: "agenda", pro: true, desc: "Gestiona tus plazos, audiencias y recordatorios (PRO)." },
-    { label: "Recordatorios", key: "recordatorios", pro: true, desc: "Configura alertas importantes para tu práctica legal (PRO)." },
+    { label: "Agenda", key: "agenda", pro: true, desc: "Gestiona plazos, audiencias y recordatorios (PRO)." },
+    { label: "Recordatorios", key: "recordatorios", pro: true, desc: "Configura alertas importantes (PRO)." },
     { label: "Tercio de la Pena", key: "tercio_pena", pro: false, desc: "Calcula tercios, mitades y cuartos de pena." },
     { label: "Liquidación Laboral", key: "liquidacion_laboral", pro: false, desc: "CTS, vacaciones, gratificaciones y beneficios." },
   ];
@@ -397,15 +394,19 @@ function ModalHerramientas({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-3"
-      onClick={(e) => {
-        // Cerrar si se hace click en el overlay (fuera del cuadro)
-        if (e.target === e.currentTarget) onClose?.();
-      }}
-      style={{ backgroundColor: "rgba(0,0,0,0.3)" }}
-    >
+  className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+  onClick={(e) => {
+    if (e.target === e.currentTarget) onClose?.();
+  }}
+  style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+>
+      {/* En móvil ocupa toda la pantalla; en >=sm actúa como modal */}
       <div
-        className="bg-white rounded-2xl shadow-lg p-6 sm:p-7 w-full max-w-md relative border-2 border-yellow-600"
+        className={`
+          bg-white shadow-lg relative border-2 border-yellow-600
+          w-full h-full rounded-none p-5
+          sm:h-auto sm:max-w-md sm:rounded-2xl sm:p-6
+        `}
         role="dialog"
         aria-modal="true"
       >
@@ -497,7 +498,7 @@ const INIT_MSG = {
 };
 
 /* ============================================================
-   Componente Principal
+   Componente Principal (100% responsive)
 ============================================================ */
 export default function LitisBotChatBase({
   user = {},
@@ -535,7 +536,7 @@ export default function LitisBotChatBase({
     el.style.height = Math.min(el.scrollHeight, 6 * 28) + "px"; // max 6 líneas
   }, [input]);
 
-  // Exponer cierre para integraciones (si alguna herramienta interna usa su propia X)
+  // Exponer cierre (si otras partes quieren cerrar el modal)
   useEffect(() => {
     window.litisbotCloseTools = () => setShowModal?.(false);
     return () => {
@@ -593,7 +594,7 @@ export default function LitisBotChatBase({
   }
 
   async function handleSend(e) {
-    e.preventDefault();
+    e?.preventDefault?.();
     setAlertaAdjuntos("");
 
     // Si hay adjuntos, simula recepción y limpia
@@ -623,6 +624,14 @@ export default function LitisBotChatBase({
     await handleConsultaLegal(pregunta);
   }
 
+  // Enter = enviar / Shift+Enter = salto de línea
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend(e);
+    }
+  }
+
   const handleVoice = () => {
     if (grabando) return;
     setGrabando(true);
@@ -650,8 +659,7 @@ export default function LitisBotChatBase({
 
   return (
     <div
-      className="flex flex-col w-full items-center bg-white"
-      style={{ minHeight: "100vh" }}
+      className="flex flex-col w-full bg-white h-screen"
       onPaste={(e) => {
         if (e.clipboardData?.files?.length) {
           handleFileChange({ target: { files: e.clipboardData.files } });
@@ -660,26 +668,23 @@ export default function LitisBotChatBase({
     >
       {/* Área del chat */}
       <div
-        className="flex flex-col justify-end w-full mx-auto bg-white overflow-y-auto no-scrollbar
-                   px-2 sm:px-3 md:px-4
-                   max-w-[92vw] sm:max-w-3xl md:max-w-4xl
-                   h-[68vh] sm:h-[70vh] md:h-[72vh] lg:max-h-[80vh]"
-        style={{
-          marginTop: 24,
-          marginBottom: 14,
-          borderRadius: 24,
-          boxShadow: "0 4px 26px 0 #0001",
-        }}
+        className={`
+          flex-1 overflow-y-auto no-scrollbar
+          px-2 sm:px-4 md:px-6
+          pt-3 pb-2
+          max-w-[100vw]
+        `}
+        style={{ scrollPaddingBottom: 88 }}
       >
-        <div className="flex flex-col gap-2 w-full py-3">
+        <div className="flex flex-col gap-2 w-full">
           {mensajes.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}>
               <div
                 className={`
-                  px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
-                  rounded-[1.75rem] shadow max-w-[92%] md:max-w-[85%] break-words
+                  px-3 sm:px-4 md:px-5 py-2.5 sm:py-3 md:py-3.5
+                  rounded-[1.5rem] shadow max-w-[95%] sm:max-w-[86%] lg:max-w-[70%] break-words
                   ${m.role === "user" ? "text-white self-end" : "bg-yellow-50 text-[#5C2E0B] self-start"}
-                  sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
+                  text-sm md:text-[15px] lg:text-[17px] leading-relaxed
                 `}
                 style={{ background: m.role === "user" ? "#5C2E0B" : undefined, border: 0 }}
               >
@@ -699,7 +704,7 @@ export default function LitisBotChatBase({
 
           {cargando && (
             <div className="flex justify-start w-full">
-              <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
+              <div className="px-4 py-2.5 rounded-[1.5rem] shadow bg-yellow-100 text-[#5C2E0B] text-sm md:text-[15px]">
                 Buscando en bases legales…
               </div>
             </div>
@@ -711,20 +716,23 @@ export default function LitisBotChatBase({
       {/* Barra de entrada */}
       <form
         onSubmit={handleSend}
-        className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
-                   px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
-                   max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+        className={`
+          w-full mx-auto flex items-end gap-2 bg-white shadow-[0_-6px_18px_rgba(0,0,0,0.06)]
+          border-t border-yellow-200
+          px-2.5 sm:px-4 py-2 sm:py-2.5
+          sticky bottom-0 z-[60]
+          pb-[env(safe-area-inset-bottom)]
+        `}
       >
         {/* Adjuntar */}
         <label
-          className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${
-            adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""
-          }`}
+          className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition
+            ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}`}
           style={{ background: "#5C2E0B", color: "#fff" }}
           title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
           aria-label="Adjuntar archivo"
         >
-          <FaPaperclip size={22} />
+          <FaPaperclip size={20} />
           <input
             type="file"
             className="hidden"
@@ -736,7 +744,7 @@ export default function LitisBotChatBase({
 
         {/* Previews (scroll horizontal en móvil) */}
         {adjuntos.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 max-w-[40vw] sm:max-w-[50%]">
             {adjuntos.map((adj, idx) => (
               <div key={idx} className="relative flex-shrink-0">
                 {adj.type?.startsWith("image/") ? (
@@ -744,14 +752,14 @@ export default function LitisBotChatBase({
                     src={URL.createObjectURL(adj)}
                     alt={adj.name}
                     className="rounded-xl border-2 border-yellow-300 shadow object-cover"
-                    style={{ width: 100, height: 72 }}
+                    style={{ width: 96, height: 70 }}
                   />
                 ) : (
                   <div
                     className="bg-yellow-50 border-2 border-yellow-300 rounded-xl flex flex-col items-center justify-center text-[#5C2E0B] font-semibold shadow"
-                    style={{ width: 120, height: 72, fontSize: 14, padding: 6 }}
+                    style={{ width: 116, height: 70, fontSize: 13, padding: 6 }}
                   >
-                    <div style={{ fontSize: 26, marginBottom: 2 }}>
+                    <div style={{ fontSize: 24, marginBottom: 2 }}>
                       {adj.name.toLowerCase().endsWith(".pdf")
                         ? "📄"
                         : /\.(doc|docx)$/i.test(adj.name)
@@ -782,11 +790,12 @@ export default function LitisBotChatBase({
         {/* Entrada */}
         <textarea
           ref={textareaRef}
-          className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none
-                     sm:text-[15px] md:text-[17px]"
+          className="flex-1 bg-white outline-none px-2 sm:px-3 py-2 border border-yellow-300 rounded-xl resize-none
+                     text-sm md:text-[15px] leading-5"
           placeholder="Escribe o pega tu pregunta legal aquí…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
           disabled={grabando}
           rows={1}
           style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
@@ -802,7 +811,7 @@ export default function LitisBotChatBase({
           disabled={grabando}
           title="Dictar voz"
         >
-          <FaMicrophone size={20} />
+          <FaMicrophone size={18} />
         </button>
 
         {/* Enviar */}
@@ -815,14 +824,14 @@ export default function LitisBotChatBase({
           style={{ background: "#5C2E0B", color: "#fff", minWidth: 44, minHeight: 44, fontWeight: "bold" }}
           disabled={(!input.trim() && adjuntos.length === 0) || cargando}
         >
-          <MdSend size={24} />
+          <MdSend size={22} />
         </button>
       </form>
 
-      {alertaAdjuntos && <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>}
-      {error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
+      {alertaAdjuntos && <div className="text-red-600 text-center w-full pb-2 text-sm">{alertaAdjuntos}</div>}
+      {error && <div className="p-2 mt-2 text-red-700 text-base">{error}</div>}
 
-      {/* MODAL HERRAMIENTAS (controlado desde el panel izquierdo o botón que uses) */}
+      {/* MODAL HERRAMIENTAS */}
       {showModal && (
         <ModalHerramientas
           onClose={closeHerramientas}
@@ -843,7 +852,7 @@ export default function LitisBotChatBase({
 }
 
 /* ============================================================
-   MensajeBot (definición – se mantiene abajo para claridad)
+   MensajeBot
 ============================================================ */
 function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
   const [editando, setEditando] = useState(false);
@@ -874,7 +883,7 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
       {!editando ? (
         <div className="flex items-start gap-2">
           <div
-            className="flex-1 leading-relaxed sm:text-[15px] md:text-[18px] lg:text-[20px]"
+            className="flex-1 leading-relaxed text-sm md:text-[15px] lg:text-[17px]"
             style={{ color: "#6b2f12" }}
             dangerouslySetInnerHTML={{ __html: msg.content }}
           />
@@ -907,7 +916,7 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
           </button>
           <button
             className="ml-1 hover:text-green-700"
-            onClick={() => onFeedback("up")}
+            onClick={() => onFeedback?.("up")}
             title="Me gusta"
             aria-label="Me gusta"
           >
@@ -915,7 +924,7 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
           </button>
           <button
             className="ml-1 hover:text-red-700"
-            onClick={() => onFeedback("down")}
+            onClick={() => onFeedback?.("down")}
             title="No me gusta"
             aria-label="No me gusta"
           >

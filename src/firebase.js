@@ -24,7 +24,7 @@ import {
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   getStorage,
-  ref,              // 👈 agregado solo aquí
+  ref,
   uploadBytes,
   deleteObject,
   getDownloadURL,
@@ -36,7 +36,7 @@ import {
   onMessage,
 } from "firebase/messaging";
 
-// --- Configuración ---
+// --- Configuración desde .env.local ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -47,7 +47,7 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// ✅ Inicializar solo si no hay apps previas (evita error de duplicado)
+// --- Inicializar app ---
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // --- Servicios principales ---
@@ -57,19 +57,27 @@ const storage = getStorage(app);
 
 // --- Inicialización segura de Messaging ---
 let messaging = null;
-(async () => {
-  if (await isSupported()) {
-    messaging = getMessaging(app);
+const initMessaging = async () => {
+  try {
+    if (await isSupported()) {
+      messaging = getMessaging(app);
+      console.log("✅ Firebase Messaging inicializado");
+    } else {
+      console.warn("⚠️ Este navegador no soporta Firebase Messaging");
+    }
+  } catch (err) {
+    console.error("❌ Error inicializando Messaging:", err);
   }
-})();
+};
+initMessaging();
 
-// --- Exportar todo sin duplicados ---
+// --- Exportar todo ---
 export {
   app,
   db,
   auth,
   storage,
-  messaging,
+  messaging, // 👈 ahora existe aunque sea null
   // firestore
   doc,
   getDoc,
@@ -90,7 +98,7 @@ export {
   limit,
   startAfter,
   // storage
-  ref,             // 👈 ref ahora viene solo de storage
+  ref,
   uploadBytes,
   deleteObject,
   getDownloadURL,

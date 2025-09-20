@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import logoBuhoLex from "../assets/buho-institucional.png";
 import { useAuth } from "../context/AuthContext";
+import { FaBars } from "react-icons/fa";
 
 const menu = [
   { label: "Inicio", to: "/" },
@@ -22,7 +23,7 @@ export default function SidebarLayout({ children }) {
   const { user } = useAuth();
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen relative">
       {/* SIDEBAR */}
       <aside
         className={`
@@ -35,8 +36,11 @@ export default function SidebarLayout({ children }) {
         {/* Logo */}
         <Link to="/" className="mb-6 flex items-center gap-2">
           <img src={logoBuhoLex} alt="BúhoLex" className="h-12 w-12 rounded-md shadow" />
-          <span className="text-white font-extrabold text-2xl tracking-widest drop-shadow-lg">BúhoLex</span>
+          <span className="text-white font-extrabold text-2xl tracking-widest drop-shadow-lg">
+            BúhoLex
+          </span>
         </Link>
+
         {/* Menú */}
         <nav className="flex flex-col gap-2 w-full">
           {menu.map(({ label, to }) => (
@@ -54,6 +58,7 @@ export default function SidebarLayout({ children }) {
             </Link>
           ))}
         </nav>
+
         {/* Avatar al final */}
         <div className="mt-auto mb-2">
           {user && !user.isAnonymous ? (
@@ -62,11 +67,10 @@ export default function SidebarLayout({ children }) {
                 {getInitials(user.displayName, user.email)}
               </span>
             </span>
-          ) : (
-            <></>
-          )}
+          ) : null}
         </div>
-        {/* Botón ocultar en móvil */}
+
+        {/* Botón cerrar en móvil */}
         <button
           className="md:hidden absolute top-4 right-4 text-white text-2xl"
           onClick={() => setSidebarOpen(false)}
@@ -74,17 +78,27 @@ export default function SidebarLayout({ children }) {
           ✖️
         </button>
       </aside>
-      {/* Botón mostrar sidebar (sólo en móvil) */}
+
+      {/* Overlay en móvil */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Botón mostrar sidebar en móvil */}
       {!sidebarOpen && (
         <button
           className="fixed top-4 left-4 z-50 md:hidden bg-[#b03a1a] text-white rounded-full p-2 shadow"
           onClick={() => setSidebarOpen(true)}
         >
-          <span className="material-icons">menu</span>
+          <FaBars size={20} />
         </button>
       )}
+
       {/* CONTENIDO PRINCIPAL */}
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-10 md:ml-56">
+      <main className="flex-1 flex flex-col items-start justify-start px-4 py-12 md:ml-56">
         {children}
       </main>
     </div>

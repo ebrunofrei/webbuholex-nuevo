@@ -1,6 +1,6 @@
 // api/notificaciones.js
 import { getMessaging } from "firebase-admin/messaging";
-import { admin } from "../backend/services/firebaseAdmin.js";
+import { admin } from "../services/firebaseAdmin.js";
 
 // --- Handler para enviar notificaciones push ---
 export default async function handler(req, res) {
