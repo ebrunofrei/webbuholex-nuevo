@@ -40,7 +40,8 @@ export default function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 h-full w-64 bg-[#fef6f2] border-r px-5 py-6 flex flex-col items-center z-50 transform transition-transform duration-300
-        ${open ? "translate-x-0" : "-translate-x-full"} md:static md:translate-x-0`}
+        ${open ? "translate-x-0 pointer-events-auto" : "-translate-x-full pointer-events-none"}
+        md:static md:translate-x-0 md:pointer-events-auto`}
       >
         <img src={buhoLogo} alt="Logo" className="w-16 h-16 mb-2 rounded-xl" />
         <div className="font-bold text-[#b03a1a] text-lg mb-1">BúhoLex</div>

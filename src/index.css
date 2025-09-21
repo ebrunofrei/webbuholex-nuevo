@@ -2,15 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Fondo blanco al centro y laterales rojos */
+/* Altura real en móviles + sin márgenes por defecto */
+html, body, #root {
+  height: 100%;
+  min-height: 100dvh;   /* usa dvh cuando está disponible */
+}
 body {
-  min-height: 100vh;
-  background: linear-gradient(90deg, #b30000 0%, #fff 15%, #fff 85%, #b30000 100%);
+  margin: 0;
   color: #4b2e19;
-  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: #fff;     /* 👈 móvil: SIN gradiente para que no aparezca el raíl */
 }
 
-/* Scrollbar personalizado */
-::-webkit-scrollbar { width: 8px; background: #fff4f4; }
-::-webkit-scrollbar-thumb { background: #b03a1a; border-radius: 5px; }
+/* Desktop/tablet: gradiente con centro blanco y laterales rojos */
+@media (min-width: 768px) {
+  body {
+    background:
+      linear-gradient(
+        90deg,
+        #b30000 0 12%,
+        #ffffff 12% 88%,
+        #b30000 88% 100%
+      );
+    background-size: 100% 100%;
+    background-position: 0 0;
+  }
+}
 
+/* Evita overflow de hijos en contenedores flex (bug común) */
+* { min-width: 0; }
+
+/* Scrollbar (WebKit + Firefox) */
+:root {
+  --scrollbar-track: #fff4f4;
+  --scrollbar-thumb: #b03a1a;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 6px; }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+
+/* Helper: ocultar scrollbar donde sea necesario */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 🔧 Parche anti-borde fantasma en móvil dentro de <main> */
+@media (max-width: 767px) {
+  main [class*="border-l"],
+  main [style*="border-left"] {
+    border-left: 0 !important;
+  }
+}
+
+/* Útil para barras fijas/sticky en el fondo (iOS safe area) */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
