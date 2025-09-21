@@ -1,18 +1,16 @@
-// src/layouts/Layout.jsx
 import React from "react";
-import Navbar from "../components/ui/Navbar";
-import Footer from "../components/Footer";
+import SidebarChats from "@/components/SidebarChats";
+import LitisBotChatBase from "@/components/LitisBotChatBase";
 
-// Aquí el Layout envuelve el contenido con márgenes y máximo ancho
-export default function Layout({ children }) {
+export default function Layout() {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
-      <Navbar />
-      {/* Este main es el contenedor central */}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8">
-        {children}
+    <div className="relative min-h-[100dvh] bg-white">
+      {/* Sidebar es fixed; no ocupa ancho en móvil */}
+      <SidebarChats />
+      {/* En desktop reservamos 64px con padding-left */}
+      <main className="min-h-[100dvh] md:pl-64 flex flex-col bg-white overflow-x-hidden">
+        <LitisBotChatBase />
       </main>
-      <Footer />
     </div>
   );
 }
