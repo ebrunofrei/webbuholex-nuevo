@@ -30,7 +30,7 @@ import {
    Utilidades de red (quedan en este archivo para evitar conflictos)
 ============================================================ */
 // Endpoint unificado: por defecto /api/litisbot (compatible con Vercel)
-const buildIaUrl = () => {
+const buildIaUrl = () => "/api/litisbot";{
   const raw =
     (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
   if (!raw) "/api/ia?action=chat";
