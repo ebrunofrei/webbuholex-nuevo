@@ -94,24 +94,21 @@ function OficinaVirtualLayout({ children }) {
 }
 
 /* ============================================================
-   LitisBot con Sidebar + Chat (con sidebar móvil)
+   LitisBot con Sidebar + Chat (con drawer móvil)
 ============================================================ */
 function LitisBotPageIntegrada() {
   const [casos, setCasos] = React.useState([]);
   const [casoActivo, setCasoActivo] = React.useState(null);
   const [showModalHerramientas, setShowModalHerramientas] = React.useState(false);
 
-  // Sidebar móvil
+  // Drawer móvil
   const [sidebarOpenMobile, setSidebarOpenMobile] = React.useState(false);
 
   const { user } = useAuth() || {};
   const userInfo = user || { nombre: "Invitado", pro: false };
 
   return (
-    <div
-      className="flex w-full min-h-screen bg-white"
-      style={{ height: "100vh", overflow: "hidden" }}
-    >
+    <div className="flex w-full min-h-screen bg-white" style={{ height: "100vh", overflow: "hidden" }}>
       {/* Sidebar ESCRITORIO */}
       <div
         className="h-full hidden lg:flex"
@@ -131,36 +128,35 @@ function LitisBotPageIntegrada() {
           setCasoActivo={setCasoActivo}
           user={userInfo}
           onOpenHerramientas={() => setShowModalHerramientas(true)}
+          // modo normal (estático)
         />
       </div>
 
-      {/* BOTÓN flotante para abrir sidebar en MÓVIL */}
+      {/* BOTÓN para abrir drawer en MÓVIL */}
       <button
         className="lg:hidden fixed left-3 top-[84px] z-40 px-3 py-2 rounded-full bg-[#5C2E0B] text-white shadow"
         onClick={() => setSidebarOpenMobile(true)}
         aria-label="Abrir lista de casos"
-        title="Casos"
       >
         Casos
       </button>
 
-      {/* Sidebar MÓVIL en slide */}
-      <SidebarChats
-        casos={casos}
-        setCasos={setCasos}
-        casoActivo={casoActivo}
-        setCasoActivo={setCasoActivo}
-        user={userInfo}
-        onOpenHerramientas={() => setShowModalHerramientas(true)}
-        isOpen={sidebarOpenMobile}
-        onCloseSidebar={() => setSidebarOpenMobile(false)}
-      />
+      {/* Drawer MÓVIL: solo se monta/ve en móvil */}
+      <div className="lg:hidden">
+        <SidebarChats
+          casos={casos}
+          setCasos={setCasos}
+          casoActivo={casoActivo}
+          setCasoActivo={setCasoActivo}
+          user={userInfo}
+          onOpenHerramientas={() => setShowModalHerramientas(true)}
+          isOpen={sidebarOpenMobile}
+          onCloseSidebar={() => setSidebarOpenMobile(false)}
+        />
+      </div>
 
-      {/* Chat: ocupa todo el ancho disponible */}
-      <div
-        className="flex-1 flex flex-col items-stretch bg-white"
-        style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}
-      >
+      {/* Chat principal */}
+      <div className="flex-1 flex flex-col items-stretch bg-white" style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}>
         <LitisBotChatBase
           user={userInfo}
           casoActivo={casoActivo}
@@ -260,7 +256,6 @@ function AppContent() {
                   <NoticiasSlider />
                 </aside>
                 {mostrarBotonNoticias && <NoticiasBotonFlotante />}
-                {/* <InstalarApp /> */}
               </>
             )}
           </div>
@@ -297,7 +292,7 @@ function AppContent() {
 }
 
 /* ============================================================
-   App: un solo AuthProvider (no duplicar)
+   App (un solo AuthProvider) + Burbuja con usuario
 ============================================================ */
 export default function App() {
   return (
@@ -310,7 +305,6 @@ export default function App() {
                 <Router>
                   <AppContent />
                 </Router>
-                {/* Burbuja flotante global conectada al usuario */}
                 <BubbleWithUser />
               </ToastProvider>
             </LitisBotProvider>
@@ -321,15 +315,7 @@ export default function App() {
   );
 }
 
-/* ============================================================
-   Componente auxiliar para burbuja global
-============================================================ */
 function BubbleWithUser() {
   const { user } = useAuth() || {};
-  return (
-    <LitisBotBubbleChat
-      usuarioId={user?.uid || "invitado"}
-      pro={!!user?.pro}
-    />
-  );
+  return <LitisBotBubbleChat usuarioId={user?.uid || "invitado"} pro={!!user?.pro} />;
 }
