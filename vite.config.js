@@ -4,12 +4,23 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig(({ mode }) => {
-  // Carga variables .env.* (VITE_BACKEND_URL, VITE_ENABLE_FCM, etc.)
+  // Carga variables de entorno (.env.*)
   const env = loadEnv(mode, process.cwd(), "");
   const BACKEND = (env.VITE_BACKEND_URL || "").trim() || "http://localhost:3001";
 
-  // Usa proxy en DEV cuando el backend esté en localhost
+  // Usa proxy en DEV solo cuando el backend es local
   const useDevProxy = BACKEND.startsWith("http://localhost");
+
+  // Configuración de proxy con rewrite (clave para /api/noticias)
+  const proxyConfig = useDevProxy
+    ? {
+        "/api": {
+          target: BACKEND,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, "/api"), // 🔑 evita que dev sirva el archivo crudo
+        },
+      }
+    : undefined;
 
   return {
     plugins: [react()],
@@ -18,33 +29,17 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
-    base: "/", // assets correctos en Vercel
+    base: "/", // asegura rutas correctas en Vercel
     server: {
       port: 5173,
-      host: true,      // permite abrir en red local / móviles
+      host: true, // permite abrir en LAN / móvil
       strictPort: true,
-      // Proxy solo en desarrollo si el backend es local
-      proxy: useDevProxy
-        ? {
-            "/api": {
-              target: BACKEND,
-              changeOrigin: true,
-            },
-          }
-        : undefined,
+      proxy: proxyConfig,
     },
-    // Útil para probar el build local sin CORS:
     preview: {
       port: 4173,
       host: true,
-      proxy: useDevProxy
-        ? {
-            "/api": {
-              target: BACKEND,
-              changeOrigin: true,
-            },
-          }
-        : undefined,
+      proxy: proxyConfig,
     },
     build: {
       outDir: "dist",
@@ -57,7 +52,7 @@ export default defineConfig(({ mode }) => {
         "firebase/auth",
         "firebase/firestore",
         "firebase/storage",
-        "firebase/messaging", // si molesta en dev, quítalo y pon VITE_ENABLE_FCM=false
+        "firebase/messaging", // si da problemas en dev, quitar y usar VITE_ENABLE_FCM=false
       ],
     },
   };

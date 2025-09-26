@@ -110,16 +110,15 @@ function LitisBotPageIntegrada() {
         overflow: "hidden",
       }}
     >
-      {/* Sidebar ocupa 320px máximo, pero nunca más del 22% */}
+      {/* Sidebar solo visible en escritorio */}
       <div
-        className="h-full"
+        className="h-full hidden lg:flex"
         style={{
           width: "22vw",
           minWidth: 250,
           maxWidth: 350,
           borderRight: "1px solid #f4e6c7",
           background: "#fff",
-          display: "flex",
           flexDirection: "column",
         }}
       >
@@ -132,7 +131,7 @@ function LitisBotPageIntegrada() {
           onOpenHerramientas={() => setShowModalHerramientas(true)}
         />
       </div>
-      {/* Chat ocupa el resto */}
+      {/* Chat ocupa todo en móvil */}
       <div
         className="flex-1 flex flex-col items-stretch bg-white"
         style={{
@@ -155,10 +154,8 @@ function LitisBotPageIntegrada() {
 // -----------------------------------------------
 
 function AppContent() {
-  // 🔔 ÚNICO punto de entrada para FCM (token + mensajes foreground)
   useFirebaseMessaging((payload) => {
     console.log("📩 Notificación recibida via hook:", payload);
-    // Aquí puedes disparar toast / UI según payload
   });
 
   const { user, loading, abrirLogin } = useAuth?.() || {};
@@ -167,7 +164,6 @@ function AppContent() {
   const enOficinaVirtual = /^\/oficinaVirtual(\/|$)/.test(location.pathname);
   const hideNavbar = location.pathname === "/litisbot";
 
-  // Solo mostrar botón flotante de noticias en Home
   const mostrarBotonNoticias = location.pathname === "/";
 
   function BibliotecaProtegida() {
@@ -191,10 +187,7 @@ function AppContent() {
   }
 
   return (
-    <div
-      className="relative min-h-screen w-full"
-      style={{ background: "#fff" }}
-    >
+    <div className="relative min-h-screen w-full" style={{ background: "#fff" }}>
       {!enOficinaVirtual && (
         <>
           {!hideNavbar && <Navbar />}
@@ -278,7 +271,6 @@ function AppContent() {
           </Routes>
         </OficinaVirtualLayout>
       )}
-      {/* Ya NO mostramos el botón de noticias aquí globalmente */}
     </div>
   );
 }
@@ -294,7 +286,8 @@ export default function App() {
                 <Router>
                   <AppContent />
                 </Router>
-                <LitisBotBubbleChat />
+                {/* Burbuja flotante global */}
+                <LitisBotBubbleChat usuarioId="invi  tado" pro={true} />
               </ToastProvider>
             </LitisBotProvider>
           </AuthProvider>

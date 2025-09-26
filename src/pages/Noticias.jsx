@@ -1,71 +1,112 @@
 // src/pages/Noticias.jsx
 import React, { useEffect, useState } from "react";
+import { getNoticiasJuridicas } from "@/services/newsApi";
+
+// Normaliza la respuesta (array o { items, hasMore })
+const normalizeResponse = (data) => {
+  if (!data) return { items: [], hasMore: false };
+  if (Array.isArray(data)) return { items: data, hasMore: false };
+  if (Array.isArray(data.items)) {
+    return { items: data.items, hasMore: Boolean(data.hasMore) };
+  }
+  return { items: [], hasMore: false };
+};
 
 export default function Noticias() {
-  const [noticias, setNoticias] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // Ahora todo es automático y viene del microservicio proxy
-  useEffect(() => {
-    async function fetchNoticias() {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/utils?action=news");
-        const datos = await res.json();
-        setNoticias(datos);
-      } catch (e) {
-        setNoticias([]);
-      } finally {
-        setLoading(false);
+  const loadNoticias = async (p = 1, replace = false) => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const data = await getNoticiasJuridicas();
+      const normalized = normalizeResponse(data);
+
+      if (replace) {
+        setItems(normalized.items);
+      } else {
+        setItems((prev) => [
+          ...prev,
+          ...normalized.items.filter(
+            (n) =>
+              !prev.some(
+                (p) => p.enlace === n.enlace || p.titulo === n.titulo
+              )
+          ),
+        ]);
       }
+
+      setHasMore(normalized.hasMore);
+      setPage(p);
+    } catch (e) {
+      console.error("❌ Error cargando noticias jurídicas:", e);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
     }
-    fetchNoticias();
+  };
+
+  useEffect(() => {
+    loadNoticias(1, true);
   }, []);
 
   return (
-    <div className="min-h-screen bg-white px-4 py-10 md:px-24 lg:px-48">
-      <h1 className="text-3xl font-extrabold text-center mb-8 text-[#b03a1a] tracking-tight">
-        Noticias Jurídicas Inteligentes
-      </h1>
+    <section className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">Noticias jurídicas</h1>
 
-      {loading && (
-        <div className="flex justify-center py-10">
-          <span className="text-[#b03a1a] font-medium animate-pulse">Cargando noticias...</span>
-        </div>
+      {items.length === 0 && !loading && (
+        <p className="text-center text-gray-500">
+          No hay noticias jurídicas por el momento.
+        </p>
       )}
 
-      {!loading && noticias.length === 0 && (
-        <div className="text-center text-gray-500 py-10">
-          No se encontraron noticias recientes.
-        </div>
-      )}
-
-      <div className="space-y-8">
-        {noticias.map((n, i) => (
-          <div key={i} className="rounded-xl shadow p-5 border border-[#e8d3c3] bg-[#fff6f3] hover:shadow-lg transition">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2">
-              <span className="text-xs bg-[#b03a1a]/80 text-white px-2 py-0.5 rounded-full font-medium mb-1 md:mb-0">
-                {n.fuente}
-              </span>
-              <span className="text-xs text-[#b03a1a] opacity-80">
-                {n.fecha ? new Date(n.fecha).toLocaleDateString() : ""}
-              </span>
-            </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((n, i) => (
+          <article
+            key={n.enlace || n.titulo || i}
+            className="border rounded-lg p-4 bg-[#fffdfc] shadow-sm hover:shadow-md transition"
+          >
             <a
               href={n.enlace}
               target="_blank"
-              rel="noopener noreferrer"
-              className="block font-bold text-[#b03a1a] text-lg leading-snug hover:underline hover:text-[#a87247] transition"
-              style={{ wordBreak: "break-word" }}
+              rel="noreferrer"
+              className="underline font-semibold text-[#b03a1a] hover:text-[#a87247]"
             >
-              {n.titulo}
+              {n.titulo || "Sin título"}
             </a>
-            <p className="mt-1 text-sm text-[#3a2a20] opacity-85">
-              {n.resumen}
+            <p className="text-xs text-gray-500 mt-1">
+              {n.fuente || "Fuente desconocida"} •{" "}
+              {n.fecha &&
+                new Date(n.fecha).toLocaleDateString("es-PE", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                })}
             </p>
-          </div>
+            {n.resumen && (
+              <p className="text-sm mt-2 text-[#3a2a20] opacity-85 line-clamp-4">
+                {n.resumen}
+              </p>
+            )}
+          </article>
         ))}
       </div>
-    </div>
+
+      {/* Botón cargar más */}
+      {hasMore && (
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => loadNoticias(page + 1)}
+            disabled={loading}
+            className="px-4 py-2 border rounded bg-gray-100 hover:bg-gray-200 text-[#b03a1a] font-medium"
+          >
+            {loading ? "Cargando..." : "Cargar más"}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
