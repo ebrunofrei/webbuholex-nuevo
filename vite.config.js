@@ -1,59 +1,50 @@
 // vite.config.js
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
+import path from "node:path";
 
-export default defineConfig(({ mode }) => {
-  // Carga variables de entorno (.env.*)
-  const env = loadEnv(mode, process.cwd(), "");
-  const BACKEND = (env.VITE_BACKEND_URL || "").trim() || "http://localhost:3001";
+export default defineConfig({
+  // Importante para que Vercel resuelva correctamente los assets
+  base: "/",
 
-  // Usa proxy en DEV solo cuando el backend es local
-  const useDevProxy = BACKEND.startsWith("http://localhost");
+  plugins: [react()],
 
-  // Configuración de proxy con rewrite (clave para /api/noticias)
-  const proxyConfig = useDevProxy
-    ? {
-        "/api": {
-          target: BACKEND,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, "/api"), // 🔑 evita que dev sirva el archivo crudo
-        },
-      }
-    : undefined;
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+    },
+  },
 
-  return {
-    plugins: [react()],
-    resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
+  server: {
+    host: true,
+    port: 5173,
+  },
+
+  build: {
+    outDir: "dist",
+    assetsDir: "assets",
+    emptyOutDir: true,
+    sourcemap: false,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        // Garantiza que todos los bundles y assets vivan bajo /assets/
+        entryFileNames: "assets/[name]-[hash].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
       },
     },
-    base: "/", // asegura rutas correctas en Vercel
-    server: {
-      port: 5173,
-      host: true, // permite abrir en LAN / móvil
-      strictPort: true,
-      proxy: proxyConfig,
-    },
-    preview: {
-      port: 4173,
-      host: true,
-      proxy: proxyConfig,
-    },
-    build: {
-      outDir: "dist",
-      sourcemap: false,
-      chunkSizeWarningLimit: 1000,
-    },
-    optimizeDeps: {
-      include: [
-        "firebase/app",
-        "firebase/auth",
-        "firebase/firestore",
-        "firebase/storage",
-        "firebase/messaging", // si da problemas en dev, quitar y usar VITE_ENABLE_FCM=false
-      ],
-    },
-  };
+  },
+
+  optimizeDeps: {
+    include: [
+      "firebase/app",
+      "firebase/auth",
+      "firebase/firestore",
+      "firebase/storage",
+      "firebase/messaging",
+    ],
+    // Librería de backend: evita que Vite intente prebundlearla en el cliente
+    exclude: ["rss-parser"],
+  },
 });

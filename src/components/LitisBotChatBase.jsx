@@ -30,24 +30,34 @@ import {
    Utilidades de red (quedan en este archivo para evitar conflictos)
 ============================================================ */
 // Endpoint unificado: por defecto /api/litisbot (compatible con Vercel)
-const buildIaUrl = () => "/api/litisbot";{
+function buildIaUrl() {
   const raw =
-    (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
-  if (!raw) "/api/ia?action=chat";
+    (import.meta.env.VITE_API_URL ||
+      import.meta.env.PUBLIC_API_URL ||
+      "").trim();
 
+  // Sin configuración → endpoint propio
+  if (!raw) return "/api/litisbot";
+
+  // URL absoluta (https://... o http://...)
   if (/^https?:\/\//i.test(raw)) {
-    return /\baction=/.test(raw)
-    ? raw
-    : raw + (raw.includes("?") ? "&action=chat" : "?action=chat");
+    // Si ya trae action= o apunta a litisbot, la dejamos tal cual
+    if (/\baction=/.test(raw) || /\/litisbot(\b|\/|\?)/i.test(raw)) return raw;
+    const sep = raw.includes("?") ? "&" : "?";
+    return raw.replace(/\/+$/, "") + `${sep}action=chat`;
   }
+
+  // Ruta absoluta relativa a la app (/algo)
   const base = raw.replace(/\/+$/, "");
   if (base.startsWith("/api/")) {
-    return /\baction=/.test(base)
-    ? base
-    : base + (base.includes("?") ? "&action=chat" : "?action=chat");
+    if (/\baction=/.test(base) || /\/litisbot(\b|\/|\?)/i.test(base)) return base;
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}action=chat`;
   }
-  return base + "/api/ia?action=chat";
-};
+
+  // Cualquier otro caso: montamos el proxy propio
+  return `${base}/api/litisbot`;
+}
 
 // Helper de red: JSON normal + opcional streaming (text/event-stream)
 async function enviarAlLitisbot(IA_URL, payload, onStreamChunk) {
