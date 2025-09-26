@@ -3,15 +3,16 @@ import SidebarChats from "@/components/SidebarChats";
 import LitisBotChatBasePro from "@/components/LitisBotChatBasePro";
 
 export default function LitisBot({ user: userProp }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [casos, setCasos] = useState([]);
   const [casoActivo, setCasoActivo] = useState(null);
 
   const user = userProp || { nombre: "Eduardo", pro: true, uid: "invitado" };
 
+  // Al iniciar, abre el sidebar en desktop (>=1024px)
   useEffect(() => {
-    const handleResize = () => setSidebarOpen(window.innerWidth >= 1024);
+    const handleResize = () => setIsSidebarOpen(window.innerWidth >= 1024);
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -19,16 +20,16 @@ export default function LitisBot({ user: userProp }) {
 
   function handleOpenHerramientas() {
     setShowModal(true);
-    if (window.innerWidth < 1024) setSidebarOpen(false);
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
   }
 
   return (
     <div className="flex w-full min-h-screen bg-white overflow-hidden">
       {/* Botón flotante para abrir el menú en móvil */}
-      {!sidebarOpen && (
+      {!isSidebarOpen && (
         <button
           className="fixed top-4 left-4 z-50 lg:hidden bg-yellow-600 text-white p-2 rounded-full shadow-lg"
-          onClick={() => setSidebarOpen(true)}
+          onClick={() => setIsSidebarOpen(true)}
         >
           ☰
         </button>
@@ -36,11 +37,13 @@ export default function LitisBot({ user: userProp }) {
 
       {/* Sidebar como drawer */}
       <div
-        className={`fixed inset-y-0 left-0 z-40 transition-transform transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:relative lg:flex`}
+        className={`fixed inset-y-0 left-0 z-40 transition-transform transform lg:translate-x-0 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:relative lg:flex`}
       >
         <SidebarChats
-          open={sidebarOpen}
-          setOpen={setSidebarOpen}
+          isOpen={isSidebarOpen}
+          onCloseSidebar={() => setIsSidebarOpen(false)}
           casos={casos}
           setCasos={setCasos}
           casoActivo={casoActivo}

@@ -132,7 +132,11 @@ export default function LitisBotBubbleChat({ usuarioId, pro = true }) {
 
           {/* CONTENIDO: Chat jurídico */}
           <div className="flex-1 overflow-hidden">
-            <LitisBotChatBase user={{ uid: usuarioId }} pro={pro} />
+            <LitisBotChatBase
+              user={{ uid: usuarioId }}
+              pro={pro}
+              casoActivo={`bubble-${usuarioId}`} // 👈 cada usuario conserva su historial en la burbuja
+            />
           </div>
         </div>
       )}

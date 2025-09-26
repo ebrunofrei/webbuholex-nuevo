@@ -13,18 +13,27 @@ import {
 import { MdSend } from "react-icons/md";
 
 // --- Herramientas integradas en este archivo (mock UI simples).
-// Mantengo tu estructura; puedes separarlas cuando gustes.
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
 import HerramientaLiquidacionLaboral from "./Herramientas/HerramientaLiquidacionLaboral";
 
+// --- Persistencia local (chat + archivos)
+import {
+  getMessages,
+  saveMessage,
+  deleteMessage,
+  getFiles,
+  saveFile,
+  deleteFile,
+} from "@/services/chatStorage";
+
 /* ============================================================
-   Utilidades
+   Utilidades de red (quedan en este archivo para evitar conflictos)
 ============================================================ */
-// Endpoint unificado: por defecto /api/litisbot (compatible con Vercel Hobby)
+// Endpoint unificado: por defecto /api/litisbot (compatible con Vercel)
 const buildIaUrl = () => {
   const raw =
     (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
-  if (!raw) return "/api/litisbot"; // por defecto usamos el router único
+  if (!raw) return "/api/litisbot";
 
   if (/^https?:\/\//i.test(raw)) {
     if (/\/api\/.+/i.test(raw)) return raw.replace(/\/+$/, "");
@@ -202,7 +211,9 @@ function HerramientaAgenda() {
       </button>
       <ul className="mt-2 text-sm">
         {agenda.map((e, idx) => (
-          <li key={idx}>📅 <b>{e.evento}</b> para el {e.fecha}</li>
+          <li key={idx}>
+            📅 <b>{e.evento}</b> para el {e.fecha}
+          </li>
         ))}
       </ul>
     </div>
@@ -246,7 +257,9 @@ function HerramientaRecordatorios() {
       </button>
       <ul className="mt-2 text-sm">
         {records.map((r, idx) => (
-          <li key={idx}>⏰ <b>{r.texto}</b> para {r.fecha}</li>
+          <li key={idx}>
+            ⏰ <b>{r.texto}</b> para {r.fecha}
+          </li>
         ))}
       </ul>
     </div>
@@ -365,7 +378,7 @@ function HerramientaTraducir() {
 }
 
 /* ============================================================
-   Modal de Herramientas (con cierre por X, overlay y Escape)
+   Modal de Herramientas
 ============================================================ */
 function ModalHerramientas({
   onClose,
@@ -380,8 +393,8 @@ function ModalHerramientas({
     { label: "Modo Audiencia", key: "audiencia", pro: true, desc: "Guía de objeciones, alegatos y tips de litigio para audiencias (PRO)." },
     { label: "Analizar Archivo", key: "analizador", pro: true, desc: "Sube archivos PDF, Word o audio para análisis legal (PRO)." },
     { label: "Traducir", key: "traducir", pro: false, desc: "Traduce textos o documentos legales." },
-    { label: "Agenda", key: "agenda", pro: true, desc: "Gestiona tus plazos, audiencias y recordatorios (PRO)." },
-    { label: "Recordatorios", key: "recordatorios", pro: true, desc: "Configura alertas importantes para tu práctica legal (PRO)." },
+    { label: "Agenda", key: "agenda", pro: true, desc: "Gestiona plazos y audiencias (PRO)." },
+    { label: "Recordatorios", key: "recordatorios", pro: true, desc: "Configura alertas importantes (PRO)." },
     { label: "Tercio de la Pena", key: "tercio_pena", pro: false, desc: "Calcula tercios, mitades y cuartos de pena." },
     { label: "Liquidación Laboral", key: "liquidacion_laboral", pro: false, desc: "CTS, vacaciones, gratificaciones y beneficios." },
   ];
@@ -495,7 +508,7 @@ function ModalHerramientas({
 }
 
 /* ============================================================
-   Mensaje burbuja del asistente (con TTS/copy/edit/feedback)
+   Mensaje burbuja del asistente (wrapper -> usa MensajeBot)
 ============================================================ */
 function MensajeBurbuja({ msg, onCopy, onEdit, onFeedback }) {
   return (
@@ -509,7 +522,7 @@ function MensajeBurbuja({ msg, onCopy, onEdit, onFeedback }) {
 }
 
 /* ============================================================
-   Mensaje inicial
+   Mensaje inicial (ÚNICA DECLARACIÓN – evita conflictos)
 ============================================================ */
 const INIT_MSG = {
   general: {
@@ -530,12 +543,22 @@ const INIT_MSG = {
 export default function LitisBotChatBase({
   user = {},
   pro = false,
+  casoActivo = "default",
   showModal,
   setShowModal,
   expedientes = [],
 }) {
-  const [adjuntos, setAdjuntos] = useState([]);
-  const [mensajes, setMensajes] = useState([pro ? INIT_MSG.pro : INIT_MSG.general]);
+  // Estado inicial desde chatStorage
+  const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
+  const [mensajes, setMensajes] = useState(() => {
+    const prev = getMessages(casoActivo);
+    if (prev && prev.length) return prev;
+    const init = [pro ? INIT_MSG.pro : INIT_MSG.general];
+    // Guardamos el mensaje inicial solo si no existía historial
+    saveMessage(casoActivo, init[0]);
+    return init;
+  });
+
   const [input, setInput] = useState("");
   const [grabando, setGrabando] = useState(false);
   const [herramienta, setHerramienta] = useState(null);
@@ -550,51 +573,12 @@ export default function LitisBotChatBase({
   const MAX_MB = 25;
   const IA_URL = buildIaUrl();
 
-  // --- Responsive PRO: ocultar sidebar en tablet/móvil y centrar chat ---
+  // Al cambiar de casoActivo, recargamos historial y adjuntos
   useEffect(() => {
-    const selectors = [
-      "aside",
-      ".sidebar",
-      "[data-sidebar]",
-      ".menu-lateral",
-      ".left-pane",
-      ".layout-sidebar",
-    ];
-
-    const apply = () => {
-      const small = window.matchMedia("(max-width: 1024px)").matches;
-      selectors.forEach((sel) => {
-        document.querySelectorAll(sel).forEach((el) => {
-          if (!el) return;
-          if (small) {
-            if (el.dataset._prevDisplay === undefined)
-              el.dataset._prevDisplay = el.style.display || "";
-            el.style.display = "none";
-          } else {
-            if (el.dataset._prevDisplay !== undefined) {
-              el.style.display = el.dataset._prevDisplay;
-              delete el.dataset._prevDisplay;
-            }
-          }
-        });
-      });
-    };
-
-    apply();
-    window.addEventListener("resize", apply);
-    return () => {
-      // restaurar al salir
-      selectors.forEach((sel) =>
-        document.querySelectorAll(sel).forEach((el) => {
-          if (el?.dataset?._prevDisplay !== undefined) {
-            el.style.display = el.dataset._prevDisplay;
-            delete el.dataset._prevDisplay;
-          }
-        })
-      );
-      window.removeEventListener("resize", apply);
-    };
-  }, []);
+    const prev = getMessages(casoActivo);
+    setMensajes(prev && prev.length ? prev : [pro ? INIT_MSG.pro : INIT_MSG.general]);
+    setAdjuntos(getFiles(casoActivo) || []);
+  }, [casoActivo, pro]);
 
   // Scroll al final
   useEffect(() => {
@@ -606,7 +590,7 @@ export default function LitisBotChatBase({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = Math.min(el.scrollHeight, 6 * 28) + "px"; // max 6 líneas
+    el.style.height = Math.min(el.scrollHeight, 6 * 28) + "px";
   }, [input]);
 
   // Exponer cierre para integraciones
@@ -617,6 +601,7 @@ export default function LitisBotChatBase({
     };
   }, [setShowModal]);
 
+  /* ------------------------ Adjuntos ------------------------ */
   function handleFileChange(e) {
     const files = Array.from(e.target.files || []);
     const nuevos = [];
@@ -627,17 +612,25 @@ export default function LitisBotChatBase({
         continue;
       }
       nuevos.push(f);
+      // Persistimos metadatos del archivo
+      saveFile(casoActivo, { name: f.name, type: f.type, size: f.size });
     }
     if (nuevos.length) setAdjuntos((prev) => [...prev, ...nuevos]);
   }
+
   function handleRemoveAdjunto(idx) {
-    setAdjuntos((prev) => prev.filter((_, i) => i !== idx));
+    setAdjuntos((prev) => {
+      const copia = [...prev];
+      copia.splice(idx, 1);
+      deleteFile(casoActivo, idx);
+      return copia;
+    });
   }
 
+  /* ---------------------- Consulta legal -------------------- */
   async function handleConsultaLegal(mensaje) {
     setCargando(true);
 
-    // historial: user/assistant solamente
     const historial = mensajes
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role, content: m.content }));
@@ -650,10 +643,8 @@ export default function LitisBotChatBase({
       materia: "general",
       modo: "public",
       idioma: "es",
-      // expediente: { numero: "...", archivos: [...] } // si lo tienes
     };
 
-    // burbuja placeholder (sirve si activas streaming)
     let idxAssistant = null;
     setMensajes((msgs) => {
       idxAssistant = msgs.length;
@@ -676,8 +667,12 @@ export default function LitisBotChatBase({
 
       if (respuesta && respuesta !== "…") {
         setMensajes((ms) =>
-          ms.map((m, i) => (i === idxAssistant ? { ...m, content: respuesta } : m))
+          ms.map((m, i) =>
+            i === idxAssistant ? { ...m, content: respuesta } : m
+          )
         );
+        // persistimos respuesta final
+        saveMessage(casoActivo, { role: "assistant", content: respuesta });
       }
     } catch (err) {
       console.error("❌ Error al consultar LitisBot:", err);
@@ -701,33 +696,39 @@ export default function LitisBotChatBase({
     e.preventDefault();
     setAlertaAdjuntos("");
 
-    // Si hay adjuntos, simula recepción (tu flujo actual)
+    // Si hay adjuntos, simulamos recepción
     if (adjuntos.length > 0) {
-      setMensajes((msgs) => [
-        ...msgs,
-        ...adjuntos.map((file) => ({
-          role: "user",
-          content: `📎 Archivo subido: <b>${file.name}</b>`,
-          tipo: "archivo",
-        })),
-        ...adjuntos.map((file) => ({
-          role: "assistant",
-          content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`,
-          tipo: "archivo",
-        })),
-      ]);
+      const msgsParaGuardar = [];
+      const msgsParaUI = [];
+
+      adjuntos.forEach((file) => {
+        const mu = { role: "user", content: `📎 Archivo subido: <b>${file.name}</b>`, tipo: "archivo" };
+        const ma = { role: "assistant", content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`, tipo: "archivo" };
+        msgsParaGuardar.push(mu, ma);
+        msgsParaUI.push(mu, ma);
+      });
+
+      // Persistimos y actualizamos UI
+      msgsParaGuardar.forEach((m) => saveMessage(casoActivo, m));
+      setMensajes((msgs) => [...msgs, ...msgsParaUI]);
+
       setAdjuntos([]);
       setInput("");
       return;
     }
 
     if (!input.trim()) return;
-    setMensajes((msgs) => [...msgs, { role: "user", content: input }]);
+
+    const nuevo = { role: "user", content: input };
+    setMensajes((msgs) => [...msgs, nuevo]);
+    saveMessage(casoActivo, nuevo);
+
     const pregunta = input;
     setInput("");
     await handleConsultaLegal(pregunta);
   }
 
+  /* -------------------- Acciones de mensajes ---------------- */
   const handleVoice = () => {
     if (grabando) return;
     setGrabando(true);
@@ -741,9 +742,18 @@ export default function LitisBotChatBase({
   function handleCopy(text) {
     navigator.clipboard.writeText(String(text || "").replace(/<[^>]+>/g, " "));
   }
+
   function handleEdit(idx, nuevoTexto) {
-    setMensajes((ms) => ms.map((m, i) => (i === idx ? { ...m, content: nuevoTexto } : m)));
+    setMensajes((ms) => {
+      const copia = [...ms];
+      copia[idx].content = nuevoTexto;
+      // Persistimos edición (delete+save mantiene compatibilidad con chatStorage simple)
+      deleteMessage(casoActivo, idx);
+      saveMessage(casoActivo, copia[idx]);
+      return copia;
+    });
   }
+
   function handleFeedback(idx, type) {
     setMensajes((ms) => ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m)));
   }
@@ -753,6 +763,7 @@ export default function LitisBotChatBase({
     setHerramienta(null);
   };
 
+  /* --------------------------- Render ----------------------- */
   return (
     <div
       className="flex flex-col w-full items-center bg-white litisbot-fill"
@@ -822,9 +833,7 @@ export default function LitisBotChatBase({
       >
         {/* Adjuntar */}
         <label
-          className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${
-            adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""
-          }`}
+          className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}`}
           style={{ background: "#5C2E0B", color: "#fff" }}
           title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
           aria-label="Adjuntar archivo"
@@ -887,8 +896,7 @@ export default function LitisBotChatBase({
         {/* Entrada */}
         <textarea
           ref={textareaRef}
-          className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none
-                     sm:text-[15px] md:text-[17px]"
+          className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
           placeholder="Escribe o pega tu pregunta legal aquí…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -915,8 +923,9 @@ export default function LitisBotChatBase({
           type="submit"
           aria-label="Enviar"
           title="Enviar"
-          className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0
-            ${!input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${
+            !input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
           style={{ background: "#5C2E0B", color: "#fff", minWidth: 44, minHeight: 44, fontWeight: "bold" }}
           disabled={(!input.trim() && adjuntos.length === 0) || cargando}
         >
@@ -942,7 +951,6 @@ export default function LitisBotChatBase({
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        /* Mejor centrado en móvil/tablet cuando ocultamos el sidebar */
         @media (max-width: 1024px) {
           .litisbot-fill { max-width: 100vw !important; padding-left: 8px; padding-right: 8px; }
         }
@@ -952,7 +960,7 @@ export default function LitisBotChatBase({
 }
 
 /* ============================================================
-   MensajeBot (definición – se mantiene abajo para claridad)
+   MensajeBot (con TTS/copy/edit/feedback)
 ============================================================ */
 function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
   const [editando, setEditando] = useState(false);

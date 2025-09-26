@@ -105,12 +105,9 @@ function LitisBotPageIntegrada() {
   return (
     <div
       className="flex w-full min-h-screen bg-white"
-      style={{
-        height: "100vh",
-        overflow: "hidden",
-      }}
+      style={{ height: "100vh", overflow: "hidden" }}
     >
-      {/* Sidebar solo visible en escritorio */}
+      {/* Sidebar escritorio */}
       <div
         className="h-full hidden lg:flex"
         style={{
@@ -134,11 +131,7 @@ function LitisBotPageIntegrada() {
       {/* Chat ocupa todo en móvil */}
       <div
         className="flex-1 flex flex-col items-stretch bg-white"
-        style={{
-          minWidth: 0,
-          height: "100vh",
-          overflowY: "auto",
-        }}
+        style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}
       >
         <LitisBotChatBase
           user={userInfo}
@@ -160,7 +153,6 @@ function AppContent() {
 
   const { user, loading, abrirLogin } = useAuth?.() || {};
   const location = useLocation();
-  const esLitisBot = location.pathname === "/litisbot";
   const enOficinaVirtual = /^\/oficinaVirtual(\/|$)/.test(location.pathname);
   const hideNavbar = location.pathname === "/litisbot";
 
@@ -286,13 +278,25 @@ export default function App() {
                 <Router>
                   <AppContent />
                 </Router>
-                {/* Burbuja flotante global */}
-                <LitisBotBubbleChat usuarioId="invi  tado" pro={true} />
+                {/* Burbuja flotante global conectada al usuario */}
+                <AuthProvider>
+                  <BubbleWithUser />
+                </AuthProvider>
               </ToastProvider>
             </LitisBotProvider>
           </AuthProvider>
         </NoticiasProvider>
       </LitisBotChatProvider>
     </GoogleAuthRootProvider>
+  );
+}
+
+/* ============================================================
+   Componente auxiliar para burbuja global
+============================================================ */
+function BubbleWithUser() {
+  const { user } = useAuth() || {};
+  return (
+    <LitisBotBubbleChat usuarioId={user?.uid || "invitado"} pro={!!user?.pro} />
   );
 }
