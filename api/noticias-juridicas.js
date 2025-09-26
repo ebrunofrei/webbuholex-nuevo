@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
     const feed = await parser.parseURL(url);
 
-    const noticias = feed.items.map((item) => ({
+    const noticias = (feed.items || []).map((item) => ({
       id: item.guid || item.link,
       titulo: item.title,
       enlace: item.link,
