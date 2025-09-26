@@ -33,14 +33,20 @@ import {
 const buildIaUrl = () => {
   const raw =
     (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
-  if (!raw) return "/api/litisbot";
+  if (!raw) "/api/ia?action=chat";
 
   if (/^https?:\/\//i.test(raw)) {
-    if (/\/api\/.+/i.test(raw)) return raw.replace(/\/+$/, "");
-    return raw.replace(/\/+$/, "") + "/api/litisbot";
+    return /\baction=/.test(raw)
+    ? raw
+    : raw + (raw.includes("?") ? "&action=chat" : "?action=chat");
   }
-  if (raw.startsWith("/api/")) return raw;
-  return raw.replace(/\/+$/, "") + "/api/litisbot";
+  const base = raw.replace(/\/+$/, "");
+  if (base.startsWith("/api/")) {
+    return /\baction=/.test(base)
+    ? base
+    : base + (base.includes("?") ? "&action=chat" : "?action=chat");
+  }
+  return base + "/api/ia?action=chat";
 };
 
 // Helper de red: JSON normal + opcional streaming (text/event-stream)
@@ -636,7 +642,7 @@ export default function LitisBotChatBase({
       .map((m) => ({ role: m.role, content: m.content }));
 
     const payload = {
-      consulta: mensaje,
+      prompt: mensaje,
       historial,
       usuarioId: user?.uid || "invitado",
       userEmail: user?.email || "",
