@@ -93,11 +93,16 @@ function OficinaVirtualLayout({ children }) {
   );
 }
 
-// ---------- LitisBot con Sidebar+Chat ----------
+/* ============================================================
+   LitisBot con Sidebar + Chat (con sidebar móvil)
+============================================================ */
 function LitisBotPageIntegrada() {
   const [casos, setCasos] = React.useState([]);
   const [casoActivo, setCasoActivo] = React.useState(null);
   const [showModalHerramientas, setShowModalHerramientas] = React.useState(false);
+
+  // Sidebar móvil
+  const [sidebarOpenMobile, setSidebarOpenMobile] = React.useState(false);
 
   const { user } = useAuth() || {};
   const userInfo = user || { nombre: "Invitado", pro: false };
@@ -107,7 +112,7 @@ function LitisBotPageIntegrada() {
       className="flex w-full min-h-screen bg-white"
       style={{ height: "100vh", overflow: "hidden" }}
     >
-      {/* Sidebar escritorio */}
+      {/* Sidebar ESCRITORIO */}
       <div
         className="h-full hidden lg:flex"
         style={{
@@ -128,7 +133,30 @@ function LitisBotPageIntegrada() {
           onOpenHerramientas={() => setShowModalHerramientas(true)}
         />
       </div>
-      {/* Chat ocupa todo en móvil */}
+
+      {/* BOTÓN flotante para abrir sidebar en MÓVIL */}
+      <button
+        className="lg:hidden fixed left-3 top-[84px] z-40 px-3 py-2 rounded-full bg-[#5C2E0B] text-white shadow"
+        onClick={() => setSidebarOpenMobile(true)}
+        aria-label="Abrir lista de casos"
+        title="Casos"
+      >
+        Casos
+      </button>
+
+      {/* Sidebar MÓVIL en slide */}
+      <SidebarChats
+        casos={casos}
+        setCasos={setCasos}
+        casoActivo={casoActivo}
+        setCasoActivo={setCasoActivo}
+        user={userInfo}
+        onOpenHerramientas={() => setShowModalHerramientas(true)}
+        isOpen={sidebarOpenMobile}
+        onCloseSidebar={() => setSidebarOpenMobile(false)}
+      />
+
+      {/* Chat: ocupa todo el ancho disponible */}
       <div
         className="flex-1 flex flex-col items-stretch bg-white"
         style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}
@@ -144,8 +172,10 @@ function LitisBotPageIntegrada() {
     </div>
   );
 }
-// -----------------------------------------------
 
+/* ============================================================
+   Contenido principal (rutas públicas)
+============================================================ */
 function AppContent() {
   useFirebaseMessaging((payload) => {
     console.log("📩 Notificación recibida via hook:", payload);
@@ -155,7 +185,6 @@ function AppContent() {
   const location = useLocation();
   const enOficinaVirtual = /^\/oficinaVirtual(\/|$)/.test(location.pathname);
   const hideNavbar = location.pathname === "/litisbot";
-
   const mostrarBotonNoticias = location.pathname === "/";
 
   function BibliotecaProtegida() {
@@ -267,6 +296,9 @@ function AppContent() {
   );
 }
 
+/* ============================================================
+   App: un solo AuthProvider (no duplicar)
+============================================================ */
 export default function App() {
   return (
     <GoogleAuthRootProvider>
@@ -279,9 +311,7 @@ export default function App() {
                   <AppContent />
                 </Router>
                 {/* Burbuja flotante global conectada al usuario */}
-                <AuthProvider>
-                  <BubbleWithUser />
-                </AuthProvider>
+                <BubbleWithUser />
               </ToastProvider>
             </LitisBotProvider>
           </AuthProvider>
@@ -297,6 +327,9 @@ export default function App() {
 function BubbleWithUser() {
   const { user } = useAuth() || {};
   return (
-    <LitisBotBubbleChat usuarioId={user?.uid || "invitado"} pro={!!user?.pro} />
+    <LitisBotBubbleChat
+      usuarioId={user?.uid || "invitado"}
+      pro={!!user?.pro}
+    />
   );
 }
