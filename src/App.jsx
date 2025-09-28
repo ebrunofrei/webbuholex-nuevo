@@ -14,7 +14,6 @@ import { GoogleAuthRootProvider } from "@/context/GoogleAuthContext";
 // COMPONENTES GENERALES
 import Navbar from "./components/ui/Navbar";
 import Footer from "./components/Footer";
-// import InstalarApp from "./components/InstalarApp";
 import RutaPrivada from "./components/RutaPrivada";
 import NoticiasSlider from "./components/NoticiasSlider";
 import NoticiasBotonFlotante from "./components/ui/NoticiasBotonFlotante";
@@ -84,6 +83,9 @@ import ServiciosAdmin from "@/pages/admin/ServiciosAdmin";
 // 🔔 Hook centralizado para FCM
 import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
 
+// Ícono del botón móvil para abrir el drawer
+import { FolderKanban } from "lucide-react";
+
 function OficinaVirtualLayout({ children }) {
   return (
     <div className="min-h-screen flex">
@@ -107,6 +109,13 @@ function LitisBotPageIntegrada() {
   const { user } = useAuth() || {};
   const userInfo = user || { nombre: "Invitado", pro: false };
 
+  // Bloquear scroll del body cuando el drawer esté abierto
+  React.useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = sidebarOpenMobile ? "hidden" : prev || "";
+    return () => { document.body.style.overflow = prev || ""; };
+  }, [sidebarOpenMobile]);
+
   return (
     <div className="flex w-full min-h-screen bg-white" style={{ height: "100vh", overflow: "hidden" }}>
       {/* Sidebar ESCRITORIO */}
@@ -128,20 +137,22 @@ function LitisBotPageIntegrada() {
           setCasoActivo={setCasoActivo}
           user={userInfo}
           onOpenHerramientas={() => setShowModalHerramientas(true)}
-          // modo normal (estático)
         />
       </div>
 
-      {/* BOTÓN para abrir drawer en MÓVIL */}
-      <button
-        className="lg:hidden fixed left-3 top-[84px] z-40 px-3 py-2 rounded-full bg-[#5C2E0B] text-white shadow"
-        onClick={() => setSidebarOpenMobile(true)}
-        aria-label="Abrir lista de casos"
-      >
-        Casos
-      </button>
+      {/* Botón móvil (TOP-LEFT). OJO: se oculta si el drawer está abierto */}
+      {!sidebarOpenMobile && (
+        <button
+          className="lg:hidden fixed left-4 top-4 z-[80] p-3 rounded-full bg-[#5C2E0B] text-white shadow-xl active:scale-95"
+          onClick={() => setSidebarOpenMobile(true)}
+          aria-label="Abrir lista de casos"
+          title="Casos"
+        >
+          <FolderKanban size={22} />
+        </button>
+      )}
 
-      {/* Drawer MÓVIL: solo se monta/ve en móvil */}
+      {/* Drawer MÓVIL */}
       <div className="lg:hidden">
         <SidebarChats
           casos={casos}
@@ -177,7 +188,8 @@ function AppContent() {
     console.log("📩 Notificación recibida via hook:", payload);
   });
 
-  const { user, loading, abrirLogin } = useAuth?.() || {};
+  const { user, loading, abrirLogin } = useAuth() || {};
+
   const location = useLocation();
   const enOficinaVirtual = /^\/oficinaVirtual(\/|$)/.test(location.pathname);
   const hideNavbar = location.pathname === "/litisbot";
@@ -208,7 +220,7 @@ function AppContent() {
       {!enOficinaVirtual && (
         <>
           {!hideNavbar && <Navbar />}
-          <div className="flex pt-20">
+          <div className={`flex ${!hideNavbar ? "pt-20" : ""}`}>
             <main className={`flex-1 w-full ${!hideNavbar ? "lg:pr-80" : ""}`}>
               <Routes>
                 <Route path="/" element={<Home />} />
@@ -250,15 +262,19 @@ function AppContent() {
                 <Route path="/admin/servicios" element={<ServiciosAdmin />} />
               </Routes>
             </main>
+
             {!hideNavbar && (
               <>
                 <aside className="hidden lg:flex flex-col w-80 h-[calc(100vh-80px)] fixed top-20 right-0 z-40">
                   <NoticiasSlider />
                 </aside>
-                {mostrarBotonNoticias && <NoticiasBotonFlotante />}
+                {mostrarBotonNoticias && (
+                  <NoticiasBotonFlotante endpoint="general" titulo="Noticias" />
+                )}
               </>
             )}
           </div>
+
           {!hideNavbar && <Footer />}
           <CookiesBanner />
           <ModalLogin />
@@ -292,7 +308,7 @@ function AppContent() {
 }
 
 /* ============================================================
-   App (un solo AuthProvider) + Burbuja con usuario
+   App root
 ============================================================ */
 export default function App() {
   return (
@@ -304,8 +320,8 @@ export default function App() {
               <ToastProvider>
                 <Router>
                   <AppContent />
+                  <BubbleWithUser />
                 </Router>
-                <BubbleWithUser />
               </ToastProvider>
             </LitisBotProvider>
           </AuthProvider>
@@ -317,5 +333,11 @@ export default function App() {
 
 function BubbleWithUser() {
   const { user } = useAuth() || {};
+  const location = useLocation();
+  const ocultarBurbujas =
+    /^\/litisbot(\/|$)/.test(location.pathname) ||
+    /^\/oficinaVirtual\/litisbot(\/|$)/.test(location.pathname);
+
+  if (ocultarBurbujas) return null;
   return <LitisBotBubbleChat usuarioId={user?.uid || "invitado"} pro={!!user?.pro} />;
 }

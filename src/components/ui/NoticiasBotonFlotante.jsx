@@ -1,20 +1,26 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
 
-// Endpoint → noticias generales (no jurídicas)
-const BASE_URL =
-  import.meta.env.VITE_NEWS_API_URL || "/api/noticias";
+/**
+ * endpoint:
+ *  - "general"  -> /api/noticias  (o VITE_NEWS_API_URL)
+ *  - "juridicas"-> /api/noticias-juridicas (o VITE_NEWS_LEGAL_API_URL)
+ */
+export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "Noticias" }) {
+  const BASE_URL =
+    endpoint === "juridicas"
+      ? (import.meta.env.VITE_NEWS_LEGAL_API_URL || "/api/noticias-juridicas")
+      : (import.meta.env.VITE_NEWS_API_URL || "/api/noticias");
 
-const NOTICIAS_POR_PAGINA = 8;
+  const PAGE_SIZE = 8;
 
-export default function NoticiasBotonFlotante() {
   const [open, setOpen] = useState(false);
-  const [noticias, setNoticias] = useState([]);
-  const [page, setPage] = useState(1);
+  const [items, setItems] = useState([]);        // noticias acumuladas (dedupe)
+  const [page, setPage] = useState(1);           // página actual cargada
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [hayNuevas, setHayNuevas] = useState(false);
-  const sidebarRef = useRef();
+  const sidebarRef = useRef(null);
 
   // Normaliza la respuesta del backend (array o {items, hasMore})
   const normalizeResponse = (data) => {
@@ -26,74 +32,100 @@ export default function NoticiasBotonFlotante() {
     return { items: [], hasMore: false };
   };
 
-  const fetchNoticias = async (nextPage = 1, replace = false) => {
+  // Llamada a API con paginación real
+  const fetchPage = async (p = 1) => {
     if (loading) return;
     setLoading(true);
-
-    const controller = new AbortController();
     try {
-      const res = await fetch(BASE_URL, { signal: controller.signal });
-      if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+      const url = `${BASE_URL}?page=${p}&limit=${PAGE_SIZE}`;
+      const res = await fetch(url);
+
+      // Evita intentar parsear HTML cuando algo del routing falla
+      const ct = res.headers.get("content-type") || "";
+      if (!res.ok || !/json/i.test(ct)) {
+        throw new Error(`Respuesta no válida (${res.status}) de ${url}`);
+      }
 
       const data = normalizeResponse(await res.json());
 
-      // Evitar duplicados usando enlace o título como clave
-      const uniques = Array.from(
-        new Map(
-          data.items.map((n) => [n.enlace || n.titulo || n.id, n])
-        ).values()
-      );
-
-      const limitados = uniques.slice(0, nextPage * NOTICIAS_POR_PAGINA);
-      setNoticias(replace ? limitados : limitados);
-      setHasMore(data.hasMore || uniques.length > limitados.length);
-
-      if (nextPage === 1) setHayNuevas(true);
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        console.error("❌ Error cargando noticias generales:", err);
-        setHasMore(false);
+      // Dedupe global (por enlace/título/id)
+      const next = new Map(items.map(n => [n.enlace || n.titulo || n.id, n]));
+      for (const n of data.items) {
+        next.set(n.enlace || n.titulo || n.id, n);
       }
+
+      setItems(Array.from(next.values()));
+      setHasMore(data.hasMore);
+      setPage(p);
+
+      if (p === 1) setHayNuevas(true);
+    } catch (err) {
+      console.error(`❌ Error cargando noticias (${endpoint}):`, err);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
-
-    return () => controller.abort();
   };
 
-  // Cargar inicial
+  // Carga inicial
   useEffect(() => {
-    fetchNoticias(1, true);
-  }, []);
+    // al cambiar endpoint reiniciamos estado
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
+    fetchPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint]);
 
-  // Scroll infinito en el sidebar
+  // Scroll infinito dentro del panel
   useEffect(() => {
     if (!open) return;
     const el = sidebarRef.current;
     if (!el) return;
 
-    const handleScroll = () => {
-      if (
-        el.scrollTop + el.clientHeight >= el.scrollHeight - 32 &&
-        hasMore &&
-        !loading
-      ) {
-        const next = page + 1;
-        fetchNoticias(next);
-        setPage(next);
+    const onScroll = () => {
+      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 32;
+      if (nearBottom && hasMore && !loading) {
+        fetchPage(page + 1);
       }
     };
 
-    el.addEventListener("scroll", handleScroll);
-    return () => el.removeEventListener("scroll", handleScroll);
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
   }, [open, hasMore, loading, page]);
+
+  // Bloquea el scroll de body cuando abre
+  useEffect(() => {
+    const cls = "overflow-hidden";
+    if (open) document.body.classList.add(cls);
+    else document.body.classList.remove(cls);
+    return () => document.body.classList.remove(cls);
+  }, [open]);
+
+  // Ping simple cada 5 min para marcar "hay nuevas" (solo cuando está cerrado)
+  useEffect(() => {
+    const id = setInterval(async () => {
+      if (open) return;
+      try {
+        const res = await fetch(`${BASE_URL}?page=1&limit=1`, { method: "GET" });
+        const ct = res.headers.get("content-type") || "";
+        if (!/json/i.test(ct)) return;
+        const data = normalizeResponse(await res.json());
+        const firstNew = data.items?.[0]?.enlace || data.items?.[0]?.titulo || data.items?.[0]?.id;
+        const firstOld = items?.[0]?.enlace || items?.[0]?.titulo || items?.[0]?.id;
+        if (firstNew && firstNew !== firstOld) setHayNuevas(true);
+      } catch {}
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, BASE_URL, items]);
 
   return (
     <>
       {/* Botón flotante */}
       <div
         className="
-          fixed z-[100] bottom-4 left-1/2 transform -translate-x-1/2
+          fixed z-[100] bottom-4 left-1/2 -translate-x-1/2
           md:left-auto md:right-8 md:bottom-8 md:translate-x-0
           flex justify-center w-full md:w-auto pointer-events-none
         "
@@ -115,38 +147,42 @@ export default function NoticiasBotonFlotante() {
             size={22}
             className={`text-white ${hayNuevas ? "animate-bell" : ""}`}
           />
-          <span className="hidden sm:inline">Noticias</span>
+          <span className="hidden sm:inline">{titulo}</span>
           {hayNuevas && (
             <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-yellow-400 animate-ping"></span>
           )}
         </button>
       </div>
 
-      {/* Sidebar */}
+      {/* Panel / Sidebar */}
       {open && (
         <div
+          role="dialog"
+          aria-modal="true"
           className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[100] flex flex-col animate-slide-in"
           style={{ maxWidth: "340px" }}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b bg-[#b03a1a]/10">
             <h2 className="font-bold text-[#b03a1a] text-lg">
-              Noticias generales
+              {endpoint === "juridicas" ? "Noticias jurídicas" : "Noticias generales"}
             </h2>
             <button
               onClick={() => setOpen(false)}
               className="text-2xl font-bold hover:text-[#b03a1a]"
+              aria-label="Cerrar noticias"
             >
               &times;
             </button>
           </div>
+
           <div
             className="p-3 overflow-y-auto flex-1"
             ref={sidebarRef}
             style={{ scrollbarWidth: "thin" }}
           >
-            {noticias?.length > 0 ? (
-              noticias.map((n, idx) => (
-                <div key={n.enlace || n.titulo || idx} className="mb-3">
+            {items?.length > 0 ? (
+              items.map((n, idx) => (
+                <div key={n.enlace || n.titulo || n.id || idx} className="mb-3">
                   <div className="bg-[#fff6f3] rounded-xl p-3 shadow-md border hover:shadow-lg transition">
                     <div className="flex items-center mb-2">
                       {n.fuente && (
@@ -155,8 +191,7 @@ export default function NoticiasBotonFlotante() {
                         </span>
                       )}
                       <span className="ml-auto text-[11px] text-[#b03a1a] opacity-70">
-                        {n.fecha &&
-                          new Date(n.fecha).toLocaleDateString("es-PE")}
+                        {n.fecha && new Date(n.fecha).toLocaleDateString("es-PE")}
                       </span>
                     </div>
                     <a
@@ -168,7 +203,13 @@ export default function NoticiasBotonFlotante() {
                       {n.titulo || "Sin título"}
                     </a>
                     {n.resumen && (
-                      <p className="mt-1 text-sm text-[#3a2a20] opacity-85 line-clamp-3">
+                      <p className="mt-1 text-sm text-[#3a2a20] opacity-85"
+                         style={{
+                           display: "-webkit-box",
+                           WebkitBoxOrient: "vertical",
+                           WebkitLineClamp: 3,
+                           overflow: "hidden"
+                         }}>
                         {n.resumen}
                       </p>
                     )}
@@ -176,19 +217,14 @@ export default function NoticiasBotonFlotante() {
                 </div>
               ))
             ) : (
-              <div className="text-center text-gray-500">
-                No hay noticias disponibles.
-              </div>
+              <div className="text-center text-gray-500">No hay noticias disponibles.</div>
             )}
+
             {loading && (
-              <div className="text-center text-[#b03a1a] py-3">
-                Cargando...
-              </div>
+              <div className="text-center text-[#b03a1a] py-3">Cargando…</div>
             )}
-            {!hasMore && !loading && noticias.length > 0 && (
-              <div className="text-center text-xs text-[#bbb] py-2">
-                No hay más noticias.
-              </div>
+            {!hasMore && !loading && items.length > 0 && (
+              <div className="text-center text-xs text-[#bbb] py-2">No hay más noticias.</div>
             )}
           </div>
         </div>
@@ -197,23 +233,16 @@ export default function NoticiasBotonFlotante() {
       {/* Animaciones */}
       <style>
         {`
-        .animate-slide-in {
-          animation: slideInRight 0.3s ease-out;
-        }
-        @keyframes slideInRight {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        .animate-bell {
-          animation: bell-shake 1s infinite;
-        }
+        .animate-slide-in { animation: slideInRight .28s ease-out; }
+        @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+        .animate-bell { animation: bell-shake 1s infinite; }
         @keyframes bell-shake {
-          0%, 100% { transform: rotate(0deg); }
-          15% { transform: rotate(-20deg); }
-          30% { transform: rotate(15deg); }
-          45% { transform: rotate(-10deg); }
-          60% { transform: rotate(10deg); }
-          75% { transform: rotate(-5deg); }
+          0%,100% { transform: rotate(0) }
+          15% { transform: rotate(-18deg) }
+          30% { transform: rotate(14deg) }
+          45% { transform: rotate(-10deg) }
+          60% { transform: rotate(9deg) }
+          75% { transform: rotate(-4deg) }
         }
         `}
       </style>

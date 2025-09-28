@@ -1,5 +1,5 @@
 // src/components/SidebarChats.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   FaHome,
   FaPlus,
@@ -20,11 +20,20 @@ function uuid() {
 function Modal({ open, onClose, children }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl p-6 w-full max-w-xs relative border-2 border-yellow-700">
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl p-6 w-full max-w-xs relative border-2 border-yellow-700"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           className="absolute right-3 top-2 text-yellow-800 text-2xl font-bold"
           onClick={onClose}
+          aria-label="Cerrar"
         >
           ×
         </button>
@@ -35,19 +44,47 @@ function Modal({ open, onClose, children }) {
 }
 
 export default function SidebarChats({
-  user = { nombre: "Invitado", pro: false },
+  user = { nombre: "Invitado", pro: false, uid: "" },
   setCasos: setCasosProp,
   setCasoActivo: setCasoActivoProp,
   onOpenHerramientas,
-  isOpen = true, // control externo
-  onCloseSidebar, // cerrar sidebar en móvil
+  isOpen = true, // control externo (drawer móvil)
+  onCloseSidebar,  // cerrar sidebar en móvil
 }) {
-  // Persistencia local
-  const [casos, setCasos] = useState(() =>
-    JSON.parse(localStorage.getItem("litisbot_casos") || "[]")
+  /* ============================================================
+     Claves de almacenamiento (aisladas por usuario)
+  ============================================================ */
+  const ns = useMemo(
+    () => (user?.uid ? `litisbot:${user.uid}` : "litisbot:anon"),
+    [user?.uid]
   );
-  const [casoActivo, setCasoActivo] = useState(() =>
-    localStorage.getItem("litisbot_caso_activo") || ""
+  const CASOS_KEY = `${ns}:casos`;
+  const ACTIVO_KEY = `${ns}:caso_activo`;
+
+  // Migración ligera: si existen claves antiguas, muévelas al namespace del usuario
+  useEffect(() => {
+    const oldCasos = localStorage.getItem("litisbot_casos");
+    const oldActivo = localStorage.getItem("litisbot_caso_activo");
+    if (oldCasos && !localStorage.getItem(CASOS_KEY)) {
+      localStorage.setItem(CASOS_KEY, oldCasos);
+      localStorage.removeItem("litisbot_casos");
+    }
+    if (oldActivo && !localStorage.getItem(ACTIVO_KEY)) {
+      localStorage.setItem(ACTIVO_KEY, oldActivo);
+      localStorage.removeItem("litisbot_caso_activo");
+    }
+  }, [CASOS_KEY, ACTIVO_KEY]);
+
+  // Estado local con carga inicial desde storage namespaced
+  const [casos, setCasos] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(CASOS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [casoActivo, setCasoActivo] = useState(
+    () => localStorage.getItem(ACTIVO_KEY) || ""
   );
 
   // Estados internos
@@ -58,15 +95,29 @@ export default function SidebarChats({
   const [deleteId, setDeleteId] = useState("");
   const [deleteFinal, setDeleteFinal] = useState(false);
 
-  // Actualizar localStorage
+  /* ============================================================
+     Persistencia + sync hacia el padre
+  ============================================================ */
   useEffect(() => {
-    localStorage.setItem("litisbot_casos", JSON.stringify(casos));
-    if (setCasosProp) setCasosProp(casos);
-  }, [casos]);
+    localStorage.setItem(CASOS_KEY, JSON.stringify(casos));
+    setCasosProp?.(casos);
+  }, [casos, CASOS_KEY, setCasosProp]);
+
   useEffect(() => {
-    localStorage.setItem("litisbot_caso_activo", casoActivo);
-    if (setCasoActivoProp) setCasoActivoProp(casoActivo);
-  }, [casoActivo]);
+    localStorage.setItem(ACTIVO_KEY, casoActivo);
+    setCasoActivoProp?.(casoActivo);
+  }, [casoActivo, ACTIVO_KEY, setCasoActivoProp]);
+
+  // Asegura que siempre haya un caso activo válido
+  useEffect(() => {
+    const visibles = casos.filter((c) => !c.papelera);
+    if (!visibles.length) {
+      if (casoActivo) setCasoActivo(""); // nada visible
+      return;
+    }
+    const existe = visibles.some((c) => c.id === casoActivo);
+    if (!existe) setCasoActivo(visibles[0].id);
+  }, [casos, casoActivo]);
 
   /* ============================================================
      Acciones sobre casos
@@ -75,41 +126,48 @@ export default function SidebarChats({
     e.preventDefault();
     const nuevo = {
       id: uuid(),
-      nombre: nombreNuevo.trim() || "Nuevo caso",
+      nombre: (nombreNuevo || "").trim() || "Nuevo caso",
       papelera: false,
       creadoEn: Date.now(),
     };
-    setCasos([nuevo, ...casos]);
+    setCasos((prev) => [nuevo, ...prev]);
     setCasoActivo(nuevo.id);
     setNombreNuevo("");
     setModalNuevo(false);
+    // En móvil, al crear también cerramos el drawer para ir al chat
+    onCloseSidebar?.();
   }
 
   function handleRenombrar(id, nuevoNombre) {
-    setCasos((casos) =>
-      casos.map((c) => (c.id === id ? { ...c, nombre: nuevoNombre } : c))
-    );
+    const name = (nuevoNombre || "").trim();
+    if (!name) return;
+    setCasos((prev) => prev.map((c) => (c.id === id ? { ...c, nombre: name } : c)));
     setEditId("");
     setEditNombre("");
   }
 
   function handleEliminar(id, permanente = false) {
     if (permanente) {
-      setCasos((casos) => casos.filter((c) => c.id !== id));
+      setCasos((prev) => prev.filter((c) => c.id !== id));
     } else {
-      setCasos((casos) =>
-        casos.map((c) => (c.id === id ? { ...c, papelera: true } : c))
-      );
+      setCasos((prev) => prev.map((c) => (c.id === id ? { ...c, papelera: true } : c)));
     }
     setDeleteId("");
     if (casoActivo === id) setCasoActivo("");
   }
 
   function handleRestaurar(id) {
-    setCasos((casos) =>
-      casos.map((c) => (c.id === id ? { ...c, papelera: false } : c))
-    );
+    setCasos((prev) => prev.map((c) => (c.id === id ? { ...c, papelera: false } : c)));
   }
+
+  const seleccionarCaso = useCallback(
+    (id) => {
+      setCasoActivo(id);
+      // En móvil, al elegir un caso cerramos el drawer
+      onCloseSidebar?.();
+    },
+    [onCloseSidebar]
+  );
 
   /* ============================================================
      Render
@@ -122,26 +180,30 @@ export default function SidebarChats({
       {/* Backdrop para móvil */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/40 z-[60] lg:hidden"
           onClick={onCloseSidebar}
-        ></div>
+        />
       )}
 
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full z-50 transform transition-transform duration-300
+          fixed top-0 left-0 h-full z-[70] transform transition-transform duration-300
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           lg:static lg:translate-x-0 lg:flex
-          flex-col bg-yellow-50 min-h-screen border-r border-yellow-100 w-[240px]
+          flex flex-col bg-yellow-50 border-r border-yellow-100
+          w-[86vw] max-w-[320px] lg:w-[240px]
         `}
         style={{ minWidth: 210, maxWidth: 350 }}
+        aria-label="Lista de casos"
       >
         {/* Botón de cierre móvil */}
         <div className="flex lg:hidden justify-end p-2 border-b border-yellow-200 bg-yellow-100">
           <button
             onClick={onCloseSidebar}
             className="text-yellow-800 text-xl hover:text-red-600"
+            aria-label="Cerrar barra lateral"
+            title="Cerrar"
           >
             <FaTimes />
           </button>
@@ -171,29 +233,30 @@ export default function SidebarChats({
           <FaPlus size={18} /> Nuevo caso
         </button>
 
-        {/* Lista de casos */}
+        {/* Título lista */}
         <div className="px-4 pt-3 pb-1 text-[15px] font-medium text-brown-900">
           Casos recientes
         </div>
-        <div className="flex-1 overflow-y-auto px-2">
+
+        {/* Lista con scroll propia */}
+        <div className="flex-1 overflow-y-auto px-2 min-h-0">
           {chatsVisibles.length === 0 && (
             <div className="text-sm text-brown-400 px-1">
               Aún no has creado ningún caso.
             </div>
           )}
+
           {chatsVisibles.map((c) => (
             <div
               key={c.id}
               className={`flex items-center px-2 py-2 mb-1 rounded-lg cursor-pointer transition
-              ${
-                casoActivo === c.id
-                  ? "bg-yellow-200 font-bold"
-                  : "hover:bg-yellow-100"
-              }`}
+              ${casoActivo === c.id ? "bg-yellow-200 font-bold" : "hover:bg-yellow-100"}`}
               style={{ fontSize: 16 }}
-              onClick={() => setCasoActivo(c.id)}
+              onClick={() => seleccionarCaso(c.id)}
+              title={c.nombre}
             >
               <span className="mr-2">💬</span>
+
               {editId === c.id ? (
                 <form
                   onSubmit={(e) => {
@@ -203,14 +266,19 @@ export default function SidebarChats({
                   className="flex-1 flex items-center"
                 >
                   <input
-                    className="border-b border-yellow-600 bg-transparent px-1 text-brown-900"
+                    className="border-b border-yellow-600 bg-transparent px-1 text-brown-900 w-full"
                     value={editNombre}
                     autoFocus
                     onChange={(e) => setEditNombre(e.target.value)}
-                    onBlur={() => setEditId("")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setEditId("");
+                        setEditNombre("");
+                      }
+                    }}
                     maxLength={36}
                   />
-                  <button type="submit" className="ml-1 text-green-700">
+                  <button type="submit" className="ml-1 text-green-700" aria-label="Guardar nombre">
                     <FaEdit />
                   </button>
                 </form>
@@ -225,6 +293,7 @@ export default function SidebarChats({
                   >
                     {c.nombre}
                   </span>
+
                   <button
                     className="ml-2 text-yellow-900 hover:text-yellow-700"
                     onClick={(e) => {
@@ -232,9 +301,12 @@ export default function SidebarChats({
                       setEditId(c.id);
                       setEditNombre(c.nombre);
                     }}
+                    aria-label="Renombrar"
+                    title="Renombrar"
                   >
                     <FaEdit size={16} />
                   </button>
+
                   <button
                     className="ml-1 text-red-700 hover:text-red-900"
                     onClick={(e) => {
@@ -242,6 +314,8 @@ export default function SidebarChats({
                       setDeleteId(c.id);
                       setDeleteFinal(false);
                     }}
+                    aria-label="Enviar a papelera"
+                    title="Eliminar"
                   >
                     <FaTrash size={16} />
                   </button>
@@ -260,22 +334,28 @@ export default function SidebarChats({
                 <div
                   key={c.id}
                   className="flex items-center px-2 py-2 mb-1 rounded-lg bg-yellow-100 text-yellow-800"
-                  style={{ fontSize: 16, opacity: 0.7 }}
+                  style={{ fontSize: 16, opacity: 0.8 }}
                 >
                   <span className="mr-2">💬</span>
                   <span className="flex-1 truncate">{c.nombre}</span>
+
                   <button
                     className="ml-1 text-green-800 hover:text-green-900"
                     onClick={() => handleRestaurar(c.id)}
+                    aria-label="Restaurar"
+                    title="Restaurar"
                   >
                     <FaRecycle size={16} />
                   </button>
+
                   <button
                     className="ml-1 text-red-700 hover:text-red-900"
                     onClick={() => {
                       setDeleteId(c.id);
                       setDeleteFinal(true);
                     }}
+                    aria-label="Eliminar definitivamente"
+                    title="Eliminar definitivamente"
                   >
                     <FaTrash size={16} />
                   </button>

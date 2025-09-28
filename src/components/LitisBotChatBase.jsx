@@ -30,7 +30,7 @@ import {
    Utilidades de red (un solo endpoint: /api/ia?action=chat)
 ============================================================ */
 
-// utils/net.js
+// utils/net.js 
 export function buildIaUrl() {
   const raw = (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
 
@@ -546,7 +546,7 @@ const INIT_MSG = {
   },
 };
 
-/* ============================================================
+ /* ============================================================
    Componente Principal
 ============================================================ */
 export default function LitisBotChatBase({
@@ -684,7 +684,7 @@ export default function LitisBotChatBase({
         saveMessage(casoActivo, { role: "assistant", content: respuesta });
       }
     } catch (err) {
-      console.error("❌ Error al consultar LitisBot:", err);
+      console.error("❌ Hubo un error consultando al asistente:", err);
       setMensajes((ms) =>
         ms.map((m, i) =>
           i === idxAssistant
@@ -702,7 +702,7 @@ export default function LitisBotChatBase({
   }
 
   async function handleSend(e) {
-    e.preventDefault();
+    e?.preventDefault?.();
     setAlertaAdjuntos("");
 
     // Si hay adjuntos, simulamos recepción
@@ -772,6 +772,14 @@ export default function LitisBotChatBase({
     setHerramienta(null);
   };
 
+  // Enter para enviar / Shift+Enter para salto
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (input.trim() || adjuntos.length) handleSend(e);
+    }
+  };
+
   /* --------------------------- Render ----------------------- */
   return (
     <div
@@ -784,166 +792,168 @@ export default function LitisBotChatBase({
       }}
     >
       {/* Área del chat */}
-      <div
-        className="flex flex-col justify-end w-full mx-auto bg-white overflow-y-auto no-scrollbar
-                   px-2 sm:px-3 md:px-4
-                   max-w-[92vw] sm:max-w-3xl md:max-w-4xl
-                   h-[68vh] sm:h-[70vh] md:h-[72vh] lg:max-h-[80vh]"
-        style={{
-          marginTop: 24,
-          marginBottom: 14,
-          borderRadius: 24,
-          boxShadow: "0 4px 26px 0 #0001",
-        }}
-      >
-        <div className="flex flex-col gap-2 w-full py-3">
-          {mensajes.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}>
-              <div
-                className={`
-                  px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
-                  rounded-[1.75rem] shadow max-w-[92%] md:max-w-[85%] break-words
-                  ${m.role === "user" ? "text-white self-end" : "bg-yellow-50 text-[#5C2E0B] self-start"}
-                  sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
-                `}
-                style={{ background: m.role === "user" ? "#5C2E0B" : undefined, border: 0 }}
-              >
-                {m.role === "assistant" ? (
-                  <MensajeBurbuja
-                    msg={m}
-                    onCopy={handleCopy}
-                    onEdit={(nuevo) => handleEdit(i, nuevo)}
-                    onFeedback={(type) => handleFeedback(i, type)}
-                  />
-                ) : (
-                  <span dangerouslySetInnerHTML={{ __html: m.content }} />
-                )}
-              </div>
-            </div>
-          ))}
+<div
+  id="litisbot-feed"
+  className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar px-2 sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+  style={{
+    // altura: viewport menos header (~80px) y barra de entrada (~96px)
+    height: "calc(100vh - 176px)",
+    marginTop: 24,
+    marginBottom: 12,
+    borderRadius: 24,
+    boxShadow: "0 4px 26px 0 #0001",
+  }}
+>
+  <div className="flex flex-col gap-2 w-full py-3">
+    {mensajes.map((m, i) => (
+      <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}>
+        <div
+          className={`
+            px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
+            rounded-[1.75rem] shadow max-w-[92%] md:max-w-[85%] break-words
+            ${m.role === "user" ? "text-white self-end" : "bg-yellow-50 text-[#5C2E0B] self-start"}
+            sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
+          `}
+          style={{ background: m.role === "user" ? "#5C2E0B" : undefined, border: 0 }}
+        >
+          {m.role === "assistant" ? (
+            <MensajeBurbuja
+              msg={m}
+              onCopy={handleCopy}
+              onEdit={(nuevo) => handleEdit(i, nuevo)}
+              onFeedback={(type) => handleFeedback(i, type)}
+            />
+          ) : (
+            <span dangerouslySetInnerHTML={{ __html: m.content }} />
+          )}
+        </div>
+      </div>
+    ))}
 
-          {cargando && (
-            <div className="flex justify-start w-full">
-              <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
-                Buscando en bases legales…
+    {cargando && (
+      <div className="flex justify-start w-full">
+        <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
+          Buscando en bases legales…
+        </div>
+      </div>
+    )}
+    <div ref={chatEndRef} />
+  </div>
+</div>
+
+{/* Barra de entrada */}
+<form
+  onSubmit={handleSend}
+  className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
+             px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
+             max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+>
+  {/* Adjuntar */}
+  <label
+    className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}`}
+    style={{ background: "#5C2E0B", color: "#fff" }}
+    title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
+    aria-label="Adjuntar archivo"
+  >
+    <FaPaperclip size={22} />
+    <input
+      type="file"
+      className="hidden"
+      multiple
+      onChange={handleFileChange}
+      disabled={adjuntos.length >= MAX_ADJUNTOS}
+    />
+  </label>
+
+  {/* Previews */}
+  {adjuntos.length > 0 && (
+    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+      {adjuntos.map((adj, idx) => (
+        <div key={idx} className="relative flex-shrink-0">
+          {adj.type?.startsWith("image/") ? (
+            <img
+              src={URL.createObjectURL(adj)}
+              alt={adj.name}
+              className="rounded-xl border-2 border-yellow-300 shadow object-cover"
+              style={{ width: 100, height: 72 }}
+            />
+          ) : (
+            <div
+              className="bg-yellow-50 border-2 border-yellow-300 rounded-xl flex flex-col items-center justify-center text-[#5C2E0B] font-semibold shadow"
+              style={{ width: 120, height: 72, fontSize: 14, padding: 6 }}
+            >
+              <div style={{ fontSize: 26, marginBottom: 2 }}>
+                {adj.name.toLowerCase().endsWith(".pdf")
+                  ? "📄"
+                  : /\.(doc|docx)$/i.test(adj.name)
+                  ? "📝"
+                  : /\.(xls|xlsx)$/i.test(adj.name)
+                  ? "📊"
+                  : "📎"}
+              </div>
+              <div className="truncate w-full text-center" title={adj.name}>
+                {adj.name}
               </div>
             </div>
           )}
-          <div ref={chatEndRef} />
+          <button
+            type="button"
+            aria-label="Quitar archivo"
+            className="absolute -top-1 -right-1 bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center"
+            onClick={() => handleRemoveAdjunto(idx)}
+            title="Eliminar archivo"
+          >
+            ×
+          </button>
         </div>
-      </div>
+      ))}
+    </div>
+  )}
 
-      {/* Barra de entrada */}
-      <form
-        onSubmit={handleSend}
-        className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
-                   px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
-                   max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
-      >
-        {/* Adjuntar */}
-        <label
-          className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}`}
-          style={{ background: "#5C2E0B", color: "#fff" }}
-          title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
-          aria-label="Adjuntar archivo"
-        >
-          <FaPaperclip size={22} />
-          <input
-            type="file"
-            className="hidden"
-            multiple
-            onChange={handleFileChange}
-            disabled={adjuntos.length >= MAX_ADJUNTOS}
-          />
-        </label>
+  {/* Entrada */}
+  <textarea
+    ref={textareaRef}
+    className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
+    placeholder="Escribe o pega tu pregunta legal aquí…"
+    value={input}
+    onChange={(e) => setInput(e.target.value)}
+    onKeyDown={handleKeyDown}
+    disabled={grabando}
+    rows={1}
+    style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
+  />
 
-        {/* Previews */}
-        {adjuntos.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-            {adjuntos.map((adj, idx) => (
-              <div key={idx} className="relative flex-shrink-0">
-                {adj.type?.startsWith("image/") ? (
-                  <img
-                    src={URL.createObjectURL(adj)}
-                    alt={adj.name}
-                    className="rounded-xl border-2 border-yellow-300 shadow object-cover"
-                    style={{ width: 100, height: 72 }}
-                  />
-                ) : (
-                  <div
-                    className="bg-yellow-50 border-2 border-yellow-300 rounded-xl flex flex-col items-center justify-center text-[#5C2E0B] font-semibold shadow"
-                    style={{ width: 120, height: 72, fontSize: 14, padding: 6 }}
-                  >
-                    <div style={{ fontSize: 26, marginBottom: 2 }}>
-                      {adj.name.toLowerCase().endsWith(".pdf")
-                        ? "📄"
-                        : /\.(doc|docx)$/i.test(adj.name)
-                        ? "📝"
-                        : /\.(xls|xlsx)$/i.test(adj.name)
-                        ? "📊"
-                        : "📎"}
-                    </div>
-                    <div className="truncate w-full text-center" title={adj.name}>
-                      {adj.name}
-                    </div>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  aria-label="Quitar archivo"
-                  className="absolute -top-1 -right-1 bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center"
-                  onClick={() => handleRemoveAdjunto(idx)}
-                  title="Eliminar archivo"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+  {/* Micrófono */}
+  <button
+    type="button"
+    aria-label="Dictar voz"
+    className="p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
+    style={{ background: "#5C2E0B", color: "#fff", minWidth: 38, minHeight: 38 }}
+    onClick={handleVoice}
+    disabled={grabando}
+    title="Dictar voz"
+  >
+    <FaMicrophone size={20} />
+  </button>
 
-        {/* Entrada */}
-        <textarea
-          ref={textareaRef}
-          className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
-          placeholder="Escribe o pega tu pregunta legal aquí…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={grabando}
-          rows={1}
-          style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
-        />
+  {/* Enviar */}
+  <button
+    type="submit"
+    aria-label="Enviar"
+    title="Enviar"
+    className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${
+      !input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+    }`}
+    style={{ background: "#5C2E0B", color: "#fff", minWidth: 44, minHeight: 44, fontWeight: "bold" }}
+    disabled={(!input.trim() && adjuntos.length === 0) || cargando}
+  >
+    <MdSend size={24} />
+  </button>
+</form>
 
-        {/* Micrófono */}
-        <button
-          type="button"
-          aria-label="Dictar voz"
-          className="p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
-          style={{ background: "#5C2E0B", color: "#fff", minWidth: 38, minHeight: 38 }}
-          onClick={handleVoice}
-          disabled={grabando}
-          title="Dictar voz"
-        >
-          <FaMicrophone size={20} />
-        </button>
+{alertaAdjuntos && <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>}
+{error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
 
-        {/* Enviar */}
-        <button
-          type="submit"
-          aria-label="Enviar"
-          title="Enviar"
-          className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${
-            !input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-          style={{ background: "#5C2E0B", color: "#fff", minWidth: 44, minHeight: 44, fontWeight: "bold" }}
-          disabled={(!input.trim() && adjuntos.length === 0) || cargando}
-        >
-          <MdSend size={24} />
-        </button>
-      </form>
-
-      {alertaAdjuntos && <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>}
-      {error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
 
       {/* MODAL HERRAMIENTAS */}
       {showModal && (

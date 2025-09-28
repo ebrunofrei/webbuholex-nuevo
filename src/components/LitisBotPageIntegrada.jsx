@@ -1,49 +1,30 @@
-import React, { useState } from "react";
+import { FolderKanban } from "lucide-react";
+import React from "react";
 import SidebarChats from "@/components/SidebarChats";
 import LitisBotChatBase from "@/components/LitisBotChatBase";
 import { useAuth } from "@/context/AuthContext";
-import { FaBars } from "react-icons/fa";
 
-export default function LitisBotPageIntegrada() {
-  const [casos, setCasos] = useState([]);
-  const [casoActivo, setCasoActivo] = useState(null);
-  const [showModalHerramientas, setShowModalHerramientas] = useState(false);
-  const [menuAbierto, setMenuAbierto] = useState(false);
+function LitisBotPageIntegrada() {
+  const [casos, setCasos] = React.useState([]);
+  const [casoActivo, setCasoActivo] = React.useState(null);
+  const [showModalHerramientas, setShowModalHerramientas] = React.useState(false);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
 
-  const { user, isPremium } = useAuth() || {};
+  const { user } = useAuth() || {};
   const userInfo = user || { nombre: "Invitado", pro: false };
 
   return (
-    <div className="flex w-full min-h-screen bg-white h-screen overflow-hidden">
-      {/* Botón hamburguesa en móvil */}
-      <button
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-yellow-700 text-white rounded-md shadow-md"
-        onClick={() => setMenuAbierto(true)}
-        aria-label="Abrir menú"
-      >
-        <FaBars size={20} />
-      </button>
-
-      {/* Overlay oscuro en móvil */}
-      {menuAbierto && (
-        <div
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden transition-opacity duration-300"
-          onClick={() => setMenuAbierto(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Sidebar con animación tipo drawer */}
+    <div className="flex w-full min-h-screen bg-white" style={{ height: "100vh", overflow: "hidden" }}>
+      {/* Sidebar escritorio */}
       <div
-        className={`fixed lg:static top-0 left-0 h-full z-40 transform transition-transform duration-500 ease-in-out
-        ${menuAbierto ? "translate-x-0" : "-translate-x-full"}
-        lg:translate-x-0 lg:flex lg:flex-col`}
+        className="h-full hidden lg:flex"
         style={{
-          width: "75vw",
-          maxWidth: 320,
+          width: "22vw",
+          minWidth: 250,
+          maxWidth: 350,
           borderRight: "1px solid #f4e6c7",
           background: "#fff",
-          boxShadow: menuAbierto ? "4px 0 12px rgba(0,0,0,0.25)" : "none",
+          flexDirection: "column",
         }}
       >
         <SidebarChats
@@ -53,21 +34,62 @@ export default function LitisBotPageIntegrada() {
           setCasoActivo={setCasoActivo}
           user={userInfo}
           onOpenHerramientas={() => setShowModalHerramientas(true)}
-          onCloseSidebar={() => setMenuAbierto(false)} // 👈 botón X dentro del sidebar
         />
       </div>
 
-      {/* Chat principal */}
-      <div className="flex-1 flex flex-col items-stretch bg-white min-w-0 h-screen overflow-y-auto">
+      {/* Chat (siempre) */}
+      <div className="flex-1 flex flex-col items-stretch bg-white" style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}>
         <LitisBotChatBase
           user={userInfo}
           casoActivo={casoActivo}
           expedientes={casos}
           showModal={showModalHerramientas}
           setShowModal={setShowModalHerramientas}
-          pro={isPremium}
         />
       </div>
+
+      {/* Botón flotante móvil: abrir "Casos" */}
+      <button
+        onClick={() => setDrawerOpen(true)}
+        className="lg:hidden fixed left-4 bottom-24 z-[120] p-3 rounded-full shadow-xl bg-[#b03a1a] text-white active:scale-95"
+        aria-label="Abrir casos"
+      >
+        <FolderKanban size={22} />
+      </button>
+
+      {/* Drawer móvil con Sidebar */}
+      {drawerOpen && (
+        <div className="lg:hidden fixed inset-0 z-[130]">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <div className="absolute left-0 top-0 h-full w-[85vw] max-w-[340px] bg-white shadow-2xl border-r border-[#f4e6c7] flex flex-col">
+            <div className="px-4 py-3 border-b flex justify-between items-center">
+              <strong>Casos</strong>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="text-xl font-bold"
+                aria-label="Cerrar"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <SidebarChats
+                casos={casos}
+                setCasos={setCasos}
+                casoActivo={casoActivo}
+                setCasoActivo={setCasoActivo}
+                user={userInfo}
+                onOpenHerramientas={() => setShowModalHerramientas(true)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default LitisBotPageIntegrada;
