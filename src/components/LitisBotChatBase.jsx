@@ -30,21 +30,21 @@ import {
    Utilidades de red (un solo endpoint: /api/ia?action=chat)
 ============================================================ */
 
-/** Devuelve la URL del endpoint de IA. */
+// utils/net.js
 export function buildIaUrl() {
   const raw = (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
 
-  // Sin configuración → serverless propio en Vercel
+  // Sin config → directo al handler
   if (!raw) return "/api/ia?action=chat";
 
-  // URL absoluta (https://... o http://...)
+  // URL absoluta
   if (/^https?:\/\//i.test(raw)) {
     if (/\baction=/.test(raw)) return raw;
     const sep = raw.includes("?") ? "&" : "?";
-    return `${raw.replace(/\/+$/, "")}${sep}action=chat`;
+    return raw.replace(/\/+$/, "") + `${sep}action=chat`;
   }
 
-  // Ruta relativa que ya empieza en /api/...
+  // /api/*
   const base = raw.replace(/\/+$/, "");
   if (base.startsWith("/api/")) {
     if (/\baction=/.test(base)) return base;
@@ -52,47 +52,33 @@ export function buildIaUrl() {
     return `${base}${sep}action=chat`;
   }
 
-  // Cualquier otro caso: montamos nuestro endpoint bajo esa base
   return `${base}/api/ia?action=chat`;
 }
 
-/**
- * Llama al endpoint de IA. Soporta JSON normal y (opcional) streaming text/event-stream.
- * @param {string} IA_URL
- * @param {object} payload
- * @param {(chunk:string,total:string)=>void} [onStreamChunk]
- */
 export async function enviarAlLitisbot(IA_URL, payload, onStreamChunk) {
   const resp = await fetch(IA_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload ?? {}),
+    body: JSON.stringify(payload),
   });
 
   const ctype = resp.headers.get("content-type") || "";
 
-  // Streaming opcional
   if (resp.body && /text\/event-stream/i.test(ctype)) {
     const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder("utf-8");
     let total = "";
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
       total += chunk;
-      if (typeof onStreamChunk === "function") onStreamChunk(chunk, total);
+      onStreamChunk?.(chunk, total);
     }
     return { respuesta: total.trim() };
   }
 
-  // JSON estándar
-  let json = {};
-  try {
-    json = await resp.json();
-  } catch {
-    // sin cuerpo JSON
-  }
+  const json = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
   return json; // { respuesta }
 }
