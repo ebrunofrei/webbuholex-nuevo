@@ -27,65 +27,72 @@ import {
 } from "@/services/chatStorage";
 
 /* ============================================================
-   Utilidades de red (quedan en este archivo para evitar conflictos)
+   Utilidades de red (un solo endpoint: /api/ia?action=chat)
 ============================================================ */
-// Endpoint unificado: por defecto /api/litisbot (compatible con Vercel)
-function buildIaUrl() {
-  const raw =
-    (import.meta.env.VITE_API_URL ||
-      import.meta.env.PUBLIC_API_URL ||
-      "").trim();
 
-  // Sin configuración → endpoint propio
-  if (!raw) return "/api/litisbot";
+/** Devuelve la URL del endpoint de IA. */
+export function buildIaUrl() {
+  const raw = (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
+
+  // Sin configuración → serverless propio en Vercel
+  if (!raw) return "/api/ia?action=chat";
 
   // URL absoluta (https://... o http://...)
   if (/^https?:\/\//i.test(raw)) {
-    // Si ya trae action= o apunta a litisbot, la dejamos tal cual
-    if (/\baction=/.test(raw) || /\/litisbot(\b|\/|\?)/i.test(raw)) return raw;
+    if (/\baction=/.test(raw)) return raw;
     const sep = raw.includes("?") ? "&" : "?";
-    return raw.replace(/\/+$/, "") + `${sep}action=chat`;
+    return `${raw.replace(/\/+$/, "")}${sep}action=chat`;
   }
 
-  // Ruta absoluta relativa a la app (/algo)
+  // Ruta relativa que ya empieza en /api/...
   const base = raw.replace(/\/+$/, "");
   if (base.startsWith("/api/")) {
-    if (/\baction=/.test(base) || /\/litisbot(\b|\/|\?)/i.test(base)) return base;
+    if (/\baction=/.test(base)) return base;
     const sep = base.includes("?") ? "&" : "?";
     return `${base}${sep}action=chat`;
   }
 
-  // Cualquier otro caso: montamos el proxy propio
-  return `${base}/api/litisbot`;
+  // Cualquier otro caso: montamos nuestro endpoint bajo esa base
+  return `${base}/api/ia?action=chat`;
 }
 
-// Helper de red: JSON normal + opcional streaming (text/event-stream)
-async function enviarAlLitisbot(IA_URL, payload, onStreamChunk) {
+/**
+ * Llama al endpoint de IA. Soporta JSON normal y (opcional) streaming text/event-stream.
+ * @param {string} IA_URL
+ * @param {object} payload
+ * @param {(chunk:string,total:string)=>void} [onStreamChunk]
+ */
+export async function enviarAlLitisbot(IA_URL, payload, onStreamChunk) {
   const resp = await fetch(IA_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload ?? {}),
   });
 
   const ctype = resp.headers.get("content-type") || "";
 
-  // Streaming opcional (si lo activas en backend)
+  // Streaming opcional
   if (resp.body && /text\/event-stream/i.test(ctype)) {
     const reader = resp.body.getReader();
-    const decoder = new TextDecoder("utf-8");
+    const decoder = new TextDecoder();
     let total = "";
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
       total += chunk;
-      onStreamChunk?.(chunk, total);
+      if (typeof onStreamChunk === "function") onStreamChunk(chunk, total);
     }
     return { respuesta: total.trim() };
   }
 
   // JSON estándar
-  const json = await resp.json().catch(() => ({}));
+  let json = {};
+  try {
+    json = await resp.json();
+  } catch {
+    // sin cuerpo JSON
+  }
   if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
   return json; // { respuesta }
 }
