@@ -895,142 +895,163 @@ export default function LitisBotChatBase({
     }
   };
 
-  /* --------------------------- Render ----------------------- */
-  return (
+ /* --------------------------- Render ----------------------- */
+return (
+  <div
+    className="flex flex-col w-full items-center bg-white litisbot-fill"
+    style={{ minHeight: "100vh" }}
+    onPaste={(e) => {
+      if (e.clipboardData?.files?.length) {
+        handleFileChange({ target: { files: e.clipboardData.files } });
+      }
+    }}
+  >
+    {/* Área del chat */}
     <div
-      className="flex flex-col w-full items-center bg-white litisbot-fill"
-      style={{ minHeight: "100vh" }}
-      onPaste={(e) => {
-        if (e.clipboardData?.files?.length) {
-          handleFileChange({ target: { files: e.clipboardData.files } });
-        }
+      id="litisbot-feed"
+      className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar px-2 sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+      style={{
+        height: "calc(100vh - 176px)",
+        marginTop: 24,
+        marginBottom: 12,
+        borderRadius: 24,
+        boxShadow: "0 4px 26px 0 #0001",
       }}
     >
-      {/* Área del chat */}
-      <div
-        id="litisbot-feed"
-        className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar px-2 sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
-        style={{
-          height: "calc(100vh - 176px)",
-          marginTop: 24,
-          marginBottom: 12,
-          borderRadius: 24,
-          boxShadow: "0 4px 26px 0 #0001",
-        }}
-      >
-        <div className="flex flex-col gap-2 w-full py-3">
-          {mensajes.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}>
-              <div
-                className={`
-                  px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
-                  rounded-[1.75rem] shadow break-words
-                  ${
-                    m.role === "user"
-                      ? "text-white self-end max-w-[85%]"
-                      : "bg-yellow-50 text-[#5C2E0B] self-start w-full sm:max-w-[85%]"
-                  }
-                  sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
-                `}
-                style={{
-                  background: m.role === "user" ? "#5C2E0B" : undefined,
-                  border: 0,
-                }}
-              >
-                {m.role === "assistant" ? (
-                  <MensajeBurbuja
-                    msg={m}
-                    onCopy={handleCopy}
-                    onEdit={(nuevo) => handleEdit(i, nuevo)}
-                    onFeedback={(type) => handleFeedback(i, type)}
-                  />
-                ) : (
-                  <span dangerouslySetInnerHTML={{ __html: m.content }} />
-                )}
-              </div>
+      <div className="flex flex-col gap-2 w-full py-3">
+        {mensajes.map((m, i) => (
+          <div
+            key={i}
+            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}
+          >
+            <div
+              className={`
+                px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
+                rounded-[1.75rem] shadow break-words
+                ${
+                  m.role === "user"
+                    ? "text-white self-end max-w-[85%]"
+                    : "bg-yellow-50 text-[#5C2E0B] self-start w-full sm:max-w-[85%] px-3"
+                }
+                sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
+              `}
+              style={{
+                background: m.role === "user" ? "#5C2E0B" : undefined,
+                border: 0,
+              }}
+            >
+              {m.role === "assistant" ? (
+                <MensajeBurbuja
+                  msg={m}
+                  onCopy={handleCopy}
+                  onEdit={(nuevo) => handleEdit(i, nuevo)}
+                  onFeedback={(type) => handleFeedback(i, type)}
+                />
+              ) : (
+                <span dangerouslySetInnerHTML={{ __html: m.content }} />
+              )}
             </div>
-          ))}
-          {cargando && (
-            <div className="flex justify-start w-full">
-              <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
-                Buscando en bases legales…
-              </div>
+          </div>
+        ))}
+
+        {cargando && (
+          <div className="flex justify-start w-full">
+            <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
+              Buscando en bases legales…
             </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
+          </div>
+        )}
+        <div ref={chatEndRef} />
       </div>
-
-      {/* Barra de entrada */}
-      <form
-        onSubmit={handleSend}
-        className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
-                   px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
-                   max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
-      >
-        {/* Adjuntar */}
-        <label
-          className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}`}
-          style={{ background: "#5C2E0B", color: "#fff" }}
-        >
-          <FaPaperclip size={22} />
-          <input type="file" className="hidden" multiple onChange={handleFileChange} disabled={adjuntos.length >= MAX_ADJUNTOS}/>
-        </label>
-
-        {/* Entrada */}
-        <textarea
-          ref={textareaRef}
-          className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
-          placeholder="Escribe o dicta tu pregunta aquí…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={grabando}
-          rows={1}
-          style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
-        />
-
-        {/* Micrófono */}
-        <button
-          type="button"
-          aria-label="Dictar voz"
-          className="p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
-          style={{ background: "#5C2E0B", color: "#fff", minWidth: 38, minHeight: 38 }}
-          onClick={handleVoice}
-          disabled={grabando}
-          title="Dictar voz"
-        >
-          <FaMicrophone size={20} />
-        </button>
-
-        {/* Enviar */}
-        <button
-          type="submit"
-          aria-label="Enviar"
-          title="Enviar"
-          className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${!input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-          style={{ background: "#5C2E0B", color: "#fff", minWidth: 44, minHeight: 44 }}
-          disabled={(!input.trim() && adjuntos.length === 0) || cargando}
-        >
-          <MdSend size={24} />
-        </button>
-      </form>
-
-      {alertaAdjuntos && <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>}
-      {error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
-
-      {showModal && (
-        <ModalHerramientas
-          onClose={closeHerramientas}
-          herramienta={herramienta}
-          setHerramienta={setHerramienta}
-          pro={pro}
-          error={error}
-          setError={setError}
-        />
-      )}
     </div>
-  );
+
+    {/* Barra de entrada */}
+    <form
+      onSubmit={handleSend}
+      className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
+                 px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
+                 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+    >
+      {/* Adjuntar */}
+      <label
+        className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${
+          adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""
+        }`}
+        style={{ background: "#5C2E0B", color: "#fff" }}
+      >
+        <FaPaperclip size={22} />
+        <input
+          type="file"
+          className="hidden"
+          multiple
+          onChange={handleFileChange}
+          disabled={adjuntos.length >= MAX_ADJUNTOS}
+        />
+      </label>
+
+      {/* Entrada */}
+      <textarea
+        ref={textareaRef}
+        className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
+        placeholder="Escribe o dicta tu pregunta aquí…"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        disabled={grabando}
+        rows={1}
+        style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
+      />
+
+      {/* Micrófono */}
+      <button
+        type="button"
+        aria-label="Dictar voz"
+        className="p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
+        style={{ background: "#5C2E0B", color: "#fff", minWidth: 38, minHeight: 38 }}
+        onClick={handleVoice}
+        disabled={grabando}
+        title="Dictar voz"
+      >
+        <FaMicrophone size={20} />
+      </button>
+
+      {/* Enviar */}
+      <button
+        type="submit"
+        aria-label="Enviar"
+        title="Enviar"
+        className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${
+          !input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+        }`}
+        style={{
+          background: "#5C2E0B",
+          color: "#fff",
+          minWidth: 44,
+          minHeight: 44,
+        }}
+        disabled={(!input.trim() && adjuntos.length === 0) || cargando}
+      >
+        <MdSend size={24} />
+      </button>
+    </form>
+
+    {alertaAdjuntos && (
+      <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>
+    )}
+    {error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
+
+    {showModal && (
+      <ModalHerramientas
+        onClose={closeHerramientas}
+        herramienta={herramienta}
+        setHerramienta={setHerramienta}
+        pro={pro}
+        error={error}
+        setError={setError}
+      />
+    )}
+  </div>
+);
 }
 
 /* ============================================================

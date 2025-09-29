@@ -1,4 +1,6 @@
 // src/firebase.js
+import "dotenv/config"; // asegura variables también en Node
+
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc, collection, query, where,
@@ -13,15 +15,15 @@ import {
   getMessaging, isSupported, getToken, onMessage,
 } from "firebase/messaging";
 
-// --- Config desde .env.local ---
+// --- Config desde .env.local o process.env ---
 const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId:     import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey:            import.meta.env?.VITE_FIREBASE_API_KEY     || process.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env?.VITE_FIREBASE_PROJECT_ID  || process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env?.VITE_FIREBASE_APP_ID      || process.env.VITE_FIREBASE_APP_ID,
+  measurementId:     import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID || process.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 // Para que FCM/Installations no crashee si faltan core keys
@@ -47,11 +49,10 @@ let messaging = null;
 export const registerFcmServiceWorker = async () => {
   try {
     if (!("serviceWorker" in navigator)) return null;
-    // Ajusta el path si tu SW tiene otro nombre/ruta
     const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
     return reg;
   } catch (e) {
-    console.warn("FCM SW no registrado:", e?.message || e);
+    console.warn("⚠️ FCM SW no registrado:", e?.message || e);
     return null;
   }
 };
@@ -59,18 +60,17 @@ export const registerFcmServiceWorker = async () => {
 export const initMessaging = async () => {
   try {
     if (!app || !HAS_CORE) {
-      console.warn("FCM omitido: configuración Firebase incompleta.");
+      console.warn("⚠️ FCM omitido: configuración Firebase incompleta.");
       return null;
     }
     if (!("Notification" in window)) {
-      console.warn("FCM omitido: el navegador no soporta Notificaciones.");
+      console.warn("⚠️ FCM omitido: el navegador no soporta Notificaciones.");
       return null;
     }
     if (!(await isSupported())) {
-      console.warn("FCM omitido: Firebase Messaging no soportado en este entorno.");
+      console.warn("⚠️ FCM omitido: Firebase Messaging no soportado en este entorno.");
       return null;
     }
-    // Asegura SW antes de crear messaging (en la mayoría de setups no es obligatorio, pero ayuda)
     await registerFcmServiceWorker();
     messaging = getMessaging(app);
     console.log("✅ Firebase Messaging inicializado");
@@ -86,11 +86,11 @@ export const getFcmToken = async () => {
   try {
     if (!messaging) await initMessaging();
     if (!messaging) return null;
-    const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY || undefined;
+    const vapidKey = import.meta.env?.VITE_FIREBASE_VAPID_KEY || process.env.VITE_FIREBASE_VAPID_KEY;
     const token = await getToken(messaging, vapidKey ? { vapidKey } : undefined);
     return token || null;
   } catch (e) {
-    console.warn("No se obtuvo token FCM:", e?.message || e);
+    console.warn("⚠️ No se obtuvo token FCM:", e?.message || e);
     return null;
   }
 };
@@ -98,19 +98,18 @@ export const getFcmToken = async () => {
 /** Listener seguro para mensajes en foreground */
 export const onForegroundMessage = (cb) => {
   if (!messaging) {
-    // devuelve un unsub no-op para no romper llamadas
-    return () => {};
+    return () => {}; // unsub no-op
   }
   return onMessage(messaging, cb);
 };
 
-// --- Exportar todo (mantenemos tu API) ---
+// --- Exportar todo (API unificada) ---
 export {
   app,
   db,
   auth,
   storage,
-  messaging, // puede ser null y está bien
+  messaging,
 
   // firestore
   doc,
@@ -141,7 +140,7 @@ export {
   // auth
   onAuthStateChanged,
 
-  // messaging base (por compatibilidad)
+  // messaging base
   getToken,
   onMessage,
 };
