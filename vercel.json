@@ -7,14 +7,19 @@
   "headers": [
     {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
     },
     {
-      "source": "/api/(noticias|noticias-juridicas)",
-      "headers": [{ "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }]
+      "source": "/api/noticias|noticias-juridicas",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }
+      ]
     }
   ],
   "rewrites": [
+    { "source": "/api/ia", "destination": "/api/ia.js" },
     { "source": "/firebase-messaging-sw.js", "destination": "/firebase-messaging-sw.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
