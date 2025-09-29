@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Falta el prompt en la solicitud" });
     }
 
-    // 🔍 Clasificación automática de materia jurídica
+    // 🧠 Clasificación automática de materias jurídicas
     const materias = [
       { key: "civil", keywords: ["contrato", "obligación", "propiedad", "arrendamiento"] },
       { key: "penal", keywords: ["delito", "acusación", "pena", "condena"] },
@@ -48,14 +48,16 @@ export default async function handler(req, res) {
       }
     }
 
-    // 🔧 Configuración dinámica según el modo
+    // 🎯 Configuración dinámica según modo
     let systemPrompt = "Eres un asistente útil y generalista.";
     if (modo === "juridico") {
       systemPrompt = `Eres un abogado experto en derecho ${materiaDetectada}.
-      Responde siempre con fundamento jurídico, citando artículos de la ley peruana, doctrina y jurisprudencia relevante.`;
+      Responde siempre con fundamento jurídico, citando artículos de la ley peruana, doctrina y jurisprudencia relevante.
+      Si corresponde, analiza la lógica jurídica y su relación con principios constitucionales.`;
     } else if (modo === "investigacion") {
       systemPrompt = `Eres un investigador académico en derecho.
-      Ayuda a plantear hipótesis, variables, objetivos y marcos teóricos para tesis o investigaciones jurídicas.`;
+      Ayuda a plantear hipótesis, variables, objetivos y marcos teóricos para tesis o investigaciones jurídicas.
+      Usa metodología científica y referencias doctrinales.`;
     }
 
     // 🔥 Llamada a OpenAI
@@ -72,6 +74,7 @@ export default async function handler(req, res) {
 
     const respuesta = completion.choices[0]?.message?.content || "";
 
+    // 📝 Logging
     console.log(
       `[IA.js] Usuario: ${usuarioId} (${userEmail}) → modo: ${modo}, materia: ${materiaDetectada}`
     );
@@ -80,6 +83,7 @@ export default async function handler(req, res) {
       respuesta,
       modoDetectado: modo,
       materiaDetectada,
+      idioma,
     });
   } catch (err) {
     console.error("❌ Error en /api/ia:", err);
