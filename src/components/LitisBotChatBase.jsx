@@ -11,6 +11,7 @@ import {
   FaRegThumbsDown,
 } from "react-icons/fa";
 import { MdSend } from "react-icons/md";
+import { enviarAlChat } from "@/services/chat";
 
 // --- Herramientas integradas en este archivo (mock UI simples).
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
@@ -635,150 +636,269 @@ export default function LitisBotChatBase({
       return copia;
     });
   }
+/* ---------------------- Consulta general -------------------- */
+async function handleConsultaGeneral(mensaje) {
+  setCargando(true);
 
-  /* ---------------------- Consulta legal -------------------- */
-  async function handleConsultaLegal(mensaje) {
-    setCargando(true);
+  const historial = mensajes
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
 
-    const historial = mensajes
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role, content: m.content }));
+  let idxAssistant = null;
+  setMensajes((msgs) => {
+    idxAssistant = msgs.length;
+    return [...msgs, { role: "assistant", content: "…" }];
+  });
 
-    const payload = {
+  try {
+    const respuesta = await enviarAlChat({
       prompt: mensaje,
       historial,
-      usuarioId: user?.uid || "invitado",
-      userEmail: user?.email || "",
-      materia: "general",
-      modo: "public",
-      idioma: "es",
-    };
-
-    let idxAssistant = null;
-    setMensajes((msgs) => {
-      idxAssistant = msgs.length;
-      return [...msgs, { role: "assistant", content: "…" }];
+      usuarioId: user?.uid,
+      userEmail: user?.email,
     });
 
-    try {
-      const { respuesta } = await enviarAlLitisbot(
-        IA_URL,
-        payload,
-        (_chunk, acumulado) => {
-          // pintar parcial si hay streaming
-          setMensajes((ms) =>
-            ms.map((m, i) =>
-              i === idxAssistant ? { ...m, content: acumulado } : m
-            )
-          );
-        }
-      );
-
-      if (respuesta && respuesta !== "…") {
-        setMensajes((ms) =>
-          ms.map((m, i) =>
-            i === idxAssistant ? { ...m, content: respuesta } : m
-          )
-        );
-        // persistimos respuesta final
-        saveMessage(casoActivo, { role: "assistant", content: respuesta });
-      }
-    } catch (err) {
-      console.error("❌ Hubo un error consultando al asistente:", err);
+    if (respuesta && respuesta !== "…") {
       setMensajes((ms) =>
         ms.map((m, i) =>
-          i === idxAssistant
-            ? {
-                ...m,
-                content:
-                  "❌ Hubo un error consultando al asistente legal. Intenta nuevamente más tarde.",
-              }
-            : m
+          i === idxAssistant ? { ...m, content: respuesta } : m
         )
       );
-    } finally {
-      setCargando(false);
+      saveMessage(casoActivo, { role: "assistant", content: respuesta });
     }
+  } catch (err) {
+    console.error("❌ Hubo un error consultando al chat general:", err);
+    setMensajes((ms) =>
+      ms.map((m, i) =>
+        i === idxAssistant
+          ? {
+              ...m,
+              content:
+                "❌ Hubo un error consultando al chat general. Intenta nuevamente más tarde.",
+            }
+          : m
+      )
+    );
+  } finally {
+    setCargando(false);
   }
+}
 
-  async function handleSend(e) {
-    e?.preventDefault?.();
-    setAlertaAdjuntos("");
+/* ---------------------- Consulta legal -------------------- */
+async function handleConsultaLegal({ mensaje, materia = "general" }) {
+  setCargando(true);
 
-    // Si hay adjuntos, simulamos recepción
-    if (adjuntos.length > 0) {
-      const msgsParaGuardar = [];
-      const msgsParaUI = [];
+  const historial = mensajes
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
 
-      adjuntos.forEach((file) => {
-        const mu = { role: "user", content: `📎 Archivo subido: <b>${file.name}</b>`, tipo: "archivo" };
-        const ma = { role: "assistant", content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`, tipo: "archivo" };
-        msgsParaGuardar.push(mu, ma);
-        msgsParaUI.push(mu, ma);
-      });
+  let idxAssistant = null;
+  setMensajes((msgs) => {
+    idxAssistant = msgs.length;
+    return [...msgs, { role: "assistant", content: "…" }];
+  });
 
-      // Persistimos y actualizamos UI
-      msgsParaGuardar.forEach((m) => saveMessage(casoActivo, m));
-      setMensajes((msgs) => [...msgs, ...msgsParaUI]);
-
-      setAdjuntos([]);
-      setInput("");
-      return;
-    }
-
-    if (!input.trim()) return;
-
-    const nuevo = { role: "user", content: input };
-    setMensajes((msgs) => [...msgs, nuevo]);
-    saveMessage(casoActivo, nuevo);
-
-    const pregunta = input;
-    setInput("");
-    await handleConsultaLegal(pregunta);
-  }
-
-  /* -------------------- Acciones de mensajes ---------------- */
-  const handleVoice = () => {
-    if (grabando) return;
-    setGrabando(true);
-    setInput((prev) => (prev ? prev + " " : "") + "[dictado de voz…]");
-    setTimeout(() => {
-      setGrabando(false);
-      setInput((prev) => prev + " (audio convertido a texto)");
-    }, 1000);
-  };
-
-  function handleCopy(text) {
-    navigator.clipboard.writeText(String(text || "").replace(/<[^>]+>/g, " "));
-  }
-
-  function handleEdit(idx, nuevoTexto) {
-    setMensajes((ms) => {
-      const copia = [...ms];
-      copia[idx].content = nuevoTexto;
-      // Persistimos edición (delete+save mantiene compatibilidad con chatStorage simple)
-      deleteMessage(casoActivo, idx);
-      saveMessage(casoActivo, copia[idx]);
-      return copia;
+  try {
+    const respuesta = await enviarAlLitisbot({
+      prompt: mensaje,
+      historial,
+      usuarioId: user?.uid,
+      userEmail: user?.email,
+      materia, // 👈 ahora se envía la materia detectada
     });
-  }
 
-  function handleFeedback(idx, type) {
-    setMensajes((ms) => ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m)));
-  }
-
-  const closeHerramientas = () => {
-    setShowModal && setShowModal(false);
-    setHerramienta(null);
-  };
-
-  // Enter para enviar / Shift+Enter para salto
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (input.trim() || adjuntos.length) handleSend(e);
+    if (respuesta && respuesta !== "…") {
+      setMensajes((ms) =>
+        ms.map((m, i) =>
+          i === idxAssistant ? { ...m, content: respuesta } : m
+        )
+      );
+      saveMessage(casoActivo, { role: "assistant", content: respuesta });
     }
+  } catch (err) {
+    console.error("❌ Error en LitisBot:", err);
+    setMensajes((ms) =>
+      ms.map((m, i) =>
+        i === idxAssistant
+          ? { ...m, content: "❌ Error consultando al asistente legal." }
+          : m
+      )
+    );
+  } finally {
+    setCargando(false);
+  }
+}
+/* ---------------------- Consulta de investigación jurídica -------------------- */
+async function handleConsultaInvestigacion(mensaje) {
+  setCargando(true);
+
+  const historial = mensajes
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  let idxAssistant = null;
+  setMensajes((msgs) => {
+    idxAssistant = msgs.length;
+    return [...msgs, { role: "assistant", content: "…" }];
+  });
+
+  try {
+    const respuesta = await enviarAlLitisbot({
+      prompt: mensaje,
+      historial,
+      usuarioId: user?.uid,
+      userEmail: user?.email,
+      materia: "investigacion", // 👈 clave para activar el modo de investigación
+      preferencias: { modo: "investigacion" }
+    });
+
+    if (respuesta && respuesta !== "…") {
+      setMensajes((ms) =>
+        ms.map((m, i) =>
+          i === idxAssistant ? { ...m, content: respuesta } : m
+        )
+      );
+      saveMessage(casoActivo, { role: "assistant", content: respuesta });
+    }
+  } catch (err) {
+    console.error("❌ Error en investigación jurídica:", err);
+    setMensajes((ms) =>
+      ms.map((m, i) =>
+        i === idxAssistant
+          ? {
+              ...m,
+              content:
+                "❌ Hubo un error consultando en modo investigación jurídica. Intenta nuevamente más tarde.",
+            }
+          : m
+      )
+    );
+  } finally {
+    setCargando(false);
+  }
+}
+
+/* ---------------------- Envío -------------------- */
+async function handleSend(e) {
+  e?.preventDefault?.();
+  setAlertaAdjuntos("");
+
+  // Si hay adjuntos, simulamos recepción
+  if (adjuntos.length > 0) {
+    const msgsParaGuardar = [];
+    const msgsParaUI = [];
+
+    adjuntos.forEach((file) => {
+      const mu = {
+        role: "user",
+        content: `📎 Archivo subido: <b>${file.name}</b>`,
+        tipo: "archivo",
+      };
+      const ma = {
+        role: "assistant",
+        content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`,
+        tipo: "archivo",
+      };
+      msgsParaGuardar.push(mu, ma);
+      msgsParaUI.push(mu, ma);
+    });
+
+    msgsParaGuardar.forEach((m) => saveMessage(casoActivo, m));
+    setMensajes((msgs) => [...msgs, ...msgsParaUI]);
+
+    setAdjuntos([]);
+    setInput("");
+    return;
+  }
+
+  if (!input.trim()) return;
+
+  const nuevo = { role: "user", content: input };
+  setMensajes((msgs) => [...msgs, nuevo]);
+  saveMessage(casoActivo, nuevo);
+
+  const pregunta = input;
+  setInput("");
+
+  // 👉 detección automática de modo y materia
+  const texto = pregunta.toLowerCase();
+
+  // Diccionario de materias jurídicas
+  const materias = {
+    civil: /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
+    penal: /penal|delito|crimen|homicidio|robo|violencia|acusaci(ón|on)|condena/i,
+    laboral: /laboral|trabajo|sindicato|despido|remuneraci(ón|on)|indemnizaci(ón|on)/i,
+    constitucional: /constituci(ón|on)|derechos fundamentales|amparo|habeas|tc|tribunal constitucional/i,
+    administrativo: /administrativo|procedimiento|sancionador|sunat|sunafil|municipalidad/i,
   };
+
+  if (/investigaci(ón|on)|tesis|hipótesis|metodolog/i.test(texto)) {
+    // 🔎 modo investigación jurídica
+    await handleConsultaInvestigacion(pregunta);
+  } else {
+    // Verificar si entra en alguna materia jurídica
+    let materiaDetectada = null;
+    for (const [materia, regex] of Object.entries(materias)) {
+      if (regex.test(texto)) {
+        materiaDetectada = materia;
+        break;
+      }
+    }
+
+    if (materiaDetectada) {
+      // modo jurídico especializado
+      await handleConsultaLegal({ mensaje: pregunta, materia: materiaDetectada });
+    } else {
+      // modo general
+      await handleConsultaGeneral(pregunta);
+    }
+  }
+}
+
+
+/* -------------------- Acciones de mensajes ---------------- */
+const handleVoice = () => {
+  if (grabando) return;
+  setGrabando(true);
+  setInput((prev) => (prev ? prev + " " : "") + "[dictado de voz…]");
+  setTimeout(() => {
+    setGrabando(false);
+    setInput((prev) => prev + " (audio convertido a texto)");
+  }, 1000);
+};
+
+function handleCopy(text) {
+  navigator.clipboard.writeText(String(text || "").replace(/<[^>]+>/g, " "));
+}
+
+function handleEdit(idx, nuevoTexto) {
+  setMensajes((ms) => {
+    const copia = [...ms];
+    copia[idx].content = nuevoTexto;
+    deleteMessage(casoActivo, idx);
+    saveMessage(casoActivo, copia[idx]);
+    return copia;
+  });
+}
+
+function handleFeedback(idx, type) {
+  setMensajes((ms) =>
+    ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m))
+  );
+}
+
+const closeHerramientas = () => {
+  setShowModal && setShowModal(false);
+  setHerramienta(null);
+};
+
+// Enter = enviar / Shift+Enter = salto
+const handleKeyDown = (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (input.trim() || adjuntos.length) handleSend(e);
+  }
+};
 
   /* --------------------------- Render ----------------------- */
   return (
