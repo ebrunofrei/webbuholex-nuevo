@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNoticiasGuardadas } from "@/oficinaVirtual/hooks/useNoticiasGuardadas";
 import { useAuth } from "@/context/AuthContext";
-import { asAbsoluteUrl } from "@utils/apiUrl";
+import { asAbsoluteUrl } from "@/utils/apiUrl";
 
 // Endpoint configurable → usa el de Vercel si no está definido en entorno
- const BASE_URL =
-    import.meta.env.VITE_NEWS_API_URL || "/api/noticias?tipo=juridicas";
+const BASE_URL =
+  import.meta.env.VITE_NEWS_API_URL || "/api/noticias-juridicas";
 
 const PAGE_SIZE = 12;
 

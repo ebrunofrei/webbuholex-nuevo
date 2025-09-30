@@ -1,8 +1,8 @@
-// src/pages/db/ServiciosAdmin.jsx
+// src/pages/admin/ServiciosAdmin.jsx
 import React, { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/firebase";
-import { CATEGORIES } from "@services/servicesApi";
+import { CATEGORIES } from "@/services/servicesApi";
 
 const ADMIN = (import.meta.env.VITE_ADMIN_EMAILS || "")
   .split(",")

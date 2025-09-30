@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { sugerenciasParaUsuario, guardarInteraccionAudiencia, guardarFeedbackAudiencia } from "@services/../../services/litisbotSugerenciasService".replace("services/", "");
+import { sugerenciasParaUsuario, guardarInteraccionAudiencia, guardarFeedbackAudiencia } from "../../services/litisbotSugerenciasService";
 import { useAuth } from "../../context/AuthContext";
 
 const AudienciaContext = createContext();

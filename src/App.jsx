@@ -1,32 +1,32 @@
 // src/App.jsx
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import SeedBrandingPage from "@pages/SeedBrandingPage";
+import SeedBrandingPage from "@/pages/SeedBrandingPage";
 
 // CONTEXTOS
 import { LitisBotChatProvider } from "./context/LitisBotChatContext";
 import { NoticiasProvider } from "./context/NoticiasContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LitisBotProvider } from "./context/LitisBotContext";
-import { ToastProvider } from "@components/ui/use-toast";
+import { ToastProvider } from "@/components/ui/use-toast";
 import { GoogleAuthRootProvider } from "@/context/GoogleAuthContext";
 
 // COMPONENTES GENERALES
-import Navbar from "@components/ui/Navbar";
-import Footer from "@components/Footer";
-import RutaPrivada from "@components/RutaPrivada";
-import NoticiasSlider from "@components/NoticiasSlider";
-import NoticiasBotonFlotante from "@components/ui/NoticiasBotonFlotante";
-import ModalLogin from "@components/ModalLogin";
-import RecuperarPassword from "@components/RecuperarPassword";
-import PersonalizacionView from "@views/PersonalizacionView";
+import Navbar from "./components/ui/Navbar";
+import Footer from "./components/Footer";
+import RutaPrivada from "./components/RutaPrivada";
+import NoticiasSlider from "./components/NoticiasSlider";
+import NoticiasBotonFlotante from "./components/ui/NoticiasBotonFlotante";
+import ModalLogin from "./components/ModalLogin";
+import RecuperarPassword from "./components/RecuperarPassword";
+import PersonalizacionView from "./views/PersonalizacionView";
 
 // LITISBOT
-import SidebarChats from "@components/SidebarChats";
-import LitisBotChatBase from "@components/LitisBotChatBase";
+import SidebarChats from "@/components/SidebarChats";
+import LitisBotChatBase from "@/components/LitisBotChatBase";
 
 // OFICINA VIRTUAL MODULAR
-import Sidebar from "@components/Sidebar";
+import Sidebar from "./components/Sidebar";
 import Oficina from "@/oficinaVirtual/pages/Oficina";
 import ListaExpedientes from "./oficinaVirtual/components/ListaExpedientes";
 import Expedientes from "./oficinaVirtual/pages/Expedientes";
@@ -47,43 +47,43 @@ import ConfigurarAlertas from "@/oficinaVirtual/components/ConfigurarAlertas";
 import CalculadoraLaboral from "@/oficinaVirtual/pages/CalculadoraLaboral";
 
 // PÁGINAS PÚBLICAS Y ADMIN
-import Blog from "@pages/Blog";
-import Home from "@pages/Home";
-import Servicios from "@pages/Servicios";
-import Contacto from "@pages/Contacto";
-import BibliotecaJ from "@pages/Biblioteca";
-import Jurisprudencia from "@pages/Jurisprudencia";
-import JurisprudenciaVisorModal from "@components/jurisprudencia/JurisprudenciaVisorModal";
-import Codigos from "@pages/Codigos";
-import CodigoDetalle from "@pages/CodigoDetalle";
-import NoticiasHome from "@pages/Noticias";
-import ArticuloBlog from "@pages/ArticuloBlog";
-import Nosotros from "@pages/Nosotros";
-import LoginAdmin from "@pages/LoginAdmin";
-import DashboardAdmin from "@pages/DashboardAdmin";
-import SubirLibro from "@pages/SubirLibro";
-import ConsultasAdmin from "@pages/ConsultasAdmin";
-import PublicarArticulo from "@pages/PublicarArticulo";
-import Error404 from "@pages/Error404";
-import Login from "@pages/Login";
-import MiCuenta from "@pages/MiCuenta";
-import HistorialArchivos from "@pages/HistorialArchivos";
-import BibliotecaDrive from "@components/BibliotecaDrive";
-import LitisBotBubbleChat from "@components/ui/LitisBotBubbleChat";
-import PoliticaPrivacidad from "@pages/legal/politica-de-privacidad";
-import TerminosCondiciones from "@pages/legal/terminos-y-condiciones";
-import AvisoCookies from "@pages/legal/aviso-cookies";
-import CookiesBanner from "@components/CookiesBanner";
-import PricingPage from "@pages/PricingPage";
-import LandingSaaS from "@pages/LandingSaaS";
-import ChatTest from "@components/ChatTest";
-import ServicioDetalle from "@pages/ServicioDetalle";
-import ServiciosAdmin from "@pages/ServiciosAdmin";
+import Blog from "./pages/Blog";
+import Home from "./pages/Home";
+import Servicios from "./pages/Servicios";
+import Contacto from "./pages/Contacto";
+import BibliotecaJ from "./pages/Biblioteca";
+import Jurisprudencia from "@/pages/Jurisprudencia";
+import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
+import Codigos from "./pages/Codigos";
+import CodigoDetalle from "./pages/CodigoDetalle";
+import NoticiasHome from "./pages/Noticias";
+import ArticuloBlog from "./pages/ArticuloBlog";
+import Nosotros from "./pages/Nosotros";
+import LoginAdmin from "./pages/admin/LoginAdmin";
+import DashboardAdmin from "./pages/admin/DashboardAdmin";
+import SubirLibro from "./pages/admin/SubirLibro";
+import ConsultasAdmin from "./pages/admin/ConsultasAdmin";
+import PublicarArticulo from "./pages/admin/PublicarArticulo";
+import Error404 from "./pages/Error404";
+import Login from "./pages/Login";
+import MiCuenta from "./pages/MiCuenta";
+import HistorialArchivos from "./pages/HistorialArchivos";
+import BibliotecaDrive from "./components/BibliotecaDrive";
+import LitisBotBubbleChat from "@/components/ui/LitisBotBubbleChat";
+import PoliticaPrivacidad from "@/pages/legal/politica-de-privacidad";
+import TerminosCondiciones from "@/pages/legal/terminos-y-condiciones";
+import AvisoCookies from "@/pages/legal/aviso-cookies";
+import CookiesBanner from "@/components/CookiesBanner";
+import PricingPage from "./pages/PricingPage";
+import LandingSaaS from "./pages/LandingSaaS";
+import ChatTest from "@/components/ChatTest";
+import ServicioDetalle from "@/pages/ServicioDetalle";
+import ServiciosAdmin from "@/pages/admin/ServiciosAdmin";
 
 // 🔔 Hook centralizado para FCM
 import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
 
-// Ícono del botón móvil
+// Ícono del botón móvil para abrir el drawer
 import { FolderKanban } from "lucide-react";
 
 function OficinaVirtualLayout({ children }) {
@@ -244,11 +244,11 @@ function AppContent() {
                 <Route path="/historial-archivos" element={<HistorialArchivos />} />
                 <Route path="/perfil" element={<RutaPrivada><Perfil /></RutaPrivada>} />
                 <Route path="/mi-cuenta" element={<RutaPrivada><MiCuenta /></RutaPrivada>} />
-                <Route path="/db/login" element={<LoginAdmin />} />
-                <Route path="/db" element={<RutaPrivada redir="/db/login">{<DashboardAdmin />}</RutaPrivada>} />
-                <Route path="/db/libros" element={<RutaPrivada>{<SubirLibro />}</RutaPrivada>} />
-                <Route path="/db/consultas" element={<RutaPrivada>{<ConsultasAdmin />}</RutaPrivada>} />
-                <Route path="/db/publicar-articulo" element={<RutaPrivada>{<PublicarArticulo />}</RutaPrivada>} />
+                <Route path="/admin/login" element={<LoginAdmin />} />
+                <Route path="/admin" element={<RutaPrivada redir="/admin/login">{<DashboardAdmin />}</RutaPrivada>} />
+                <Route path="/admin/libros" element={<RutaPrivada>{<SubirLibro />}</RutaPrivada>} />
+                <Route path="/admin/consultas" element={<RutaPrivada>{<ConsultasAdmin />}</RutaPrivada>} />
+                <Route path="/admin/publicar-articulo" element={<RutaPrivada>{<PublicarArticulo />}</RutaPrivada>} />
                 <Route path="/oficinaVirtual/personalizacion" element={<PersonalizacionView />} />
                 <Route path="/seed-branding" element={<SeedBrandingPage />} />
                 <Route path="/legal/politica-de-privacidad" element={<PoliticaPrivacidad />} />
@@ -259,7 +259,7 @@ function AppContent() {
                 <Route path="*" element={<Error404 />} />
                 <Route path="/chat-test" element={<ChatTest />} />
                 <Route path="/servicios/:slug" element={<ServicioDetalle />} />
-                <Route path="/db/servicios" element={<ServiciosAdmin />} />
+                <Route path="/admin/servicios" element={<ServiciosAdmin />} />
               </Routes>
             </main>
 

@@ -1,6 +1,6 @@
 // src/components/BlogCard.jsx
 import React, { useState } from "react";
-import { eliminarArticuloBlog, editarArticuloBlog } from "@services/firebaseBlogService";
+import { eliminarArticuloBlog, editarArticuloBlog } from "@/services/firebaseBlogService";
 import { useUserAdminStatus } from "@/hooks/useUserAdminStatus";
 
 export default function BlogCard({ articulo, onEdit, onDeleted }) {

@@ -161,7 +161,7 @@ export default function LitisBotChat() {
         const chunk = new TextDecoder("utf-8").decode(value);
         chunk.split("\n").forEach(line => {
           if (line.startsWith("data: ")) {
-            const delta = line.replace("data: ", "").trim();
+            const delta = line.trim();
             if (delta && delta !== "[DONE]") {
               try {
                 const content = JSON.parse(delta).choices?.[0]?.delta?.content || "";

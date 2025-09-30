@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { updateEmail, updatePassword } from "firebase/auth";
-import { useToast } from "@components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 import buholexLogo from "../assets/buho-institucional.png";
 
 export default function MiCuenta() {

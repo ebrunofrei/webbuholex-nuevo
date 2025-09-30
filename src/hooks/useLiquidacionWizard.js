@@ -70,7 +70,7 @@ export function useLiquidacionWizard({ onFinish }) {
       value = /^(si|sí|yes|y)$/i.test(input.trim()) ? true : false;
     }
     if (actual.tipo === "number") {
-      value = parseFloat(input.replace(",", "."));
+      value = parseFloat(input);
       if (isNaN(value)) value = 0;
     }
     setDatos(d => ({ ...d, [actual.key]: value }));

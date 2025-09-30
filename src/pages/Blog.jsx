@@ -1,12 +1,12 @@
 // src/pages/Blog.jsx
 import React, { useEffect, useState } from "react";
-import { obtenerArticulosBlog, eliminarArticuloBlog } from "@services/firebaseBlogService";
-import BlogPublicarCard from "@components/BlogPublicarCard";
+import { obtenerArticulosBlog, eliminarArticuloBlog } from "@/services/firebaseBlogService";
+import BlogPublicarCard from "@/components/BlogPublicarCard";
 import { useUserAdminStatus } from "@/hooks/useUserAdminStatus";
 import toast, { Toaster } from "react-hot-toast";
-import PageContainer from "@components/PageContainer";
-import BlogLectorModal from "@components/BlogLectorModal";
-import BlogPublicarEditarModal from "@components/BlogPublicarEditarModal";
+import PageContainer from "@/components/PageContainer";
+import BlogLectorModal from "@/components/BlogLectorModal";
+import BlogPublicarEditarModal from "@/components/BlogPublicarEditarModal";
 
 export default function Blog() {
   const { isAdmin, checking } = useUserAdminStatus();
@@ -24,7 +24,7 @@ export default function Blog() {
 
   useEffect(() => { cargarArticulos(); }, []);
 
-  // Eliminar artículo (solo db)
+  // Eliminar artículo (solo admin)
   const handleEliminar = async (id) => {
     if (!window.confirm("¿Seguro que deseas eliminar este artículo?")) return;
     await eliminarArticuloBlog(id);
@@ -39,7 +39,7 @@ export default function Blog() {
         Blog Jurídico de BúhoLex
       </h1>
 
-      {/* Solo para db */}
+      {/* Solo para admin */}
       {!checking && isAdmin && (
         <BlogPublicarCard onPublicado={cargarArticulos} />
       )}

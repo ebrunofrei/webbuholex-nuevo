@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
 import { db, auth, storage } from "@/firebase";
-import PageContainer from "@components/PageContainer";
+import PageContainer from "@/components/PageContainer";
 
 export default function JurisprudenciaVisor() {
   const { id } = useParams();

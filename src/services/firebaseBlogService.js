@@ -64,7 +64,7 @@ export async function eliminarArticuloBlog(id, urlPortada) {
       // Si solo tienes la URL, convierte a path relativo:
       const url = new URL(urlPortada);
       const path = decodeURIComponent(
-        url.pathname.replace(/^\/v0\/b\/[^/]+\/o\//, '').replace(/%2F/g, '/')
+        url.pathname
       );
       await deleteObject(ref(storage, path));
     } catch (e) {

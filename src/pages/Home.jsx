@@ -1,56 +1,28 @@
-// src/pages/Home.jsx
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import logoBuho from "../assets/buho-institucional.png";
-import NoticiasSlidebar from "@components/NoticiasSlidebar";
-import { Link, useNavigate } from "react-router-dom";
+import NoticiasSlidebar from "../components/NoticiasSlidebar";
+import { Link } from "react-router-dom";
 import { useNoticias } from "../context/NoticiasContext";
-import { obtenerNoticias } from "@services/firebaseNoticiasService";
-import PageContainer from "@components/PageContainer";
+import { obtenerNoticias } from "../services/firebaseNoticiasService";
+import PageContainer from "@/components/PageContainer";
 
 export default function Home() {
   const { showNoticias, setShowNoticias } = useNoticias();
   const [noticias, setNoticias] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const navigate = useNavigate();
 
-  // Traer noticias públicas desde Firestore
+  // Traer noticias públicas desde Firestore al cargar la página
   useEffect(() => {
-    const fetchNoticias = async () => {
-      try {
-        const datos = await obtenerNoticias({ max: 10, soloLibres: true });
-        setNoticias(datos || []);
-      } catch (err) {
-        console.error("Error al cargar noticias:", err);
-        setError("No se pudieron cargar las noticias.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchNoticias();
+    obtenerNoticias({ max: 10, soloLibres: true })
+      .then(setNoticias)
+      .finally(() => setLoading(false));
   }, []);
 
   const handleOficina = () => {
-    navigate("/oficina");
+    if (window.location.pathname === "/oficina") return;
+    window.location.href = "/oficina";
   };
-
-  // Noticias a mostrar (con fallback)
-  const noticiasMostrar =
-    loading || error
-      ? []
-      : noticias.length > 0
-      ? noticias
-      : [
-          {
-            titulo: "LitisBot se integra a la web de BúhoLex",
-            resumen: "Ahora puedes consultar con IA jurídica gratis.",
-          },
-          {
-            titulo: "Nueva oficina virtual para abogados",
-            resumen: "Organiza tus expedientes online con BúhoLex.",
-          },
-        ];
 
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden bg-white">
@@ -59,7 +31,6 @@ export default function Home() {
         <div className="absolute inset-y-0 left-0 w-[140px] sm:w-[180px] bg-gradient-to-r from-[#b03a1a]/60 via-transparent to-transparent" />
         <div className="absolute inset-y-0 right-0 w-[140px] sm:w-[180px] bg-gradient-to-l from-[#b03a1a]/60 via-transparent to-transparent" />
       </div>
-
       {/* HERO central */}
       <motion.div
         className="fixed inset-0 z-30 flex flex-col items-center justify-center w-full"
@@ -79,21 +50,20 @@ export default function Home() {
             BúhoLex: justicia sin privilegios.
           </h2>
           <h3 className="text-lg sm:text-2xl md:text-3xl font-bold text-[#4b2e19] text-center mb-7 leading-snug">
-            LitisBot{" "}
-            <span className="font-black text-[#b03a1a]">
-              ¡¡te acompaña y te defiende!!
-            </span>
+            LitisBot <span className="font-black text-[#b03a1a]">¡¡te acompaña y te defiende!!</span>
           </h3>
           <div className="flex flex-col sm:flex-row gap-4 mb-2 w-full max-w-lg justify-center">
             <Link
               to="/litisbot"
               className="bg-[#4b2e19] text-white rounded-xl px-8 py-4 font-extrabold text-lg shadow hover:bg-[#a87247] transition w-full sm:w-auto block text-center focus:outline-none focus:ring-2 focus:ring-[#b03a1a] focus:ring-offset-2"
+              style={{ pointerEvents: "auto" }}
             >
               Consultar con LitisBot
             </Link>
             <button
               onClick={handleOficina}
               className="bg-white text-[#b03a1a] border-2 border-[#b03a1a] rounded-xl px-8 py-4 font-extrabold text-lg shadow hover:bg-[#fff6f6] hover:text-[#980808] transition w-full sm:w-auto"
+              style={{ pointerEvents: "auto" }}
               type="button"
             >
               Oficina Virtual Abogados
@@ -101,12 +71,14 @@ export default function Home() {
           </div>
         </div>
       </motion.div>
-
       {/* Slidebar de Noticias */}
       <NoticiasSlidebar
         open={showNoticias}
         onClose={() => setShowNoticias(false)}
-        noticias={noticiasMostrar}
+        noticias={loading ? [] : (noticias.length ? noticias : [
+          { titulo: "LitisBot se integra a la web de BúhoLex", resumen: "Ahora puedes consultar con IA jurídica gratis." },
+          { titulo: "Nueva oficina virtual para abogados", resumen: "Organiza tus expedientes online con BúhoLex." },
+        ])}
       />
     </div>
   );

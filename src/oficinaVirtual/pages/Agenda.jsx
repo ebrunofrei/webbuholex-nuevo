@@ -1,6 +1,6 @@
 import React from "react";
 import { useGoogleAuth } from "@/context/GoogleAuthContext";
-import AgendaProfesional from "@components/../components/AgendaProfesional".replace("components/", ""); // Ajusta la ruta si es necesario
+import AgendaProfesional from "../components/AgendaProfesional"; // Ajusta la ruta si es necesario
 
 export default function Agenda({ user, expedienteId }) {
   const { token, profile, login, logout } = useGoogleAuth();

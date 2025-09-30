@@ -1,6 +1,6 @@
 // src/components/BlogPublicarForm.jsx
 import React, { useState } from "react";
-import { subirImagenBlog, publicarArticuloBlog } from "@services/firebaseBlogService";
+import { subirImagenBlog, publicarArticuloBlog } from "@/services/firebaseBlogService";
 import { useUserAdminStatus } from "@/hooks/useUserAdminStatus";
 
 export default function BlogPublicarForm({ onSuccess }) {

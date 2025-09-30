@@ -8,21 +8,21 @@ export default function DashboardAdmin() {
 
       <div className="grid gap-4">
         <Link
-          to="/db/libros"
+          to="/admin/libros"
           className="block bg-green-600 hover:bg-green-700 text-white text-center px-4 py-3 rounded"
         >
           Subir Libros a Biblioteca
         </Link>
 
         <Link
-          to="/db/consultas"
+          to="/admin/consultas"
           className="block bg-purple-600 hover:bg-purple-700 text-white text-center px-4 py-3 rounded"
         >
           Ver Consultas de LitisBot
         </Link>
 
         <Link
-          to="/db/publicar-articulo"
+          to="/admin/publicar-articulo"
           className="block bg-blue-600 hover:bg-blue-700 text-white text-center px-4 py-3 rounded"
         >
           Publicar nuevo artículo en el Blog

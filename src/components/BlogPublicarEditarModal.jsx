@@ -3,8 +3,8 @@ import {
   publicarArticuloBlog,
   editarArticuloBlog,
   subirPortadaBlog,
-} from "@services/firebaseBlogService";
-import { useToast } from "@components/ui/use-toast";
+} from "@/services/firebaseBlogService";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function BlogPublicarEditarModal({ articulo, onClose, onSave }) {
   const { toast } = useToast();

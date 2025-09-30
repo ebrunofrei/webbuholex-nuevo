@@ -133,7 +133,7 @@ export default function GeneradorUniversalEscritos() {
 
 // Utilidad para convertir color HEX a RGB array
 function hexToRgb(hex) {
-  hex = hex.replace("#", "");
+  hex = hex;
   if (hex.length === 3) hex = hex.split("").map(x => x + x).join("");
   const num = parseInt(hex, 16);
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];

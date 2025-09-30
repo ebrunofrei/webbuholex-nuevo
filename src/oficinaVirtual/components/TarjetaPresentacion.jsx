@@ -25,7 +25,7 @@ export default function TarjetaPresentacion({
     const url = canvas.toDataURL("image/png");
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Tarjeta_${nombre.replace(/\s/g, "_")}.png`;
+    link.download = `Tarjeta_${nombre}.png`;
     link.click();
   };
 

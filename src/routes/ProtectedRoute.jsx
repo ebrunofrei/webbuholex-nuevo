@@ -1,9 +1,9 @@
-// src/routes/ProtectedRoute.jsx
 import React, { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import EmailVerificationModal from "@components/ui/EmailVerificationModal";
+import EmailVerificationModal from "../components/ui/EmailVerificationModal";
 
+// Cierra sesión automáticamente si no verifica en X minutos
 const MINUTES_TO_VERIFY = 15;
 
 export default function ProtectedRoute({ children }) {
@@ -12,45 +12,37 @@ export default function ProtectedRoute({ children }) {
 
   // Timer autocierre si no verifica
   useEffect(() => {
-    let timer;
-    if (user && !user.isAnonymous && !(user.emailVerified || emailVerificado)) {
+    let timer = null;
+    if (
+      user &&
+      !user.isAnonymous &&
+      !emailVerificado
+    ) {
       timer = setTimeout(async () => {
-        try {
-          await cerrarSesion();
-          console.warn(
-            "Sesión cerrada automáticamente por falta de verificación de correo."
-          );
-          // 🔔 Aquí puedes disparar un toast en vez de alert
-        } catch (err) {
-          console.error("Error al cerrar sesión automáticamente:", err);
-        }
+        await cerrarSesion();
+        alert("No verificaste tu correo en el tiempo indicado. Se cerró la sesión.");
       }, MINUTES_TO_VERIFY * 60 * 1000);
     }
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [user, emailVerificado, cerrarSesion]);
+    // eslint-disable-next-line
+  }, [user?.emailVerified, user, emailVerificado]);
 
-  // Mientras carga el estado de autenticación
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-[#b03a1a] font-bold">
-        Cargando...
-      </div>
-    );
-  }
+  // Mientras carga
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
 
-  // Si no está logueado o es anónimo → redirigir a login
+  // No logueado
   if (!user || user.isAnonymous) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Si está logueado pero no verificó el correo → modal bloqueante
-  if (!(user.emailVerified || emailVerificado)) {
+  // Logueado pero no verificado (modal bloqueante)
+  if (!emailVerificado) {
     return (
       <>
         <EmailVerificationModal open />
-        <div className="fixed inset-0 z-[110] bg-black/30" />
+        <div className="fixed inset-0 z-[110] bg-black/30"></div>
       </>
     );
   }

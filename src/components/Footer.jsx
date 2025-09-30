@@ -1,6 +1,6 @@
 // src/components/Footer.jsx
 import React from "react";
-import LegalLinks from "@components/LegalLinks";
+import LegalLinks from "@/components/LegalLinks";
 
 export default function Footer() {
   return (

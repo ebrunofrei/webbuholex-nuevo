@@ -25,7 +25,7 @@ import ArchivoViewerModal from "./ArchivoViewerModal";
 import VisorArchivoModal from "./VisorArchivoModal";
 import AgendadorPlazos from "./AgendadorPlazos";
 import ResumenExpediente from "./ResumenExpediente";
-import { enviarTelegram } from "@services/telegram";
+import { enviarTelegram } from "@/services/telegram";
 
 export default function TabDocumentos({ expedienteId }) {
   const [archivoMadre, setArchivoMadre] = useState(null);

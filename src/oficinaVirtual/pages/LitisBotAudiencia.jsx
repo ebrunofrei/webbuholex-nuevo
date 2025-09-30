@@ -1,5 +1,5 @@
 import React from "react";
-import LitisBotChatPRO from "@components/../../components/LitisBotChatPRO".replace("components/", "");
+import LitisBotChatPRO from "../../components/LitisBotChatPRO";
 
 // Si tienes props de expediente o contexto, pásalos
 // Ejemplo: const { expedienteId, expediente } = props;

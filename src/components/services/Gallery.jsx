@@ -1,6 +1,6 @@
 // src/components/services/Gallery.jsx
 import React, { useState } from "react";
-import Lightbox from "@components/ui/Lightbox";
+import Lightbox from "@/components/ui/Lightbox";
 
 export default function Gallery({ images = [], enablePreview = true }) {
   const [open, setOpen] = useState(false);

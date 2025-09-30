@@ -1,10 +1,10 @@
 // src/pages/ServicioDetalle.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getServiceBySlug, WA } from "@services/servicesApi";
-import Gallery from "@components/services/Gallery";
-import VideoEmbed from "@components/services/VideoEmbed";
-import { formatPrice } from "@services/servicesApi";
+import { getServiceBySlug, WA } from "@/services/servicesApi";
+import Gallery from "@/components/services/Gallery";
+import VideoEmbed from "@/components/services/VideoEmbed";
+import { formatPrice } from "@/services/servicesApi";
 
 export default function ServicioDetalle() {
   const { slug } = useParams();

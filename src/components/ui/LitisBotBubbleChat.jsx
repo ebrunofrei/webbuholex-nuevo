@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import litisbotLogo from "@/assets/litisbot-logo.png";
 import { X } from "lucide-react";
-import LitisBotChatBase from "@components/LitisBotChatBase";
+import LitisBotChatBase from "@/components/LitisBotChatBase";
 
 export default function LitisBotBubbleChat({ usuarioId, pro = true }) {
   const [open, setOpen] = useState(false);

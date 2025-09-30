@@ -5,10 +5,10 @@ import {
   CATEGORIES,
   WA,
   CTA_WHATSAPP,
-} from "@services/servicesApi";
-import ServiceCard from "@components/services/ServiceCard";
-import Gallery from "@components/services/Gallery";
-import VideoEmbed from "@components/services/VideoEmbed";
+} from "@/services/servicesApi";
+import ServiceCard from "@/components/services/ServiceCard";
+import Gallery from "@/components/services/Gallery";
+import VideoEmbed from "@/components/services/VideoEmbed";
 
 // Banners de marketing desde /public/marketing
 const MARKETING_IMAGES = [

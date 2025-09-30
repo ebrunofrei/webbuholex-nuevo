@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import {
   solicitarPermisoYToken,
   listenToForegroundMessages,
-} from "@services/firebaseMessaging";
+} from "@/services/firebaseMessaging";
 
 export function useFirebaseMessaging(onMessageCallback) {
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import LitisBotChatBase from "@components/../../components/LitisBotChatBase".replace("components/", "");
+import LitisBotChatBase from "../../components/LitisBotChatBase";
 
 export default function LitisBotFlotante() {
   const [open, setOpen] = useState(false);

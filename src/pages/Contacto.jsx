@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import PageContainer from "@components/PageContainer";
+import PageContainer from "@/components/PageContainer";
 
 const Contacto = () => {
   const [formData, setFormData] = useState({

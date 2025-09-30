@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Plus, FolderOpen, Bot, Eye, X, ArrowDownToLine, FileImage, FileText, Printer
 } from "lucide-react";
-import PerfilFirmaEscaneada from "@components/../components/PerfilFirmaEscaneada".replace("components/", "");
-import ToggleNotificaciones from "@components/../components/ToggleNotificaciones".replace("components/", "");
+import PerfilFirmaEscaneada from "../components/PerfilFirmaEscaneada";
+import ToggleNotificaciones from "../components/ToggleNotificaciones";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";

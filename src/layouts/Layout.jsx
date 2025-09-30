@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import SidebarChats from "@components/SidebarChats";
-import LitisBotChatBase from "@components/LitisBotChatBase";
+import SidebarChats from "@/components/SidebarChats";
+import LitisBotChatBase from "@/components/LitisBotChatBase";
 
 export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

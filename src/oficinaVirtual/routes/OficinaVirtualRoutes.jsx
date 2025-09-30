@@ -1,9 +1,9 @@
 // src/oficinaVirtual/routes/OficinaVirtualRoutes.jsx
 
 import { Routes, Route } from "react-router-dom";
-import PanelConfiguracionOficina from "@pages/../pages/configuracion/PanelConfiguracionOficina".replace("pages/", "");
-import PagoPRO from "@pages/../pages/pagos/PagoPRO".replace("pages/", "");
-import Noticias from "@pages/../pages/Noticias".replace("pages/", "");
+import PanelConfiguracionOficina from "../pages/configuracion/PanelConfiguracionOficina";
+import PagoPRO from "../pages/pagos/PagoPRO";
+import Noticias from "../pages/Noticias";
 // ...otros imports
 
 export default function OficinaVirtualRoutes() {

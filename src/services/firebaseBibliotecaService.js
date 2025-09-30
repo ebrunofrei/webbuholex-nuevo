@@ -94,11 +94,11 @@ export async function eliminarLibroDigital(id, urlArchivo, urlPortada) {
   // Elimina archivos en storage si existen
   try {
     if (urlArchivo) {
-      const archivoRef = ref(storage, urlArchivo.replace(/^https:\/\/[^/]+\/o\//, '').split('?')[0]);
+      const archivoRef = ref(storage, urlArchivo.split('?')[0]);
       await deleteObject(archivoRef);
     }
     if (urlPortada) {
-      const portadaRef = ref(storage, urlPortada.replace(/^https:\/\/[^/]+\/o\//, '').split('?')[0]);
+      const portadaRef = ref(storage, urlPortada.split('?')[0]);
       await deleteObject(portadaRef);
     }
   } catch (e) {

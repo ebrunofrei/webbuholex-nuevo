@@ -11,7 +11,7 @@ import {
   FaRegThumbsDown,
 } from "react-icons/fa";
 import { MdSend } from "react-icons/md";
-import { enviarAlChat } from "@services/chat";
+import { enviarAlChat } from "@/services/chat";
 
 // --- Herramientas integradas en este archivo (mock UI simples).
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
@@ -25,7 +25,7 @@ import {
   getFiles,
   saveFile,
   deleteFile,
-} from "@services/chatStorage";
+} from "@/services/chatStorage";
 
 /* ============================================================
    Utilidades de red (un solo endpoint: /api/ia?action=chat)
@@ -42,11 +42,11 @@ export function buildIaUrl() {
   if (/^https?:\/\//i.test(raw)) {
     if (/\baction=/.test(raw)) return raw;
     const sep = raw.includes("?") ? "&" : "?";
-    return raw.replace(/\/+$/, "") + `${sep}action=chat`;
+    return raw + `${sep}action=chat`;
   }
 
   // /api/*
-  const base = raw.replace(/\/+$/, "");
+  const base = raw;
   if (base.startsWith("/api/")) {
     if (/\baction=/.test(base)) return base;
     const sep = base.includes("?") ? "&" : "?";
@@ -547,7 +547,7 @@ const INIT_MSG = {
   },
 };
 
-/* ============================================================
+ /* ============================================================
    Componente Principal
 ============================================================ */
 export default function LitisBotChatBase({
@@ -564,6 +564,7 @@ export default function LitisBotChatBase({
     const prev = getMessages(casoActivo);
     if (prev && prev.length) return prev;
     const init = [pro ? INIT_MSG.pro : INIT_MSG.general];
+    // Guardamos el mensaje inicial solo si no existía historial
     saveMessage(casoActivo, init[0]);
     return init;
   });
@@ -621,6 +622,7 @@ export default function LitisBotChatBase({
         continue;
       }
       nuevos.push(f);
+      // Persistimos metadatos del archivo
       saveFile(casoActivo, { name: f.name, type: f.type, size: f.size });
     }
     if (nuevos.length) setAdjuntos((prev) => [...prev, ...nuevos]);
@@ -634,424 +636,466 @@ export default function LitisBotChatBase({
       return copia;
     });
   }
+/* ---------------------- Consulta general -------------------- */
+async function handleConsultaGeneral(mensaje) {
+  setCargando(true);
 
-  /* ---------------------- Consulta general -------------------- */
-  async function handleConsultaGeneral(mensaje) {
-    setCargando(true);
-    const historial = mensajes
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role, content: m.content }));
+  const historial = mensajes
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
 
-    let idxAssistant = null;
-    setMensajes((msgs) => {
-      idxAssistant = msgs.length;
-      return [...msgs, { role: "assistant", content: "…" }];
+  let idxAssistant = null;
+  setMensajes((msgs) => {
+    idxAssistant = msgs.length;
+    return [...msgs, { role: "assistant", content: "…" }];
+  });
+
+  try {
+    const respuesta = await enviarAlChat({
+      prompt: mensaje,
+      historial,
+      usuarioId: user?.uid,
+      userEmail: user?.email,
     });
 
-    try {
-      const respuesta = await enviarAlChat({
-        prompt: mensaje,
-        historial,
-        usuarioId: user?.uid,
-        userEmail: user?.email,
-      });
-
-      if (respuesta && respuesta !== "…") {
-        setMensajes((ms) =>
-          ms.map((m, i) =>
-            i === idxAssistant ? { ...m, content: respuesta } : m
-          )
-        );
-        saveMessage(casoActivo, { role: "assistant", content: respuesta });
-      }
-    } catch (err) {
-      console.error("❌ Hubo un error consultando al chat general:", err);
+    if (respuesta && respuesta !== "…") {
       setMensajes((ms) =>
         ms.map((m, i) =>
-          i === idxAssistant
-            ? {
-                ...m,
-                content: "❌ Hubo un error consultando al chat general.",
-              }
-            : m
+          i === idxAssistant ? { ...m, content: respuesta } : m
         )
       );
-    } finally {
-      setCargando(false);
+      saveMessage(casoActivo, { role: "assistant", content: respuesta });
     }
-  }
-
-  /* ---------------------- Consulta legal -------------------- */
-  async function handleConsultaLegal({ mensaje, materia = "general" }) {
-    setCargando(true);
-    const historial = mensajes
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role, content: m.content }));
-
-    let idxAssistant = null;
-    setMensajes((msgs) => {
-      idxAssistant = msgs.length;
-      return [...msgs, { role: "assistant", content: "…" }];
-    });
-
-    try {
-      const respuesta = await enviarAlLitisbot({
-        prompt: mensaje,
-        historial,
-        usuarioId: user?.uid,
-        userEmail: user?.email,
-        materia,
-      });
-
-      if (respuesta && respuesta !== "…") {
-        setMensajes((ms) =>
-          ms.map((m, i) =>
-            i === idxAssistant ? { ...m, content: respuesta } : m
-          )
-        );
-        saveMessage(casoActivo, { role: "assistant", content: respuesta });
-      }
-    } catch (err) {
-      console.error("❌ Error en LitisBot:", err);
-      setMensajes((ms) =>
-        ms.map((m, i) =>
-          i === idxAssistant
-            ? { ...m, content: "❌ Error consultando al asistente legal." }
-            : m
-        )
-      );
-    } finally {
-      setCargando(false);
-    }
-  }
-
-  /* ---------------------- Consulta investigación -------------------- */
-  async function handleConsultaInvestigacion(mensaje) {
-    setCargando(true);
-    const historial = mensajes
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role, content: m.content }));
-
-    let idxAssistant = null;
-    setMensajes((msgs) => {
-      idxAssistant = msgs.length;
-      return [...msgs, { role: "assistant", content: "…" }];
-    });
-
-    try {
-      const respuesta = await enviarAlLitisbot({
-        prompt: mensaje,
-        historial,
-        usuarioId: user?.uid,
-        userEmail: user?.email,
-        materia: "investigacion",
-        preferencias: { modo: "investigacion" },
-      });
-
-      if (respuesta && respuesta !== "…") {
-        setMensajes((ms) =>
-          ms.map((m, i) =>
-            i === idxAssistant ? { ...m, content: respuesta } : m
-          )
-        );
-        saveMessage(casoActivo, { role: "assistant", content: respuesta });
-      }
-    } catch (err) {
-      console.error("❌ Error en investigación jurídica:", err);
-      setMensajes((ms) =>
-        ms.map((m, i) =>
-          i === idxAssistant
-            ? { ...m, content: "❌ Error en investigación jurídica." }
-            : m
-        )
-      );
-    } finally {
-      setCargando(false);
-    }
-  }
-
-  /* ---------------------- Envío -------------------- */
-  async function handleSend(e) {
-    e?.preventDefault?.();
-    setAlertaAdjuntos("");
-
-    if (adjuntos.length > 0) {
-      const msgsParaGuardar = [];
-      const msgsParaUI = [];
-
-      adjuntos.forEach((file) => {
-        const mu = {
-          role: "user",
-          content: `📎 Archivo subido: <b>${file.name}</b>`,
-          tipo: "archivo",
-        };
-        const ma = {
-          role: "assistant",
-          content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`,
-          tipo: "archivo",
-        };
-        msgsParaGuardar.push(mu, ma);
-        msgsParaUI.push(mu, ma);
-      });
-
-      msgsParaGuardar.forEach((m) => saveMessage(casoActivo, m));
-      setMensajes((msgs) => [...msgs, ...msgsParaUI]);
-      setAdjuntos([]);
-      setInput("");
-      return;
-    }
-
-    if (!input.trim()) return;
-
-    const nuevo = { role: "user", content: input };
-    setMensajes((msgs) => [...msgs, nuevo]);
-    saveMessage(casoActivo, nuevo);
-
-    const pregunta = input;
-    setInput("");
-
-    const texto = pregunta.toLowerCase();
-    const materias = {
-      civil: /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
-      penal: /penal|delito|crimen|homicidio|robo|violencia|acusaci(ón|on)|condena/i,
-      laboral: /laboral|trabajo|sindicato|despido|remuneraci(ón|on)|indemnizaci(ón|on)/i,
-      constitucional: /constituci(ón|on)|derechos fundamentales|amparo|habeas|tc|tribunal constitucional/i,
-      administrativo: /administrativo|procedimiento|sancionador|sunat|sunafil|municipalidad/i,
-    };
-
-    if (/investigaci(ón|on)|tesis|hipótesis|metodolog/i.test(texto)) {
-      await handleConsultaInvestigacion(pregunta);
-    } else {
-      let materiaDetectada = null;
-      for (const [materia, regex] of Object.entries(materias)) {
-        if (regex.test(texto)) {
-          materiaDetectada = materia;
-          break;
-        }
-      }
-      if (materiaDetectada) {
-        await handleConsultaLegal({ mensaje: pregunta, materia: materiaDetectada });
-      } else {
-        await handleConsultaGeneral(pregunta);
-      }
-    }
-  }
-
-  /* -------------------- Acciones de mensajes ---------------- */
-  const handleVoice = () => {
-    if (!("webkitSpeechRecognition" in window)) {
-      alert("Tu navegador no soporta reconocimiento de voz.");
-      return;
-    }
-    const recognition = new window.webkitSpeechRecognition();
-    recognition.lang = "es-ES";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => {
-      setGrabando(true);
-      setInput((prev) => (prev ? prev + " " : "") + "[🎤 Escuchando…]");
-    };
-    recognition.onresult = (event) => {
-      const texto = event.results[0][0].transcript;
-      setGrabando(false);
-      setInput((prev) =>
-        prev.replace("[🎤 Escuchando…]", "").trim() + " " + texto
-      );
-    };
-    recognition.onerror = () => setGrabando(false);
-    recognition.onend = () => setGrabando(false);
-    recognition.start();
-  };
-
-  function handleCopy(text) {
-    navigator.clipboard.writeText(String(text || "").replace(/<[^>]+>/g, " "));
-  }
-
-  function handleEdit(idx, nuevoTexto) {
-    setMensajes((ms) => {
-      const copia = [...ms];
-      copia[idx].content = nuevoTexto;
-      deleteMessage(casoActivo, idx);
-      saveMessage(casoActivo, copia[idx]);
-      return copia;
-    });
-  }
-
-  function handleFeedback(idx, type) {
+  } catch (err) {
+    console.error("❌ Hubo un error consultando al chat general:", err);
     setMensajes((ms) =>
-      ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m))
+      ms.map((m, i) =>
+        i === idxAssistant
+          ? {
+              ...m,
+              content:
+                "❌ Hubo un error consultando al chat general. Intenta nuevamente más tarde.",
+            }
+          : m
+      )
     );
+  } finally {
+    setCargando(false);
+  }
+}
+
+/* ---------------------- Consulta legal -------------------- */
+async function handleConsultaLegal({ mensaje, materia = "general" }) {
+  setCargando(true);
+
+  const historial = mensajes
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  let idxAssistant = null;
+  setMensajes((msgs) => {
+    idxAssistant = msgs.length;
+    return [...msgs, { role: "assistant", content: "…" }];
+  });
+
+  try {
+    const respuesta = await enviarAlLitisbot({
+      prompt: mensaje,
+      historial,
+      usuarioId: user?.uid,
+      userEmail: user?.email,
+      materia, // 👈 ahora se envía la materia detectada
+    });
+
+    if (respuesta && respuesta !== "…") {
+      setMensajes((ms) =>
+        ms.map((m, i) =>
+          i === idxAssistant ? { ...m, content: respuesta } : m
+        )
+      );
+      saveMessage(casoActivo, { role: "assistant", content: respuesta });
+    }
+  } catch (err) {
+    console.error("❌ Error en LitisBot:", err);
+    setMensajes((ms) =>
+      ms.map((m, i) =>
+        i === idxAssistant
+          ? { ...m, content: "❌ Error consultando al asistente legal." }
+          : m
+      )
+    );
+  } finally {
+    setCargando(false);
+  }
+}
+/* ---------------------- Consulta de investigación jurídica -------------------- */
+async function handleConsultaInvestigacion(mensaje) {
+  setCargando(true);
+
+  const historial = mensajes
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  let idxAssistant = null;
+  setMensajes((msgs) => {
+    idxAssistant = msgs.length;
+    return [...msgs, { role: "assistant", content: "…" }];
+  });
+
+  try {
+    const respuesta = await enviarAlLitisbot({
+      prompt: mensaje,
+      historial,
+      usuarioId: user?.uid,
+      userEmail: user?.email,
+      materia: "investigacion", // 👈 clave para activar el modo de investigación
+      preferencias: { modo: "investigacion" }
+    });
+
+    if (respuesta && respuesta !== "…") {
+      setMensajes((ms) =>
+        ms.map((m, i) =>
+          i === idxAssistant ? { ...m, content: respuesta } : m
+        )
+      );
+      saveMessage(casoActivo, { role: "assistant", content: respuesta });
+    }
+  } catch (err) {
+    console.error("❌ Error en investigación jurídica:", err);
+    setMensajes((ms) =>
+      ms.map((m, i) =>
+        i === idxAssistant
+          ? {
+              ...m,
+              content:
+                "❌ Hubo un error consultando en modo investigación jurídica. Intenta nuevamente más tarde.",
+            }
+          : m
+      )
+    );
+  } finally {
+    setCargando(false);
+  }
+}
+
+/* ---------------------- Envío -------------------- */
+async function handleSend(e) {
+  e?.preventDefault?.();
+  setAlertaAdjuntos("");
+
+  // Si hay adjuntos, simulamos recepción
+  if (adjuntos.length > 0) {
+    const msgsParaGuardar = [];
+    const msgsParaUI = [];
+
+    adjuntos.forEach((file) => {
+      const mu = {
+        role: "user",
+        content: `📎 Archivo subido: <b>${file.name}</b>`,
+        tipo: "archivo",
+      };
+      const ma = {
+        role: "assistant",
+        content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`,
+        tipo: "archivo",
+      };
+      msgsParaGuardar.push(mu, ma);
+      msgsParaUI.push(mu, ma);
+    });
+
+    msgsParaGuardar.forEach((m) => saveMessage(casoActivo, m));
+    setMensajes((msgs) => [...msgs, ...msgsParaUI]);
+
+    setAdjuntos([]);
+    setInput("");
+    return;
   }
 
-  const closeHerramientas = () => {
-    setShowModal && setShowModal(false);
-    setHerramienta(null);
+  if (!input.trim()) return;
+
+  const nuevo = { role: "user", content: input };
+  setMensajes((msgs) => [...msgs, nuevo]);
+  saveMessage(casoActivo, nuevo);
+
+  const pregunta = input;
+  setInput("");
+
+  // 👉 detección automática de modo y materia
+  const texto = pregunta.toLowerCase();
+
+  // Diccionario de materias jurídicas
+  const materias = {
+    civil: /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
+    penal: /penal|delito|crimen|homicidio|robo|violencia|acusaci(ón|on)|condena/i,
+    laboral: /laboral|trabajo|sindicato|despido|remuneraci(ón|on)|indemnizaci(ón|on)/i,
+    constitucional: /constituci(ón|on)|derechos fundamentales|amparo|habeas|tc|tribunal constitucional/i,
+    administrativo: /administrativo|procedimiento|sancionador|sunat|sunafil|municipalidad/i,
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (input.trim() || adjuntos.length) handleSend(e);
-    }
-  };
-
- /* --------------------------- Render ----------------------- */
-return (
-  <div
-    className="flex flex-col w-full items-center bg-white litisbot-fill"
-    style={{ minHeight: "100vh" }}
-    onPaste={(e) => {
-      if (e.clipboardData?.files?.length) {
-        handleFileChange({ target: { files: e.clipboardData.files } });
+  if (/investigaci(ón|on)|tesis|hipótesis|metodolog/i.test(texto)) {
+    // 🔎 modo investigación jurídica
+    await handleConsultaInvestigacion(pregunta);
+  } else {
+    // Verificar si entra en alguna materia jurídica
+    let materiaDetectada = null;
+    for (const [materia, regex] of Object.entries(materias)) {
+      if (regex.test(texto)) {
+        materiaDetectada = materia;
+        break;
       }
-    }}
-  >
-    {/* Área del chat */}
+    }
+
+    if (materiaDetectada) {
+      // modo jurídico especializado
+      await handleConsultaLegal({ mensaje: pregunta, materia: materiaDetectada });
+    } else {
+      // modo general
+      await handleConsultaGeneral(pregunta);
+    }
+  }
+}
+
+
+/* -------------------- Acciones de mensajes ---------------- */
+const handleVoice = () => {
+  if (grabando) return;
+  setGrabando(true);
+  setInput((prev) => (prev ? prev + " " : "") + "[dictado de voz…]");
+  setTimeout(() => {
+    setGrabando(false);
+    setInput((prev) => prev + " (audio convertido a texto)");
+  }, 1000);
+};
+
+function handleCopy(text) {
+  navigator.clipboard.writeText(String(text || ""));
+}
+
+function handleEdit(idx, nuevoTexto) {
+  setMensajes((ms) => {
+    const copia = [...ms];
+    copia[idx].content = nuevoTexto;
+    deleteMessage(casoActivo, idx);
+    saveMessage(casoActivo, copia[idx]);
+    return copia;
+  });
+}
+
+function handleFeedback(idx, type) {
+  setMensajes((ms) =>
+    ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m))
+  );
+}
+
+const closeHerramientas = () => {
+  setShowModal && setShowModal(false);
+  setHerramienta(null);
+};
+
+// Enter = enviar / Shift+Enter = salto
+const handleKeyDown = (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (input.trim() || adjuntos.length) handleSend(e);
+  }
+};
+
+  /* --------------------------- Render ----------------------- */
+  return (
     <div
-      id="litisbot-feed"
-      className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar px-2 sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
-      style={{
-        height: "calc(100vh - 176px)",
-        marginTop: 24,
-        marginBottom: 12,
-        borderRadius: 24,
-        boxShadow: "0 4px 26px 0 #0001",
+      className="flex flex-col w-full items-center bg-white litisbot-fill"
+      style={{ minHeight: "100vh" }}
+      onPaste={(e) => {
+        if (e.clipboardData?.files?.length) {
+          handleFileChange({ target: { files: e.clipboardData.files } });
+        }
       }}
     >
-      <div className="flex flex-col gap-2 w-full py-3">
-        {mensajes.map((m, i) => (
-          <div
-            key={i}
-            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}
-          >
-            <div
-              className={`
-                px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
-                rounded-[1.75rem] shadow break-words
-                ${
-                  m.role === "user"
-                    ? "text-white self-end max-w-[85%]"
-                    : "bg-yellow-50 text-[#5C2E0B] self-start w-full sm:max-w-[85%] px-3"
-                }
-                sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
-              `}
-              style={{
-                background: m.role === "user" ? "#5C2E0B" : undefined,
-                border: 0,
-              }}
-            >
-              {m.role === "assistant" ? (
-                <MensajeBurbuja
-                  msg={m}
-                  onCopy={handleCopy}
-                  onEdit={(nuevo) => handleEdit(i, nuevo)}
-                  onFeedback={(type) => handleFeedback(i, type)}
-                />
-              ) : (
-                <span dangerouslySetInnerHTML={{ __html: m.content }} />
-              )}
-            </div>
-          </div>
-        ))}
-
-        {cargando && (
-          <div className="flex justify-start w-full">
-            <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
-              Buscando en bases legales…
-            </div>
-          </div>
-        )}
-        <div ref={chatEndRef} />
+      {/* Área del chat */}
+<div
+  id="litisbot-feed"
+  className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar px-2 sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+  style={{
+    // altura: viewport menos header (~80px) y barra de entrada (~96px)
+    height: "calc(100vh - 176px)",
+    marginTop: 24,
+    marginBottom: 12,
+    borderRadius: 24,
+    boxShadow: "0 4px 26px 0 #0001",
+  }}
+>
+  <div className="flex flex-col gap-2 w-full py-3">
+    {mensajes.map((m, i) => (
+      <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}>
+        <div
+          className={`
+            px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
+            rounded-[1.75rem] shadow max-w-[92%] md:max-w-[85%] break-words
+            ${m.role === "user" ? "text-white self-end" : "bg-yellow-50 text-[#5C2E0B] self-start"}
+            sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
+          `}
+          style={{ background: m.role === "user" ? "#5C2E0B" : undefined, border: 0 }}
+        >
+          {m.role === "assistant" ? (
+            <MensajeBurbuja
+              msg={m}
+              onCopy={handleCopy}
+              onEdit={(nuevo) => handleEdit(i, nuevo)}
+              onFeedback={(type) => handleFeedback(i, type)}
+            />
+          ) : (
+            <span dangerouslySetInnerHTML={{ __html: m.content }} />
+          )}
+        </div>
       </div>
-    </div>
+    ))}
 
-    {/* Barra de entrada */}
-    <form
-      onSubmit={handleSend}
-      className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
-                 px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
-                 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
-    >
-      {/* Adjuntar */}
-      <label
-        className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${
-          adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""
-        }`}
-        style={{ background: "#5C2E0B", color: "#fff" }}
-      >
-        <FaPaperclip size={22} />
-        <input
-          type="file"
-          className="hidden"
-          multiple
-          onChange={handleFileChange}
-          disabled={adjuntos.length >= MAX_ADJUNTOS}
-        />
-      </label>
-
-      {/* Entrada */}
-      <textarea
-        ref={textareaRef}
-        className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
-        placeholder="Escribe o dicta tu pregunta aquí…"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        disabled={grabando}
-        rows={1}
-        style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
-      />
-
-      {/* Micrófono */}
-      <button
-        type="button"
-        aria-label="Dictar voz"
-        className="p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
-        style={{ background: "#5C2E0B", color: "#fff", minWidth: 38, minHeight: 38 }}
-        onClick={handleVoice}
-        disabled={grabando}
-        title="Dictar voz"
-      >
-        <FaMicrophone size={20} />
-      </button>
-
-      {/* Enviar */}
-      <button
-        type="submit"
-        aria-label="Enviar"
-        title="Enviar"
-        className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${
-          !input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-        }`}
-        style={{
-          background: "#5C2E0B",
-          color: "#fff",
-          minWidth: 44,
-          minHeight: 44,
-        }}
-        disabled={(!input.trim() && adjuntos.length === 0) || cargando}
-      >
-        <MdSend size={24} />
-      </button>
-    </form>
-
-    {alertaAdjuntos && (
-      <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>
+    {cargando && (
+      <div className="flex justify-start w-full">
+        <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
+          Buscando en bases legales…
+        </div>
+      </div>
     )}
-    {error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
-
-    {showModal && (
-      <ModalHerramientas
-        onClose={closeHerramientas}
-        herramienta={herramienta}
-        setHerramienta={setHerramienta}
-        pro={pro}
-        error={error}
-        setError={setError}
-      />
-    )}
+    <div ref={chatEndRef} />
   </div>
-);
+</div>
+
+{/* Barra de entrada */}
+<form
+  onSubmit={handleSend}
+  className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
+             px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
+             max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+>
+  {/* Adjuntar */}
+  <label
+    className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}`}
+    style={{ background: "#5C2E0B", color: "#fff" }}
+    title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
+    aria-label="Adjuntar archivo"
+  >
+    <FaPaperclip size={22} />
+    <input
+      type="file"
+      className="hidden"
+      multiple
+      onChange={handleFileChange}
+      disabled={adjuntos.length >= MAX_ADJUNTOS}
+    />
+  </label>
+
+  {/* Previews */}
+  {adjuntos.length > 0 && (
+    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+      {adjuntos.map((adj, idx) => (
+        <div key={idx} className="relative flex-shrink-0">
+          {adj.type?.startsWith("image/") ? (
+            <img
+              src={URL.createObjectURL(adj)}
+              alt={adj.name}
+              className="rounded-xl border-2 border-yellow-300 shadow object-cover"
+              style={{ width: 100, height: 72 }}
+            />
+          ) : (
+            <div
+              className="bg-yellow-50 border-2 border-yellow-300 rounded-xl flex flex-col items-center justify-center text-[#5C2E0B] font-semibold shadow"
+              style={{ width: 120, height: 72, fontSize: 14, padding: 6 }}
+            >
+              <div style={{ fontSize: 26, marginBottom: 2 }}>
+                {adj.name.toLowerCase().endsWith(".pdf")
+                  ? "📄"
+                  : /\.(doc|docx)$/i.test(adj.name)
+                  ? "📝"
+                  : /\.(xls|xlsx)$/i.test(adj.name)
+                  ? "📊"
+                  : "📎"}
+              </div>
+              <div className="truncate w-full text-center" title={adj.name}>
+                {adj.name}
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            aria-label="Quitar archivo"
+            className="absolute -top-1 -right-1 bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center"
+            onClick={() => handleRemoveAdjunto(idx)}
+            title="Eliminar archivo"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {/* Entrada */}
+  <textarea
+    ref={textareaRef}
+    className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
+    placeholder="Escribe o pega tu pregunta legal aquí…"
+    value={input}
+    onChange={(e) => setInput(e.target.value)}
+    onKeyDown={handleKeyDown}
+    disabled={grabando}
+    rows={1}
+    style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
+  />
+
+  {/* Micrófono */}
+  <button
+    type="button"
+    aria-label="Dictar voz"
+    className="p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
+    style={{ background: "#5C2E0B", color: "#fff", minWidth: 38, minHeight: 38 }}
+    onClick={handleVoice}
+    disabled={grabando}
+    title="Dictar voz"
+  >
+    <FaMicrophone size={20} />
+  </button>
+
+  {/* Enviar */}
+  <button
+    type="submit"
+    aria-label="Enviar"
+    title="Enviar"
+    className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${
+      !input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+    }`}
+    style={{ background: "#5C2E0B", color: "#fff", minWidth: 44, minHeight: 44, fontWeight: "bold" }}
+    disabled={(!input.trim() && adjuntos.length === 0) || cargando}
+  >
+    <MdSend size={24} />
+  </button>
+</form>
+
+{alertaAdjuntos && <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>}
+{error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
+
+
+      {/* MODAL HERRAMIENTAS */}
+      {showModal && (
+        <ModalHerramientas
+          onClose={closeHerramientas}
+          herramienta={herramienta}
+          setHerramienta={setHerramienta}
+          pro={pro}
+          error={error}
+          setError={setError}
+        />
+      )}
+
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @media (max-width: 1024px) {
+          .litisbot-fill { max-width: 100vw !important; padding-left: 8px; padding-right: 8px; }
+        }
+      `}</style>
+    </div>
+  );
 }
 
 /* ============================================================
@@ -1065,7 +1109,7 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
   function handleSpeak() {
     try {
       setLeyendo(true);
-      const plain = (msg.content || "").replace(/<[^>]+>/g, " ");
+      const plain = (msg.content || "");
       const speech = new window.SpeechSynthesisUtterance(plain);
       speech.lang = "es-PE";
       window.speechSynthesis.cancel();

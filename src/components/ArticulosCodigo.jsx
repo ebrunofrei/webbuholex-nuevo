@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { obtenerArticulosPorCodigo, editarArticulo, eliminarArticulo } from "@services/firebaseCodigosService";
-import ModalEditarArticulo from "../db/ModalEditarArticulo";
+import { obtenerArticulosPorCodigo, editarArticulo, eliminarArticulo } from "@/services/firebaseCodigosService";
+import ModalEditarArticulo from "../admin/ModalEditarArticulo";
 import { useUserAdminStatus } from "../hooks/useUserAdminStatus";
 import toast, { Toaster } from "react-hot-toast";
 
@@ -55,7 +55,7 @@ const ArticulosCodigo = ({ codigoId }) => {
     }
   };
 
-  // Abrir modal sólo db
+  // Abrir modal sólo admin
   const handleEditar = (articulo) => {
     if (!isAdmin) {
       toast.error("No tienes permisos de administrador para editar artículos.");
@@ -71,7 +71,7 @@ const ArticulosCodigo = ({ codigoId }) => {
   return (
     <div className="space-y-4">
       <Toaster position="top-center" />
-      {/* Banner db/lectura */}
+      {/* Banner admin/lectura */}
       {isAdmin ? (
         <div className="mb-4 rounded-xl bg-white border-l-8 border-[#7a2518] p-3 text-[#7a2518] font-semibold shadow">
           👑 Estás en modo <b>Administrador</b>: puedes editar y eliminar artículos.
@@ -105,7 +105,7 @@ const ArticulosCodigo = ({ codigoId }) => {
               </span>
             )}
           </div>
-          {/* Botón Editar sólo para db */}
+          {/* Botón Editar sólo para admin */}
           {isAdmin && (
             <button
               onClick={() => handleEditar(art)}
