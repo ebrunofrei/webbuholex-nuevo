@@ -2,14 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { db, auth, storage } from "@/firebase";
 import { collection, query, orderBy, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import ArchivoCard from "../components/ArchivoCard";
-import GrabadoraVoz from "../components/GrabadoraVoz";
-import ArchivoViewerModal from "../components/ArchivoViewerModal";
-import AgendadorPlazos from "../components/AgendadorPlazos";
-import ResumenExpediente from "../components/ResumenExpediente";
-import PartesProcesales from "../components/PartesProcesales";
-import Seguimiento from "../components/Seguimiento";
-import TabDocumentos from "../components/TabDocumentos";
+import ArchivoCard from "@components/../components/ArchivoCard".replace("components/", "");
+import GrabadoraVoz from "@components/../components/GrabadoraVoz".replace("components/", "");
+import ArchivoViewerModal from "@components/../components/ArchivoViewerModal".replace("components/", "");
+import AgendadorPlazos from "@components/../components/AgendadorPlazos".replace("components/", "");
+import ResumenExpediente from "@components/../components/ResumenExpediente".replace("components/", "");
+import PartesProcesales from "@components/../components/PartesProcesales".replace("components/", "");
+import Seguimiento from "@components/../components/Seguimiento".replace("components/", "");
+import TabDocumentos from "@components/../components/TabDocumentos".replace("components/", "");
 
 export default function ExpedienteJudicialDetalle({ expedienteId }) {
   const [tab, setTab] = useState("documentos");

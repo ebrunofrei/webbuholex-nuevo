@@ -1,8 +1,8 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+import { db, auth, storage } from "#services/myFirebaseAdmin.js";
 // backend/jobs/litisbotOrquestador.js
-import { fetchBoletinesIDH } from "../services/scrapingBoletines.js";
-import { analizarContenidoLegal } from "../services/litisbotAI.js";
-import { enviarNotificacionesInteligentes } from "../services/litisbotNotificaciones.js";
+import { fetchBoletinesIDH } from "#services/scrapingBoletines.js";
+import { analizarContenidoLegal } from "#services/litisbotAI.js";
+import { enviarNotificacionesInteligentes } from "#services/litisbotNotificaciones.js";
 import { db, auth, storage } from "@/firebase";
 
 

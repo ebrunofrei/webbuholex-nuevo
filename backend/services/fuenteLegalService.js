@@ -1,26 +1,55 @@
-import { db, auth, admin } from "./firebaseAdmin.js";
-// services/fuenteLegalService.js
+// backend/services/fuenteLegalService.js
+import { db } from "#services/myFirebaseAdmin.js"; // Firestore (si lo necesitas)
+import { MongoClient } from "mongodb";
 
-import firestore from "./firebaseAdmin.js";
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017";
+const client = new MongoClient(MONGO_URI);
 
-// Busca fuentes legales desde Firestore (colección 'fuentes_legales')
-export async function buscarFuentesLegales(consulta) {
-  if (!consulta || typeof consulta !== "string") return [];
+let mongoDb;
+async function connectMongo() {
+  if (!mongoDb) {
+    await client.connect();
+    mongoDb = client.db("legalbot"); // 👈 renombrado para evitar choque
+    console.log("✅ MongoDB conectado en fuenteLegalService");
+  }
+}
+await connectMongo();
 
-  const snapshot = await firestore
-    .collection("fuentes_legales")
-    .where("keywords", "array-contains-any", consulta.toLowerCase().split(" "))
-    .limit(10)
-    .get();
-
-  if (snapshot.empty) return [];
-
-  return snapshot.docs.map(doc => {
-    const data = doc.data();
-    return {
-      titulo: data.titulo || "",
-      url: data.url || "",
-      fuente: data.fuente || "Desconocida"
-    };
+/**
+ * Guardar fuente en Firestore + Mongo
+ */
+export async function guardarFuente(usuarioId, fuente, datos) {
+  // Guardar en Firestore
+  await db.collection("fuentes_legales").add({
+    usuarioId,
+    fuente,
+    datos,
+    fecha: new Date(),
   });
+
+  // Guardar en Mongo
+  await mongoDb.collection("fuentes_cache").insertOne({
+    usuarioId,
+    fuente,
+    datos,
+    fecha: new Date(),
+  });
+
+  return { ok: true };
+}
+
+/**
+ * Buscar fuentes legales en Mongo
+ */
+export async function buscarFuentesLegales(query = {}) {
+  if (!mongoDb) await connectMongo();
+
+  const resultados = await mongoDb
+    .collection("fuentes_cache")
+    .find(query)
+    .sort({ fecha: -1 })
+    .limit(20)
+    .toArray();
+
+  return resultados;
 }

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { FileText, User, ListChecks, BookOpen } from "lucide-react";
-import TabDocumentos from "../components/TabDocumentos";
-import PartesProcesales from "../components/PartesProcesales";
-import Seguimiento from "../components/Seguimiento";
+import TabDocumentos from "@components/../components/TabDocumentos".replace("components/", "");
+import PartesProcesales from "@components/../components/PartesProcesales".replace("components/", "");
+import Seguimiento from "@components/../components/Seguimiento".replace("components/", "");
 import { useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db, auth, storage } from "@/firebase";

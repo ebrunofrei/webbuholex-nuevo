@@ -1,22 +1,69 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+// routes/membership.js
+import { db } from "#services/myFirebaseAdmin.js";
 import express from "express";
-const router = express.Router();
 import jwt from "jsonwebtoken";
 
-// Simulación: deberías tener tu propia lógica de users y membresía
-router.get('/membership', (req, res) => {
-  try {
-    const auth = req.headers.authorization;
-    if (!auth) return res.json({ isPro: false });
-    const token = auth.split(' ')[1];
-    // Valida el token (coloca tu SECRET real)
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+const router = express.Router();
 
-    // Simulación: payload tiene { id, email, isPro, ... }
-    // En la vida real: busca el usuario en tu base de datos y retorna membership real
-    return res.json({ isPro: payload.isPro === true });
+/**
+ * 📌 GET /membership
+ * Valida el token JWT y devuelve el estado de membresía del usuario.
+ */
+router.get("/membership", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        isPro: false,
+        error: "Token no proporcionado o inválido.",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        isPro: false,
+        error: "Token inválido o expirado.",
+      });
+    }
+
+    // 🔑 Simulación: payload trae { id, email, isPro }
+    // En la práctica: buscar usuario en Firestore
+    let isPro = payload.isPro === true;
+    let proExpiresAt = null;
+
+    try {
+      const userDoc = await db.collection("usuarios").doc(payload.id).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        isPro = userData.isPro === true;
+        proExpiresAt = userData.proExpiresAt || null;
+      }
+    } catch (dbErr) {
+      console.warn("⚠️ No se pudo consultar Firestore:", dbErr.message);
+    }
+
+    return res.json({
+      success: true,
+      isPro,
+      userId: payload.id,
+      email: payload.email || null,
+      proExpiresAt, // útil para frontend
+    });
   } catch (e) {
-    return res.json({ isPro: false });
+    console.error("❌ Error en /membership:", e);
+    return res.status(500).json({
+      success: false,
+      isPro: false,
+      error: "Error interno verificando membresía.",
+    });
   }
 });
 

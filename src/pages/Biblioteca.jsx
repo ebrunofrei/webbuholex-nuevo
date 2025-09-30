@@ -6,16 +6,16 @@ import {
   editarLibroDigital,
   eliminarLibroDigital,
   buscarLibrosAvanzado
-} from "@/services/firebaseBibliotecaService";
-import SubirLibroModal from "@/components/Biblioteca/SubirLibroModal";
-import EditarLibroModal from "@/components/Biblioteca/EditarLibroModal";
-import VisorLibroModal from "@/components/Biblioteca/VisorLibroModal";
+} from "@services/firebaseBibliotecaService";
+import SubirLibroModal from "@components/Biblioteca/SubirLibroModal";
+import EditarLibroModal from "@components/Biblioteca/EditarLibroModal";
+import VisorLibroModal from "@components/Biblioteca/VisorLibroModal";
 import { useUserAdminStatus } from "@/hooks/useUserAdminStatus";
 import toast, { Toaster } from "react-hot-toast";
-import PageContainer from "@/components/PageContainer";
+import PageContainer from "@components/PageContainer";
 
 export default function Biblioteca() {
-  // Hook admin completo
+  // Hook db completo
   const { user, isAdmin, checking } = useUserAdminStatus();
 
   // Estado de UI
@@ -125,7 +125,7 @@ export default function Biblioteca() {
   return (
     <PageContainer>
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <span className="loader-admin"></span>
+        <span className="loader-db"></span>
         <div className="mt-4 font-bold text-[#7a2518] text-xl">
           Verificando acceso...
         </div>

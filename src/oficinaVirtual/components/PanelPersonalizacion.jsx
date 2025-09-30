@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import useLegalOSStore from "@/store/useLegalOSStore";
+import useLegalOSStore from "@store/useLegalOSStore";
 
 // Temas y colores para demo
 const temas = [

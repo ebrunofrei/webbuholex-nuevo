@@ -1,5 +1,5 @@
-import { db } from "../services/firebaseAdmin.js";
-import { openai } from "../services/openaiService.js"
+import { db, auth, storage as firebaseStorage } from "#services/myFirebaseAdmin.js";
+import { openai } from "#services/openaiService.js";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import XLSX from "xlsx";
@@ -9,9 +9,8 @@ import { Storage } from "@google-cloud/storage";
 import fetch from "node-fetch";
 import fs from "fs";
 
-// Configuración (variables de entorno)
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const storage = new Storage({
+// --- Google Cloud Storage ---
+const gcs = new Storage({
   projectId: process.env.GCP_PROJECT_ID,
   credentials: JSON.parse(process.env.GCP_CREDENTIALS),
 });
@@ -19,13 +18,13 @@ const bucketName = process.env.BUCKET_NAME;
 
 // Sube archivo a GCS y devuelve URL pública
 async function saveToStorageAndGetUrl(filename, buffer, mimetype = "text/plain") {
-  const file = storage.bucket(bucketName).file("resultados_ia/" + filename);
+  const file = gcs.bucket(bucketName).file("resultados_ia/" + filename);
   await file.save(buffer, { contentType: mimetype });
   await file.makePublic();
   return `https://storage.googleapis.com/${bucketName}/resultados_ia/${filename}`;
 }
 
-// Audio (Whisper OpenAI)
+// --- Audio (Whisper OpenAI) ---
 async function audioToTextOpenAI(buffer, nombre, tipo) {
   const tempFilePath = `/tmp/${nombre}`;
   fs.writeFileSync(tempFilePath, buffer);
@@ -42,7 +41,7 @@ async function audioToTextOpenAI(buffer, nombre, tipo) {
   }
 }
 
-// OCR imágenes (tesseract.js)
+// --- OCR imágenes (tesseract.js) ---
 async function ocrImage(buffer) {
   const worker = await createWorker("eng+spa");
   await worker.loadLanguage("eng+spa");
@@ -52,11 +51,13 @@ async function ocrImage(buffer) {
   return data.text || "";
 }
 
+// --- Word (docx) ---
 async function docxToText(buffer) {
   const { value } = await mammoth.extractRawText({ buffer });
   return value;
 }
 
+// --- Excel ---
 function xlsxToText(buffer) {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   let texto = "";
@@ -69,6 +70,7 @@ function xlsxToText(buffer) {
   return texto;
 }
 
+// --- PowerPoint ---
 async function pptxToText(buffer) {
   const tempPath = `/tmp/temp-${Date.now()}.pptx`;
   fs.writeFileSync(tempPath, buffer);
@@ -89,7 +91,7 @@ async function pptxToText(buffer) {
   }
 }
 
-// --- Actualiza: Soporta más tipos de archivos, OCR, Audio, etc.
+// --- Extractor general ---
 async function extractTextByType(buffer, nombre, tipo) {
   if (tipo.includes("pdf")) {
     const data = await pdfParse(buffer);
@@ -116,6 +118,7 @@ async function extractTextByType(buffer, nombre, tipo) {
   return "";
 }
 
+// --- Handler ---
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ success: false, message: "Method not allowed" });
@@ -165,14 +168,14 @@ export default async function handler(req, res) {
     }
     // --- FIN VALIDACIÓN ---
 
-    // Extraer texto/OCR/Transcribir
+    // Extraer texto
     let texto = await extractTextByType(buffer, nombre, tipo);
 
     if (!texto || texto.trim().length < 10) {
       throw new Error("No se pudo extraer texto significativo del archivo");
     }
 
-    // Prompt IA minimalista y profesional
+    // Prompt IA
     const prompt = `Haz un resumen jurídico profesional, claro, técnico y útil para abogados del siguiente documento:\n\n${texto.slice(0, 8000)}`;
     const completion = await openai.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
@@ -181,12 +184,11 @@ export default async function handler(req, res) {
     });
     const summary = completion.choices[0].message.content.trim();
 
-    // Crea y sube archivo resultado
+    // Crear archivo resultado y subir
     const resultFileName = nombre.replace(/\.[^/.]+$/, "") + "-resumen.txt";
     const resultFileBuffer = Buffer.from(summary, "utf8");
     const archivoAnalizadoUrl = await saveToStorageAndGetUrl(resultFileName, resultFileBuffer, "text/plain");
 
-    // Devuelve resumen y link
     res.status(200).json({
       success: true,
       resumen: summary,

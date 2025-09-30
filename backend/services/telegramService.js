@@ -1,4 +1,4 @@
-import { db, auth, admin } from "./firebaseAdmin.js";
+import { db, auth, storage } from "#services/myFirebaseAdmin.js";
 import axios from "axios";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 

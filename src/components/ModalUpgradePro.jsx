@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import useLegalOSStore from "@/store/useLegalOSStore";
+import useLegalOSStore from "@store/useLegalOSStore";
 
 const ModalUpgradePRO = ({ open, onClose }) => {
   const { usuarioId, guardarEnFirestore, setPlan } = useLegalOSStore();

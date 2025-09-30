@@ -1,4 +1,4 @@
-import { db } from "../services/firebaseAdmin.js";
+import { db } from "../services/myFirebaseAdmin.js";
 import normas from "./csvjson.json" assert { type: "json" };
 
 async function importarNormas() {

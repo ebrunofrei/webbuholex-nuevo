@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import PieDocumentoPreview from "../../components/PieDocumentoPreview";
+import PieDocumentoPreview from "@components/../../components/PieDocumentoPreview".replace("components/", "");
 import { usePerfilOficina } from "../../hooks/usePerfilOficina";
 
 

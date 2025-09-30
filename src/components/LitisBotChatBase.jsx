@@ -11,7 +11,7 @@ import {
   FaRegThumbsDown,
 } from "react-icons/fa";
 import { MdSend } from "react-icons/md";
-import { enviarAlChat } from "@/services/chat";
+import { enviarAlChat } from "@services/chat";
 
 // --- Herramientas integradas en este archivo (mock UI simples).
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
@@ -25,7 +25,7 @@ import {
   getFiles,
   saveFile,
   deleteFile,
-} from "@/services/chatStorage";
+} from "@services/chatStorage";
 
 /* ============================================================
    Utilidades de red (un solo endpoint: /api/ia?action=chat)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Eye, FolderPlus, MailCheck } from "lucide-react";
-import Modal from "@/components/Modal";
+import Modal from "@components/Modal";
 
 // Simulación de expedientes
 const DUMMY_EXPEDIENTES = [

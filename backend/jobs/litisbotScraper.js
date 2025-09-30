@@ -1,9 +1,9 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+import { db, auth, storage } from "#services/myFirebaseAdmin.js";
 // jobs/litisbotScraper.js
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-db/firestore";
 import OpenAI from "openai";
 
 // --- INICIALIZAR FIREBASE ADMIN ---

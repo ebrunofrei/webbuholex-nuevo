@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { cargarPerfilUsuario, guardarTodoUsuario } from "@/utils/firestoreSync";
+import { cargarPerfilUsuario, guardarTodoUsuario } from "@utils/firestoreSync";
 
 // --- Datos por defecto ---
 const defaultBotMsg = {

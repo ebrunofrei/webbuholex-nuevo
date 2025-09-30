@@ -1,5 +1,5 @@
 import React from "react";
-import useLegalOSStore from "@/store/useLegalOSStore";
+import useLegalOSStore from "@store/useLegalOSStore";
 
 // Drag&Drop builder para organizar módulos, y bloquear PRO según plan
 const BuilderModulos = () => {

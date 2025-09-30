@@ -1,4 +1,4 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+import { db, auth, storage } from "../services/myFirebaseAdmin.js";
 // utils/translateHelper.js
 import { v2 as TranslateV2 } from "@google-cloud/translate";
 

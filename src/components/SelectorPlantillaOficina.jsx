@@ -1,5 +1,5 @@
 import React from "react";
-import useLegalOSStore from "@/store/useLegalOSStore";
+import useLegalOSStore from "@store/useLegalOSStore";
 
 // Puedes usar IA aquí si deseas ("Sugerir con IA" sería otro botón)
 const TEMPLATES = [

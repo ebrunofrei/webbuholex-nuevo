@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import ModalHerramientas from "./ModalHerramientas"; // Asegúrate de tener este componente
-import { obtenerMemoriaPorCaso, guardarMemoriaPorCaso } from "@/services/litisbotMemoriaService";
+import { obtenerMemoriaPorCaso, guardarMemoriaPorCaso } from "@services/litisbotMemoriaService";
 
 export default function LitisBotChatBasePro({
   user,

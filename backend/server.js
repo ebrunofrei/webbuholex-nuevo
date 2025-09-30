@@ -14,16 +14,16 @@ const allowedOrigins = [
   "https://www.buholex.com",
   "https://buholex.vercel.app",
 ];
-const allowedRegex = [
-  /\.vercel\.app$/i,
-  /\.railway\.app$/i,
-];
+const allowedRegex = [/\.vercel\.app$/i, /\.railway\.app$/i];
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // server2server / Postman
-      if (allowedOrigins.includes(origin) || allowedRegex.some((r) => r.test(origin))) {
+      if (!origin) return cb(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        allowedRegex.some((r) => r.test(origin))
+      ) {
         return cb(null, true);
       }
       return cb(new Error(`❌ CORS bloqueado para: ${origin}`));
@@ -50,7 +50,7 @@ const http = axios.create({
    🗄 Cache en memoria
 ================================= */
 const memoryCache = new Map();
-const CACHE_TTL = Number(process.env.CACHE_TTL || 600); // 10 min
+const CACHE_TTL = Number(process.env.CACHE_TTL || 600);
 
 function getCache(key) {
   const hit = memoryCache.get(key);
@@ -69,6 +69,7 @@ function setCache(key, data, ttl = CACHE_TTL) {
    🔎 Normalizador
 ================================= */
 function normalizeItems(arr = []) {
+  if (!Array.isArray(arr)) return [];
   return arr.map((x, i) => ({
     id: x.id || x.url || `item-${i}-${Date.now()}`,
     titulo: x.title || x.name || "",
@@ -82,12 +83,17 @@ function normalizeItems(arr = []) {
 
 async function fetchJsonFeed(url) {
   const { data } = await http.get(url);
-  const items = normalizeItems(data?.articles || data?.items || data?.data || []);
-  return items;
+  // Intentar detectar el array válido
+  const arr =
+    data?.articles ||
+    data?.items ||
+    data?.data ||
+    (Array.isArray(data) ? data : []);
+  return normalizeItems(arr);
 }
 
 /* ===============================
-   🚦 Health / raíz
+   🚦 Health
 ================================= */
 app.get("/", (_req, res) => res.type("text/plain").send("ok"));
 app.get("/api/health", (_req, res) =>
@@ -96,8 +102,6 @@ app.get("/api/health", (_req, res) =>
 
 /* ===============================
    📰 Noticias generales
-   GET /api/noticias?page=1&limit=8
-   Fuente por env: NEWS_GENERAL_FEED
 ================================= */
 app.get("/api/noticias", async (req, res) => {
   const page = Math.max(parseInt(req.query.page || "1", 10), 1);
@@ -113,7 +117,7 @@ app.get("/api/noticias", async (req, res) => {
 
     const feedUrl =
       process.env.NEWS_GENERAL_FEED ||
-      "https://gnews.io/api/v4/top-headlines?lang=es&country=pe&max=50&apikey=demo";
+      "https://newsdata.io/api/1/news?country=pe&language=es&apikey=demo";
 
     const items = await fetchJsonFeed(feedUrl);
     const start = (page - 1) * limit;
@@ -132,8 +136,6 @@ app.get("/api/noticias", async (req, res) => {
 
 /* ===============================
    ⚖️ Noticias jurídicas
-   GET /api/noticias-juridicas?q=...&page=1&limit=8
-   Fuente por env: NEWS_LEGAL_FEED
 ================================= */
 app.get("/api/noticias-juridicas", async (req, res) => {
   const q = (req.query.q || "ley OR justicia OR judicial").toString();
@@ -148,11 +150,10 @@ app.get("/api/noticias-juridicas", async (req, res) => {
       return res.json(cached);
     }
 
-    // Puedes cambiar la fuente libremente por otra API/endpoint propio
     const base =
       process.env.NEWS_LEGAL_FEED ||
-      "https://gnews.io/api/v4/search?lang=es&country=pe&max=50&apikey=demo&q=";
-    const feedUrl = `${base}${encodeURIComponent(q)}`;
+      "https://newsdata.io/api/1/news?country=pe&language=es&q=";
+    const feedUrl = `${base}${encodeURIComponent(q)}&apikey=demo`;
 
     const items = await fetchJsonFeed(feedUrl);
     const start = (page - 1) * limit;
@@ -170,7 +171,7 @@ app.get("/api/noticias-juridicas", async (req, res) => {
 });
 
 /* ===============================
-   🖥 Arranque (⬅️ clave en Railway)
+   🖥 Arranque
 ================================= */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {

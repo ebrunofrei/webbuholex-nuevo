@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import useLegalOSStore from '@/store/useLegalOSStore';
+import useLegalOSStore from '@store/useLegalOSStore';
 const colores = ["#b03a1a", "#1662C4", "#16c49e", "#ffc107", "#fff"];
 const temas = [
   { name: "Claro", value: "light", color: "#f9fafb" },

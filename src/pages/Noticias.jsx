@@ -1,6 +1,6 @@
 // src/pages/Noticias.jsx
 import React, { useEffect, useState } from "react";
-import { getNoticiasJuridicas } from "@/services/newsApi";
+import { getNoticiasJuridicas } from "@services/newsApi";
 
 // Normaliza la respuesta (array o { items, hasMore })
 const normalizeResponse = (data) => {

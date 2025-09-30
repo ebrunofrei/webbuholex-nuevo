@@ -1,72 +1,119 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+import { db, auth, storage } from "#services/myFirebaseAdmin.js";
 import { Router } from "express";
-import { callOpenAI } from "../services/openaiService.js";
-import { obtenerHistorialUsuario, guardarHistorial } from "../services/memoryService.js";
-import { buscarFuentesLegales } from "../services/fuenteLegalService.js";
+import { callOpenAI } from "#services/openaiService.js";
+import { obtenerHistorialUsuario, guardarHistorial } from "#services/memoryService.js";
+import { buscarFuentesLegales } from "#services/fuenteLegalService.js";
 
 const router = Router();
 
+/**
+ * 📌 Endpoint principal de LitisBot
+ * Body esperado:
+ * {
+ *   consulta: string,
+ *   usuarioId: string,
+ *   expedienteId?: string,
+ *   modo?: "legal" | "general",
+ *   pro?: boolean,
+ *   fuentesOficiales?: boolean,
+ *   fuentesEncontradas?: array
+ * }
+ */
 router.post("/", async (req, res) => {
-  const { consulta, usuarioId, expedienteId, modo, pro, fuentesOficiales, fuentesEncontradas } = req.body;
+  const {
+    consulta,
+    usuarioId = "anonimo",
+    expedienteId = null,
+    modo = "legal",
+    pro = false,
+    fuentesOficiales = true,
+    fuentesEncontradas = [],
+  } = req.body || {};
 
-  // --- 1. Memoria: trae historial de usuario ---
+  // --- Validación de entrada ---
+  if (!consulta || consulta.trim().length < 5) {
+    return res.status(400).json({
+      success: false,
+      error: "La consulta es demasiado corta o inválida.",
+    });
+  }
+
+  // --- 1. Memoria: trae historial del usuario ---
   let historial = [];
   try {
     historial = await obtenerHistorialUsuario(usuarioId, expedienteId);
   } catch (error) {
-    console.warn("No se pudo obtener historial:", error.message);
+    console.warn("⚠️ No se pudo obtener historial:", error.message);
   }
 
   // --- 2. Fuentes legales ---
   let fuentes = fuentesEncontradas;
-  if (!fuentes || !fuentes.length) {
+  if ((!fuentes || !fuentes.length) && fuentesOficiales) {
     try {
       fuentes = await buscarFuentesLegales(consulta);
     } catch (error) {
-      console.warn("No se pudieron buscar fuentes legales:", error.message);
+      console.warn("⚠️ No se pudieron buscar fuentes legales:", error.message);
       fuentes = [];
     }
   }
 
-  // --- 3. Construye prompt para IA ---
-  let messages = [
+  // --- 3. Construye mensajes para IA ---
+  const messages = [
     {
       role: "system",
-      content: modo === "legal"
-        ? "Eres LitisBot A1, asistente legal peruano especializado. Solo responde con fundamento jurídico real, cita doctrina, jurisprudencia y normas PERUANAS. Da links a las fuentes cuando existan. Nunca inventes normas o jurisprudencia. Si no sabes, responde con humildad."
-        : "Eres LitisBot, un asistente legal general que ayuda con modelos, dudas rápidas y consejos prácticos. No inventes leyes, responde solo con temas legales generales."
-    }
+      content:
+        modo === "legal"
+          ? "Eres LitisBot A1, asistente legal peruano especializado. Responde solo con fundamento jurídico real. Cita doctrina, jurisprudencia y normas PERUANAS cuando corresponda. Incluye links a fuentes oficiales si existen. Nunca inventes información. Si no sabes, responde con humildad."
+          : "Eres LitisBot, un asistente legal general que ayuda con modelos, dudas rápidas y consejos prácticos. No inventes leyes ni jurisprudencia.",
+    },
   ];
 
-  // Memoria/historial breve (máximo 2 mensajes)
-  historial.slice(0, 2).forEach(msg => {
+  // Contexto de memoria (máx 2 turnos anteriores)
+  historial.slice(0, 2).forEach((msg) => {
     messages.push({ role: "user", content: msg.pregunta });
     messages.push({ role: "assistant", content: msg.respuesta });
   });
 
-  // Incluye fuentes encontradas en el prompt
+  // Agrega fuentes legales encontradas
   if (fuentes && fuentes.length) {
     messages.push({
       role: "system",
-      content: "Fuentes oficiales encontradas para la consulta:\n" +
-        fuentes.map(f => `- ${f.titulo}: ${f.url} (${f.fuente})`).join("\n")
+      content:
+        "Fuentes oficiales encontradas para la consulta:\n" +
+        fuentes
+          .map((f) => `- ${f.titulo}: ${f.url} (${f.fuente})`)
+          .join("\n"),
     });
   }
 
-  // Consulta del usuario
+  // Mensaje del usuario
   messages.push({ role: "user", content: consulta });
 
-  // --- 4. Llama a OpenAI (o tu IA) ---
-  const respuesta = await callOpenAI(messages);
+  // --- 4. Llama a OpenAI ---
+  let respuesta = "";
+  try {
+    respuesta = await callOpenAI(messages);
+  } catch (error) {
+    console.error("❌ Error al llamar a OpenAI:", error.message);
+    return res.status(502).json({
+      success: false,
+      error: "Error al procesar la respuesta con IA.",
+    });
+  }
 
-  // --- 5. Guarda en memoria/historial ---
+  // --- 5. Guarda en historial ---
   try {
     await guardarHistorial(usuarioId, expedienteId, consulta, respuesta);
   } catch (error) {
-    console.warn("No se pudo guardar historial:", error.message);
+    console.warn("⚠️ No se pudo guardar historial:", error.message);
   }
 
-  res.json({ respuesta });
+  // --- 6. Respuesta final ---
+  return res.json({
+    success: true,
+    respuesta,
+    fuentes,
+  });
 });
 
 export default router;

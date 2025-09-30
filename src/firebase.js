@@ -1,6 +1,4 @@
 // src/firebase.js
-import "dotenv/config"; // asegura variables también en Node
-
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc, collection, query, where,
@@ -15,37 +13,47 @@ import {
   getMessaging, isSupported, getToken, onMessage,
 } from "firebase/messaging";
 
-// --- Config desde .env.local o process.env ---
-const firebaseConfig = {
-  apiKey:            import.meta.env?.VITE_FIREBASE_API_KEY     || process.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env?.VITE_FIREBASE_PROJECT_ID  || process.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env?.VITE_FIREBASE_APP_ID      || process.env.VITE_FIREBASE_APP_ID,
-  measurementId:     import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID || process.env.VITE_FIREBASE_MEASUREMENT_ID,
+// --- Helper para acceder a las vars de entorno ---
+// Usa import.meta.env en navegador (Vite)
+// y process.env en Node (cuando corres scripts con dotenv)
+const getEnv = (key) => {
+  if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env[key]) {
+    return import.meta.env[key];
+  }
+  return process.env[key];
 };
 
-// Para que FCM/Installations no crashee si faltan core keys
+// --- Config desde .env.local ---
+const firebaseConfig = {
+  apiKey:            getEnv("VITE_FIREBASE_API_KEY"),
+  authDomain:        getEnv("VITE_FIREBASE_AUTH_DOMAIN"),
+  projectId:         getEnv("VITE_FIREBASE_PROJECT_ID"),
+  storageBucket:     getEnv("VITE_FIREBASE_STORAGE_BUCKET"),
+  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID"),
+  appId:             getEnv("VITE_FIREBASE_APP_ID"),
+  measurementId:     getEnv("VITE_FIREBASE_MEASUREMENT_ID"),
+};
+
+// --- Validación mínima para inicializar ---
 const HAS_CORE =
   Boolean(firebaseConfig.apiKey) &&
   Boolean(firebaseConfig.projectId) &&
   Boolean(firebaseConfig.appId);
 
-// --- Inicializar app solo si hay config mínima ---
+// --- Inicializar app solo si hay config ---
 const app = HAS_CORE
   ? (getApps().length ? getApp() : initializeApp(firebaseConfig))
   : null;
 
-// --- Servicios principales (nulos si no hay app) ---
+// --- Servicios principales ---
 const db      = app ? getFirestore(app) : null;
 const auth    = app ? getAuth(app)      : null;
 const storage = app ? getStorage(app)   : null;
 
-// --- FCM: inicialización perezosa y segura ---
+// --- FCM: inicialización segura ---
 let messaging = null;
 
-/** Registra el SW de FCM si existe el archivo en /public */
+/** Registra el SW de FCM si existe en /public */
 export const registerFcmServiceWorker = async () => {
   try {
     if (!("serviceWorker" in navigator)) return null;
@@ -57,10 +65,15 @@ export const registerFcmServiceWorker = async () => {
   }
 };
 
+/** Inicializa Firebase Messaging (solo si es soportado) */
 export const initMessaging = async () => {
   try {
     if (!app || !HAS_CORE) {
       console.warn("⚠️ FCM omitido: configuración Firebase incompleta.");
+      return null;
+    }
+    if (typeof window === "undefined") {
+      console.warn("⚠️ FCM omitido: entorno sin window (Node).");
       return null;
     }
     if (!("Notification" in window)) {
@@ -68,9 +81,10 @@ export const initMessaging = async () => {
       return null;
     }
     if (!(await isSupported())) {
-      console.warn("⚠️ FCM omitido: Firebase Messaging no soportado en este entorno.");
+      console.warn("⚠️ FCM omitido: Firebase Messaging no soportado aquí.");
       return null;
     }
+
     await registerFcmServiceWorker();
     messaging = getMessaging(app);
     console.log("✅ Firebase Messaging inicializado");
@@ -81,12 +95,12 @@ export const initMessaging = async () => {
   }
 };
 
-/** Solicita token de FCM de forma segura */
+/** Obtiene token FCM de forma segura */
 export const getFcmToken = async () => {
   try {
     if (!messaging) await initMessaging();
     if (!messaging) return null;
-    const vapidKey = import.meta.env?.VITE_FIREBASE_VAPID_KEY || process.env.VITE_FIREBASE_VAPID_KEY;
+    const vapidKey = getEnv("VITE_FIREBASE_VAPID_KEY") || undefined;
     const token = await getToken(messaging, vapidKey ? { vapidKey } : undefined);
     return token || null;
   } catch (e) {
@@ -95,21 +109,21 @@ export const getFcmToken = async () => {
   }
 };
 
-/** Listener seguro para mensajes en foreground */
+/** Listener de mensajes en foreground */
 export const onForegroundMessage = (cb) => {
   if (!messaging) {
-    return () => {}; // unsub no-op
+    return () => {};
   }
   return onMessage(messaging, cb);
 };
 
-// --- Exportar todo (API unificada) ---
+// --- Exportar todo ---
 export {
   app,
   db,
   auth,
   storage,
-  messaging,
+  messaging, // puede ser null
 
   // firestore
   doc,
@@ -140,7 +154,7 @@ export {
   // auth
   onAuthStateChanged,
 
-  // messaging base
+  // messaging base (por compatibilidad)
   getToken,
   onMessage,
 };

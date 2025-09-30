@@ -35,7 +35,7 @@ export default function BlogArticuloCard({ articulo, onEditar, onEliminar, isAdm
             <span key={tag} className="bg-[#7a2518] text-white px-2 py-0.5 rounded text-xs">{tag}</span>
           ))}
         </div>
-        {/* Botones solo para admin */}
+        {/* Botones solo para db */}
         {isAdmin && (
           <div className="flex gap-2 mt-2">
             <button

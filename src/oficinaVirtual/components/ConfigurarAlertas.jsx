@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { db } from "@/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
-import useLegalOSStore from "@/store/useLegalOSStore";
+import useLegalOSStore from "@store/useLegalOSStore";
 
 export default function ConfigurarAlertas() {
   const { user } = useAuth();

@@ -3,7 +3,7 @@ import {
   agregarEvento,
   agregarAGoogleCalendar,
   enviarNotificacion,
-} from "@/services/agendadorService";
+} from "@services/agendadorService";
 import { useLitisBot } from "@/context/LitisBotContext";
 
 export default function AgendadorPlazos({ user, expedienteId, googleAccessToken, userDeviceToken }) {

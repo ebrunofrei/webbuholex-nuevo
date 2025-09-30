@@ -1,6 +1,6 @@
 // src/pages/LitisBotHerramientasDemo.jsx (o en tu página de chat)
 import React, { useState } from "react";
-import ModalHerramientas from "@/components/ModalHerramientas";
+import ModalHerramientas from "@components/ModalHerramientas";
 
 export default function LitisBotHerramientasDemo() {
   const [modalAbierto, setModalAbierto] = useState(false);

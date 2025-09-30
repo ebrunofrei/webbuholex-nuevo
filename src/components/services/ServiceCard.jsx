@@ -1,7 +1,7 @@
 // src/components/services/ServiceCard.jsx
 import React from "react";
 import { Link } from "react-router-dom";
-import { CTA_WHATSAPP, formatPrice } from "@/services/servicesApi";
+import { CTA_WHATSAPP, formatPrice } from "@services/servicesApi";
 
 export default function ServiceCard({ s }) {
   if (!s) return null;

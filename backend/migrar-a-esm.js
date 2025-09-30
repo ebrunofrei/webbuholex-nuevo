@@ -1,4 +1,4 @@
-import { db, auth, admin } from "./services/firebaseAdmin.js";
+import { db, auth, storage } from "./services/myFirebaseAdmin.js";
 // migrar-a-esm.js
 import fs from "fs";
 import path from "path";

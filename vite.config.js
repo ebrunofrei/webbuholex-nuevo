@@ -11,7 +11,13 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "src"),
+      "@": path.resolve(__dirname, "./src"),
+      "@components": path.resolve(__dirname, "./src/components"),
+      "@pages": path.resolve(__dirname, "./src/pages"),
+      "@services": path.resolve(__dirname, "./src/services"),
+      "@store": path.resolve(__dirname, "./src/store"),
+      "@utils": path.resolve(__dirname, "./src/utils"),
+      "@views": path.resolve(__dirname, "./src/views"),
     },
   },
 
@@ -28,7 +34,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
-        // Garantiza que todos los bundles y assets vivan bajo /assets/
+        // Todos los bundles y assets bajo /assets/
         entryFileNames: "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
@@ -44,7 +50,7 @@ export default defineConfig({
       "firebase/storage",
       "firebase/messaging",
     ],
-    // Librería de backend: evita que Vite intente prebundlearla en el cliente
+    // Evita que Vite intente prebundlear librerías solo de backend
     exclude: ["rss-parser"],
   },
 });

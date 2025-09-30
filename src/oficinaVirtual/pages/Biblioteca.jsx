@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import BuscadorBiblioteca from "../components/BuscadorBiblioteca";
-import GridArchivos from "../components/GridArchivos";
+import BuscadorBiblioteca from "@components/../components/BuscadorBiblioteca".replace("components/", "");
+import GridArchivos from "@components/../components/GridArchivos".replace("components/", "");
 
 export default function Biblioteca() {
   const [query, setQuery] = useState("");

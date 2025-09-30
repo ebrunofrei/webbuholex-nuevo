@@ -1,5 +1,5 @@
 import React from "react";
-import { generarPDFConFirmaYQR } from "@/utils/pdfFirma";
+import { generarPDFConFirmaYQR } from "@utils/pdfFirma";
 
 export default function BotonGenerarPDF({ textoDocumento, firmaUrl, datosAbogado, onPDF }) {
   const handleClick = async () => {

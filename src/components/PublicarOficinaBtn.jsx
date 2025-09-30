@@ -1,8 +1,8 @@
 import { db, auth, storage } from "@/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import slugify from "slugify";
-import { slugDisponible } from "@/utils/validarSlug";
-import useLegalOSStore from "@/store/useLegalOSStore";
+import { slugDisponible } from "@utils/validarSlug";
+import useLegalOSStore from "@store/useLegalOSStore";
 
 const PublicarOficinaBtn = () => {
   const { branding, plan } = useLegalOSStore();

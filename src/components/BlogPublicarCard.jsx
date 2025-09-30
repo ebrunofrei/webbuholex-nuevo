@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { subirPortadaBlog, publicarArticuloBlog } from "@/services/firebaseBlogService";
-import { useToast } from "@/components/ui/use-toast";
+import { subirPortadaBlog, publicarArticuloBlog } from "@services/firebaseBlogService";
+import { useToast } from "@components/ui/use-toast";
 
 const CATEGORIAS = [
   "Opinión Jurídica",

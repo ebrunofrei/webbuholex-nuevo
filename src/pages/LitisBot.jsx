@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import SidebarChats from "@/components/SidebarChats";
-import LitisBotChatBasePro from "@/components/LitisBotChatBasePro";
+import SidebarChats from "@components/SidebarChats";
+import LitisBotChatBasePro from "@components/LitisBotChatBasePro";
 
 export default function LitisBot({ user: userProp }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

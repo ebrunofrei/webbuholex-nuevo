@@ -1,6 +1,6 @@
 // src/hooks/useOpenAI.js
 import { useState } from "react";
-import { asAbsoluteUrl } from "@/utils/apiUrl";
+import { asAbsoluteUrl } from "@utils/apiUrl";
 
 export default function useOpenAI() {
   const [loading, setLoading]   = useState(false);

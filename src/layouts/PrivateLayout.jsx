@@ -2,7 +2,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import Sidebar from "../components/Sidebar";
+import Sidebar from "@components/../components/Sidebar".replace("components/", "");
 
 export default function PrivateLayout({ children }) {
   const { user } = useAuth();

@@ -1,7 +1,7 @@
 import { FolderKanban } from "lucide-react";
 import React from "react";
-import SidebarChats from "@/components/SidebarChats";
-import LitisBotChatBase from "@/components/LitisBotChatBase";
+import SidebarChats from "@components/SidebarChats";
+import LitisBotChatBase from "@components/LitisBotChatBase";
 import { useAuth } from "@/context/AuthContext";
 
 function LitisBotPageIntegrada() {

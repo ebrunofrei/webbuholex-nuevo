@@ -13,7 +13,7 @@ export default function LoginAdmin() {
     e.preventDefault();
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigate("/admin/libros");
+      navigate("/db/libros");
     } catch (err) {
       setError("Credenciales inválidas o user no autorizado.");
     }

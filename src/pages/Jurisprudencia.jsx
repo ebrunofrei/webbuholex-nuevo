@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { getJurisprudencia } from "@/services/jurisprudenciaService";
-import JurisprudenciaCard from "@/components/jurisprudencia/JurisprudenciaCard";
-import JurisprudenciaSearchBar from "@/components/jurisprudencia/JurisprudenciaSearchBar";
-import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
+import { getJurisprudencia } from "@services/jurisprudenciaService";
+import JurisprudenciaCard from "@components/jurisprudencia/JurisprudenciaCard";
+import JurisprudenciaSearchBar from "@components/jurisprudencia/JurisprudenciaSearchBar";
+import JurisprudenciaVisorModal from "@components/jurisprudencia/JurisprudenciaVisorModal";
 
 export default function Jurisprudencia() {
   const [juris, setJuris] = useState([]);

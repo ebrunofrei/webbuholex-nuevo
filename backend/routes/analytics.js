@@ -1,33 +1,65 @@
-import { db, auth, admin } from "../services/firebaseAdmin.js";
+import { db, auth, storage } from "#services/myFirebaseAdmin.js";
 import express from "express";
+
 const router = express.Router();
 
-// Ejemplo con MongoDB:
+/**
+ * 📊 Endpoint de resumen de analytics
+ * Devuelve: 
+ *  - porDia (últimos 7 días)
+ *  - porFuente (fuentes más usadas)
+ */
 router.get("/resumen", async (req, res) => {
-  const db = req.app.locals.db; // o usa tu conexión
-  // Consultas por día (últimos 7 días)
-  const porDia = await db.collection("analytics").aggregate([
-    {
-      $group: {
-        _id: { $dateToString: { format: "%Y-%m-%d", date: "$fecha" } },
-        total: { $sum: 1 },
-      }
-    },
-    { $sort: { _id: 1 } }
-  ]).toArray();
+  try {
+    const mongoDb = req.app.locals.db; // conexión Mongo inyectada en app
 
-  // Fuentes más usadas
-  const porFuente = await db.collection("analytics").aggregate([
-    {
-      $group: {
-        _id: "$fuente",
-        total: { $sum: 1 }
-      }
-    },
-    { $sort: { total: -1 } }
-  ]).toArray();
+    if (!mongoDb) {
+      return res.status(500).json({
+        success: false,
+        message: "No se encontró conexión a la base de datos.",
+      });
+    }
 
-  res.json({ porDia, porFuente });
+    // Consultas por día (últimos 7 días)
+    const porDia = await mongoDb.collection("analytics").aggregate([
+      {
+        $match: {
+          fecha: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }, // últimos 7 días
+        },
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$fecha" } },
+          total: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]).toArray();
+
+    // Fuentes más usadas
+    const porFuente = await mongoDb.collection("analytics").aggregate([
+      {
+        $group: {
+          _id: "$fuente",
+          total: { $sum: 1 },
+        },
+      },
+      { $sort: { total: -1 } },
+      { $limit: 10 }, // opcional: top 10 fuentes
+    ]).toArray();
+
+    return res.json({
+      success: true,
+      porDia,
+      porFuente,
+    });
+  } catch (error) {
+    console.error("Error en /analytics/resumen:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener resumen de analytics.",
+    });
+  }
 });
 
 export default router;
