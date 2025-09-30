@@ -152,3 +152,9 @@ public/*.bak
 # BACKEND KEYS
 # ============================
 backend/keys/*.json
+
+# Scripts de mantenimiento
+scripts/fix-*.js
+scripts/find-*.js
+scripts/list-storage.js
+scripts/check-env.mjs

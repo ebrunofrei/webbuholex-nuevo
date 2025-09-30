@@ -97,3 +97,9 @@ cypress/screenshots/
 
 # ⚠️ NO ignores vercel.json (configuración de proyecto)
 !vercel.json
+
+# Scripts de mantenimiento
+scripts/fix-*.js
+scripts/find-*.js
+scripts/list-storage.js
+scripts/check-env.mjs
