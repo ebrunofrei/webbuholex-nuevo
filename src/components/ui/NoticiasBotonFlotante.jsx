@@ -66,11 +66,11 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
 
       const data = normalizeResponse(await res.json());
 
-      const keyFor = (n) =>
+      const keyFor = (n, idx) =>
         pick(n, ["enlace", "link", "url"]) ||
         pick(n, ["id", "_id"]) ||
-        pick(n, ["titulo", "title", "headline"]) ||
-        Math.random().toString(36).slice(2);
+        pick(n, ["id", "_id"]) ||
+        `noticia-${idx}`;
 
       const next = new Map(items.map((n) => [keyFor(n), n]));
       for (const n of data.items) next.set(keyFor(n), n);
@@ -195,7 +195,7 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
                 const href = pick(n, ["enlace", "link", "url"]) || "#";
                 const title = pick(n, ["titulo", "title", "headline"]) || "Sin título";
                 return (
-                  <article key={href || idx} className="mb-3">
+                  <article key={keyFor(n, idx)} className="mb-3">
                     <a href={href} target="_blank" rel="noopener noreferrer"
                       className="block font-bold text-[#b03a1a] hover:underline">
                       {title}
