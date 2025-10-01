@@ -1,5 +1,5 @@
-// /src/services/firebaseMessaging.js
-import { messaging } from "@/firebase";
+// src/services/firebaseMessaging.js
+import { initMessaging, getFcmToken, registerFcmServiceWorker } from "@/firebase";
 import {
   getToken,
   onMessage,
@@ -9,9 +9,8 @@ import {
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
-/** Cache de soporte */
+// --- Cache ---
 let _supportCache = null;
-/** Cache de token */
 let _cachedToken = null;
 
 /** Comprueba si Firebase Messaging está soportado en este navegador */
@@ -23,50 +22,6 @@ export async function isMessagingSupported() {
     _supportCache = false;
   }
   return _supportCache;
-}
-
-/** Asegura contexto seguro (https o localhost) */
-function isSecureContextForFcm() {
-  return (
-    typeof window !== "undefined" &&
-    (location.protocol === "https:" || location.hostname === "localhost")
-  );
-}
-
-/** Registra el Service Worker de FCM (idempotente) */
-async function registerFcmServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
-    console.warn("⚠️ Este navegador no soporta Service Workers.");
-    return null;
-  }
-  if (!isSecureContextForFcm()) {
-    console.warn("⚠️ FCM requiere HTTPS o localhost.");
-    return null;
-  }
-
-  try {
-    // Si ya hay un SW activo con firebase-messaging, reutilízalo
-    const regs = await navigator.serviceWorker.getRegistrations();
-    const existing = regs.find((r) =>
-      r.active?.scriptURL?.includes("firebase-messaging-sw.js")
-    );
-    if (existing) {
-      await navigator.serviceWorker.ready;
-      return existing;
-    }
-
-    // Si no existe, registramos uno nuevo
-    const reg = await navigator.serviceWorker.register(
-      "/firebase-messaging-sw.js",
-      { scope: "/" }
-    );
-    await navigator.serviceWorker.ready;
-    console.log("✅ SW FCM registrado:", reg);
-    return reg;
-  } catch (err) {
-    console.error("❌ Error registrando SW FCM:", err);
-    return null;
-  }
 }
 
 /** Pide permiso de notificaciones */
@@ -85,14 +40,14 @@ async function ensureNotificationPermission() {
 }
 
 /**
- * Obtiene el token FCM.
+ * Obtiene el token FCM y pide permisos si es necesario.
  * @param {{ forceRefresh?: boolean, vapidKey?: string }} [opts]
  */
 export async function solicitarPermisoYToken(opts = {}) {
   try {
-    // Saltar en local si no quieres ruido en desarrollo
-    if (window.location.hostname === "localhost") {
-      console.warn("⚠️ FCM deshabilitado en localhost.");
+    // Permite desactivar FCM en dev con variable de entorno
+    if (import.meta.env.VITE_ENABLE_FCM === "false") {
+      console.warn("⚠️ FCM deshabilitado por configuración (VITE_ENABLE_FCM=false).");
       return null;
     }
 
@@ -102,12 +57,14 @@ export async function solicitarPermisoYToken(opts = {}) {
       console.warn("⚠️ Firebase Messaging no soportado en este navegador.");
       return null;
     }
+
+    // 2) Inicializa messaging y SW
+    const messaging = await initMessaging();
     if (!messaging) {
-      console.error("❌ 'messaging' no está inicializado desde '@/firebase'.");
+      console.error("❌ 'messaging' no está inicializado.");
       return null;
     }
 
-    // 2) Service Worker + permisos
     const swReg = await registerFcmServiceWorker();
     if (!swReg) return null;
 
@@ -139,6 +96,9 @@ export async function solicitarPermisoYToken(opts = {}) {
 /** Elimina token FCM actual */
 export async function borrarTokenFcm() {
   try {
+    const messaging = await initMessaging();
+    if (!messaging) return false;
+
     const ok = await deleteToken(messaging);
     if (ok) {
       console.log("🗑️ Token FCM eliminado.");
@@ -153,13 +113,15 @@ export async function borrarTokenFcm() {
 
 /** Escucha mensajes en foreground */
 export function listenToForegroundMessages(onMessageCallback) {
-  const supportedPromise = isMessagingSupported();
-
-  supportedPromise.then((supported) => {
-    if (!supported || !messaging) {
+  isMessagingSupported().then(async (supported) => {
+    if (!supported) {
       console.warn("⚠️ Foreground listener no habilitado.");
       return;
     }
+
+    const messaging = await initMessaging();
+    if (!messaging) return;
+
     try {
       const unsubscribe = onMessage(messaging, (payload) => {
         console.log("📩 Notificación en foreground:", payload);

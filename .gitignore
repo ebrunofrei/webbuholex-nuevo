@@ -154,7 +154,17 @@ public/*.bak
 backend/keys/*.json
 
 # Scripts de mantenimiento
-scripts/fix-*.js
-scripts/find-*.js
-scripts/list-storage.js
-scripts/check-env.mjs
+scripts/*.tmp
+scripts/*.bak
+scripts/*.log
+# Mantener scripts útiles
+!scripts/test-fcm.js
+!scripts/send-fcm.js
+
+# ============================
+# TEMPORALES
+# ============================
+tmp/
+temp/
+*.tmp
+scripts
