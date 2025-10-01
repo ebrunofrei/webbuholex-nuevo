@@ -1,29 +1,26 @@
 // src/main.jsx
 import "./polyfills/process-shim.js";
 import React from "react";
-import { hydrateRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-const rootElement = document.getElementById("root");
+const container = document.getElementById("root");
 
-if (rootElement.hasChildNodes()) {
-  // ✅ Si el HTML ya viene renderizado desde el servidor (Vercel/SSR)
+// --- Usar hydrateRoot si hay HTML pre-renderizado ---
+if (container.hasChildNodes()) {
   hydrateRoot(
-    rootElement,
+    container,
     <React.StrictMode>
       <App />
     </React.StrictMode>
   );
 } else {
-  // ✅ Si es un render en blanco (desarrollo/local)
-  import("react-dom/client").then(({ createRoot }) => {
-    createRoot(rootElement).render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
-    );
-  });
+  createRoot(container).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
 }
 
 // --- Registro del Service Worker de Firebase Messaging ---
