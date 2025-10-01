@@ -6,10 +6,13 @@ import path from "node:path";
 export default defineConfig({
   base: "/",
   plugins: [react()],
+  define: {
+    'process.env': {}, // 👈 polyfill para que no rompa en frontend
+  },
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:4000", // 👈 backend en dev
+        target: "http://localhost:4000",
         changeOrigin: true,
         secure: false,
       },
@@ -39,4 +42,7 @@ export default defineConfig({
     ],
     exclude: ["rss-parser"],
   },
+  define: {
+  'process.env': {},
+}
 });
