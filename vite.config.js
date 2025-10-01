@@ -6,6 +6,15 @@ import path from "node:path";
 export default defineConfig({
   base: "/",
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:4000", // 👈 backend en dev
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

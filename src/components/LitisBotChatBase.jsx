@@ -558,14 +558,13 @@ export default function LitisBotChatBase({
   setShowModal,
   expedientes = [],
 }) {
-  // Estado inicial desde chatStorage
+  // =================== ESTADOS ===================
   const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
   const [mensajes, setMensajes] = useState(() => {
     const prev = getMessages(casoActivo);
     if (prev && prev.length) return prev;
     const init = [pro ? INIT_MSG.pro : INIT_MSG.general];
-    // Guardamos el mensaje inicial solo si no existía historial
-    saveMessage(casoActivo, init[0]);
+    saveMessage(casoActivo, init[0]); // guarda mensaje inicial
     return init;
   });
 
@@ -583,19 +582,21 @@ export default function LitisBotChatBase({
   const MAX_MB = 25;
   const IA_URL = buildIaUrl();
 
-  // Al cambiar de casoActivo, recargamos historial y adjuntos
+  // =================== EFECTOS ===================
+
+  // Recargar historial y adjuntos al cambiar de caso
   useEffect(() => {
     const prev = getMessages(casoActivo);
     setMensajes(prev && prev.length ? prev : [pro ? INIT_MSG.pro : INIT_MSG.general]);
     setAdjuntos(getFiles(casoActivo) || []);
   }, [casoActivo, pro]);
 
-  // Scroll al final
+  // Scroll automático al final
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mensajes, cargando]);
 
-  // Auto-expand textarea
+  // Expandir textarea dinámicamente
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -603,15 +604,17 @@ export default function LitisBotChatBase({
     el.style.height = Math.min(el.scrollHeight, 6 * 28) + "px";
   }, [input]);
 
-  // Exponer cierre para integraciones
+  // Exponer cierre para integraciones externas
   useEffect(() => {
-    window.litisbotCloseTools = () => setShowModal?.(false);
-    return () => {
-      if (window.litisbotCloseTools) delete window.litisbotCloseTools;
-    };
+    if (typeof window !== "undefined") {
+      window.litisbotCloseTools = () => setShowModal?.(false);
+      return () => {
+        delete window.litisbotCloseTools;
+      };
+    }
   }, [setShowModal]);
 
-  /* ------------------------ Adjuntos ------------------------ */
+  // =================== ADJUNTOS ===================
   function handleFileChange(e) {
     const files = Array.from(e.target.files || []);
     const nuevos = [];
@@ -622,7 +625,6 @@ export default function LitisBotChatBase({
         continue;
       }
       nuevos.push(f);
-      // Persistimos metadatos del archivo
       saveFile(casoActivo, { name: f.name, type: f.type, size: f.size });
     }
     if (nuevos.length) setAdjuntos((prev) => [...prev, ...nuevos]);
@@ -636,271 +638,197 @@ export default function LitisBotChatBase({
       return copia;
     });
   }
-/* ---------------------- Consulta general -------------------- */
-async function handleConsultaGeneral(mensaje) {
-  setCargando(true);
 
-  const historial = mensajes
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role, content: m.content }));
+  // =================== CONSULTAS ===================
 
-  let idxAssistant = null;
-  setMensajes((msgs) => {
-    idxAssistant = msgs.length;
-    return [...msgs, { role: "assistant", content: "…" }];
-  });
+  async function handleConsultaGeneral(mensaje) {
+    await procesarConsulta(() =>
+      enviarAlChat({
+        prompt: mensaje,
+        historial: obtenerHistorial(),
+        usuarioId: user?.uid,
+        userEmail: user?.email,
+      })
+    );
+  }
 
-  try {
-    const respuesta = await enviarAlChat({
-      prompt: mensaje,
-      historial,
-      usuarioId: user?.uid,
-      userEmail: user?.email,
+  async function handleConsultaLegal({ mensaje, materia = "general" }) {
+    await procesarConsulta(() =>
+      enviarAlLitisbot({
+        prompt: mensaje,
+        historial: obtenerHistorial(),
+        usuarioId: user?.uid,
+        userEmail: user?.email,
+        materia,
+      })
+    );
+  }
+
+  async function handleConsultaInvestigacion(mensaje) {
+    await procesarConsulta(() =>
+      enviarAlLitisbot({
+        prompt: mensaje,
+        historial: obtenerHistorial(),
+        usuarioId: user?.uid,
+        userEmail: user?.email,
+        materia: "investigacion",
+        preferencias: { modo: "investigacion" },
+      })
+    );
+  }
+
+  // =================== HELPERS ===================
+
+  function obtenerHistorial() {
+    return mensajes
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role, content: m.content }));
+  }
+
+  async function procesarConsulta(fn) {
+    setCargando(true);
+    let idxAssistant = null;
+    setMensajes((msgs) => {
+      idxAssistant = msgs.length;
+      return [...msgs, { role: "assistant", content: "…" }];
     });
 
-    if (respuesta && respuesta !== "…") {
+    try {
+      const respuesta = await fn();
+      if (respuesta && respuesta !== "…") {
+        setMensajes((ms) =>
+          ms.map((m, i) => (i === idxAssistant ? { ...m, content: respuesta } : m))
+        );
+        saveMessage(casoActivo, { role: "assistant", content: respuesta });
+      }
+    } catch (err) {
+      console.error("❌ Error en consulta:", err);
       setMensajes((ms) =>
         ms.map((m, i) =>
-          i === idxAssistant ? { ...m, content: respuesta } : m
+          i === idxAssistant
+            ? {
+                ...m,
+                content: "❌ Ocurrió un error al procesar tu consulta.",
+              }
+            : m
         )
       );
-      saveMessage(casoActivo, { role: "assistant", content: respuesta });
+    } finally {
+      setCargando(false);
     }
-  } catch (err) {
-    console.error("❌ Hubo un error consultando al chat general:", err);
-    setMensajes((ms) =>
-      ms.map((m, i) =>
-        i === idxAssistant
-          ? {
-              ...m,
-              content:
-                "❌ Hubo un error consultando al chat general. Intenta nuevamente más tarde.",
-            }
-          : m
-      )
-    );
-  } finally {
-    setCargando(false);
   }
-}
 
-/* ---------------------- Consulta legal -------------------- */
-async function handleConsultaLegal({ mensaje, materia = "general" }) {
-  setCargando(true);
+  // =================== ENVÍO ===================
 
-  const historial = mensajes
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role, content: m.content }));
+  async function handleSend(e) {
+    e?.preventDefault?.();
+    setAlertaAdjuntos("");
 
-  let idxAssistant = null;
-  setMensajes((msgs) => {
-    idxAssistant = msgs.length;
-    return [...msgs, { role: "assistant", content: "…" }];
-  });
-
-  try {
-    const respuesta = await enviarAlLitisbot({
-      prompt: mensaje,
-      historial,
-      usuarioId: user?.uid,
-      userEmail: user?.email,
-      materia, // 👈 ahora se envía la materia detectada
-    });
-
-    if (respuesta && respuesta !== "…") {
-      setMensajes((ms) =>
-        ms.map((m, i) =>
-          i === idxAssistant ? { ...m, content: respuesta } : m
-        )
-      );
-      saveMessage(casoActivo, { role: "assistant", content: respuesta });
+    // Si hay adjuntos
+    if (adjuntos.length > 0) {
+      const msgsParaGuardar = [];
+      const msgsParaUI = [];
+      adjuntos.forEach((file) => {
+        const mu = {
+          role: "user",
+          content: `📎 Archivo subido: <b>${file.name}</b>`,
+          tipo: "archivo",
+        };
+        const ma = {
+          role: "assistant",
+          content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`,
+          tipo: "archivo",
+        };
+        msgsParaGuardar.push(mu, ma);
+        msgsParaUI.push(mu, ma);
+      });
+      msgsParaGuardar.forEach((m) => saveMessage(casoActivo, m));
+      setMensajes((msgs) => [...msgs, ...msgsParaUI]);
+      setAdjuntos([]);
+      setInput("");
+      return;
     }
-  } catch (err) {
-    console.error("❌ Error en LitisBot:", err);
-    setMensajes((ms) =>
-      ms.map((m, i) =>
-        i === idxAssistant
-          ? { ...m, content: "❌ Error consultando al asistente legal." }
-          : m
-      )
-    );
-  } finally {
-    setCargando(false);
-  }
-}
-/* ---------------------- Consulta de investigación jurídica -------------------- */
-async function handleConsultaInvestigacion(mensaje) {
-  setCargando(true);
 
-  const historial = mensajes
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role, content: m.content }));
+    if (!input.trim()) return;
 
-  let idxAssistant = null;
-  setMensajes((msgs) => {
-    idxAssistant = msgs.length;
-    return [...msgs, { role: "assistant", content: "…" }];
-  });
+    const nuevo = { role: "user", content: input };
+    setMensajes((msgs) => [...msgs, nuevo]);
+    saveMessage(casoActivo, nuevo);
 
-  try {
-    const respuesta = await enviarAlLitisbot({
-      prompt: mensaje,
-      historial,
-      usuarioId: user?.uid,
-      userEmail: user?.email,
-      materia: "investigacion", // 👈 clave para activar el modo de investigación
-      preferencias: { modo: "investigacion" }
-    });
-
-    if (respuesta && respuesta !== "…") {
-      setMensajes((ms) =>
-        ms.map((m, i) =>
-          i === idxAssistant ? { ...m, content: respuesta } : m
-        )
-      );
-      saveMessage(casoActivo, { role: "assistant", content: respuesta });
-    }
-  } catch (err) {
-    console.error("❌ Error en investigación jurídica:", err);
-    setMensajes((ms) =>
-      ms.map((m, i) =>
-        i === idxAssistant
-          ? {
-              ...m,
-              content:
-                "❌ Hubo un error consultando en modo investigación jurídica. Intenta nuevamente más tarde.",
-            }
-          : m
-      )
-    );
-  } finally {
-    setCargando(false);
-  }
-}
-
-/* ---------------------- Envío -------------------- */
-async function handleSend(e) {
-  e?.preventDefault?.();
-  setAlertaAdjuntos("");
-
-  // Si hay adjuntos, simulamos recepción
-  if (adjuntos.length > 0) {
-    const msgsParaGuardar = [];
-    const msgsParaUI = [];
-
-    adjuntos.forEach((file) => {
-      const mu = {
-        role: "user",
-        content: `📎 Archivo subido: <b>${file.name}</b>`,
-        tipo: "archivo",
-      };
-      const ma = {
-        role: "assistant",
-        content: `📑 Archivo recibido: <b>${file.name}</b>.<br/><b>Analizando…</b>`,
-        tipo: "archivo",
-      };
-      msgsParaGuardar.push(mu, ma);
-      msgsParaUI.push(mu, ma);
-    });
-
-    msgsParaGuardar.forEach((m) => saveMessage(casoActivo, m));
-    setMensajes((msgs) => [...msgs, ...msgsParaUI]);
-
-    setAdjuntos([]);
+    const pregunta = input;
     setInput("");
-    return;
-  }
 
-  if (!input.trim()) return;
+    // 👉 detección automática de modo y materia
+    const texto = pregunta.toLowerCase();
+    const materias = {
+      civil: /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
+      penal: /penal|delito|crimen|homicidio|robo|violencia|acusaci(ón|on)|condena/i,
+      laboral: /laboral|trabajo|sindicato|despido|remuneraci(ón|on)|indemnizaci(ón|on)/i,
+      constitucional: /constituci(ón|on)|derechos fundamentales|amparo|habeas|tc|tribunal constitucional/i,
+      administrativo: /administrativo|procedimiento|sancionador|sunat|sunafil|municipalidad/i,
+    };
 
-  const nuevo = { role: "user", content: input };
-  setMensajes((msgs) => [...msgs, nuevo]);
-  saveMessage(casoActivo, nuevo);
-
-  const pregunta = input;
-  setInput("");
-
-  // 👉 detección automática de modo y materia
-  const texto = pregunta.toLowerCase();
-
-  // Diccionario de materias jurídicas
-  const materias = {
-    civil: /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
-    penal: /penal|delito|crimen|homicidio|robo|violencia|acusaci(ón|on)|condena/i,
-    laboral: /laboral|trabajo|sindicato|despido|remuneraci(ón|on)|indemnizaci(ón|on)/i,
-    constitucional: /constituci(ón|on)|derechos fundamentales|amparo|habeas|tc|tribunal constitucional/i,
-    administrativo: /administrativo|procedimiento|sancionador|sunat|sunafil|municipalidad/i,
-  };
-
-  if (/investigaci(ón|on)|tesis|hipótesis|metodolog/i.test(texto)) {
-    // 🔎 modo investigación jurídica
-    await handleConsultaInvestigacion(pregunta);
-  } else {
-    // Verificar si entra en alguna materia jurídica
-    let materiaDetectada = null;
-    for (const [materia, regex] of Object.entries(materias)) {
-      if (regex.test(texto)) {
-        materiaDetectada = materia;
-        break;
+    if (/investigaci(ón|on)|tesis|hipótesis|metodolog/i.test(texto)) {
+      await handleConsultaInvestigacion(pregunta);
+    } else {
+      let materiaDetectada = null;
+      for (const [materia, regex] of Object.entries(materias)) {
+        if (regex.test(texto)) {
+          materiaDetectada = materia;
+          break;
+        }
+      }
+      if (materiaDetectada) {
+        await handleConsultaLegal({ mensaje: pregunta, materia: materiaDetectada });
+      } else {
+        await handleConsultaGeneral(pregunta);
       }
     }
+  }
 
-    if (materiaDetectada) {
-      // modo jurídico especializado
-      await handleConsultaLegal({ mensaje: pregunta, materia: materiaDetectada });
-    } else {
-      // modo general
-      await handleConsultaGeneral(pregunta);
+  // =================== ACCIONES MENSAJES ===================
+
+  const handleVoice = () => {
+    if (grabando) return;
+    setGrabando(true);
+    setInput((prev) => (prev ? prev + " " : "") + "[dictado de voz…]");
+    setTimeout(() => {
+      setGrabando(false);
+      setInput((prev) => prev + " (audio convertido a texto)");
+    }, 1000);
+  };
+
+  function handleCopy(text) {
+    navigator.clipboard.writeText(String(text || ""));
+  }
+
+  function handleEdit(idx, nuevoTexto) {
+    setMensajes((ms) => {
+      const copia = [...ms];
+      copia[idx].content = nuevoTexto;
+      deleteMessage(casoActivo, idx);
+      saveMessage(casoActivo, copia[idx]);
+      return copia;
+    });
+  }
+
+  function handleFeedback(idx, type) {
+    setMensajes((ms) => ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m)));
+  }
+
+  const closeHerramientas = () => {
+    setShowModal?.(false);
+    setHerramienta(null);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (input.trim() || adjuntos.length) handleSend(e);
     }
-  }
-}
+  };
 
-
-/* -------------------- Acciones de mensajes ---------------- */
-const handleVoice = () => {
-  if (grabando) return;
-  setGrabando(true);
-  setInput((prev) => (prev ? prev + " " : "") + "[dictado de voz…]");
-  setTimeout(() => {
-    setGrabando(false);
-    setInput((prev) => prev + " (audio convertido a texto)");
-  }, 1000);
-};
-
-function handleCopy(text) {
-  navigator.clipboard.writeText(String(text || ""));
-}
-
-function handleEdit(idx, nuevoTexto) {
-  setMensajes((ms) => {
-    const copia = [...ms];
-    copia[idx].content = nuevoTexto;
-    deleteMessage(casoActivo, idx);
-    saveMessage(casoActivo, copia[idx]);
-    return copia;
-  });
-}
-
-function handleFeedback(idx, type) {
-  setMensajes((ms) =>
-    ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m))
-  );
-}
-
-const closeHerramientas = () => {
-  setShowModal && setShowModal(false);
-  setHerramienta(null);
-};
-
-// Enter = enviar / Shift+Enter = salto
-const handleKeyDown = (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    if (input.trim() || adjuntos.length) handleSend(e);
-  }
-};
-
-  /* --------------------------- Render ----------------------- */
+   /* --------------------------- Render ----------------------- */
   return (
     <div
       className="flex flex-col w-full items-center bg-white litisbot-fill"
@@ -914,17 +842,18 @@ const handleKeyDown = (e) => {
       {/* Área del chat */}
 <div
   id="litisbot-feed"
-  className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar px-2 sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
+  className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar
+               sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
   style={{
     // altura: viewport menos header (~80px) y barra de entrada (~96px)
     height: "calc(100vh - 176px)",
     marginTop: 24,
     marginBottom: 12,
     borderRadius: 24,
-    boxShadow: "0 4px 26px 0 #0001",
+    boxShadow: "0 4px 26px 0 #0001",  
   }}
 >
-  <div className="flex flex-col gap-2 w-full py-3">
+  <div className="flex flex-col gap-2 w-full py-3 px-2">
     {mensajes.map((m, i) => (
       <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}>
         <div

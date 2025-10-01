@@ -49,7 +49,7 @@ export default function SidebarChats({
   setCasoActivo: setCasoActivoProp,
   onOpenHerramientas,
   isOpen = true, // control externo (drawer móvil)
-  onCloseSidebar,  // cerrar sidebar en móvil
+  onCloseSidebar, // cerrar sidebar en móvil
 }) {
   /* ============================================================
      Claves de almacenamiento (aisladas por usuario)
@@ -61,8 +61,33 @@ export default function SidebarChats({
   const CASOS_KEY = `${ns}:casos`;
   const ACTIVO_KEY = `${ns}:caso_activo`;
 
-  // Migración ligera: si existen claves antiguas, muévelas al namespace del usuario
+  // Estado inicial seguro (evita localStorage en SSR)
+  const [casos, setCasos] = useState([]);
+  const [casoActivo, setCasoActivo] = useState("");
+
+  // Estados internos
+  const [modalNuevo, setModalNuevo] = useState(false);
+  const [nombreNuevo, setNombreNuevo] = useState("");
+  const [editId, setEditId] = useState("");
+  const [editNombre, setEditNombre] = useState("");
+  const [deleteId, setDeleteId] = useState("");
+  const [deleteFinal, setDeleteFinal] = useState(false);
+
+  /* ============================================================
+     Carga inicial + migración de storage (solo cliente)
+  ============================================================ */
   useEffect(() => {
+    try {
+      const guardados = JSON.parse(localStorage.getItem(CASOS_KEY) || "[]");
+      setCasos(guardados);
+    } catch {
+      setCasos([]);
+    }
+
+    const activo = localStorage.getItem(ACTIVO_KEY);
+    if (activo) setCasoActivo(activo);
+
+    // Migración de claves antiguas
     const oldCasos = localStorage.getItem("litisbot_casos");
     const oldActivo = localStorage.getItem("litisbot_caso_activo");
     if (oldCasos && !localStorage.getItem(CASOS_KEY)) {
@@ -75,48 +100,34 @@ export default function SidebarChats({
     }
   }, [CASOS_KEY, ACTIVO_KEY]);
 
-  // Estado local con carga inicial desde storage namespaced
-  const [casos, setCasos] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(CASOS_KEY) || "[]");
-    } catch {
-      return [];
-    }
-  });
-  const [casoActivo, setCasoActivo] = useState(
-    () => localStorage.getItem(ACTIVO_KEY) || ""
-  );
-
-  // Estados internos
-  const [modalNuevo, setModalNuevo] = useState(false);
-  const [nombreNuevo, setNombreNuevo] = useState("");
-  const [editId, setEditId] = useState("");
-  const [editNombre, setEditNombre] = useState("");
-  const [deleteId, setDeleteId] = useState("");
-  const [deleteFinal, setDeleteFinal] = useState(false);
-
   /* ============================================================
-     Persistencia + sync hacia el padre
+     Persistencia reactiva + sync hacia el padre
   ============================================================ */
   useEffect(() => {
-    localStorage.setItem(CASOS_KEY, JSON.stringify(casos));
-    setCasosProp?.(casos);
+    if (casos.length) {
+      localStorage.setItem(CASOS_KEY, JSON.stringify(casos));
+      setCasosProp?.(casos);
+    }
   }, [casos, CASOS_KEY, setCasosProp]);
 
   useEffect(() => {
-    localStorage.setItem(ACTIVO_KEY, casoActivo);
-    setCasoActivoProp?.(casoActivo);
+    if (casoActivo) {
+      localStorage.setItem(ACTIVO_KEY, casoActivo);
+      setCasoActivoProp?.(casoActivo);
+    }
   }, [casoActivo, ACTIVO_KEY, setCasoActivoProp]);
 
   // Asegura que siempre haya un caso activo válido
   useEffect(() => {
-    const visibles = casos.filter((c) => !c.papelera);
-    if (!visibles.length) {
-      if (casoActivo) setCasoActivo(""); // nada visible
+    if (!casos.length) {
+      if (casoActivo) setCasoActivo("");
       return;
     }
-    const existe = visibles.some((c) => c.id === casoActivo);
-    if (!existe) setCasoActivo(visibles[0].id);
+    const existe = casos.some((c) => c.id === casoActivo && !c.papelera);
+    if (!existe) {
+      const primero = casos.find((c) => !c.papelera);
+      if (primero) setCasoActivo(primero.id);
+    }
   }, [casos, casoActivo]);
 
   /* ============================================================
@@ -134,8 +145,7 @@ export default function SidebarChats({
     setCasoActivo(nuevo.id);
     setNombreNuevo("");
     setModalNuevo(false);
-    // En móvil, al crear también cerramos el drawer para ir al chat
-    onCloseSidebar?.();
+    onCloseSidebar?.(); // en móvil cerramos el drawer
   }
 
   function handleRenombrar(id, nuevoNombre) {
@@ -163,8 +173,7 @@ export default function SidebarChats({
   const seleccionarCaso = useCallback(
     (id) => {
       setCasoActivo(id);
-      // En móvil, al elegir un caso cerramos el drawer
-      onCloseSidebar?.();
+      onCloseSidebar?.(); // en móvil cerramos el drawer
     },
     [onCloseSidebar]
   );
@@ -188,13 +197,13 @@ export default function SidebarChats({
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full z-[70] transform transition-transform duration-300
+          h-full flex flex-col
+          bg-white
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
-          lg:static lg:translate-x-0 lg:flex
-          flex flex-col bg-yellow-50 border-r border-yellow-100
-          w-[86vw] max-w-[320px] lg:w-[240px]
+          lg:translate-x-0 lg:flex
+          transition-transform duration-300
         `}
-        style={{ minWidth: 210, maxWidth: 350 }}
+        style={{ width: "100%" }}
         aria-label="Lista de casos"
       >
         {/* Botón de cierre móvil */}

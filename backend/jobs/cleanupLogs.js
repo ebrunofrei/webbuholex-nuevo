@@ -1,11 +1,11 @@
-    // backend/jobs/cleanupLogs.js
+// backend/jobs/cleanupLogs.js
 import { db } from "#services/myFirebaseAdmin.js";
 import cron from "node-cron";
 
 /**
  * 🧹 Job: elimina registros de busquedas_legales mayores a 30 días
  */
-function startCleanupLogs() {
+export function cleanupLogs() {
   // Corre todos los días a las 2 AM
   cron.schedule("0 2 * * *", async () => {
     try {
@@ -32,5 +32,3 @@ function startCleanupLogs() {
     }
   });
 }
-
-export default startCleanupLogs;

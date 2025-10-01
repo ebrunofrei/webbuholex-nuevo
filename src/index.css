@@ -1,57 +1,71 @@
+/* ============================
+   Tailwind base
+============================ */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Altura real en móviles + sin márgenes por defecto */
+/* ============================
+   Global reset
+============================ */
 html, body, #root {
   height: 100%;
-  min-height: 100dvh;   /* usa dvh cuando está disponible */
-}
-body {
   margin: 0;
-  color: #4b2e19;
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: #fff;     /* 👈 móvil: SIN gradiente para que no aparezca el raíl */
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #fff; /* Blanco puro institucional */
+  color: #2b1107; /* Marrón institucional */
 }
 
-/* Desktop/tablet: gradiente con centro blanco y laterales rojos */
-@media (min-width: 768px) {
-  body {
-    background:
-      linear-gradient(
-        90deg,
-        #b30000 0 12%,
-        #ffffff 12% 88%,
-        #b30000 88% 100%
-      );
-    background-size: 100% 100%;
-    background-position: 0 0;
-  }
+/* ============================
+   Scrollbar personalizado
+============================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #fff;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #5C2E0B; /* Marrón institucional */
+  border-radius: 10px;
+  border: 2px solid #fff;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #a52e00; /* Marrón/rojo más intenso */
 }
 
-/* Evita overflow de hijos en contenedores flex (bug común) */
-* { min-width: 0; }
-
-/* Scrollbar (WebKit + Firefox) */
-:root {
-  --scrollbar-track: #fff4f4;
-  --scrollbar-thumb: #b03a1a;
+/* ============================
+   Helpers
+============================ */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
-::-webkit-scrollbar { width: 8px; height: 8px; background: var(--scrollbar-track); }
-::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 6px; }
-* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
-
-/* Helper: ocultar scrollbar donde sea necesario */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* 🔧 Parche anti-borde fantasma en móvil dentro de <main> */
-@media (max-width: 767px) {
-  main [class*="border-l"],
-  main [style*="border-left"] {
-    border-left: 0 !important;
-  }
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Útil para barras fijas/sticky en el fondo (iOS safe area) */
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+/* Ajuste para evitar contenido pegado al borde en móviles con notch */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* ============================
+   Inputs y formularios
+============================ */
+input, textarea, button, select {
+  font-family: inherit;
+}
+
+/* ============================
+   Links
+============================ */
+a {
+  color: #a52e00; /* Rojo institucional */
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}

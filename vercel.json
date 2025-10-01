@@ -12,13 +12,21 @@
       ]
     },
     {
-      "source": "/api/noticias|noticias-juridicas",
+      "source": "/api/(noticias|noticias-juridicas)",
       "headers": [
         { "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }
       ]
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/noticias",
+      "destination": "https://tu-backend-en-railway.app/api/noticias"
+    },
+    {
+      "source": "/api/noticias-juridicas",
+      "destination": "https://tu-backend-en-railway.app/api/noticias-juridicas"
+    },
     { "source": "/api/ia", "destination": "/api/ia.js" },
     { "source": "/firebase-messaging-sw.js", "destination": "/firebase-messaging-sw.js" },
     { "source": "/(.*)", "destination": "/index.html" }

@@ -117,17 +117,14 @@ function LitisBotPageIntegrada() {
   }, [sidebarOpenMobile]);
 
   return (
-    <div className="flex w-full min-h-screen bg-white" style={{ height: "100vh", overflow: "hidden" }}>
+    <div className="flex w-full min-h-screen bg-white overflow-hidden">
       {/* Sidebar ESCRITORIO */}
-      <div
-        className="h-full hidden lg:flex"
+      <aside
+        className="hidden lg:flex h-screen flex-col flex-shrink-0"
         style={{
-          width: "22vw",
-          minWidth: 250,
-          maxWidth: 350,
-          borderRight: "1px solid #f4e6c7",
+          width: "300px",            // ancho fijo
+          borderRight: "1px solid #eee",
           background: "#fff",
-          flexDirection: "column",
         }}
       >
         <SidebarChats
@@ -138,9 +135,9 @@ function LitisBotPageIntegrada() {
           user={userInfo}
           onOpenHerramientas={() => setShowModalHerramientas(true)}
         />
-      </div>
+      </aside>
 
-      {/* Botón móvil (TOP-LEFT). OJO: se oculta si el drawer está abierto */}
+      {/* Botón móvil */}
       {!sidebarOpenMobile && (
         <button
           className="lg:hidden fixed left-4 top-4 z-[80] p-3 rounded-full bg-[#5C2E0B] text-white shadow-xl active:scale-95"
@@ -153,21 +150,38 @@ function LitisBotPageIntegrada() {
       )}
 
       {/* Drawer MÓVIL */}
-      <div className="lg:hidden">
-        <SidebarChats
-          casos={casos}
-          setCasos={setCasos}
-          casoActivo={casoActivo}
-          setCasoActivo={setCasoActivo}
-          user={userInfo}
-          onOpenHerramientas={() => setShowModalHerramientas(true)}
-          isOpen={sidebarOpenMobile}
-          onCloseSidebar={() => setSidebarOpenMobile(false)}
-        />
-      </div>
+      {sidebarOpenMobile && (
+        <div className="lg:hidden fixed inset-0 z-[70] flex">
+          <div
+            className="flex-1 bg-black/40"
+            onClick={() => setSidebarOpenMobile(false)}
+          />
+          <aside
+            className="w-[80vw] max-w-[320px] h-full bg-white shadow-xl flex flex-col"
+            style={{ borderRight: "1px solid #f4e6c7" }}
+          >
+            <SidebarChats
+              casos={casos}
+              setCasos={setCasos}
+              casoActivo={casoActivo}
+              setCasoActivo={setCasoActivo}
+              user={userInfo}
+              onOpenHerramientas={() => setShowModalHerramientas(true)}
+              isOpen={sidebarOpenMobile}
+              onCloseSidebar={() => setSidebarOpenMobile(false)}
+            />
+          </aside>
+        </div>
+      )}
 
       {/* Chat principal */}
-      <div className="flex-1 flex flex-col items-stretch bg-white" style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}>
+      <main
+        className="flex-1 flex flex-col items-stretch bg-white overflow-y-auto"
+        style={{
+          minWidth: 0,
+          height: "100vh",
+        }}
+      >
         <LitisBotChatBase
           user={userInfo}
           casoActivo={casoActivo}
@@ -175,11 +189,10 @@ function LitisBotPageIntegrada() {
           showModal={showModalHerramientas}
           setShowModal={setShowModalHerramientas}
         />
-      </div>
+      </main>
     </div>
   );
 }
-
 /* ============================================================
    Contenido principal (rutas públicas)
 ============================================================ */

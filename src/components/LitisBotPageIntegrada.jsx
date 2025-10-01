@@ -1,5 +1,5 @@
-import { FolderKanban } from "lucide-react";
 import React from "react";
+import { FolderKanban } from "lucide-react";
 import SidebarChats from "@/components/SidebarChats";
 import LitisBotChatBase from "@/components/LitisBotChatBase";
 import { useAuth } from "@/context/AuthContext";
@@ -15,16 +15,15 @@ function LitisBotPageIntegrada() {
 
   return (
     <div className="flex w-full min-h-screen bg-white" style={{ height: "100vh", overflow: "hidden" }}>
-      {/* Sidebar escritorio */}
-      <div
-        className="h-full hidden lg:flex"
+      {/* Sidebar ESCRITORIO */}
+      <aside
+        className="hidden lg:flex h-full flex-col"
         style={{
           width: "22vw",
           minWidth: 250,
           maxWidth: 350,
-          borderRight: "1px solid #f4e6c7",
+          borderRight: "1px solid #eee",
           background: "#fff",
-          flexDirection: "column",
         }}
       >
         <SidebarChats
@@ -35,10 +34,13 @@ function LitisBotPageIntegrada() {
           user={userInfo}
           onOpenHerramientas={() => setShowModalHerramientas(true)}
         />
-      </div>
+      </aside>
 
-      {/* Chat (siempre) */}
-      <div className="flex-1 flex flex-col items-stretch bg-white" style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}>
+      {/* Chat principal */}
+      <main
+        className="flex-1 flex flex-col items-stretch bg-white"
+        style={{ minWidth: 0, height: "100vh", overflowY: "auto" }}
+      >
         <LitisBotChatBase
           user={userInfo}
           casoActivo={casoActivo}
@@ -46,18 +48,18 @@ function LitisBotPageIntegrada() {
           showModal={showModalHerramientas}
           setShowModal={setShowModalHerramientas}
         />
-      </div>
+      </main>
 
-      {/* Botón flotante móvil: abrir "Casos" */}
+      {/* Botón flotante móvil */}
       <button
         onClick={() => setDrawerOpen(true)}
-        className="lg:hidden fixed left-4 bottom-24 z-[120] p-3 rounded-full shadow-xl bg-[#b03a1a] text-white active:scale-95"
-        aria-label="Abrir casos"
+        className="lg:hidden fixed left-4 bottom-24 z-[120] p-3 rounded-full shadow-xl bg-[#5C2E0B] text-white active:scale-95"
+        aria-label="Abrir lista de casos"
       >
         <FolderKanban size={22} />
       </button>
 
-      {/* Drawer móvil con Sidebar */}
+      {/* Drawer móvil */}
       {drawerOpen && (
         <div className="lg:hidden fixed inset-0 z-[130]">
           <div
