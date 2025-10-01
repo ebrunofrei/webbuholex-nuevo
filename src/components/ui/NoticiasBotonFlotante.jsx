@@ -14,6 +14,7 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
 
   const PAGE_SIZE = 8;
 
+  const [isClient, setIsClient] = useState(false); // <-- evita hydration mismatch
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);   // Noticias acumuladas (con dedupe)
   const [page, setPage] = useState(1);
@@ -24,6 +25,11 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
 
   const sidebarRef = useRef(null);
 
+  // ---------- Detectar render en cliente ----------
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // ---------- Utils ----------
   const pick = (obj, keys) => {
     for (const k of keys) {
@@ -32,22 +38,11 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
     return undefined;
   };
 
-  // Normaliza la respuesta del backend
   const normalizeResponse = (data) => {
     if (!data) return { items: [], hasMore: false };
-
-    // /api/noticias -> { noticias, hasMore? }
-    if (Array.isArray(data.noticias)) {
-      return { items: data.noticias, hasMore: Boolean(data.hasMore) };
-    }
-    // Otros formatos -> { items, hasMore? }
-    if (Array.isArray(data.items)) {
-      return { items: data.items, hasMore: Boolean(data.hasMore) };
-    }
-    // Array simple
-    if (Array.isArray(data)) {
-      return { items: data, hasMore: false };
-    }
+    if (Array.isArray(data.noticias)) return { items: data.noticias, hasMore: Boolean(data.hasMore) };
+    if (Array.isArray(data.items)) return { items: data.items, hasMore: Boolean(data.hasMore) };
+    if (Array.isArray(data)) return { items: data, hasMore: false };
     return { items: [], hasMore: false };
   };
 
@@ -71,7 +66,6 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
 
       const data = normalizeResponse(await res.json());
 
-      // Dedupe por enlace/título/id (tolerante a campos distintos)
       const keyFor = (n) =>
         pick(n, ["enlace", "link", "url"]) ||
         pick(n, ["id", "_id"]) ||
@@ -98,15 +92,15 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
     }
   };
 
-  // Reinicia y carga cuando cambia endpoint
+  // Reinicia y carga cuando cambia endpoint (solo en cliente)
   useEffect(() => {
+    if (!isClient) return;
     setItems([]);
     setPage(1);
     setHasMore(true);
     setErrorMsg("");
     fetchPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint]);
+  }, [endpoint, isClient]);
 
   // Scroll infinito dentro del panel
   useEffect(() => {
@@ -127,6 +121,7 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
 
   // Bloquea scroll del body + Escape para cerrar
   useEffect(() => {
+    if (!isClient) return;
     const cls = "overflow-hidden";
     if (open) document.body.classList.add(cls);
     else document.body.classList.remove(cls);
@@ -136,173 +131,83 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
       document.body.classList.remove(cls);
       window.removeEventListener("keydown", onKey);
     };
-  }, [open]);
-
-  // Ping simple cada 5min para marcar indicador "hay nuevas" (cuando está cerrado)
-  useEffect(() => {
-    const id = setInterval(async () => {
-      if (open) return;
-      try {
-        const res = await fetch(`${BASE_URL}?page=1&limit=1`);
-        const ct = res.headers.get("content-type") || "";
-        if (!/json/i.test(ct)) return;
-        const data = normalizeResponse(await res.json());
-
-        const firstNew =
-          pick(data.items?.[0], ["enlace", "link", "url", "id", "_id", "titulo", "title", "headline"]);
-        const firstOld =
-          pick(items?.[0], ["enlace", "link", "url", "id", "_id", "titulo", "title", "headline"]);
-        if (firstNew && firstNew !== firstOld) setHayNuevas(true);
-      } catch {}
-    }, 5 * 60 * 1000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, BASE_URL, items]);
+  }, [open, isClient]);
 
   // ---------- UI ----------
-  const openPanel = () => {
-    setOpen(true);
-    setHayNuevas(false);
-  };
-  const closePanel = () => setOpen(false);
+  if (!isClient) {
+    // Render estático estable para Vercel → evita mismatch
+    return (
+      <div className="fixed bottom-4 right-4 z-[100]">
+        <button
+          className="px-4 py-2 rounded-full bg-[#b03a1a] text-white shadow-md"
+          aria-label={titulo}
+          disabled
+        >
+          <Megaphone size={20} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
-      {/* Botón flotante - centrado en móvil, a la derecha en desktop */}
+      {/* Botón flotante */}
       <div
-        className="
-          fixed z-[100] bottom-4 left-1/2 -translate-x-1/2
-          md:left-auto md:right-8 md:bottom-8 md:translate-x-0
-          flex justify-center w-full md:w-auto pointer-events-none
-        "
+        className="fixed z-[100] bottom-4 left-1/2 -translate-x-1/2
+                   md:left-auto md:right-8 md:bottom-8 md:translate-x-0
+                   flex justify-center w-full md:w-auto pointer-events-none"
       >
         <button
-          onClick={openPanel}
-          className="
-            pointer-events-auto flex items-center gap-2 px-5 py-3
-            rounded-full shadow-2xl
-            bg-[#b03a1a] text-white font-bold text-lg
-            hover:bg-[#a87247] transition active:scale-95
-            relative
-          "
-          aria-label={titulo}
+          onClick={() => { setOpen(true); setHayNuevas(false); }}
+          className="pointer-events-auto flex items-center gap-2 px-5 py-3
+                     rounded-full shadow-2xl bg-[#b03a1a] text-white font-bold text-lg
+                     hover:bg-[#a87247] transition active:scale-95 relative"
         >
           <Megaphone size={22} className={`text-white ${hayNuevas ? "animate-bell" : ""}`} />
           <span className="hidden sm:inline">{titulo}</span>
-          {hayNuevas && (
-            <span
-              className="absolute top-1 right-1 h-3 w-3 rounded-full bg-yellow-400 animate-ping"
-              aria-hidden="true"
-            />
-          )}
+          {hayNuevas && <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-yellow-400 animate-ping" />}
         </button>
       </div>
 
-      {/* Backdrop para cerrar al hacer click fuera */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/30 z-[95]"
-          onClick={closePanel}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Panel / Sidebar (responsive) */}
+      {/* Panel noticias */}
       {open && (
         <aside
-          role="dialog"
-          aria-modal="true"
-          className="
-            fixed top-0 right-0 h-full w-full max-w-[420px]
-            bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[100]
-            flex flex-col animate-slide-in
-          "
+          className="fixed top-0 right-0 h-full w-full max-w-[420px]
+                     bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[100]
+                     flex flex-col animate-slide-in"
         >
           <header className="flex items-center justify-between px-4 py-3 border-b bg-[#b03a1a]/10">
             <h2 className="font-bold text-[#b03a1a] text-lg">
               {endpoint === "juridicas" ? "Noticias jurídicas" : "Noticias generales"}
             </h2>
-            <button
-              onClick={closePanel}
-              className="text-2xl font-bold hover:text-[#b03a1a]"
-              aria-label="Cerrar noticias"
-            >
-              &times;
-            </button>
+            <button onClick={() => setOpen(false)} className="text-2xl font-bold hover:text-[#b03a1a]">&times;</button>
           </header>
 
-          <div
-            className="p-3 overflow-y-auto flex-1"
-            ref={sidebarRef}
-            style={{ scrollbarWidth: "thin" }}
-          >
-            {/* Error */}
+          <div className="p-3 overflow-y-auto flex-1" ref={sidebarRef} style={{ scrollbarWidth: "thin" }}>
             {errorMsg && (
               <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
                 {errorMsg}
               </div>
             )}
 
-            {/* Lista */}
             {items?.length > 0 ? (
               items.map((n, idx) => {
                 const href = pick(n, ["enlace", "link", "url"]) || "#";
                 const title = pick(n, ["titulo", "title", "headline"]) || "Sin título";
-                const fuente = pick(n, ["fuente", "source"]);
-                const fechaRaw = pick(n, ["fecha", "date", "publishedAt"]);
-                const fecha = fechaRaw ? new Date(fechaRaw).toLocaleDateString("es-PE") : null;
-
                 return (
-                  <article key={href || title || idx} className="mb-3">
-                    <div className="bg-[#fff6f3] rounded-xl p-3 shadow-md border hover:shadow-lg transition">
-                      <div className="flex items-center mb-2">
-                        {fuente && (
-                          <span className="text-xs bg-[#b03a1a]/80 text-white px-2 py-0.5 rounded-full font-medium mr-2">
-                            {fuente}
-                          </span>
-                        )}
-                        <span className="ml-auto text-[11px] text-[#b03a1a] opacity-70">
-                          {fecha}
-                        </span>
-                      </div>
-
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block font-bold text-[#b03a1a] text-[15px] leading-snug hover:underline hover:text-[#a87247] transition"
-                      >
-                        {title}
-                      </a>
-
-                      {n.resumen && (
-                        <p
-                          className="mt-1 text-sm text-[#3a2a20] opacity-85"
-                          style={{
-                            display: "-webkit-box",
-                            WebkitBoxOrient: "vertical",
-                            WebkitLineClamp: 3,
-                            overflow: "hidden",
-                          }}
-                        >
-                          {n.resumen}
-                        </p>
-                      )}
-                    </div>
+                  <article key={href || idx} className="mb-3">
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                      className="block font-bold text-[#b03a1a] hover:underline">
+                      {title}
+                    </a>
                   </article>
                 );
               })
             ) : (
-              !loading &&
-              !errorMsg && (
-                <p className="text-center text-gray-500">No hay noticias disponibles.</p>
-              )
+              !loading && !errorMsg && <p className="text-center text-gray-500">No hay noticias disponibles.</p>
             )}
 
-            {/* Loading / Fin */}
-            {loading && (
-              <p className="text-center text-[#b03a1a] py-3">Cargando…</p>
-            )}
+            {loading && <p className="text-center text-[#b03a1a] py-3">Cargando…</p>}
             {!hasMore && !loading && items.length > 0 && (
               <p className="text-center text-xs text-[#bbb] py-2">No hay más noticias.</p>
             )}
@@ -310,9 +215,8 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
         </aside>
       )}
 
-      {/* Animaciones y micro-estilos */}
-      <style>
-        {`
+      {/* Animaciones */}
+      <style>{`
         .animate-slide-in { animation: slideInRight .28s ease-out; }
         @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
         .animate-bell { animation: bell-shake 1s infinite; transform-origin: 50% 0; }
@@ -324,8 +228,7 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
           60% { transform: rotate(9deg) }
           75% { transform: rotate(-4deg) }
         }
-        `}
-      </style>
+      `}</style>
     </>
   );
 }

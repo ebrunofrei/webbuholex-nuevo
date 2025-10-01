@@ -1,5 +1,5 @@
 // src/App.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import SeedBrandingPage from "@/pages/SeedBrandingPage";
 
@@ -80,11 +80,20 @@ import ChatTest from "@/components/ChatTest";
 import ServicioDetalle from "@/pages/ServicioDetalle";
 import ServiciosAdmin from "@/pages/admin/ServiciosAdmin";
 
-// 🔔 Hook centralizado para FCM
+// 🔔 Hook centralizado para FCM (se asume que ya es seguro en cliente)
 import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
 
-// Ícono del botón móvil para abrir el drawer
+// Ícono botón móvil
 import { FolderKanban } from "lucide-react";
+
+/* ──────────────────────────────────────────────────────────
+   Helper: montar hijos solo en cliente (evita hydration)
+   ────────────────────────────────────────────────────────── */
+function ClientOnly({ children }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
+  return ready ? <>{children}</> : null;
+}
 
 function OficinaVirtualLayout({ children }) {
   return (
@@ -121,11 +130,7 @@ function LitisBotPageIntegrada() {
       {/* Sidebar ESCRITORIO */}
       <aside
         className="hidden lg:flex h-screen flex-col flex-shrink-0"
-        style={{
-          width: "300px",            // ancho fijo
-          borderRight: "1px solid #eee",
-          background: "#fff",
-        }}
+        style={{ width: "300px", borderRight: "1px solid #eee", background: "#fff" }}
       >
         <SidebarChats
           casos={casos}
@@ -152,14 +157,8 @@ function LitisBotPageIntegrada() {
       {/* Drawer MÓVIL */}
       {sidebarOpenMobile && (
         <div className="lg:hidden fixed inset-0 z-[70] flex">
-          <div
-            className="flex-1 bg-black/40"
-            onClick={() => setSidebarOpenMobile(false)}
-          />
-          <aside
-            className="w-[80vw] max-w-[320px] h-full bg-white shadow-xl flex flex-col"
-            style={{ borderRight: "1px solid #f4e6c7" }}
-          >
+          <div className="flex-1 bg-black/40" onClick={() => setSidebarOpenMobile(false)} />
+          <aside className="w-[80vw] max-w-[320px] h-full bg-white shadow-xl flex flex-col" style={{ borderRight: "1px solid #f4e6c7" }}>
             <SidebarChats
               casos={casos}
               setCasos={setCasos}
@@ -175,13 +174,7 @@ function LitisBotPageIntegrada() {
       )}
 
       {/* Chat principal */}
-      <main
-        className="flex-1 flex flex-col items-stretch bg-white overflow-y-auto"
-        style={{
-          minWidth: 0,
-          height: "100vh",
-        }}
-      >
+      <main className="flex-1 flex flex-col items-stretch bg-white overflow-y-auto" style={{ minWidth: 0, height: "100vh" }}>
         <LitisBotChatBase
           user={userInfo}
           casoActivo={casoActivo}
@@ -193,10 +186,12 @@ function LitisBotPageIntegrada() {
     </div>
   );
 }
+
 /* ============================================================
    Contenido principal (rutas públicas)
 ============================================================ */
 function AppContent() {
+  // el hook debería ser seguro internamente; si no, ya quedó blindado en su archivo
   useFirebaseMessaging((payload) => {
     console.log("📩 Notificación recibida via hook:", payload);
   });
@@ -228,11 +223,14 @@ function AppContent() {
     return <BibliotecaJ />;
   }
 
+  const isClient = typeof window !== "undefined";
+
   return (
     <div className="relative min-h-screen w-full" style={{ background: "#fff" }}>
       {!enOficinaVirtual && (
         <>
           {!hideNavbar && <Navbar />}
+
           <div className={`flex ${!hideNavbar ? "pt-20" : ""}`}>
             <main className={`flex-1 w-full ${!hideNavbar ? "lg:pr-80" : ""}`}>
               <Routes>
@@ -278,19 +276,29 @@ function AppContent() {
 
             {!hideNavbar && (
               <>
-                <aside className="hidden lg:flex flex-col w-80 h-[calc(100vh-80px)] fixed top-20 right-0 z-40">
-                  <NoticiasSlider />
-                </aside>
+                {/* 👉 solo en cliente para evitar desajustes */}
+                <div className="hidden lg:flex flex-col w-80 h-[calc(100vh-80px)] fixed top-20 right-0 z-40">
+                  <ClientOnly>
+                    <NoticiasSlider />
+                  </ClientOnly>
+                </div>
+
                 {mostrarBotonNoticias && (
-                  <NoticiasBotonFlotante endpoint="general" titulo="Noticias" />
+                  <ClientOnly>
+                    <NoticiasBotonFlotante endpoint="general" titulo="Noticias" />
+                  </ClientOnly>
                 )}
               </>
             )}
           </div>
 
+          {/* pie + overlays sensibles al cliente */}
           {!hideNavbar && <Footer />}
-          <CookiesBanner />
-          <ModalLogin />
+
+          <ClientOnly>
+            <CookiesBanner />
+            <ModalLogin />
+          </ClientOnly>
         </>
       )}
 
@@ -333,7 +341,10 @@ export default function App() {
               <ToastProvider>
                 <Router>
                   <AppContent />
-                  <BubbleWithUser />
+                  {/* la burbuja también solo en cliente */}
+                  <ClientOnly>
+                    <BubbleWithUser />
+                  </ClientOnly>
                 </Router>
               </ToastProvider>
             </LitisBotProvider>
