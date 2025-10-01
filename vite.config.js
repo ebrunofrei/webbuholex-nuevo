@@ -6,9 +6,6 @@ import path from "node:path";
 export default defineConfig({
   base: "/",
   plugins: [react()],
-  define: {
-    'process.env': {}, // 👈 polyfill para que no rompa en frontend
-  },
   server: {
     proxy: {
       "/api": {
@@ -17,6 +14,12 @@ export default defineConfig({
         secure: false,
       },
     },
+  },
+  // 👇 Polyfills/defines para evitar "process is not defined" en el bundle
+  define: {
+    "process.env": {},          // para libs que lean process.env
+    process: { env: {} },       // para libs que referencian process directo
+    global: "window",           // algunas libs esperan "global"
   },
   resolve: {
     alias: {
@@ -42,7 +45,4 @@ export default defineConfig({
     ],
     exclude: ["rss-parser"],
   },
-  define: {
-  'process.env': {},
-}
 });
