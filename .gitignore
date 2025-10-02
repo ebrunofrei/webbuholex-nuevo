@@ -53,6 +53,8 @@ __backups__/
 # ============================
 .env
 .env.local
+.env.production
+.env.development
 *.key
 *.pem
 *.crt

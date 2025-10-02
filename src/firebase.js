@@ -1,5 +1,5 @@
 // src/firebase.js
-// ❌ Quitar dotenv (no se usa en frontend)
+// 🚫 Nada de dotenv en frontend: solo import.meta.env
 
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
@@ -15,11 +15,15 @@ import {
   getMessaging, isSupported, getToken, onMessage,
 } from "firebase/messaging";
 
-// --- Helper universal (frontend usa import.meta.env) ---
+// =========================
+// Helper env universal
+// =========================
 const getEnv = (key) =>
   (typeof import.meta !== "undefined" && import.meta.env?.[key]) || undefined;
 
-// --- Configuración Firebase ---
+// =========================
+// Configuración Firebase
+// =========================
 const firebaseConfig = {
   apiKey:            getEnv("VITE_FIREBASE_API_KEY"),
   authDomain:        getEnv("VITE_FIREBASE_AUTH_DOMAIN"),
@@ -30,33 +34,47 @@ const firebaseConfig = {
   measurementId:     getEnv("VITE_FIREBASE_MEASUREMENT_ID"),
 };
 
-// --- Validación mínima ---
+// =========================
+// Validación mínima
+// =========================
 const HAS_CORE =
   Boolean(firebaseConfig.apiKey) &&
   Boolean(firebaseConfig.projectId) &&
   Boolean(firebaseConfig.appId);
 
-// --- Inicializar app ---
+if (!HAS_CORE) {
+  console.warn("⚠️ Firebase config incompleta. Verifica variables .env");
+}
+
+// =========================
+// Inicialización App
+// =========================
 const app = HAS_CORE
   ? (getApps().length ? getApp() : initializeApp(firebaseConfig))
   : null;
 
-// --- Servicios principales ---
+// =========================
+// Servicios principales
+// =========================
 const db      = app ? getFirestore(app) : null;
 const auth    = app ? getAuth(app)      : null;
 const storage = app ? getStorage(app)   : null;
 
-// --- FCM: inicialización perezosa ---
+// =========================
+// Firebase Cloud Messaging
+// =========================
 let messaging = null;
 let swRegistration = null;
 
-/** Registra el SW de FCM (una sola vez) */
+/** Registra SW de FCM */
 export const registerFcmServiceWorker = async () => {
   try {
     if (!("serviceWorker" in navigator)) return null;
     if (swRegistration) return swRegistration;
+
     swRegistration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
     await navigator.serviceWorker.ready;
+
     console.log("✅ SW FCM registrado:", swRegistration);
     return swRegistration;
   } catch (e) {
@@ -72,12 +90,16 @@ export const initMessaging = async () => {
       console.warn("⚠️ FCM omitido: configuración Firebase incompleta.");
       return null;
     }
+    if (getEnv("VITE_ENABLE_FCM") === "false") {
+      console.info("ℹ️ FCM deshabilitado por config.");
+      return null;
+    }
     if (typeof window === "undefined" || !("Notification" in window)) {
       console.warn("⚠️ FCM omitido: entorno sin soporte de notificaciones.");
       return null;
     }
     if (!(await isSupported())) {
-      console.warn("⚠️ FCM omitido: Firebase Messaging no soportado.");
+      console.warn("⚠️ FCM no soportado en este navegador.");
       return null;
     }
 
@@ -100,6 +122,11 @@ export const getFcmToken = async () => {
     if (!messaging || !swRegistration) return null;
 
     const vapidKey = getEnv("VITE_FIREBASE_VAPID_KEY");
+    if (!vapidKey) {
+      console.warn("⚠️ No se configuró VITE_FIREBASE_VAPID_KEY");
+      return null;
+    }
+
     const token = await getToken(messaging, {
       vapidKey,
       serviceWorkerRegistration: swRegistration,
@@ -108,8 +135,10 @@ export const getFcmToken = async () => {
     if (token) {
       console.log("🎟️ Token FCM obtenido:", token);
       return token;
+    } else {
+      console.warn("⚠️ Usuario no otorgó permisos de notificación.");
+      return null;
     }
-    return null;
   } catch (e) {
     console.warn("⚠️ No se obtuvo token FCM:", e?.message || e);
     return null;
@@ -119,18 +148,21 @@ export const getFcmToken = async () => {
 /** Listener de mensajes en foreground */
 export const onForegroundMessage = (cb) => {
   if (!messaging) {
-    return () => {}; // unsub no-op
+    console.warn("⚠️ Listener FCM ignorado: messaging no inicializado.");
+    return () => {};
   }
   return onMessage(messaging, cb);
 };
 
-// --- Exportar todo ---
+// =========================
+// Exportar todo
+// =========================
 export {
   app,
   db,
   auth,
   storage,
-  messaging, // puede ser null hasta que se ejecute initMessaging
+  messaging, // puede ser null hasta initMessaging()
   swRegistration,
 
   // Firestore

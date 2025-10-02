@@ -16,7 +16,7 @@ import culqiRoutes from "./routes/culqi.js";
 import usuariosRoutes from "./routes/usuarios.js";
 import noticiasRoutes from "./routes/noticias.js";
 
-// ⚠️ Ruta de scraping (opcional). Si no existe el archivo, no rompe el server.
+// ⚠️ Ruta de scraping (opcional). Si no existe, no rompe el server
 let scrapingRoutes = null;
 try {
   scrapingRoutes = (await import("./routes/scraping.js")).default;
@@ -37,12 +37,46 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// CORS: admite lista separada por comas o '*'
+// =======================
+// CORS seguro
+// =======================
+const defaultOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://webbuholex-nuevo.vercel.app",
+  "https://www.buholex.com",
+  "https://buholex.com",
+];
+
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
-  : "*";
+  : defaultOrigins;
 
-app.use(cors({ origin: corsOrigins }));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Permite requests sin origen (ej. curl, Postman, health checks Railway)
+      if (!origin) return callback(null, true);
+
+      if (corsOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        console.warn("❌ Bloqueado por CORS:", origin);
+        return callback(new Error("No permitido por CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
+// Manejo explícito de preflight
+app.options("*", cors());
+
+// =======================
+// Middlewares
+// =======================
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
@@ -80,6 +114,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // =======================
 app.listen(PORT, () => {
   console.log(`🚀 Backend escuchando en puerto ${PORT}`);
+  console.log("🌍 Orígenes permitidos por CORS:", corsOrigins);
 });
 
 // =======================
