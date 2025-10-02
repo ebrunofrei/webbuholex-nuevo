@@ -1,7 +1,7 @@
 // backend/jobs/cronNoticias.js
 import cron from "node-cron";
+import { db } from "#services/myFirebaseAdmin.js";
 import { actualizarNoticias } from "#services/noticiasService.js";
-import { actualizarNoticiasYJurisprudencia } from "#services/noticiasJuridicasService.js";
 import admin from "firebase-admin";
 import twilio from "twilio";
 
@@ -31,31 +31,46 @@ export function cronNoticias() {
   cron.schedule("0 */3 * * *", async () => {
     console.log("⏳ [CronNoticias] Ejecutando actualización de noticias...");
 
-    // Generales
     let nuevasGenerales = 0;
+    let nuevasJuridicas = 0;
+
+    // Generales
     try {
       const generales = await actualizarNoticias({ scope: "generales" });
-      nuevasGenerales = generales?.nuevas || 0;
-      console.log(
-        `✅ Noticias generales actualizadas: ${generales?.total || 0} (nuevas: ${nuevasGenerales}).`
-      );
+      if (generales.items?.length) {
+        const coll = db.collection("noticias_generales");
+        let batch = db.batch();
+        generales.items.forEach((n) => {
+          const ref = coll.doc();
+          batch.set(ref, { ...n, creadoEn: new Date() });
+        });
+        await batch.commit();
+        nuevasGenerales = generales.total || 0;
+      }
+      console.log(`✅ Noticias generales actualizadas: ${generales.total || 0}`);
     } catch (err) {
       console.error("❌ Error al actualizar noticias generales:", err.message);
     }
 
     // Jurídicas
-    let nuevasJuridicas = 0;
     try {
-      const juridicas = await actualizarNoticiasYJurisprudencia();
-      nuevasJuridicas = juridicas?.nuevas || 0;
-      console.log(
-        `✅ Noticias jurídicas actualizadas: ${juridicas?.total || 0} (nuevas: ${nuevasJuridicas}).`
-      );
+      const juridicas = await actualizarNoticias({ scope: "juridicas" });
+      if (juridicas.items?.length) {
+        const coll = db.collection("noticias_juridicas");
+        let batch = db.batch();
+        juridicas.items.forEach((n) => {
+          const ref = coll.doc();
+          batch.set(ref, { ...n, creadoEn: new Date() });
+        });
+        await batch.commit();
+        nuevasJuridicas = juridicas.total || 0;
+      }
+      console.log(`✅ Noticias jurídicas actualizadas: ${juridicas.total || 0}`);
     } catch (err) {
       console.error("❌ Error al actualizar noticias jurídicas:", err.message);
     }
 
-    // 🔔 Notificaciones
+    // 🔔 Notificaciones si hay nuevas
     try {
       const totalNuevas = nuevasGenerales + nuevasJuridicas;
       if (totalNuevas > 0) {
@@ -77,7 +92,7 @@ export function cronNoticias() {
         // --- WhatsApp Twilio ---
         await client.messages.create({
           from: WHATSAPP_NUMBER,
-          to: "whatsapp:+519XXXXXXXX", // Número de difusión o administrador
+          to: "whatsapp:+519XXXXXXXX", // cambia por admin o grupo de difusión
           body: `${titulo}\n${cuerpo}\n👉 Ver más en https://buholex.com/noticias`,
         });
         console.log("📩 Notificación enviada vía WhatsApp.");

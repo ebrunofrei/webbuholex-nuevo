@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
-import { getNoticias } from "@/services/newsApi";
 
-export default function NoticiasBotonFlotante({ tipo = "general", titulo = "Noticias" }) {
+export default function NoticiasBotonFlotante({ tipo = "generales", titulo = "Noticias" }) {
   const PAGE_SIZE = 8;
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
   const [isClient, setIsClient] = useState(false);
   const [open, setOpen] = useState(false);
@@ -18,17 +18,20 @@ export default function NoticiasBotonFlotante({ tipo = "general", titulo = "Noti
 
   useEffect(() => { setIsClient(true); }, []);
 
-  // Key generator estable
+  // Generador de keys
   const keyFor = (n, idx) =>
     n?.url || n?.enlace || n?.link || n?.id || n?._id || `noticia-${idx}`;
 
+  // Cargar noticias
   const fetchPage = async (p = 1) => {
     if (loading) return;
     setLoading(true);
     setErrorMsg("");
 
     try {
-      const data = await getNoticias(tipo, p, PAGE_SIZE);
+      const res = await fetch(`${API_BASE}/noticias?tipo=${tipo}&page=${p}&limit=${PAGE_SIZE}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
 
       setItems((prev) => {
         const next = new Map((prev || []).map((n, i) => [keyFor(n, i), n]));
@@ -50,7 +53,7 @@ export default function NoticiasBotonFlotante({ tipo = "general", titulo = "Noti
     }
   };
 
-  // Inicial carga
+  // Carga inicial al montar
   useEffect(() => {
     if (!isClient) return;
     setItems([]);
@@ -73,7 +76,7 @@ export default function NoticiasBotonFlotante({ tipo = "general", titulo = "Noti
     return () => el.removeEventListener("scroll", onScroll);
   }, [open, hasMore, loading, page]);
 
-  // Control overflow y ESC
+  // Control overflow y tecla ESC
   useEffect(() => {
     if (!isClient) return;
     const cls = "overflow-hidden";

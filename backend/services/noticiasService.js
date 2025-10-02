@@ -32,6 +32,28 @@ const FUENTES = {
           .filter(Boolean);
       },
     },
+    {
+      nombre: "Revista Derecho PUCP",
+      url: "https://revistas.pucp.edu.pe/index.php/derechopucp/issue/current",
+      extractor: (html) => {
+        const $ = cheerio.load(html);
+        return $(".obj_article_summary")
+          .map((_, el) => {
+            const titulo = $(el).find(".title").text().trim();
+            if (!titulo) return null;
+            return {
+              titulo,
+              resumen: $(el).find(".summary").text().trim(),
+              enlace: $(el).find(".title a").attr("href") || "#",
+              fecha: $(el).find(".date").text().trim() || new Date().toISOString(),
+              fuente: "Revista Derecho PUCP",
+              scope: "juridicas",
+            };
+          })
+          .get()
+          .filter(Boolean);
+      },
+    },
   ],
   generales: [
     {
@@ -50,9 +72,7 @@ const FUENTES = {
                 const href = $(el).find(".field-content h2 a").attr("href") || "";
                 return href.startsWith("http") ? href : `https://news.un.org${href}`;
               })(),
-              fecha:
-                $(el).find(".date-display-single").attr("content") ||
-                new Date().toISOString(),
+              fecha: $(el).find(".date-display-single").attr("content") || new Date().toISOString(),
               fuente: "ONU Noticias",
               scope: "generales",
             };
@@ -101,7 +121,7 @@ export async function actualizarNoticias({ scope = "juridicas", especialidad } =
       porFuente[fuente.nombre] = items.length;
       itemsFinal.push(...items);
     } catch (err) {
-      console.error(`❌ [NoticiasService] Error al procesar fuente ${fuente.nombre}:`, err.message);
+      console.error(`❌ [NoticiasService] Error en ${fuente.nombre}:`, err.message);
       errores[fuente.nombre] = err.message;
     }
   }

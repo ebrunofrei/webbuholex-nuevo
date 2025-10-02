@@ -1,10 +1,17 @@
 // src/services/newsApi.js
-const BASE_URL = import.meta.env.VITE_NEWS_API_URL || "/api/noticias";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
-export async function getNoticias(tipo = "general", page = 1, pageSize = 8) {
+/**
+ * Obtiene noticias desde el backend unificado.
+ * 
+ * @param {string} tipo - "generales" | "juridicas"
+ * @param {number} page - número de página (default 1)
+ * @param {number} limit - tamaño de página (default 8)
+ */
+export async function getNoticias(tipo = "generales", page = 1, limit = 8) {
   try {
-    const url = `${BASE_URL}?tipo=${tipo}&page=${page}&pageSize=${pageSize}`;
-    const res = await fetch(url);
+    const url = `${API_BASE}/noticias?tipo=${tipo}&page=${page}&limit=${limit}`;
+    const res = await fetch(url, { headers: { "Content-Type": "application/json" } });
 
     if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
 

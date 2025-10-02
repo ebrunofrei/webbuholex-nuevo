@@ -9,11 +9,11 @@ import { fileURLToPath } from "url";
 // Rutas
 // =======================
 import whatsappRoutes from "./routes/whatsapp.js";
-import iaRoutes from "./routes/ia.js"; // 👈 corregido (antes litisbot)
+import iaRoutes from "./routes/ia.js"; // ✅ chat jurídico / general
 import notificacionesRoutes from "./routes/notificaciones.js";
 import culqiRoutes from "./routes/culqi.js";
 import usuariosRoutes from "./routes/usuarios.js";
-import noticiasRoutes from "./routes/noticias.js";
+import noticiasRoutes from "./routes/noticias.js"; // ✅ cache + DB
 
 // ⚠️ Ruta de scraping (opcional)
 let scrapingRoutes = null;
@@ -79,16 +79,14 @@ app.use(morgan("dev"));
 // Rutas API
 // =======================
 app.use("/api/whatsapp", whatsappRoutes);
-app.use("/api/ia", iaRoutes); // 👈 corregido aquí
+app.use("/api/ia", iaRoutes); // ✅ IA integrada
+app.use("/api/noticias", noticiasRoutes); // ✅ Noticias con cache + DB
 app.use("/api/notificaciones", notificacionesRoutes);
 if (scrapingRoutes) app.use("/api/scraping", scrapingRoutes);
 app.use("/api/culqi", culqiRoutes);
 app.use("/api/usuarios", usuariosRoutes);
 
-// ✅ Noticias (jurídicas + generales)
-app.use("/api/noticias", noticiasRoutes);
-
-// Healthcheck
+// ✅ Healthcheck
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
