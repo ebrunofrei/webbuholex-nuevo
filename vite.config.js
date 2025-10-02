@@ -6,6 +6,7 @@ import path from "node:path";
 export default defineConfig({
   base: "/",
   plugins: [react()],
+
   server: {
     proxy: {
       "/api": {
@@ -15,12 +16,14 @@ export default defineConfig({
       },
     },
   },
-  // 👇 Polyfills/defines para evitar "process is not defined" en el bundle
+
+  // 🔧 Polyfills/defines → evita "process is not defined" y referencias a global
   define: {
-    "process.env": {},          // para libs que lean process.env
-    process: { env: {} },       // para libs que referencian process directo
-    global: "window",           // algunas libs esperan "global"
+    "process.env": {},   // neutraliza referencias a process.env
+    process: { env: {} },// fallback por si alguna librería accede process directamente
+    global: "window",    // algunas libs esperan "global"
   },
+
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
@@ -33,8 +36,10 @@ export default defineConfig({
       "@oficinaPages": path.resolve(__dirname, "src/oficinaVirtual/pages"),
       "@oficinaComponents": path.resolve(__dirname, "src/oficinaVirtual/components"),
       "@oficinaRoutes": path.resolve(__dirname, "src/oficinaVirtual/routes"),
+      "@assets": path.resolve(__dirname, "src/assets"), // extra opcional
     },
   },
+
   optimizeDeps: {
     include: [
       "firebase/app",
@@ -43,6 +48,6 @@ export default defineConfig({
       "firebase/storage",
       "firebase/messaging",
     ],
-    exclude: ["rss-parser"],
+    exclude: ["rss-parser"], // la dejamos fuera porque da problemas de build en Vercel
   },
 });

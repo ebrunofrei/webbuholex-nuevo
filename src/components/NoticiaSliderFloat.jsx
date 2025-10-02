@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from "react";
+import { getNoticias } from "@/services/newsApi";
 
-const PROXY = "/api/noticias-juridicas"; // Vite proxy al backend
-
-export default function NoticiaSliderFloat() {
+export default function NoticiasSliderFloat({ tipo = "juridicas" }) {
   const [open, setOpen] = useState(false);
   const [noticias, setNoticias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [noticiaActual, setNoticiaActual] = useState(null); // Modal lector
 
-  // Fetch automatizado al cargar
+  // Fetch al montar
   useEffect(() => {
     setLoading(true);
-    fetch(PROXY)
-      .then(res => res.json())
-      .then(data => setNoticias(data || []))
+    getNoticias(tipo, 1, 12) // 👈 primera página, 12 noticias
+      .then((data) => setNoticias(data.items || []))
       .catch(() => setNoticias([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [tipo]);
 
   return (
     <>
@@ -32,11 +30,20 @@ export default function NoticiaSliderFloat() {
 
       {/* Sidebar */}
       {open && (
-        <div className="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl border-l-4 border-[#b03a1a] z-50 flex flex-col animate-slide-in"
-          style={{ maxWidth: 340 }}>
+        <div
+          className="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl border-l-4 border-[#b03a1a] z-50 flex flex-col animate-slide-in"
+          style={{ maxWidth: 340 }}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b bg-[#fff7f5]">
-            <h2 className="font-bold text-[#b03a1a] text-lg">Noticias jurídicas</h2>
-            <button onClick={() => setOpen(false)} className="text-2xl font-bold hover:text-[#b03a1a]">&times;</button>
+            <h2 className="font-bold text-[#b03a1a] text-lg">
+              {tipo === "juridicas" ? "Noticias jurídicas" : "Noticias generales"}
+            </h2>
+            <button
+              onClick={() => setOpen(false)}
+              className="text-2xl font-bold hover:text-[#b03a1a]"
+            >
+              &times;
+            </button>
           </div>
           <div className="p-4 overflow-y-auto flex-1">
             {loading ? (
@@ -45,9 +52,9 @@ export default function NoticiaSliderFloat() {
               noticias.map((n, idx) => (
                 <div key={idx} className="mb-4 pb-2 border-b last:border-0">
                   {/* Titular: abre modal o es enlace externo */}
-                  {n.enlace ? (
+                  {n.url ? (
                     <a
-                      href={n.enlace}
+                      href={n.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-semibold text-[#b03a1a] hover:underline"
@@ -64,14 +71,14 @@ export default function NoticiaSliderFloat() {
                   ) : (
                     <span className="font-semibold text-[#b03a1a]">{n.titulo}</span>
                   )}
-                  <p className="text-sm text-gray-700">{n.resumen}</p>
-                  <div className="text-xs text-[#b03a1a] mt-1 opacity-70">
-                    {n.fecha && (
-                      typeof n.fecha === "string"
+                  {n.resumen && <p className="text-sm text-gray-700">{n.resumen}</p>}
+                  {n.fecha && (
+                    <div className="text-xs text-[#b03a1a] mt-1 opacity-70">
+                      {typeof n.fecha === "string"
                         ? n.fecha
-                        : new Date(n.fecha).toLocaleDateString()
-                    )}
-                  </div>
+                        : new Date(n.fecha).toLocaleDateString()}
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
@@ -89,15 +96,24 @@ export default function NoticiaSliderFloat() {
               className="absolute top-2 right-3 text-2xl text-[#b03a1a] font-bold z-10"
               onClick={() => setNoticiaActual(null)}
               aria-label="Cerrar"
-            >×</button>
+            >
+              ×
+            </button>
             <div className="overflow-y-auto p-6 pt-10">
               <h2 className="text-lg md:text-xl font-bold text-[#b03a1a] mb-2">
                 {noticiaActual.titulo}
               </h2>
-              <div className="text-gray-800 mb-3">{noticiaActual.resumen}</div>
-              <div className="text-[#222] whitespace-pre-line mb-2" style={{ fontSize: "1.09em", lineHeight: "1.7" }}>
-                {noticiaActual.contenido}
-              </div>
+              {noticiaActual.resumen && (
+                <div className="text-gray-800 mb-3">{noticiaActual.resumen}</div>
+              )}
+              {noticiaActual.contenido && (
+                <div
+                  className="text-[#222] whitespace-pre-line mb-2"
+                  style={{ fontSize: "1.09em", lineHeight: "1.7" }}
+                >
+                  {noticiaActual.contenido}
+                </div>
+              )}
               {noticiaActual.fecha && (
                 <div className="text-xs text-[#b03a1a] mt-4">
                   {typeof noticiaActual.fecha === "string"
@@ -110,7 +126,7 @@ export default function NoticiaSliderFloat() {
         </div>
       )}
 
-      {/* Animación simple con Tailwind */}
+      {/* Animación simple */}
       <style>
         {`
         .animate-slide-in {

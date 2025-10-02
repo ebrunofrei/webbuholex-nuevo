@@ -1,31 +1,6 @@
+// backend/services/noticiasService.js
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { db } from "#services/myFirebaseAdmin.js";
-import { MongoClient } from "mongodb";
-
-// =========================
-// Conexión MongoDB
-// =========================
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017";
-const client = new MongoClient(MONGO_URI, {
-  connectTimeoutMS: 15000,
-  serverSelectionTimeoutMS: 15000,
-});
-
-let mongoDb;
-async function connectMongo() {
-  if (!mongoDb) {
-    try {
-      await client.connect();
-      mongoDb = client.db("legalbot");
-      console.log("✅ [NoticiasService] MongoDB conectado");
-    } catch (err) {
-      console.error("❌ [NoticiasService] Error conectando a MongoDB:", err.message);
-      throw err;
-    }
-  }
-}
-await connectMongo();
 
 // =========================
 // Fuentes configuradas
@@ -44,15 +19,13 @@ const FUENTES = {
             return {
               titulo,
               resumen: $(el).find(".descripcion").text().trim(),
-              url: (() => {
+              enlace: (() => {
                 const href = $(el).find("a").attr("href") || "";
                 return href.startsWith("http") ? href : `https://www.pj.gob.pe${href}`;
               })(),
               fecha: $(el).find(".fecha").text().trim() || new Date().toISOString(),
               fuente: "Poder Judicial",
-              tipo: "nacional",
-              premium: false,
-              fechaRegistro: new Date().toISOString(),
+              scope: "juridicas",
             };
           })
           .get()
@@ -73,7 +46,7 @@ const FUENTES = {
             return {
               titulo,
               resumen: $(el).find(".field-content .teaser__text").text().trim(),
-              url: (() => {
+              enlace: (() => {
                 const href = $(el).find(".field-content h2 a").attr("href") || "";
                 return href.startsWith("http") ? href : `https://news.un.org${href}`;
               })(),
@@ -81,33 +54,7 @@ const FUENTES = {
                 $(el).find(".date-display-single").attr("content") ||
                 new Date().toISOString(),
               fuente: "ONU Noticias",
-              tipo: "internacional",
-              premium: true,
-              fechaRegistro: new Date().toISOString(),
-            };
-          })
-          .get()
-          .filter(Boolean);
-      },
-    },
-    {
-      nombre: "Revista Derecho PUCP",
-      url: "https://revistas.pucp.edu.pe/index.php/derechopucp/issue/current",
-      extractor: (html) => {
-        const $ = cheerio.load(html);
-        return $(".obj_article_summary")
-          .map((_, el) => {
-            const titulo = $(el).find(".title").text().trim();
-            if (!titulo) return null;
-            return {
-              titulo,
-              resumen: $(el).find(".summary").text().trim(),
-              url: $(el).find(".title a").attr("href") || "",
-              fecha: $(el).find(".date").text().trim() || new Date().toISOString(),
-              fuente: "Revista Derecho PUCP",
-              tipo: "revista",
-              premium: true,
-              fechaRegistro: new Date().toISOString(),
+              scope: "generales",
             };
           })
           .get()
@@ -118,28 +65,18 @@ const FUENTES = {
 };
 
 // =========================
-// Util: ID único
-// =========================
-const docIdFrom = (fuente, titulo) =>
-  `${fuente}-${Buffer.from(titulo || "").toString("base64")}`;
-
-// =========================
 // Servicio principal
 // =========================
-/**
- * Actualiza noticias desde las fuentes configuradas.
- * @param {{ scope: 'juridicas'|'generales', especialidad?: string }} opts
- */
-export async function actualizarNoticias({ scope, especialidad } = { scope: "juridicas" }) {
+export async function actualizarNoticias({ scope = "juridicas", especialidad } = {}) {
   if (!["juridicas", "generales"].includes(scope)) {
     throw new Error(`Scope inválido: ${scope}`);
   }
 
   const fuentes = FUENTES[scope] || [];
   let total = 0;
-  let guardadas = 0;
   const porFuente = {};
   const errores = {};
+  let itemsFinal = [];
 
   for (const fuente of fuentes) {
     try {
@@ -150,7 +87,7 @@ export async function actualizarNoticias({ scope, especialidad } = { scope: "jur
 
       let items = fuente.extractor(html) || [];
 
-      // Filtro opcional
+      // Filtro opcional por especialidad
       if (especialidad) {
         const kw = especialidad.toLowerCase();
         items = items.filter(
@@ -162,45 +99,12 @@ export async function actualizarNoticias({ scope, especialidad } = { scope: "jur
 
       total += items.length;
       porFuente[fuente.nombre] = items.length;
-
-      // Guardado en MongoDB y espejo en Firestore
-      for (const n of items) {
-        const id = docIdFrom(fuente.nombre, n.titulo);
-
-        try {
-          // Guardar en MongoDB
-          await mongoDb.collection("noticias").updateOne(
-            { _id: id },
-            { $set: { ...n, scope, especialidad: especialidad || null } },
-            { upsert: true }
-          );
-
-          // Espejo en Firestore
-          await db.collection("noticias").doc(id).set(
-            {
-              ...n,
-              scope,
-              especialidad: especialidad || null,
-            },
-            { merge: true }
-          );
-
-          guardadas += 1;
-        } catch (err) {
-          console.warn(
-            `⚠️ [NoticiasService] Error guardando noticia (${fuente.nombre}):`,
-            err.message
-          );
-        }
-      }
+      itemsFinal.push(...items);
     } catch (err) {
-      console.error(
-        `❌ [NoticiasService] Error al procesar fuente ${fuente.nombre}:`,
-        err.message
-      );
+      console.error(`❌ [NoticiasService] Error al procesar fuente ${fuente.nombre}:`, err.message);
       errores[fuente.nombre] = err.message;
     }
   }
 
-  return { total, guardadas, porFuente, errores };
+  return { ok: true, total, items: itemsFinal, porFuente, errores };
 }

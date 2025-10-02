@@ -1,17 +1,15 @@
+// src/pages/NoticiasOficina.jsx
 import React, { useEffect, useState } from "react";
 import { useNoticiasGuardadas } from "@/oficinaVirtual/hooks/useNoticiasGuardadas";
-import { useAuth } from "@/context/AuthContext";
 import { asAbsoluteUrl } from "@/utils/apiUrl";
 
-// Endpoint configurable → usa el de Vercel si no está definido en entorno
+// Endpoint configurable → usa el legal si no está definido
 const BASE_URL =
-  import.meta.env.VITE_NEWS_API_URL || "/api/noticias-juridicas";
+  import.meta.env.VITE_NEWS_LEGAL_API_URL || "/api/noticias-juridicas";
 
 const PAGE_SIZE = 12;
 
-const AREAS = [
-  "penal", "civil", "laboral", "constitucional", "familiar", "administrativo"
-];
+const AREAS = ["penal", "civil", "laboral", "constitucional", "familiar", "administrativo"];
 const AREAS_LABEL = {
   penal: "Penal",
   civil: "Civil",
@@ -26,16 +24,9 @@ const OTRAS_ESPECIALIDADES = [
   "notarial", "registral", "penitenciario"
 ];
 const TEMAS_AFINES_SUG = [
-  "ética judicial",
-  "filosofía del derecho",
-  "innovación legal",
-  "acceso a la justicia",
-  "derechos humanos",
-  "jurisprudencia",
-  "inteligencia artificial",
-  "género y derecho",
-  "corrupción",
-  "compliance"
+  "ética judicial", "filosofía del derecho", "innovación legal", "acceso a la justicia",
+  "derechos humanos", "jurisprudencia", "inteligencia artificial", "género y derecho",
+  "corrupción", "compliance"
 ];
 
 function esReciente(fecha) {
@@ -46,7 +37,7 @@ function esReciente(fecha) {
 }
 
 export default function NoticiasOficina() {
-  const { guardadas, guardarNoticia, quitarNoticia } = useNoticiasGuardadas();
+  const { guardadas = [], guardarNoticia, quitarNoticia } = useNoticiasGuardadas();
   const [especialidad, setEspecialidad] = useState(AREAS[0]);
   const [otrasOpen, setOtrasOpen] = useState(false);
   const [afinesOpen, setAfinesOpen] = useState(false);
@@ -65,7 +56,6 @@ export default function NoticiasOficina() {
     setLoading(true);
     setPage(1);
 
-    // Query: especialidad o tema afín
     const query = modoAfin
       ? (busquedaAfin?.trim() || especialidad)
       : `${especialidad}+derecho+site:.pe`;
@@ -77,26 +67,25 @@ export default function NoticiasOficina() {
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
         return res.json();
       })
-      .then(data => { if (!cancelado) setNoticias(data || []); })
+      .then(data => { if (!cancelado) setNoticias(Array.isArray(data) ? data : []); })
       .catch(err => console.error("❌ Error cargando noticias:", err))
       .finally(() => { if (!cancelado) setLoading(false); });
 
     return () => { cancelado = true; };
   }, [especialidad, modoAfin, busquedaAfin]);
 
-  // Filtro local por búsqueda y tags
-  const filtradas = noticias.filter(n =>
+  // Filtro local
+  const filtradas = (noticias || []).filter(n =>
     (soloGuardadas || esReciente(n.fecha)) &&
     (
       n.titulo?.toLowerCase().includes(busqueda.toLowerCase()) ||
       n.resumen?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      (n.tagsAI && n.tagsAI.some(tag => tag.toLowerCase().includes(busqueda.toLowerCase())))
+      ((n.tagsAI || []).some(tag => tag.toLowerCase().includes(busqueda.toLowerCase())))
     )
   );
 
-  // Paginación
-  const total = filtradas.length;
-  const paginadas = filtradas.slice(0, page * PAGE_SIZE);
+  const total = (filtradas || []).length;
+  const paginadas = (filtradas || []).slice(0, page * PAGE_SIZE);
 
   return (
     <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 py-8 min-h-[70vh]">
@@ -118,6 +107,7 @@ export default function NoticiasOficina() {
             {AREAS_LABEL[area]}
           </button>
         ))}
+        {/* Botones extra */}
         <button
           onClick={() => { setOtrasOpen(v => !v); setAfinesOpen(false); setModoAfin(false); }}
           className="px-4 py-2 rounded-xl font-bold border border-yellow-700 bg-yellow-100 text-[#b03a1a] hover:bg-yellow-200 relative"
@@ -148,12 +138,7 @@ export default function NoticiasOficina() {
           {OTRAS_ESPECIALIDADES.map(area => (
             <button
               key={area}
-              onClick={() => {
-                setEspecialidad(area);
-                setModoAfin(false);
-                setOtrasOpen(false);
-                setAfinesOpen(false);
-              }}
+              onClick={() => { setEspecialidad(area); setModoAfin(false); setOtrasOpen(false); setAfinesOpen(false); }}
               className={`px-4 py-2 rounded-xl font-semibold border transition
                 ${especialidad === area && !modoAfin
                   ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow"
@@ -165,7 +150,7 @@ export default function NoticiasOficina() {
         </div>
       )}
 
-      {/* Modal de Temas afines */}
+      {/* Modal Temas afines */}
       {afinesOpen && modoAfin && (
         <div className="flex flex-col items-center gap-3 mb-6 animate-fade-in bg-white/95 px-4 py-6 rounded-xl shadow-lg border border-[#b03a1a]/15 max-w-lg mx-auto">
           <div className="flex justify-between items-center w-full mb-2">
@@ -182,10 +167,7 @@ export default function NoticiasOficina() {
           />
           <button
             disabled={!busquedaAfin.trim()}
-            onClick={() => {
-              setEspecialidad(busquedaAfin || "afines");
-              setAfinesOpen(false);
-            }}
+            onClick={() => { setEspecialidad(busquedaAfin || "afines"); setAfinesOpen(false); }}
             className="mt-2 px-6 py-2 rounded-lg bg-[#164a8a] text-white font-bold text-base shadow hover:bg-blue-900 transition disabled:opacity-50"
           >
             Buscar
@@ -194,11 +176,7 @@ export default function NoticiasOficina() {
             {TEMAS_AFINES_SUG.map(sug => (
               <button
                 key={sug}
-                onClick={() => {
-                  setBusquedaAfin(sug);
-                  setEspecialidad(sug);
-                  setAfinesOpen(false);
-                }}
+                onClick={() => { setBusquedaAfin(sug); setEspecialidad(sug); setAfinesOpen(false); }}
                 className="px-3 py-1 bg-[#e5ecfa] text-[#164a8a] rounded-full font-semibold hover:bg-[#d6e0f7]">
                 {sug}
               </button>
@@ -207,7 +185,7 @@ export default function NoticiasOficina() {
         </div>
       )}
 
-      {/* Barra de búsqueda */}
+      {/* Barra búsqueda */}
       <div className="w-full max-w-xl mx-auto mb-8 flex flex-col sm:flex-row gap-4 justify-center">
         <input
           type="search"
@@ -224,13 +202,12 @@ export default function NoticiasOficina() {
           <div className="col-span-full text-center text-2xl py-10 text-gray-500">Cargando noticias...</div>
         ) : paginadas.length === 0 ? (
           <div className="col-span-full text-center text-xl py-10 text-[#b03a1a] font-semibold">
-            No hay noticias en esta especialidad.<br />
-            Prueba con otra área o busca un término más general.
+            No hay noticias en esta especialidad.<br />Prueba con otra área o busca un término más general.
           </div>
         ) : (
-          paginadas.map((n, idx) => (
+          (paginadas || []).map((n, idx) => (
             <div
-              key={n.enlace || idx}
+              key={`${n.enlace || n.titulo || "noticia"}-${idx}`}
               className="bg-white rounded-3xl shadow-2xl border border-[#f1e5dc] p-6 flex flex-col gap-2 hover:shadow-[0_6px_36px_-8px_rgba(176,58,26,0.09)] transition-all min-h-[250px]"
             >
               <div className="flex flex-wrap justify-between items-center text-sm font-medium mb-2">
@@ -247,12 +224,12 @@ export default function NoticiasOficina() {
               </a>
               <p className="text-base text-gray-700 mb-1 line-clamp-3">{n.resumen}</p>
               <div className="flex flex-wrap gap-2 my-1">
-                {n.tagsAI?.map(tag => (
+                {(n.tagsAI || []).map(tag => (
                   <span key={tag} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold">{tag}</span>
                 ))}
               </div>
               <div className="flex gap-2 mt-2 items-center justify-between">
-                {n.id && guardadas.includes(n.id) ? (
+                {n.id && (guardadas || []).includes(n.id) ? (
                   <button
                     className="px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-bold shadow hover:bg-blue-800 transition"
                     onClick={() => quitarNoticia(n.id)}
@@ -279,7 +256,7 @@ export default function NoticiasOficina() {
 
       {/* Paginador */}
       <div className="flex justify-center py-8">
-        {paginadas.length < total && (
+        {(paginadas || []).length < total && (
           <button
             className="px-8 py-3 rounded-xl bg-[#164a8a] text-white font-bold text-lg shadow hover:bg-[#2057a0] transition"
             onClick={() => setPage(p => p + 1)}
@@ -290,19 +267,9 @@ export default function NoticiasOficina() {
       </div>
 
       <style>{`
-        .animate-fade-in {
-          animation: fadeIn .5s cubic-bezier(.36,.07,.19,.97);
-        }
-        @keyframes fadeIn {
-          0% { opacity: 0; transform: translateY(12px);}
-          100% { opacity: 1; transform: none;}
-        }
-        .line-clamp-3 {
-          display: -webkit-box;
-          -webkit-line-clamp: 3;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
+        .animate-fade-in { animation: fadeIn .5s cubic-bezier(.36,.07,.19,.97); }
+        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(12px);} 100% { opacity: 1; transform: none;} }
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
       `}</style>
     </div>
   );

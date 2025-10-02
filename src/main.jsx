@@ -1,27 +1,17 @@
-// src/main.jsx
-import "./polyfills/process-shim.js";
+// --- Polyfill de process para evitar "process is not defined" ---
+import "./process-shim";
+
 import React from "react";
-import { createRoot, hydrateRoot } from "react-dom/client";
+import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-const container = document.getElementById("root");
-
-// --- Usar hydrateRoot si hay HTML pre-renderizado ---
-if (container.hasChildNodes()) {
-  hydrateRoot(
-    container,
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-} else {
-  createRoot(container).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-}
+// --- Render principal ---
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
 
 // --- Registro del Service Worker de Firebase Messaging ---
 if ("serviceWorker" in navigator) {

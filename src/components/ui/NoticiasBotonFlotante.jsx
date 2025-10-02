@@ -1,22 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
+import { getNoticias } from "@/services/newsApi";
 
-/**
- * endpoint:
- *  - "general"   -> /api/noticias            (o VITE_NEWS_API_URL)
- *  - "juridicas" -> /api/noticias-juridicas  (o VITE_NEWS_LEGAL_API_URL)
- */
-export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "Noticias" }) {
-  const BASE_URL =
-    endpoint === "juridicas"
-      ? (import.meta.env.VITE_NEWS_LEGAL_API_URL || "/api/noticias-juridicas")
-      : (import.meta.env.VITE_NEWS_API_URL || "/api/noticias");
-
+export default function NoticiasBotonFlotante({ tipo = "general", titulo = "Noticias" }) {
   const PAGE_SIZE = 8;
 
-  const [isClient, setIsClient] = useState(false); // <-- evita hydration mismatch
+  const [isClient, setIsClient] = useState(false);
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState([]);   // Noticias acumuladas (con dedupe)
+  const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -25,74 +16,41 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
 
   const sidebarRef = useRef(null);
 
-  // ---------- Detectar render en cliente ----------
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  useEffect(() => { setIsClient(true); }, []);
 
-  // ---------- Utils ----------
-  const pick = (obj, keys) => {
-    for (const k of keys) {
-      if (obj?.[k]) return obj[k];
-    }
-    return undefined;
-  };
+  // Key generator estable
+  const keyFor = (n, idx) =>
+    n?.url || n?.enlace || n?.link || n?.id || n?._id || `noticia-${idx}`;
 
-  const normalizeResponse = (data) => {
-    if (!data) return { items: [], hasMore: false };
-    if (Array.isArray(data.noticias)) return { items: data.noticias, hasMore: Boolean(data.hasMore) };
-    if (Array.isArray(data.items)) return { items: data.items, hasMore: Boolean(data.hasMore) };
-    if (Array.isArray(data)) return { items: data, hasMore: false };
-    return { items: [], hasMore: false };
-  };
-
-  // ---------- Data fetch ----------
   const fetchPage = async (p = 1) => {
     if (loading) return;
     setLoading(true);
     setErrorMsg("");
 
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 15000);
-
     try {
-      const url = `${BASE_URL}?page=${p}&limit=${PAGE_SIZE}`;
-      const res = await fetch(url, { signal: ctrl.signal });
+      const data = await getNoticias(tipo, p, PAGE_SIZE);
 
-      const ct = res.headers.get("content-type") || "";
-      if (!res.ok || !/json/i.test(ct)) {
-        throw new Error(`Respuesta no válida (${res.status}) de ${url}`);
-      }
+      setItems((prev) => {
+        const next = new Map((prev || []).map((n, i) => [keyFor(n, i), n]));
+        for (const n of (data.items || [])) {
+          next.set(keyFor(n), n);
+        }
+        return Array.from(next.values());
+      });
 
-      const data = normalizeResponse(await res.json());
-
-      const keyFor = (n, idx) =>
-        pick(n, ["enlace", "link", "url"]) ||
-        pick(n, ["id", "_id"]) ||
-        pick(n, ["id", "_id"]) ||
-        `noticia-${idx}`;
-
-      const next = new Map(items.map((n) => [keyFor(n), n]));
-      for (const n of data.items) next.set(keyFor(n), n);
-
-      setItems(Array.from(next.values()));
       setHasMore(data.hasMore);
       setPage(p);
-
       if (p === 1) setHayNuevas(true);
     } catch (err) {
-      if (err?.name !== "AbortError") {
-        console.error(`❌ Error cargando noticias (${endpoint}):`, err?.message || err);
-        setErrorMsg("No se pudieron cargar las noticias. Intenta de nuevo.");
-        setHasMore(false);
-      }
+      console.error(`❌ Error cargando noticias (${tipo}):`, err);
+      setErrorMsg("No se pudieron cargar las noticias. Intenta de nuevo.");
+      setHasMore(false);
     } finally {
-      clearTimeout(t);
       setLoading(false);
     }
   };
 
-  // Reinicia y carga cuando cambia endpoint (solo en cliente)
+  // Inicial carga
   useEffect(() => {
     if (!isClient) return;
     setItems([]);
@@ -100,26 +58,22 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
     setHasMore(true);
     setErrorMsg("");
     fetchPage(1);
-  }, [endpoint, isClient]);
+  }, [tipo, isClient]);
 
-  // Scroll infinito dentro del panel
+  // Scroll infinito
   useEffect(() => {
     if (!open) return;
     const el = sidebarRef.current;
     if (!el) return;
-
     const onScroll = () => {
       const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 32;
-      if (nearBottom && hasMore && !loading) {
-        fetchPage(page + 1);
-      }
+      if (nearBottom && hasMore && !loading) fetchPage(page + 1);
     };
-
     el.addEventListener("scroll", onScroll);
     return () => el.removeEventListener("scroll", onScroll);
   }, [open, hasMore, loading, page]);
 
-  // Bloquea scroll del body + Escape para cerrar
+  // Control overflow y ESC
   useEffect(() => {
     if (!isClient) return;
     const cls = "overflow-hidden";
@@ -133,9 +87,7 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
     };
   }, [open, isClient]);
 
-  // ---------- UI ----------
   if (!isClient) {
-    // Render estático estable para Vercel → evita mismatch
     return (
       <div className="fixed bottom-4 right-4 z-[100]">
         <button
@@ -178,7 +130,7 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
         >
           <header className="flex items-center justify-between px-4 py-3 border-b bg-[#b03a1a]/10">
             <h2 className="font-bold text-[#b03a1a] text-lg">
-              {endpoint === "juridicas" ? "Noticias jurídicas" : "Noticias generales"}
+              {tipo === "juridicas" ? "Noticias jurídicas" : "Noticias generales"}
             </h2>
             <button onClick={() => setOpen(false)} className="text-2xl font-bold hover:text-[#b03a1a]">&times;</button>
           </header>
@@ -190,10 +142,10 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
               </div>
             )}
 
-            {items?.length > 0 ? (
-              items.map((n, idx) => {
-                const href = pick(n, ["enlace", "link", "url"]) || "#";
-                const title = pick(n, ["titulo", "title", "headline"]) || "Sin título";
+            {(items || []).length > 0 ? (
+              (items || []).map((n, idx) => {
+                const href = n?.url || n?.enlace || n?.link || "#";
+                const title = n?.titulo || n?.title || n?.headline || "Sin título";
                 return (
                   <article key={keyFor(n, idx)} className="mb-3">
                     <a href={href} target="_blank" rel="noopener noreferrer"
@@ -208,14 +160,13 @@ export default function NoticiasBotonFlotante({ endpoint = "general", titulo = "
             )}
 
             {loading && <p className="text-center text-[#b03a1a] py-3">Cargando…</p>}
-            {!hasMore && !loading && items.length > 0 && (
+            {!hasMore && !loading && (items || []).length > 0 && (
               <p className="text-center text-xs text-[#bbb] py-2">No hay más noticias.</p>
             )}
           </div>
         </aside>
       )}
 
-      {/* Animaciones */}
       <style>{`
         .animate-slide-in { animation: slideInRight .28s ease-out; }
         @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }

@@ -1,5 +1,5 @@
 // src/firebase.js
-import "dotenv/config"; // asegura que .env.local se lea en Node también
+// ❌ Quitar dotenv (no se usa en frontend)
 
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
@@ -15,11 +15,11 @@ import {
   getMessaging, isSupported, getToken, onMessage,
 } from "firebase/messaging";
 
-// --- Helper universal (sirve en Vite y Node) ---
+// --- Helper universal (frontend usa import.meta.env) ---
 const getEnv = (key) =>
-  (typeof import.meta !== "undefined" && import.meta.env?.[key]) || process.env[key];
+  (typeof import.meta !== "undefined" && import.meta.env?.[key]) || undefined;
 
-// --- Configuración desde .env ---
+// --- Configuración Firebase ---
 const firebaseConfig = {
   apiKey:            getEnv("VITE_FIREBASE_API_KEY"),
   authDomain:        getEnv("VITE_FIREBASE_AUTH_DOMAIN"),
@@ -46,7 +46,7 @@ const db      = app ? getFirestore(app) : null;
 const auth    = app ? getAuth(app)      : null;
 const storage = app ? getStorage(app)   : null;
 
-// --- FCM: inicialización perezosa y segura ---
+// --- FCM: inicialización perezosa ---
 let messaging = null;
 let swRegistration = null;
 
@@ -65,7 +65,7 @@ export const registerFcmServiceWorker = async () => {
   }
 };
 
-/** Inicializa Firebase Messaging de forma segura */
+/** Inicializa Firebase Messaging */
 export const initMessaging = async () => {
   try {
     if (!app || !HAS_CORE) {
@@ -73,7 +73,7 @@ export const initMessaging = async () => {
       return null;
     }
     if (typeof window === "undefined" || !("Notification" in window)) {
-      console.warn("⚠️ FCM omitido: este entorno no soporta Notificaciones.");
+      console.warn("⚠️ FCM omitido: entorno sin soporte de notificaciones.");
       return null;
     }
     if (!(await isSupported())) {
@@ -93,7 +93,7 @@ export const initMessaging = async () => {
   }
 };
 
-/** Solicita token de FCM de forma segura */
+/** Solicita token de FCM */
 export const getFcmToken = async () => {
   try {
     if (!messaging) await initMessaging();
@@ -116,7 +116,7 @@ export const getFcmToken = async () => {
   }
 };
 
-/** Listener seguro para mensajes en foreground */
+/** Listener de mensajes en foreground */
 export const onForegroundMessage = (cb) => {
   if (!messaging) {
     return () => {}; // unsub no-op

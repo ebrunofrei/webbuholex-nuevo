@@ -147,6 +147,7 @@ public/*.bak
 !public/firebase-messaging-sw.js
 !public/favicon.ico
 !public/manifest.json
+src/assets/index-*.css
 
 # ============================
 # BACKEND KEYS

@@ -1,4 +1,3 @@
-// backend/routes/noticiasJuridicas.js
 import express from "express";
 import { actualizarNoticiasYJurisprudencia } from "#services/noticiasJuridicasService.js";
 

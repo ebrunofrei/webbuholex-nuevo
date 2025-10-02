@@ -1,5 +1,4 @@
 // backend/services/noticiasJuridicasService.js
-import { db, auth, storage } from "#services/myFirebaseAdmin.js";
 import axios from "axios";
 import * as cheerio from "cheerio";
 
@@ -29,7 +28,7 @@ export async function actualizarNoticiasJuridicas() {
         noticias.push({
           titulo,
           resumen,
-          url: url.startsWith("http") ? url : `https://www.pj.gob.pe${url}`,
+          enlace: url.startsWith("http") ? url : `https://www.pj.gob.pe${url}`,
           fecha: fecha || new Date().toISOString(),
           fuente: "Poder Judicial",
           tipo: "nacional",
@@ -41,18 +40,10 @@ export async function actualizarNoticiasJuridicas() {
     });
 
     console.log(`📰 Noticias extraídas: ${noticias.length}`);
-
-    // Guardar en Firestore con upsert
-    for (const noticia of noticias) {
-      const docId = `${noticia.fuente}-${Buffer.from(noticia.titulo).toString("base64")}`;
-      await mongoDb.collection("noticiasJuridicas").doc(docId).set(noticia, { merge: true });
-    }
-
-    console.log(`✅ Proceso finalizado. Noticias actualizadas: ${noticias.length}`);
-    return noticias.length;
+    return { ok: true, total: noticias.length, items: noticias };
   } catch (e) {
     console.error("❌ Error en actualizarNoticiasJuridicas:", e.message || e);
-    return 0;
+    return { ok: false, error: e.message, items: [] };
   }
 }
 
@@ -71,7 +62,7 @@ const FUENTES = [
         .map((i, el) => ({
           titulo: $(el).find(".titulo").text().trim(),
           resumen: $(el).find(".descripcion").text().trim(),
-          url: "https://www.pj.gob.pe" + $(el).find("a").attr("href"),
+          enlace: "https://www.pj.gob.pe" + $(el).find("a").attr("href"),
           fecha: $(el).find(".fecha").text().trim() || new Date().toISOString(),
           fuente: "Poder Judicial",
           tipo: "noticia",
@@ -92,7 +83,7 @@ const FUENTES = [
         .map((i, el) => ({
           titulo: $(el).find(".field-content h2 a").text().trim(),
           resumen: $(el).find(".field-content .teaser__text").text().trim(),
-          url: "https://news.un.org" + $(el).find(".field-content h2 a").attr("href"),
+          enlace: "https://news.un.org" + $(el).find(".field-content h2 a").attr("href"),
           fecha: $(el).find(".date-display-single").attr("content") || new Date().toISOString(),
           fuente: "ONU Noticias",
           tipo: "internacional",
@@ -113,7 +104,7 @@ const FUENTES = [
         .map((i, el) => ({
           titulo: $(el).find(".title").text().trim(),
           resumen: $(el).find(".summary").text().trim(),
-          url: $(el).find(".title a").attr("href"),
+          enlace: $(el).find(".title a").attr("href"),
           fecha: $(el).find(".date").text().trim() || new Date().toISOString(),
           fuente: "Revista Derecho PUCP",
           tipo: "revista",
@@ -126,10 +117,11 @@ const FUENTES = [
 ];
 
 /**
- * Procesa todas las fuentes y guarda resultados + tendencias
+ * Procesa todas las fuentes y devuelve resultados + tendencias
  */
 export async function actualizarNoticiasYJurisprudencia() {
   let total = 0;
+  const items = [];
   const palabrasClave = {};
 
   for (const fuente of FUENTES) {
@@ -137,39 +129,24 @@ export async function actualizarNoticiasYJurisprudencia() {
       const { data: html } = await axios.get(fuente.url, { timeout: 15000 });
       const extraidos = fuente.extractor(html);
       total += extraidos.length;
+      items.push(...extraidos);
 
-      for (const noticia of extraidos) {
-        // Contar palabras clave
+      // Contar palabras clave
+      extraidos.forEach((noticia) => {
         noticia.titulo?.split(/\s+/).forEach((w) => {
           w = w.toLowerCase();
           if (w.length > 3) palabrasClave[w] = (palabrasClave[w] || 0) + 1;
         });
-
-        // Guardar noticia en Firestore
-        const docId = `${fuente.nombre}-${Buffer.from(noticia.titulo).toString("base64")}`;
-        await mongoDb.collection("noticiasJuridicas").doc(docId).set(noticia, { merge: true });
-      }
+      });
     } catch (e) {
       console.error(`❌ Error scraping ${fuente.nombre}:`, e.message);
     }
   }
 
-  // Guardar tendencias
-  await mongoDb.collection("tendenciasJuridicas").doc(formatDateKey()).set({
-    palabrasClave,
-    fecha: new Date().toISOString(),
-    top10: Object.entries(palabrasClave)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10),
-  });
+  const top10 = Object.entries(palabrasClave)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
 
-  console.log(`✅ Noticias y jurisprudencia actualizadas: ${total}`);
-  return total;
-}
-
-function formatDateKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
+  console.log(`✅ Noticias y jurisprudencia extraídas: ${total}`);
+  return { ok: true, total, items, top10 };
 }

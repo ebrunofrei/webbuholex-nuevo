@@ -1,105 +1,83 @@
-// backend/routes/scraping.js
-import { db as firebaseDb, auth, storage } from "#services/myFirebaseAdmin.js";
 import express from "express";
-const router = express.Router();
 import axios from "axios";
 import * as cheerio from "cheerio";
 import puppeteer from "puppeteer";
 import { MongoClient } from "mongodb";
 
-// ============ MongoDB CACHE =============
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017";
-const client = new MongoClient(MONGO_URI);
+const router = express.Router();
 
-let mongoDb; // 👈 distinto a firebaseDb
-client.connect().then(() => {
-  mongoDb = client.db("legalbot"); // Usa tu base preferida
-  console.log("✅ MongoDB conectado para cache");
-});
-const CACHE_DURATION = 60 * 20; // 20 minutos en segundos
+// ====== CACHE MONGO + fallback memoria ======
+const MONGO_URI = process.env.MONGO_URI || null;
+const CACHE_DURATION = 60 * 20; // 20 minutos
+let mongoDb = null;
+let memoryCache = new Map();
 
-// ============ Scraping helpers ============
+if (MONGO_URI) {
+  const client = new MongoClient(MONGO_URI);
+  client.connect().then(() => {
+    mongoDb = client.db("legalbot");
+    console.log("✅ MongoDB conectado para cache");
+  });
+}
+
+// ====== Configuración Puppeteer ======
+const ENABLE_PUPPETEER = process.env.USE_PUPPETEER === "true" && !process.env.VERCEL;
+
+// ====== Helpers ======
 const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Safari/605.1.15",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0",
+  "Mozilla/5.0 (Windows NT 10.0; rv:118.0) Gecko/20100101 Firefox/118.0",
 ];
-function randomUserAgent() {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
-function withTimeout(promise, ms = 20000) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Timeout scraping")), ms)
-    ),
-  ]);
-}
-async function tryWithRetries(scraperFn, args = [], maxRetries = 2, delay = 1500) {
+const randomUserAgent = () =>
+  USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
+async function tryWithRetries(fn, args = [], maxRetries = 2, delay = 1500) {
   let lastErr;
   for (let i = 0; i <= maxRetries; i++) {
     try {
-      return await scraperFn(...args);
+      return await fn(...args);
     } catch (err) {
       lastErr = err;
       if (i < maxRetries) {
-        await new Promise((r) => setTimeout(r, delay + Math.random() * 1000));
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
   }
   throw lastErr;
 }
 
-// ============ SCRAPERS =============
+// ====== SCRAPERS ======
 
-// --- legis.pe ---
+// --- Legis.pe ---
 async function scraperLegis(query) {
-  const searchUrl = `https://legis.pe/?s=${encodeURIComponent(query)}`;
-  const { data } = await axios.get(searchUrl, {
-    headers: { "User-Agent": randomUserAgent() },
-  });
+  const url = `https://legis.pe/?s=${encodeURIComponent(query)}`;
+  const { data } = await axios.get(url, { headers: { "User-Agent": randomUserAgent() } });
   const $ = cheerio.load(data);
-  let resultado = [];
-  $("h2.entry-title > a").each((_, el) => {
-    resultado.push({
-      titulo: $(el).text(),
-      url: $(el).attr("href"),
-      fuente: "legis.pe",
-    });
-  });
-  return resultado;
-}
-async function buscarEnLegis(query) {
-  return withTimeout(tryWithRetries(scraperLegis, [query], 2), 20000);
+  return $("h2.entry-title > a").map((_, el) => ({
+    titulo: $(el).text(),
+    url: $(el).attr("href"),
+    fuente: "legis.pe",
+  })).get();
 }
 
 // --- Actualidad Legal ---
 async function scraperActualidadLegal(query) {
   const url = `https://actualidadlegal.pe/?s=${encodeURIComponent(query)}`;
-  const { data } = await axios.get(url, {
-    headers: { "User-Agent": randomUserAgent() },
-  });
+  const { data } = await axios.get(url, { headers: { "User-Agent": randomUserAgent() } });
   const $ = cheerio.load(data);
-  let resultado = [];
-  $("h2.entry-title > a").each((_, el) => {
-    resultado.push({
-      titulo: $(el).text(),
-      url: $(el).attr("href"),
-      fuente: "actualidadlegal.pe",
-    });
-  });
-  return resultado;
-}
-async function buscarEnActualidadLegal(query) {
-  return withTimeout(tryWithRetries(scraperActualidadLegal, [query], 2), 20000);
+  return $("h2.entry-title > a").map((_, el) => ({
+    titulo: $(el).text(),
+    url: $(el).attr("href"),
+    fuente: "actualidadlegal.pe",
+  })).get();
 }
 
-// --- SPIJ (Puppeteer) ---
+// --- SPIJ (solo si Puppeteer habilitado) ---
 async function scraperSPIJ(query) {
+  if (!ENABLE_PUPPETEER) return [];
   let browser;
-  const searchUrl = `https://spij.minjus.gob.pe/clpbuscador/busqueda/resultados?cadena=${encodeURIComponent(
-    query
-  )}`;
+  const url = `https://spij.minjus.gob.pe/clpbuscador/busqueda/resultados?cadena=${encodeURIComponent(query)}`;
   try {
     browser = await puppeteer.launch({
       headless: "new",
@@ -107,39 +85,34 @@ async function scraperSPIJ(query) {
     });
     const page = await browser.newPage();
     await page.setUserAgent(randomUserAgent());
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-    await page.waitForSelector(".res-tit", { timeout: 12000 }).catch(() => {});
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     const html = await page.content();
     const $ = cheerio.load(html);
-    let resultado = [];
-    $(".res-tit").each((i, el) => {
+
+    const res = $(".res-tit").map((_, el) => {
       const titulo = $(el).text().trim();
-      const url = $(el).find("a").attr("href") || "";
-      if (titulo && url) {
-        resultado.push({
-          titulo,
-          url: url.startsWith("http") ? url : "https://spij.minjus.gob.pe" + url,
-          fuente: "SPIJ",
-        });
-      }
-    });
+      const link = $(el).find("a").attr("href");
+      return titulo && link ? {
+        titulo,
+        url: link.startsWith("http") ? link : "https://spij.minjus.gob.pe" + link,
+        fuente: "SPIJ",
+      } : null;
+    }).get();
+
     await browser.close();
-    return resultado;
+    return res;
   } catch (err) {
     if (browser) await browser.close();
-    throw err;
+    console.error("❌ Error SPIJ:", err.message);
+    return [];
   }
 }
-async function buscarEnSPIJ(query) {
-  return withTimeout(tryWithRetries(scraperSPIJ, [query], 2), 20000);
-}
 
-// --- El Peruano (Puppeteer) ---
+// --- El Peruano (solo si Puppeteer habilitado) ---
 async function scraperElPeruano(query) {
+  if (!ENABLE_PUPPETEER) return [];
   let browser;
-  const searchUrl = `https://busquedas.elperuano.pe/?s=${encodeURIComponent(
-    query
-  )}`;
+  const url = `https://busquedas.elperuano.pe/?s=${encodeURIComponent(query)}`;
   try {
     browser = await puppeteer.launch({
       headless: "new",
@@ -147,80 +120,94 @@ async function scraperElPeruano(query) {
     });
     const page = await browser.newPage();
     await page.setUserAgent(randomUserAgent());
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-    await page.waitForSelector("div#resultados", { timeout: 15000 }).catch(() => {});
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     const html = await page.content();
     const $ = cheerio.load(html);
-    let resultado = [];
-    $("div#resultados article, div#resultados .resultado").each((i, el) => {
+
+    const res = $("div#resultados article, div#resultados .resultado").map((_, el) => {
       const titulo =
         $(el).find("h2 a, h3 a").text().trim() ||
         $(el).find("h2, h3").text().trim();
-      const url = $(el).find("h2 a, h3 a").attr("href") || "";
+      const link = $(el).find("h2 a, h3 a").attr("href") || "";
       const descripcion = $(el).find("p").text().trim();
-      if (titulo && url) {
-        resultado.push({
-          titulo,
-          url: url.startsWith("http")
-            ? url
-            : "https://busquedas.elperuano.pe" + url,
-          descripcion,
-          fuente: "elperuano.pe",
-        });
-      }
-    });
+
+      return titulo && link ? {
+        titulo,
+        url: link.startsWith("http") ? link : "https://busquedas.elperuano.pe" + link,
+        descripcion,
+        fuente: "elperuano.pe",
+      } : null;
+    }).get();
+
     await browser.close();
-    return resultado;
+    return res;
   } catch (err) {
     if (browser) await browser.close();
-    throw err;
+    console.error("❌ Error El Peruano:", err.message);
+    return [];
   }
 }
-async function buscarEnElPeruano(query) {
-  return withTimeout(tryWithRetries(scraperElPeruano, [query], 2), 20000);
-}
 
-// ============ ENDPOINT PRINCIPAL =============
+// ====== ENDPOINT ======
 router.post("/", async (req, res) => {
-  const { consulta } = req.body;
+  const { consulta = "" } = req.body;
+  if (!consulta.trim()) {
+    return res.status(400).json({ ok: false, error: "Consulta requerida" });
+  }
+
   const cacheKey = consulta.trim().toLowerCase();
   const now = Date.now();
 
-  // --- 1. Busca en caché Mongo ---
-  let cacheDoc = null;
+  // 1. Revisa cache
   if (mongoDb) {
-    cacheDoc = await mongoDb.collection("legal_cache").findOne({ key: cacheKey });
-    if (cacheDoc && now - cacheDoc.time < CACHE_DURATION * 1000) {
-      return res.json({ resultado: cacheDoc.data, cache: true });
+    const cache = await mongoDb.collection("legal_cache").findOne({ key: cacheKey });
+    if (cache && now - cache.time < CACHE_DURATION * 1000) {
+      return res.json({ ok: true, cache: true, total: cache.data.length, items: cache.data, hasMore: false });
+    }
+  } else if (memoryCache.has(cacheKey)) {
+    const cache = memoryCache.get(cacheKey);
+    if (now - cache.time < CACHE_DURATION * 1000) {
+      return res.json({ ok: true, cache: true, total: cache.data.length, items: cache.data, hasMore: false });
     }
   }
 
-  // --- 2. Scrapea en paralelo fuentes ---
-  let resultado = [];
-  const fuentes = [
-    { nombre: "legis.pe", fn: buscarEnLegis },
-    { nombre: "actualidadlegal.pe", fn: buscarEnActualidadLegal },
-    { nombre: "SPIJ", fn: buscarEnSPIJ },
-    { nombre: "elperuano.pe", fn: buscarEnElPeruano },
-  ];
+  // 2. Selecciona scrapers según entorno
+  let fuentes = [scraperLegis, scraperActualidadLegal];
+  if (ENABLE_PUPPETEER) {
+    fuentes.push(scraperSPIJ, scraperElPeruano);
+    console.log("🟢 Scraping completo con Puppeteer habilitado");
+  } else {
+    console.log("⚠️ Puppeteer deshabilitado (modo Vercel)");
+  }
 
-  const resultados = await Promise.allSettled(fuentes.map((f) => f.fn(consulta)));
-  resultados.forEach((res) => {
-    if (res.status === "fulfilled" && Array.isArray(res.value)) {
-      resultado = resultado.concat(res.value);
+  const resultados = await Promise.allSettled(fuentes.map(fn => fn(consulta)));
+
+  let items = [];
+  resultados.forEach(r => {
+    if (r.status === "fulfilled" && Array.isArray(r.value)) {
+      items = items.concat(r.value);
     }
   });
 
-  // --- 3. Guarda en caché Mongo ---
+  // 3. Guarda cache
   if (mongoDb) {
     await mongoDb.collection("legal_cache").updateOne(
       { key: cacheKey },
-      { $set: { key: cacheKey, data: resultado, time: now } },
+      { $set: { key: cacheKey, data: items, time: now } },
       { upsert: true }
     );
+  } else {
+    memoryCache.set(cacheKey, { data: items, time: now });
   }
 
-  res.json({ resultado, cache: false });
+  // 4. Respuesta uniforme
+  res.json({
+    ok: true,
+    cache: false,
+    total: items.length,
+    items,
+    hasMore: false,
+  });
 });
 
 export default router;

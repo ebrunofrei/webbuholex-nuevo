@@ -1,6 +1,6 @@
 // src/pages/Noticias.jsx
 import React, { useEffect, useState } from "react";
-import { getNoticiasJuridicas } from "@/services/newsApi";
+import { getNoticiasGenerales } from "@/services/newsApi";
 
 // Normaliza la respuesta (array o { items, hasMore })
 const normalizeResponse = (data) => {
@@ -22,27 +22,26 @@ export default function Noticias() {
     if (loading) return;
     setLoading(true);
     try {
-      const data = await getNoticiasJuridicas();
+      // si tu API soporta paginación: getNoticiasGenerales(p)
+      const data = await getNoticiasGenerales();
       const normalized = normalizeResponse(data);
 
-      if (replace) {
-        setItems(normalized.items);
-      } else {
-        setItems((prev) => [
-          ...prev,
-          ...normalized.items.filter(
-            (n) =>
-              !prev.some(
-                (p) => p.enlace === n.enlace || p.titulo === n.titulo
-              )
-          ),
-        ]);
-      }
+      setItems((prev) => {
+        if (replace) return normalized.items || [];
+        const prevSafe = prev || [];
+        const nuevos = (normalized.items || []).filter(
+          (n) =>
+            !prevSafe.some(
+              (p) => p.enlace === n.enlace || p.titulo === n.titulo
+            )
+        );
+        return [...prevSafe, ...nuevos];
+      });
 
-      setHasMore(normalized.hasMore);
+      setHasMore(Boolean(normalized.hasMore));
       setPage(p);
     } catch (e) {
-      console.error("❌ Error cargando noticias jurídicas:", e);
+      console.error("❌ Error cargando noticias generales:", e);
       setHasMore(false);
     } finally {
       setLoading(false);
@@ -55,26 +54,25 @@ export default function Noticias() {
 
   return (
     <section className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Noticias jurídicas</h1>
+      <h1 className="text-2xl font-bold mb-6">Noticias generales</h1>
 
-      {items.length === 0 && !loading && (
+      {(items || []).length === 0 && !loading && (
         <p className="text-center text-gray-500">
-          No hay noticias jurídicas por el momento.
+          No hay noticias generales por el momento.
         </p>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((n, i) => (
+        {(items || []).map((n, i) => (
           <article
-            key={n.enlace || n.titulo || i}
+            key={`${n.enlace || n.titulo || "noticia"}-${i}`}
             className="border rounded-lg p-4 bg-[#fffdfc] shadow-sm hover:shadow-md transition"
           >
             <a
-              href={n.enlace}
+              href={n.enlace || "#"}
               target="_blank"
               rel="noreferrer"
-              className="underline font-semibold text-[#b03a1a] hover:text-[#a87247]"
-            >
+              className="underline font-semibold text-[#b03a1a] hover:text-[#a87247]">
               {n.titulo || "Sin título"}
             </a>
             <p className="text-xs text-gray-500 mt-1">
@@ -95,7 +93,6 @@ export default function Noticias() {
         ))}
       </div>
 
-      {/* Botón cargar más */}
       {hasMore && (
         <div className="mt-6 text-center">
           <button
