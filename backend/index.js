@@ -1,4 +1,3 @@
-// backend/index.js
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
@@ -10,13 +9,13 @@ import { fileURLToPath } from "url";
 // Rutas
 // =======================
 import whatsappRoutes from "./routes/whatsapp.js";
-import litisbotRoutes from "./routes/litisbot.js";
+import iaRoutes from "./routes/ia.js"; // 👈 corregido (antes litisbot)
 import notificacionesRoutes from "./routes/notificaciones.js";
 import culqiRoutes from "./routes/culqi.js";
 import usuariosRoutes from "./routes/usuarios.js";
 import noticiasRoutes from "./routes/noticias.js";
 
-// ⚠️ Ruta de scraping (opcional). Si no existe, no rompe el server
+// ⚠️ Ruta de scraping (opcional)
 let scrapingRoutes = null;
 try {
   scrapingRoutes = (await import("./routes/scraping.js")).default;
@@ -25,7 +24,7 @@ try {
 }
 
 // =======================
-// Cron jobs (carpeta: jobs/)
+// Cron jobs
 // =======================
 import { cleanupLogs } from "./jobs/cleanupLogs.js";
 import { cronNoticias } from "./jobs/cronNoticias.js";
@@ -55,15 +54,10 @@ const corsOrigins = process.env.CORS_ORIGINS
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Permite requests sin origen (ej. curl, Postman, health checks Railway)
-      if (!origin) return callback(null, true);
-
-      if (corsOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        console.warn("❌ Bloqueado por CORS:", origin);
-        return callback(new Error("No permitido por CORS"));
-      }
+      if (!origin) return callback(null, true); // permite Postman, curl, Railway health
+      if (corsOrigins.includes(origin)) return callback(null, true);
+      console.warn("❌ Bloqueado por CORS:", origin);
+      return callback(new Error("No permitido por CORS"));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -85,16 +79,16 @@ app.use(morgan("dev"));
 // Rutas API
 // =======================
 app.use("/api/whatsapp", whatsappRoutes);
-app.use("/api/litisbot", litisbotRoutes);
+app.use("/api/ia", iaRoutes); // 👈 corregido aquí
 app.use("/api/notificaciones", notificacionesRoutes);
-if (scrapingRoutes) app.use("/api/scraping", scrapingRoutes); // solo si existe
+if (scrapingRoutes) app.use("/api/scraping", scrapingRoutes);
 app.use("/api/culqi", culqiRoutes);
 app.use("/api/usuarios", usuariosRoutes);
 
 // ✅ Noticias (jurídicas + generales)
 app.use("/api/noticias", noticiasRoutes);
 
-// Healthcheck (Railway/Vercel)
+// Healthcheck
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
@@ -104,7 +98,7 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// Archivos estáticos (si usas uploads)
+// Archivos estáticos (ej: uploads)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -124,7 +118,7 @@ cleanupLogs?.();
 cronNoticias?.();
 
 // =======================
-// Rutas de prueba manual (solo en local)
+// Rutas de prueba (solo en local)
 // =======================
 if (process.env.NODE_ENV !== "production") {
   app.get("/api/test/cleanup", async (_req, res) => {

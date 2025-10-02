@@ -5,8 +5,7 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": { "distDir": "dist" }
-    },
-    { "src": "api/**/*.js", "use": "@vercel/node" }
+    }
   ],
   "headers": [
     {
@@ -19,7 +18,7 @@
       ]
     },
     {
-      "source": "/api/(noticias|noticias-juridicas)",
+      "source": "/api/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -30,16 +29,8 @@
   ],
   "rewrites": [
     {
-      "source": "/api/noticias/(.*)",
-      "destination": "https://tu-backend-en-railway.app/api/noticias/$1"
-    },
-    {
-      "source": "/api/noticias-juridicas/(.*)",
-      "destination": "https://tu-backend-en-railway.app/api/noticias-juridicas/$1"
-    },
-    {
       "source": "/api/(.*)",
-      "destination": "https://tu-backend-en-railway.app/api/$1"
+      "destination": "https://buholex-backend.up.railway.app/api/$1"
     },
     {
       "source": "/(.*)",
