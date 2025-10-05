@@ -1,87 +1,45 @@
-import { Router } from "express";
-import axios from "axios";
-import { actualizarNoticiasYJurisprudencia } from "#services/noticiasJuridicasService.js";
+// ============================================================
+// 🦉 BÚHOLEX | API de Noticias Unificada
+// ============================================================
+// Devuelve noticias jurídicas o generales desde MongoDB.
+// Corrige diferencias entre "juridica/juridicas" y "general/generales".
+// Compatible con frontend y cronNoticias.js
+// ============================================================
 
-const router = Router();
+import express from "express";
+import { getNoticias } from "../services/noticiasService.js";
 
-// Configuración GNews
-const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
-const GNEWS_URL = "https://gnews.io/api/v4/top-headlines";
+const router = express.Router();
 
-// Utilidad: normalizar artículos
-function normalizarArticulos(articles = []) {
-  return (articles || []).map((a) => ({
-    titulo: a.title || "Sin título",
-    resumen: a.description || "",
-    enlace: a.url || "#",
-    imagen: a.image || null,
-    fecha: a.publishedAt || new Date().toISOString(),
-    fuente: a.source?.name || "GNews",
-  }));
-}
-
-// =============================
-// 📌 Endpoint unificado
-// GET /api/noticias?tipo=general|juridica&page=1&pageSize=10
-// =============================
 router.get("/", async (req, res) => {
-  const { tipo = "general", page = 1, pageSize = 10, q = "peru" } = req.query;
-
   try {
-    let items = [];
-    let total = 0;
-    let hasMore = false;
+    // === Normalización de parámetros ===
+    let { tipo = "general", especialidad = "todas", page = 1, limit = 12 } = req.query;
 
-    if (tipo === "juridica") {
-      // Jurídicas desde servicio
-      const resultado = await actualizarNoticiasYJurisprudencia({
-        page: parseInt(page, 10),
-        limit: parseInt(pageSize, 10),
-        q,
-      });
-      items = resultado?.items || [];
-      total = resultado?.total || items.length;
-      hasMore = resultado?.hasMore || false;
-    } else {
-      // Generales desde GNews
-      if (!GNEWS_API_KEY) {
-        return res.status(500).json({
-          ok: false,
-          error: "Falta configurar GNEWS_API_KEY en backend",
-        });
-      }
+    // 🔧 Corrige pluralizaciones (compatibilidad total)
+    tipo = tipo.toLowerCase();
+    if (tipo.includes("juridica")) tipo = "juridica";
+    if (tipo.includes("general")) tipo = "general";
 
-      const response = await axios.get(GNEWS_URL, {
-        params: {
-          q,
-          lang: "es",
-          country: "pe",
-          max: pageSize,
-          token: GNEWS_API_KEY,
-        },
-        timeout: 10000,
-        headers: { "User-Agent": "BuholexNoticiasBot/1.0" },
-      });
+    especialidad = especialidad.toLowerCase();
 
-      items = normalizarArticulos(response.data.articles);
-      total = items.length;
-      hasMore = false; // GNews no expone paginación real
-    }
+    // === Obtener noticias ===
+    const data = await getNoticias({ tipo, especialidad, page, limit });
 
+    // === Respuesta estándar ===
     return res.json({
       ok: true,
       tipo,
-      items,
-      total,
-      hasMore,
-      page: parseInt(page, 10),
-      pageSize: parseInt(pageSize, 10),
+      especialidad,
+      total: data?.total || 0,
+      items: data?.items || [],
+      hasMore: data?.hasMore || false,
     });
   } catch (err) {
-    console.error("❌ [NoticiasRouter] Error en /api/noticias:", err.message);
+    console.error("❌ Error en /api/noticias:", err);
     return res.status(500).json({
       ok: false,
-      error: "Error cargando noticias.",
+      error: err.message || "Error interno del servidor",
     });
   }
 });

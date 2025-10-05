@@ -1,16 +1,21 @@
-// backend/services/myFirebaseAdmin.js
 import { initializeApp, cert, applicationDefault, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
+import fs from "fs";
+import path from "path";
 
-// --- Inicializa Firebase Admin ---
+// --- Cargar credenciales desde archivo o fallback a applicationDefault ---
 let serviceAccount = null;
 
-if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-  serviceAccount = JSON.parse(
-    Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8")
-  );
+try {
+  const filePath = path.resolve("backend/firebase-service-account.json");
+  if (fs.existsSync(filePath)) {
+    serviceAccount = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    console.log("✅ Credenciales Firebase cargadas desde archivo JSON");
+  }
+} catch (err) {
+  console.error("⚠️ Error leyendo archivo de credenciales Firebase:", err.message);
 }
 
 const adminApp =

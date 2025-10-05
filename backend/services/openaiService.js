@@ -1,18 +1,25 @@
-// backend/services/openaiService.js
 import axios from "axios";
 
-// Reutilizamos un cliente Axios con headers y timeout sensatos
-const API_KEY = process.env.OPENAI_API_KEY;
-const openaiHttp = axios.create({
-  baseURL: "https://api.openai.com/v1",
-  timeout: 25000,
-  headers: {
-    Authorization: `Bearer ${API_KEY || ""}`,
-    "Content-Type": "application/json",
-  },
-});
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Cliente Axios dinámico que siempre lee la API key actual del entorno.
+ */
+function getOpenAIClient() {
+  const API_KEY = process.env.OPENAI_API_KEY;
+  if (!API_KEY) {
+    throw new Error("Falta configurar OPENAI_API_KEY en el entorno");
+  }
+
+  return axios.create({
+    baseURL: "https://api.openai.com/v1",
+    timeout: 25000,
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+  });
+}
 
 /**
  * Llama al endpoint de Chat Completions de OpenAI.
@@ -24,26 +31,23 @@ export async function callOpenAI(
   messages,
   { model = "gpt-4o-mini", max_tokens = 1024, temperature = 0.3 } = {}
 ) {
-  if (!API_KEY) {
-    throw new Error("Falta configurar OPENAI_API_KEY en el entorno");
-  }
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new Error("El parámetro 'messages' debe ser un array con al menos un mensaje.");
   }
 
+  const client = getOpenAIClient();
   const payload = { model, messages, max_tokens, temperature };
 
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const { data } = await openaiHttp.post("/chat/completions", payload);
+      const { data } = await client.post("/chat/completions", payload);
       const text = data?.choices?.[0]?.message?.content ?? "";
       return { text, raw: data };
     } catch (err) {
       lastErr = err;
       const status = err?.response?.status;
 
-      // Reintentos simples para 429 o 5xx
       if (status === 429 || (status >= 500 && status < 600)) {
         await sleep(400 * (attempt + 1));
         continue;
@@ -64,5 +68,3 @@ export async function callOpenAI(
     }`
   );
 }
-
-export { openaiHttp };

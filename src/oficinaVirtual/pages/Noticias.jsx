@@ -1,16 +1,37 @@
-// src/pages/NoticiasOficina.jsx
-import React, { useEffect, useState } from "react";
+// ============================================================
+// 🦉 BÚHOLEX | Noticias Jurídicas Inteligentes
+// ============================================================
+// UI/UX original (el que te mostraba cards) + mejoras puntuales:
+//  - Normalizador universal (soporta {ok,items}, {data}, array puro)
+//  - Fetch con AbortController y compatibilidad de params
+//  - Manejo de especialidad "todas" (no manda el query si es "todas")
+//  - Fallback de imágenes y modal lector
+// ============================================================
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNoticiasGuardadas } from "@/oficinaVirtual/hooks/useNoticiasGuardadas";
 import { asAbsoluteUrl } from "@/utils/apiUrl";
 
-// Endpoint configurable → usa el legal si no está definido
-const BASE_URL =
-  import.meta.env.VITE_NEWS_LEGAL_API_URL || "/api/noticias-juridicas";
+// === CONFIG API ===
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:3000/api";
 
 const PAGE_SIZE = 12;
 
-const AREAS = ["penal", "civil", "laboral", "constitucional", "familiar", "administrativo"];
+// === ESPECIALIDADES ===
+const AREAS = [
+  "todas",
+  "penal",
+  "civil",
+  "laboral",
+  "constitucional",
+  "familiar",
+  "administrativo",
+];
 const AREAS_LABEL = {
+  todas: "Todas",
   penal: "Penal",
   civil: "Civil",
   laboral: "Laboral",
@@ -18,258 +39,438 @@ const AREAS_LABEL = {
   familiar: "Familiar",
   administrativo: "Administrativo",
 };
-const OTRAS_ESPECIALIDADES = [
-  "tributario", "comercial", "procesal", "internacional", "ambiental",
-  "minero", "propiedad intelectual", "consumidor", "seguridad social",
-  "notarial", "registral", "penitenciario"
+const OTRAS = [
+  "comercial",
+  "tributario",
+  "procesal",
+  "registral",
+  "ambiental",
+  "notarial",
+  "penitenciario",
+  "consumidor",
+  "seguridad social",
 ];
-const TEMAS_AFINES_SUG = [
-  "ética judicial", "filosofía del derecho", "innovación legal", "acceso a la justicia",
-  "derechos humanos", "jurisprudencia", "inteligencia artificial", "género y derecho",
-  "corrupción", "compliance"
+const AFINES = [
+  "jurisprudencia",
+  "doctrina",
+  "procesal",
+  "reformas",
+  "precedente",
+  "casación",
+  "tribunal constitucional",
 ];
 
-function esReciente(fecha) {
-  const hoy = new Date();
-  const fNoticia = new Date(fecha);
-  const diff = (hoy - fNoticia) / (1000 * 60 * 60 * 24);
-  return diff <= 5;
-}
+// === MEDIOS ===
+const FALLBACK_IMG = "/assets/default-news.jpg";
+
+// --- Normalizador universal (para backend unificado y APIs antiguas) ---
+const normalize = (data) => {
+  if (!data) return [];
+  const arr = Array.isArray(data)
+    ? data
+    : Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.result)
+    ? data.result
+    : [];
+
+  return arr.map((n, i) => ({
+    id: n._id || n.id || i,
+    titulo: n.titulo || n.title || "Sin título",
+    resumen: n.resumen || n.description || n.extracto || "Sin resumen disponible.",
+    contenido: n.contenido || n.content || n.texto || n.body || "",
+    imagen: n.imagen || n.image || n.imageUrl || FALLBACK_IMG,
+    enlace: n.enlace || n.url || "",
+    fuente: n.fuente || n.source || "Fuente desconocida",
+    fecha: n.fecha || n.date || n.publishedAt || n.createdAt || null,
+    especialidad: n.especialidad || n.area || "general",
+    tipo: n.tipo || "general",
+  }));
+};
 
 export default function NoticiasOficina() {
-  const { guardadas = [], guardarNoticia, quitarNoticia } = useNoticiasGuardadas();
-  const [especialidad, setEspecialidad] = useState(AREAS[0]);
-  const [otrasOpen, setOtrasOpen] = useState(false);
-  const [afinesOpen, setAfinesOpen] = useState(false);
-  const [busquedaAfin, setBusquedaAfin] = useState("");
-  const [modoAfin, setModoAfin] = useState(false);
+  const { guardadas /*, guardarNoticia, quitarNoticia*/ } = useNoticiasGuardadas();
 
-  const [noticias, setNoticias] = useState([]);
-  const [busqueda, setBusqueda] = useState("");
-  const [soloGuardadas, setSoloGuardadas] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // === Filtros ===
+  const [tipo, setTipo] = useState("juridica");
+  const [especialidad, setEspecialidad] = useState("todas");
+  const [tema, setTema] = useState("");
+  const [mostrarOtras, setMostrarOtras] = useState(false);
+  const [q, setQ] = useState("");
+
+  // === Datos ===
+  const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // Lógica de fetch
+  const abortRef = useRef(null);
+
+  // === Modal lector ===
+  const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState(null);
+  const shellRef = useRef(null);
+
+  // --- Fetch con compatibilidad total ---
+  async function fetchNoticias(reset = false) {
+    try {
+      if (loading) return;
+      setLoading(true);
+
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const next = reset ? 1 : page;
+
+      // Solo añadimos parámetros que realmente tienen valor
+      const params = new URLSearchParams();
+      if (tipo) params.set("tipo", tipo);
+      if (especialidad && especialidad !== "todas") params.set("especialidad", especialidad);
+      if (tema) params.set("tema", tema);
+      params.set("page", String(next));
+      params.set("limit", String(PAGE_SIZE));
+
+      const url = `${API_BASE}/noticias?${params.toString()}`;
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const json = await res.json();
+      if (import.meta.env.MODE !== "production") {
+        console.log("🧠 Datos API:", json);
+      }
+
+      // Compatibilidad asegurada
+      const data = json?.items || json?.data || json || [];
+      const nuevos = normalize(data);
+
+      setItems((prev) => (reset ? nuevos : [...prev, ...nuevos]));
+      setPage(next + 1);
+      setHasMore(nuevos.length === PAGE_SIZE);
+    } catch (e) {
+      if (e.name !== "AbortError") console.error("❌ Error noticias:", e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // === Reload al cambiar filtros ===
   useEffect(() => {
-    let cancelado = false;
-    setLoading(true);
+    setItems([]);
     setPage(1);
+    setHasMore(true);
+    fetchNoticias(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, especialidad, tema]);
 
-    const query = modoAfin
-      ? (busquedaAfin?.trim() || especialidad)
-      : `${especialidad}+derecho+site:.pe`;
+  // === Filtro local (buscador) ===
+  const filtradas = useMemo(() => {
+    const text = q.trim().toLowerCase();
+    if (!text) return items;
+    return items.filter(
+      (n) =>
+        n.titulo.toLowerCase().includes(text) ||
+        (n.resumen || "").toLowerCase().includes(text) ||
+        (n.fuente || "").toLowerCase().includes(text)
+    );
+  }, [items, q]);
 
-    const url = asAbsoluteUrl(`${BASE_URL}?q=${encodeURIComponent(query)}`);
-
-    fetch(url)
-      .then(res => {
-        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
-        return res.json();
-      })
-      .then(data => { if (!cancelado) setNoticias(Array.isArray(data) ? data : []); })
-      .catch(err => console.error("❌ Error cargando noticias:", err))
-      .finally(() => { if (!cancelado) setLoading(false); });
-
-    return () => { cancelado = true; };
-  }, [especialidad, modoAfin, busquedaAfin]);
-
-  // Filtro local
-  const filtradas = (noticias || []).filter(n =>
-    (soloGuardadas || esReciente(n.fecha)) &&
-    (
-      n.titulo?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      n.resumen?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      ((n.tagsAI || []).some(tag => tag.toLowerCase().includes(busqueda.toLowerCase())))
-    )
+  const savedSet = useMemo(
+    () => new Set((guardadas || []).map((x) => x?._id || x?.id).filter(Boolean)),
+    [guardadas]
   );
 
-  const total = (filtradas || []).length;
-  const paginadas = (filtradas || []).slice(0, page * PAGE_SIZE);
+  // === Helpers ===
+  const mediaSrc = (url) => {
+    if (!url) return FALLBACK_IMG;
+    // Si ya es local, úsala
+    if (/^\/(assets|uploads)\//.test(url)) return url;
+    // HTTP directo; si 403, cae al onError
+    if (/^https?:\/\//i.test(url)) return url;
+    return FALLBACK_IMG;
+  };
 
+  // === Modal ===
+  const openReader = (n) => {
+    setSel(n);
+    setOpen(true);
+    shellRef.current?.classList.add("overflow-hidden");
+  };
+  const closeReader = () => {
+    setOpen(false);
+    setSel(null);
+    shellRef.current?.classList.remove("overflow-hidden");
+  };
+
+  // === RENDER ===
   return (
-    <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 py-8 min-h-[70vh]">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-center mb-2 tracking-tight text-[#b03a1a]">
-        Noticias Jurídicas Inteligentes
-      </h2>
+    <div
+      ref={shellRef}
+      className="relative h-[calc(100vh-80px)] bg-[#fffaf6] rounded-2xl border border-[#f1e5dc] shadow-[0_6px_32px_-10px_rgba(176,58,26,0.08)] overflow-hidden"
+    >
+      <div className="grid grid-rows-[auto,1fr] h-full">
+        {/* HEADER */}
+        <header className="sticky top-0 z-10 bg-[#fff6ef]/95 backdrop-blur px-4 sm:px-6 pt-6 pb-3 border-b border-[#f1e5dc]">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-center text-[#b03a1a]">
+            Noticias Jurídicas Inteligentes
+          </h2>
 
-      {/* Botones de especialidad */}
-      <div className="flex flex-wrap justify-center gap-2 mb-6">
-        {AREAS.map(area => (
-          <button
-            key={area}
-            onClick={() => { setEspecialidad(area); setModoAfin(false); setOtrasOpen(false); setAfinesOpen(false); }}
-            className={`px-4 py-2 rounded-xl font-bold border shadow transition-all
-              ${especialidad === area && !modoAfin
-                ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow-lg scale-105"
-                : "bg-[#fdf5ee] text-[#b03a1a] border-[#b03a1a] hover:bg-[#f3ece9]"}`}
-          >
-            {AREAS_LABEL[area]}
-          </button>
-        ))}
-        {/* Botones extra */}
-        <button
-          onClick={() => { setOtrasOpen(v => !v); setAfinesOpen(false); setModoAfin(false); }}
-          className="px-4 py-2 rounded-xl font-bold border border-yellow-700 bg-yellow-100 text-[#b03a1a] hover:bg-yellow-200 relative"
-        >
-          Otras especialidades <span className="ml-1 text-xs">▼</span>
-        </button>
-        <button
-          onClick={() => { setAfinesOpen(true); setOtrasOpen(false); setModoAfin(true); setBusquedaAfin(""); }}
-          className={`px-4 py-2 rounded-xl font-bold border bg-blue-100 text-[#164a8a] border-blue-700 hover:bg-blue-200 transition
-            ${modoAfin ? "shadow-lg" : ""}`}
-        >
-          Temas afines
-        </button>
-        <button
-          onClick={() => setSoloGuardadas(v => !v)}
-          className={`px-4 py-2 rounded-xl font-bold border transition ml-3
-            ${soloGuardadas
-              ? "bg-blue-700 text-white border-blue-700 shadow"
-              : "bg-[#fdf5ee] text-[#164a8a] border-blue-700 hover:bg-[#e5ecfa]"}`}
-        >
-          {soloGuardadas ? "Ver Recientes" : "Ver Guardadas"}
-        </button>
-      </div>
-
-      {/* Menú de otras especialidades */}
-      {otrasOpen && (
-        <div className="flex flex-wrap justify-center gap-2 mb-4 animate-fade-in">
-          {OTRAS_ESPECIALIDADES.map(area => (
-            <button
-              key={area}
-              onClick={() => { setEspecialidad(area); setModoAfin(false); setOtrasOpen(false); setAfinesOpen(false); }}
-              className={`px-4 py-2 rounded-xl font-semibold border transition
-                ${especialidad === area && !modoAfin
-                  ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow"
-                  : "bg-white text-[#b03a1a] border-[#b03a1a] hover:bg-[#ffe6d6]"}`}
-            >
-              {area.charAt(0).toUpperCase() + area.slice(1)}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Modal Temas afines */}
-      {afinesOpen && modoAfin && (
-        <div className="flex flex-col items-center gap-3 mb-6 animate-fade-in bg-white/95 px-4 py-6 rounded-xl shadow-lg border border-[#b03a1a]/15 max-w-lg mx-auto">
-          <div className="flex justify-between items-center w-full mb-2">
-            <span className="font-bold text-lg text-[#164a8a]">Buscar noticias por temas éticos, doctrinales o tecnológicos</span>
-            <button onClick={() => { setAfinesOpen(false); setModoAfin(false); }} className="ml-4 text-gray-500 text-xl hover:text-[#b03a1a] font-bold">&times;</button>
-          </div>
-          <input
-            type="text"
-            value={busquedaAfin}
-            onChange={e => setBusquedaAfin(e.target.value)}
-            placeholder="Ej: ética judicial, filosofía, jurisprudencia, AI, género..."
-            className="border border-[#164a8a] px-4 py-3 rounded-lg text-lg w-full"
-            onKeyDown={e => { if (e.key === "Enter") { setEspecialidad(busquedaAfin || "afines"); setAfinesOpen(false); } }}
-          />
-          <button
-            disabled={!busquedaAfin.trim()}
-            onClick={() => { setEspecialidad(busquedaAfin || "afines"); setAfinesOpen(false); }}
-            className="mt-2 px-6 py-2 rounded-lg bg-[#164a8a] text-white font-bold text-base shadow hover:bg-blue-900 transition disabled:opacity-50"
-          >
-            Buscar
-          </button>
-          <div className="flex flex-wrap gap-2 mt-3">
-            {TEMAS_AFINES_SUG.map(sug => (
+          {/* Tipo de noticias */}
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {[
+              { key: "juridica", label: "Jurídicas" },
+              { key: "general", label: "Generales" },
+            ].map((t) => (
               <button
-                key={sug}
-                onClick={() => { setBusquedaAfin(sug); setEspecialidad(sug); setAfinesOpen(false); }}
-                className="px-3 py-1 bg-[#e5ecfa] text-[#164a8a] rounded-full font-semibold hover:bg-[#d6e0f7]">
-                {sug}
+                key={t.key}
+                onClick={() => setTipo(t.key)}
+                className={`px-4 py-2 rounded-full font-semibold transition ${
+                  tipo === t.key
+                    ? "bg-[#b03a1a] text-white"
+                    : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+            <button
+              onClick={() => setMostrarOtras((v) => !v)}
+              className="px-4 py-2 rounded-full font-semibold bg-white text-[#b03a1a] border border-[#e7d4c8]"
+            >
+              {mostrarOtras ? "Ocultar especialidades" : "Otras especialidades"}
+            </button>
+          </div>
+
+          {/* Especialidades principales */}
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {AREAS.map((a) => (
+              <button
+                key={a}
+                onClick={() => setEspecialidad(a)}
+                className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition ${
+                  especialidad === a
+                    ? "bg-[#b03a1a] text-white"
+                    : "text-[#4a2e23] border-[#e7d4c8] bg-white"
+                }`}
+              >
+                {AREAS_LABEL[a]}
               </button>
             ))}
           </div>
+
+          {/* Otras especialidades */}
+          {mostrarOtras && (
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {OTRAS.map((o) => (
+                <button
+                  key={o}
+                  onClick={() => setEspecialidad(o)}
+                  className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition ${
+                    especialidad === o
+                      ? "bg-[#b03a1a] text-white"
+                      : "text-[#4a2e23] border-[#e7d4c8] bg-white"
+                  }`}
+                >
+                  {o[0].toUpperCase() + o.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Temas afines */}
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <span className="text-sm font-semibold text-[#4a2e23] mr-1">
+              Temas afines:
+            </span>
+            {AFINES.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTema(t)}
+                className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition ${
+                  tema === t
+                    ? "bg-[#b03a1a] text-white"
+                    : "text-[#4a2e23] border-[#e7d4c8] bg-white"
+                }`}
+              >
+                {t[0].toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+            {tema && (
+              <button
+                onClick={() => setTema("")}
+                className="px-3 py-1.5 rounded-full text-sm font-semibold text-[#b03a1a] bg-white border border-[#e7d4c8]"
+              >
+                Limpiar tema
+              </button>
+            )}
+          </div>
+
+          {/* Buscador */}
+          <div className="mt-4 max-w-2xl mx-auto">
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar en los resultados..."
+              className="w-full px-4 py-2 rounded-xl border border-[#e7d4c8] outline-none bg-white"
+            />
+          </div>
+        </header>
+
+        {/* LISTADO */}
+        <section className="overflow-y-auto px-4 sm:px-6 py-6 no-scrollbar">
+          {loading && items.length === 0 ? (
+            <p className="text-center text-gray-500">Cargando noticias…</p>
+          ) : filtradas.length === 0 ? (
+            <p className="text-center text-[#b03a1a] font-semibold">
+              No hay noticias en esta especialidad.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+              {filtradas.map((n) => (
+                <article
+                  key={n.id}
+                  className="rounded-xl bg-white border border-[#f1e5dc] shadow-sm hover:shadow-md overflow-hidden cursor-pointer transition-all"
+                  onClick={() => openReader(n)}
+                >
+                  {/* Imagen */}
+                  <div className="relative aspect-[16/9] bg-[#f6f2ee]">
+                    <img
+                      src={mediaSrc(n.imagen)}
+                      alt={n.titulo}
+                      className="w-full h-full object-cover"
+                      onError={(e) => (e.currentTarget.src = FALLBACK_IMG)}
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white px-3 py-2 text-sm line-clamp-2">
+                      {n.titulo}
+                    </div>
+                  </div>
+
+                  {/* Contenido */}
+                  <div className="p-3">
+                    <p className="text-sm text-[#6b4d3e] line-clamp-5">
+                      {n.resumen}
+                    </p>
+                    <div className="mt-3 flex justify-between text-xs text-[#8a6e60]">
+                      <span>{n.fuente}</span>
+                      {n.fecha && (
+                        <time>{new Date(n.fecha).toLocaleDateString()}</time>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {/* Cargar más */}
+          {hasMore && (
+            <div className="mt-8 flex justify-center">
+              <button
+                disabled={loading}
+                onClick={() => fetchNoticias(false)}
+                className="px-5 py-2 rounded-lg bg-[#b03a1a] text-white font-semibold disabled:opacity-60 hover:bg-[#a87247]"
+              >
+                {loading ? "Cargando…" : "Cargar más"}
+              </button>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* MODAL LECTOR */}
+      {open && sel && (
+        <div
+          className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-3"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeReader}
+        >
+          <div
+            className="w-full max-w-5xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header modal */}
+            <div className="sticky top-0 bg-[#b03a1a] text-white px-4 sm:px-6 py-3 flex items-start gap-3">
+              <h3 className="text-base sm:text-lg font-bold leading-snug">
+                {sel.titulo}
+              </h3>
+              <button
+                onClick={closeReader}
+                className="ml-auto text-white text-xl font-bold leading-none"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Body con scroll */}
+            <div className="overflow-y-auto max-h-[calc(90vh-56px)]">
+              {sel.imagen && (
+                <img
+                  src={mediaSrc(sel.imagen)}
+                  alt={sel.titulo}
+                  className="w-full object-contain max-h-[60vh] bg-[#f6f2ee]"
+                  onError={(e) => (e.currentTarget.src = FALLBACK_IMG)}
+                />
+              )}
+
+              <div className="px-4 sm:px-6 py-4">
+                <div className="text-sm text-[#6b4d3e] flex flex-wrap gap-3 mb-4">
+                  {sel.fuente && (
+                    <span>
+                      Fuente:{" "}
+                      <span className="font-semibold">{sel.fuente}</span>
+                    </span>
+                  )}
+                  {sel.fecha && (
+                    <span>{new Date(sel.fecha).toLocaleString()}</span>
+                  )}
+                </div>
+
+                <div className="prose max-w-none text-[#3a2a24]">
+                  {sel.contenido ? (
+                    <div dangerouslySetInnerHTML={{ __html: sel.contenido }} />
+                  ) : (
+                    <p className="whitespace-pre-line">{sel.resumen}</p>
+                  )}
+                </div>
+
+                <div className="mt-6 flex gap-3">
+                  {sel.enlace && /^https?:\/\//.test(sel.enlace) && (
+                    <a
+                      href={sel.enlace}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-[#b03a1a] text-white px-4 py-2 rounded-lg font-semibold hover:bg-[#a87247]"
+                    >
+                      Ver en fuente
+                    </a>
+                  )}
+                  <button
+                    onClick={closeReader}
+                    className="px-4 py-2 rounded-lg border font-semibold text-[#8a6e60]"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+
+                <p className="mt-4 text-xs text-[#8a6e60]">
+                  Publicado y adaptado por el equipo jurídico de{" "}
+                  <strong>BúhoLex</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Barra búsqueda */}
-      <div className="w-full max-w-xl mx-auto mb-8 flex flex-col sm:flex-row gap-4 justify-center">
-        <input
-          type="search"
-          className="border border-[#b03a1a]/40 text-lg px-4 py-3 rounded-xl flex-1 outline-[#b03a1a] font-semibold shadow"
-          placeholder="Buscar por palabra clave, interés o resumen..."
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-        />
-      </div>
-
-      {/* Noticias */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-        {loading ? (
-          <div className="col-span-full text-center text-2xl py-10 text-gray-500">Cargando noticias...</div>
-        ) : paginadas.length === 0 ? (
-          <div className="col-span-full text-center text-xl py-10 text-[#b03a1a] font-semibold">
-            No hay noticias en esta especialidad.<br />Prueba con otra área o busca un término más general.
-          </div>
-        ) : (
-          (paginadas || []).map((n, idx) => (
-            <div
-              key={`${n.enlace || n.titulo || "noticia"}-${idx}`}
-              className="bg-white rounded-3xl shadow-2xl border border-[#f1e5dc] p-6 flex flex-col gap-2 hover:shadow-[0_6px_36px_-8px_rgba(176,58,26,0.09)] transition-all min-h-[250px]"
-            >
-              <div className="flex flex-wrap justify-between items-center text-sm font-medium mb-2">
-                <span className="text-[#b03a1a]">{n.fuente || "Google Noticias"} | {n.fecha?.substring(0, 10)}</span>
-                <span className="font-bold ml-2 text-green-700">Libre</span>
-              </div>
-              <a
-                href={n.enlace}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-lg sm:text-xl font-bold mb-1 text-[#b03a1a] hover:underline hover:text-[#a87247] transition line-clamp-3"
-              >
-                {n.titulo}
-              </a>
-              <p className="text-base text-gray-700 mb-1 line-clamp-3">{n.resumen}</p>
-              <div className="flex flex-wrap gap-2 my-1">
-                {(n.tagsAI || []).map(tag => (
-                  <span key={tag} className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold">{tag}</span>
-                ))}
-              </div>
-              <div className="flex gap-2 mt-2 items-center justify-between">
-                {n.id && (guardadas || []).includes(n.id) ? (
-                  <button
-                    className="px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-bold shadow hover:bg-blue-800 transition"
-                    onClick={() => quitarNoticia(n.id)}
-                  >Guardada</button>
-                ) : n.id ? (
-                  <button
-                    className="px-4 py-2 rounded-lg bg-[#b03a1a] text-white text-sm font-bold shadow hover:bg-[#a87247] transition"
-                    onClick={() => guardarNoticia(n.id)}
-                  >Guardar</button>
-                ) : null}
-                <a
-                  href={n.enlace}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#164a8a] font-semibold hover:underline hover:text-[#b03a1a] ml-auto text-base"
-                >
-                  Ver más &rarr;
-                </a>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Paginador */}
-      <div className="flex justify-center py-8">
-        {(paginadas || []).length < total && (
-          <button
-            className="px-8 py-3 rounded-xl bg-[#164a8a] text-white font-bold text-lg shadow hover:bg-[#2057a0] transition"
-            onClick={() => setPage(p => p + 1)}
-          >
-            Ver más noticias
-          </button>
-        )}
-      </div>
-
+      {/* util: oculta/estiliza scrollbar (opcional) */}
       <style>{`
-        .animate-fade-in { animation: fadeIn .5s cubic-bezier(.36,.07,.19,.97); }
-        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(12px);} 100% { opacity: 1; transform: none;} }
-        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .no-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .no-scrollbar::-webkit-scrollbar-thumb { background: #e6d9cf; border-radius: 8px; }
+        .no-scrollbar::-webkit-scrollbar-track { background: transparent; }
       `}</style>
     </div>
   );

@@ -1,63 +1,132 @@
-// src/hooks/useNoticiasGuardadas.js
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { db, auth, storage } from "@/firebase";
-import { doc, getDoc, setDoc } from "@/firebase";
 
-const LOCAL_KEY = "noticiasGuardadas_buholex";
+// Guardamos SOLO IDs en localStorage para no mezclar tipos
+const LOCAL_KEY = "noticiasGuardadas_buholex_ids";
 
-/**
- * Hook para gestionar las noticias guardadas por usuario.
- * Sincroniza localStorage y Firestore automáticamente.
- */
+// El backend unificado (ajusta si usas otro puerto/var env)
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+
+// Normaliza cualquier forma de entrada (string id, {_id}, {id})
+function toId(x) {
+  if (!x) return null;
+  if (typeof x === "string") return x.trim();
+  if (typeof x === "object") return x._id ?? x.id ?? null;
+  return null;
+}
+// Normaliza arrays: mezcla, quita nulos/duplicados
+function normalizeIdArray(arr) {
+  return Array.from(
+    new Set((arr || []).map(toId).filter(Boolean))
+  );
+}
+
 export function useNoticiasGuardadas() {
   const { user } = useAuth();
-  const [guardadas, setGuardadas] = useState([]);
+  const [guardadas, setGuardadas] = useState([]); // siempre array de IDs (strings)
+  const userId = user?.uid || null;
 
-  // Sincroniza localStorage y Firestore al iniciar sesión
-  useEffect(() => {
-    const fromLocal = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
-    if (user?.uid) {
-      // Si hay usuario, sincroniza con Firestore
-      const ref = doc(db, "usuarios", user.uid);
-      getDoc(ref).then(snap => {
-        let cloud = snap.data()?.noticiasGuardadas || [];
-        // Merge (sin duplicados)
-        let merged = Array.from(new Set([...fromLocal, ...cloud]));
-        setGuardadas(merged);
-        // Guarda merge en Firestore y localStorage
-        setDoc(ref, { noticiasGuardadas: merged }, { merge: true });
-        localStorage.setItem(LOCAL_KEY, JSON.stringify(merged));
-      });
-    } else {
-      setGuardadas(fromLocal);
+  // Lee localStorage de forma segura
+  const readLocal = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
+      return normalizeIdArray(raw);
+    } catch {
+      return [];
     }
-  }, [user]);
+  };
+  const writeLocal = (ids) => {
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(normalizeIdArray(ids)));
+    } catch {}
+  };
 
-  // Guardar noticia
-  const guardarNoticia = useCallback((id) => {
-    setGuardadas(prev => {
+  // Sincroniza local + servidor al montar o cambiar user
+  useEffect(() => {
+    let cancelled = false;
+
+    const fromLocal = readLocal();
+
+    // Si no hay usuario, solo usa local
+    if (!userId) {
+      if (!cancelled) setGuardadas(fromLocal);
+      return;
+    }
+
+    // Si hay usuario: trae del servidor y mergea con local
+    (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/noticias-guardadas?userId=${encodeURIComponent(userId)}`);
+        const data = await res.json();
+
+        // data puede ser array de ids o de objetos → normalizamos a ids
+        const fromServer = normalizeIdArray(data);
+
+        // merge (local tiene preferencia pero realmente da igual porque son ids)
+        const merged = normalizeIdArray([...fromLocal, ...fromServer]);
+
+        if (!cancelled) {
+          setGuardadas(merged);
+        }
+
+        // Persistimos en servidor y local
+        writeLocal(merged);
+        await fetch(`${BASE_URL}/noticias-guardadas`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, guardadas: merged }),
+        });
+      } catch (e) {
+        // Si el servidor falla, nos quedamos con local
+        if (!cancelled) setGuardadas(fromLocal);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  // Guardar (id puede venir como string u objeto → lo normalizamos)
+  const guardarNoticia = useCallback(async (noticiaOrId) => {
+    const id = toId(noticiaOrId);
+    if (!id) return;
+
+    setGuardadas((prev) => {
       if (prev.includes(id)) return prev;
       const updated = [...prev, id];
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(updated));
-      if (user?.uid) {
-        setDoc(doc(db, "usuarios", user.uid), { noticiasGuardadas: updated }, { merge: true });
-      }
-      return updated;
-    });
-  }, [user]);
+      writeLocal(updated);
 
-  // Quitar noticia
-  const quitarNoticia = useCallback((id) => {
-    setGuardadas(prev => {
-      const updated = prev.filter(x => x !== id);
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(updated));
-      if (user?.uid) {
-        setDoc(doc(db, "usuarios", user.uid), { noticiasGuardadas: updated }, { merge: true });
+      // Sincroniza con backend si hay usuario
+      if (userId) {
+        fetch(`${BASE_URL}/noticias-guardadas`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, guardadas: updated }),
+        }).catch(() => {});
       }
       return updated;
     });
-  }, [user]);
+  }, [userId]);
+
+  // Quitar
+  const quitarNoticia = useCallback(async (noticiaOrId) => {
+    const id = toId(noticiaOrId);
+    if (!id) return;
+
+    setGuardadas((prev) => {
+      const updated = prev.filter((x) => x !== id);
+      writeLocal(updated);
+
+      if (userId) {
+        fetch(`${BASE_URL}/noticias-guardadas`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, guardadas: updated }),
+        }).catch(() => {});
+      }
+      return updated;
+    });
+  }, [userId]);
 
   return { guardadas, guardarNoticia, quitarNoticia };
 }

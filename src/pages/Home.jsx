@@ -4,7 +4,7 @@ import logoBuho from "../assets/buho-institucional.png";
 import NoticiasSlidebar from "../components/NoticiasSlidebar";
 import { Link } from "react-router-dom";
 import { useNoticias } from "../context/NoticiasContext";
-import { obtenerNoticias } from "../services/firebaseNoticiasService";
+import { getNoticias } from "@/services/noticiasApi";
 import PageContainer from "@/components/PageContainer";
 
 export default function Home() {
@@ -14,9 +14,8 @@ export default function Home() {
 
   // Traer noticias públicas desde Firestore al cargar la página
   useEffect(() => {
-    obtenerNoticias({ max: 10, soloLibres: true })
-      .then(setNoticias)
-      .finally(() => setLoading(false));
+    getNoticias({ tipo: "general", limit: 10 })
+      .then((data) => setNoticias(data.items));
   }, []);
 
   const handleOficina = () => {

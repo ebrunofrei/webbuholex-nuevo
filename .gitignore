@@ -72,17 +72,18 @@ firebase-service-account.json
 *.history
 
 # ============================
-# SCRIPTS DE IMPORTACIÓN QUE USAN CLAVES
+# FIREBASE CONFIG FILES (solo Admin o privados)
 # ============================
-importar_normas/firebase-service-account.json
-
-# ============================
-# FIREBASE CONFIG FILES (custom paths también)
-# ============================
-# src/firebase.js  ← descomentado para subir a Vercel si quieres exponer solo client SDK
-src/firebaseConfig.js
 src/config/*.js
 src/config/**/firebase*.js
+backend/keys/*.json
+importar_normas/firebase-service-account.json
+
+# ✅ Mantener config pública (Frontend SDK) si se requiere en Vercel
+!src/firebase.js
+!public/firebase-messaging-sw.js
+!public/favicon.ico
+!public/manifest.json
 
 # ============================
 # TEST / HERRAMIENTAS
@@ -99,7 +100,8 @@ jest.config.js
 .cache/
 .yarn/
 .pnpm-debug.log
-index-C6tLERUj.js
+index-*.js
+index-*.css
 
 # ============================
 # TEMPORALES
@@ -107,7 +109,7 @@ index-C6tLERUj.js
 tmp/
 temp/
 *.tmp
-scripts
+*.bak
 
 # ============================
 # STORYBOOK
@@ -128,47 +130,24 @@ docker-compose.override.yml
 # ============================
 # VERCEL PROJECT FILES
 # ============================
-# Ignorar carpeta local de Vercel CLI
 .vercel/
-
-# ⚠️ NO ignores vercel.json (configuración de proyecto)
+# ⚠️ Mantener config de proyecto
 !vercel.json
 
 # ============================
 # FRONTEND BUILD / PUBLIC
 # ============================
-# Ignorar solo bundles generados
 src/assets/index-*.js
-
-# Ignorar temporales dentro de public
 public/*.map
 public/*.tmp
 public/*.bak
 
-# Mantener archivos críticos
-!public/firebase-messaging-sw.js
-!public/favicon.ico
-!public/manifest.json
-src/assets/index-*.css
-
 # ============================
-# BACKEND KEYS
+# SCRIPTS DE MANTENIMIENTO
 # ============================
-backend/keys/*.json
-
-# Scripts de mantenimiento
 scripts/*.tmp
 scripts/*.bak
 scripts/*.log
-# Mantener scripts útiles
+# ✅ Mantener scripts útiles
 !scripts/test-fcm.js
 !scripts/send-fcm.js
-
-# ============================
-# TEMPORALES
-# ============================
-tmp/
-temp/
-*.tmp
-scripts
-.env.local 
