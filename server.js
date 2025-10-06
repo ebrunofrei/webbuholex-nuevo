@@ -1,9 +1,9 @@
 // ============================================================
-// 🦉 BÚHOLEX | Backend Unificado con Conexión Garantizada a MongoDB
+// 🦉 BÚHOLEX | Backend Unificado y Escalable
 // ============================================================
-// Arquitectura profesional: conexión segura, CORS dinámico, logs
-// estructurados, cron jobs y mantenimiento automático.
-// Compatible con Railway, Atlas, Vercel y entornos locales.
+// Arquitectura profesional: conexión segura a MongoDB Atlas,
+// CORS dinámico, logging colorizado, healthcheck, cronjobs
+// y rutas modulares. Compatible con Railway, Vercel y local.
 // ============================================================
 
 import express from "express";
@@ -15,10 +15,10 @@ import { fileURLToPath } from "url";
 import chalk from "chalk";
 import cron from "node-cron";
 
-// === Conexión MongoDB ===
+// === 🔗 Conexión MongoDB ===
 import { connectDB, disconnectDB } from "./backend/services/db.js";
 
-// === Rutas principales ===
+// === 🧭 Rutas principales ===
 import noticiasRoutes from "./backend/routes/noticias.js";
 import noticiasContenidoRoutes from "./backend/routes/noticiasContenido.js";
 import iaRoutes from "./backend/routes/ia.js";
@@ -29,23 +29,74 @@ import noticiasGuardadasRoutes from "./backend/routes/noticiasGuardadas.js";
 import mediaProxyRoutes from "./backend/routes/mediaProxy.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 
-// === Cron Jobs ===
+// === 🕒 Cron Jobs ===
 import { cleanupLogs } from "./backend/jobs/cleanupLogs.js";
 import { jobNoticias } from "./backend/jobs/cronNoticias.js";
-
-// === Mantenimiento automático ===
 import { maintainIndexes } from "./scripts/maintain-indexes.js";
 
 // ============================================================
-// ⚙️ Configuración general
+// ⚙️ Configuración base
 // ============================================================
 
+dotenv.config(); // Detecta automáticamente Railway o .env.local
 const NODE_ENV = process.env.NODE_ENV || "production";
-dotenv.config({ path: `.env.${NODE_ENV}` });
-
+const PORT = process.env.PORT || 8080;
 const app = express();
-const PORT = process.env.PORT || 3000;
 const START_TIME = new Date();
+
+// ============================================================
+// 🌍 CORS Dinámico + Middlewares base
+// ============================================================
+
+const defaultOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://buholex.com",
+  "https://www.buholex.com",
+  "https://webbuholex-nuevo.vercel.app",
+];
+
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
+  : defaultOrigins;
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (corsOrigins.includes(origin)) return cb(null, true);
+      console.warn(chalk.red(`⚠️ [CORS] Bloqueado para: ${origin}`));
+      return cb(new Error(`CORS no permitido para ${origin}`));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan("dev"));
+
+// ============================================================
+// 🩺 Healthcheck y estado general
+// ============================================================
+
+app.get("/", (_req, res) =>
+  res.type("text/plain").send("🦉 Servidor BúhoLex operativo 🚀")
+);
+
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    env: NODE_ENV,
+    uptime: `${process.uptime().toFixed(0)}s`,
+    startedAt: START_TIME.toISOString(),
+    now: new Date().toISOString(),
+    version: process.env.npm_package_version || "1.0.0",
+    database: "MongoDB Atlas conectado ✅",
+  });
+});
 
 // ============================================================
 // 🚀 Inicialización principal
@@ -53,64 +104,12 @@ const START_TIME = new Date();
 
 (async () => {
   try {
-    console.log(chalk.yellowBright("⏳ Intentando conectar a MongoDB..."));
+    console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
     await connectDB();
-    console.log(chalk.greenBright("✅ Conexión MongoDB establecida correctamente."));
+    console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
 
     // ------------------------------------------------------------
-    // 🔧 CORS Dinámico
-    // ------------------------------------------------------------
-    const defaultOrigins = [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      "https://buholex.com",
-      "https://www.buholex.com",
-      "https://webbuholex-nuevo.vercel.app",
-    ];
-
-    const corsOrigins = process.env.CORS_ORIGINS
-      ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
-      : defaultOrigins;
-
-    app.use(
-      cors({
-        origin: (origin, cb) => {
-          if (!origin) return cb(null, true);
-          if (corsOrigins.includes(origin)) return cb(null, true);
-          console.warn(chalk.red(`⚠️ [CORS] Bloqueado para: ${origin}`));
-          return cb(new Error(`CORS no permitido para ${origin}`));
-        },
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-        credentials: true,
-      })
-    );
-
-    // ------------------------------------------------------------
-    // 🧱 Middlewares base
-    // ------------------------------------------------------------
-    app.use(express.json({ limit: "10mb" }));
-    app.use(express.urlencoded({ extended: true }));
-    app.use(morgan("dev"));
-
-    // ------------------------------------------------------------
-    // 🩺 Healthcheck (Railway)
-    // ------------------------------------------------------------
-    app.get("/api/health", (_req, res) => {
-      res.setHeader("Content-Type", "application/json");
-      res.status(200).json({
-        ok: true,
-        service: "Buholex News Proxy",
-        env: NODE_ENV,
-        uptime: process.uptime(),
-        startedAt: START_TIME.toISOString(),
-        now: new Date().toISOString(),
-        version: process.env.npm_package_version || "1.0.0",
-      });
-    });
-
-    // ------------------------------------------------------------
-    // 🌐 Rutas API
+    // 🔗 Cargar rutas de API
     // ------------------------------------------------------------
     app.use("/api/media", mediaProxyRoutes);
     app.use("/api/noticias", noticiasRoutes);
@@ -123,39 +122,41 @@ const START_TIME = new Date();
     app.use("/api/traducir", traducirRoutes);
 
     // ------------------------------------------------------------
-    // 🗂️ Archivos estáticos
+    // 📂 Archivos estáticos (por si se suben imágenes)
     // ------------------------------------------------------------
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
     // ------------------------------------------------------------
-    // 🕒 Cron Jobs Activos
+    // 🕒 CronJobs Automáticos
     // ------------------------------------------------------------
     cleanupLogs?.();
     jobNoticias?.();
 
     cron.schedule("0 3 * * 0", async () => {
-      console.log(chalk.magentaBright("\n🧹 [Cron] Mantenimiento semanal de índices..."));
+      console.log(chalk.magentaBright("\n🧹 [Cron] Mantenimiento semanal..."));
       try {
         await maintainIndexes();
-        console.log(chalk.green("✅ Mantenimiento de índices completado."));
+        console.log(chalk.green("✅ Índices optimizados correctamente."));
       } catch (err) {
-        console.error(chalk.red("❌ Error en mantenimiento de índices:"), err.message);
+        console.error(chalk.red("❌ Error en mantenimiento:"), err.message);
       }
     });
 
     // ------------------------------------------------------------
-    // ❌ 404 Fallback
+    // ❌ Ruta no encontrada (404)
     // ------------------------------------------------------------
-    app.use((req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
+    app.use((req, res) => {
+      res.status(404).json({ error: "Ruta no encontrada" });
+    });
 
     // ------------------------------------------------------------
-    // 🧩 Manejo de errores globales
+    // 🧩 Manejo global de errores
     // ------------------------------------------------------------
-    process.on("unhandledRejection", (reason) =>
-      console.error(chalk.red("⚠️ [Rechazo no manejado]"), reason)
-    );
+    process.on("unhandledRejection", (reason) => {
+      console.error(chalk.red("⚠️ [Promesa no manejada]"), reason);
+    });
 
     process.on("SIGINT", async () => {
       console.log(chalk.yellow("\n🛑 Cerrando servidor..."));
@@ -164,10 +165,10 @@ const START_TIME = new Date();
     });
 
     // ------------------------------------------------------------
-    // 🚀 Iniciar servidor (único listen)
+    // 🚀 Iniciar servidor único
     // ------------------------------------------------------------
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(chalk.greenBright(`🚀 Servidor BúhoLex operativo en puerto ${PORT}`));
+      console.log(chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`));
       console.log(chalk.cyanBright("🌍 Orígenes permitidos por CORS:"));
       corsOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
     });
