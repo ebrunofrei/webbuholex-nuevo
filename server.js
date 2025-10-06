@@ -1,17 +1,18 @@
 // ============================================================
-// 🦉 BÚHOLEX | Backend Unificado (Railway + Vercel + Local)
+// 🦉 BÚHOLEX | Backend Unificado con Conexión Garantizada a MongoDB
 // ============================================================
-// Conexión garantizada a MongoDB, CORS dinámico, logs visibles,
-// mantenimiento automático e integración con frontend.
+// Arquitectura profesional: conexión segura, CORS dinámico, logs
+// estructurados, cron jobs y mantenimiento automático.
+// Compatible con Railway, Atlas, Vercel y entornos locales.
 // ============================================================
 
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
-import chalk from "chalk";
 import path from "path";
 import { fileURLToPath } from "url";
+import chalk from "chalk";
 import cron from "node-cron";
 
 // === Conexión MongoDB ===
@@ -32,7 +33,7 @@ import traducirRoutes from "./backend/routes/traducir.js";
 import { cleanupLogs } from "./backend/jobs/cleanupLogs.js";
 import { jobNoticias } from "./backend/jobs/cronNoticias.js";
 
-// === Scripts auxiliares ===
+// === Mantenimiento automático ===
 import { maintainIndexes } from "./scripts/maintain-indexes.js";
 
 // ============================================================
@@ -47,55 +48,18 @@ const PORT = process.env.PORT || 3000;
 const START_TIME = new Date();
 
 // ============================================================
-// 🔧 CORS
+// 🌐 Rutas de prueba rápidas
 // ============================================================
 
-const defaultOrigins = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "https://buholex.com",
-  "https://www.buholex.com",
-  "https://webbuholex-nuevo.vercel.app",
-];
-
-const corsOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
-  : defaultOrigins;
-
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (corsOrigins.includes(origin)) return cb(null, true);
-      console.warn(chalk.red(`⚠️ [CORS] Bloqueado para: ${origin}`));
-      return cb(new Error(`CORS no permitido para ${origin}`));
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true,
-  })
-);
-
-// ============================================================
-// 🧱 Middlewares base
-// ============================================================
-
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan("dev"));
-
-// ============================================================
-// 🩺 Healthcheck global (disponible aunque Mongo falle)
-// ============================================================
-
-app.get("/", (_req, res) => res.type("text/plain").send("ok"));
+app.get("/", (_req, res) => res.type("text/plain").send("✅ Servidor BúhoLex operativo"));
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
-    status: "healthy",
     env: NODE_ENV,
     uptime: process.uptime(),
     startedAt: START_TIME.toISOString(),
     now: new Date().toISOString(),
+    version: process.env.npm_package_version || "1.0.0",
   });
 });
 
@@ -105,13 +69,49 @@ app.get("/api/health", (_req, res) => {
 
 (async () => {
   try {
-    console.log(chalk.yellow("⏳ Intentando conectar a MongoDB..."));
+    console.log(chalk.yellowBright("⏳ Intentando conectar a MongoDB..."));
     await connectDB();
-    console.log(chalk.green("✅ Conexión MongoDB establecida."));
+    console.log(chalk.greenBright("✅ Conexión MongoDB establecida correctamente."));
 
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
+    // 🔧 CORS Dinámico
+    // ------------------------------------------------------------
+    const defaultOrigins = [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "https://buholex.com",
+      "https://www.buholex.com",
+      "https://webbuholex-nuevo.vercel.app",
+    ];
+
+    const corsOrigins = process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
+      : defaultOrigins;
+
+    app.use(
+      cors({
+        origin: (origin, cb) => {
+          if (!origin) return cb(null, true);
+          if (corsOrigins.includes(origin)) return cb(null, true);
+          console.warn(chalk.red(`⚠️ [CORS] Bloqueado para: ${origin}`));
+          return cb(new Error(`CORS no permitido para ${origin}`));
+        },
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+        credentials: true,
+      })
+    );
+
+    // ------------------------------------------------------------
+    // 🧱 Middlewares base
+    // ------------------------------------------------------------
+    app.use(express.json({ limit: "10mb" }));
+    app.use(express.urlencoded({ extended: true }));
+    app.use(morgan("dev"));
+
+    // ------------------------------------------------------------
     // 🌐 Rutas API
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
     app.use("/api/media", mediaProxyRoutes);
     app.use("/api/noticias", noticiasRoutes);
     app.use("/api/noticias/contenido", noticiasContenidoRoutes);
@@ -122,42 +122,40 @@ app.get("/api/health", (_req, res) => {
     app.use("/api/notificaciones", notificacionesRoutes);
     app.use("/api/traducir", traducirRoutes);
 
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
     // 🗂️ Archivos estáticos
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-    // --------------------------------------------------------
-    // 🕒 Cron Jobs (solo si DB activa)
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
+    // 🕒 Cron Jobs Activos
+    // ------------------------------------------------------------
     cleanupLogs?.();
     jobNoticias?.();
 
     cron.schedule("0 3 * * 0", async () => {
-      console.log(chalk.magenta("\n🧹 [Cron] Mantenimiento semanal..."));
+      console.log(chalk.magentaBright("\n🧹 [Cron] Mantenimiento semanal de índices..."));
       try {
         await maintainIndexes();
         console.log(chalk.green("✅ Mantenimiento de índices completado."));
       } catch (err) {
-        console.error(chalk.red("❌ Error en mantenimiento:"), err.message);
+        console.error(chalk.red("❌ Error en mantenimiento de índices:"), err.message);
       }
     });
 
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
     // ❌ 404 Fallback
-    // --------------------------------------------------------
-    app.use((req, res) => {
-      res.status(404).json({ error: "Ruta no encontrada" });
-    });
+    // ------------------------------------------------------------
+    app.use((req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
 
-    // --------------------------------------------------------
-    // 🧩 Manejo de errores global
-    // --------------------------------------------------------
-    process.on("unhandledRejection", (reason) => {
-      console.error(chalk.red("⚠️ Rechazo no manejado:"), reason);
-    });
+    // ------------------------------------------------------------
+    // 🧩 Manejo de errores globales
+    // ------------------------------------------------------------
+    process.on("unhandledRejection", (reason) =>
+      console.error(chalk.red("⚠️ [Rechazo no manejado]"), reason)
+    );
 
     process.on("SIGINT", async () => {
       console.log(chalk.yellow("\n🛑 Cerrando servidor..."));
@@ -165,15 +163,16 @@ app.get("/api/health", (_req, res) => {
       process.exit(0);
     });
 
-    // --------------------------------------------------------
-    // 🚀 Iniciar servidor
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
+    // 🚀 Iniciar servidor (único listen)
+    // ------------------------------------------------------------
     app.listen(PORT, "0.0.0.0", () => {
       console.log(chalk.greenBright(`🚀 Servidor BúhoLex operativo en puerto ${PORT}`));
-      console.log(chalk.cyan("🌍 Orígenes permitidos por CORS:"));
+      console.log(chalk.cyanBright("🌍 Orígenes permitidos por CORS:"));
       corsOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
     });
   } catch (err) {
     console.error(chalk.red("❌ Error crítico al iniciar servidor:"), err.message);
+    process.exit(1);
   }
 })();
