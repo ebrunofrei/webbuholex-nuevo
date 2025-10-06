@@ -48,22 +48,6 @@ const PORT = process.env.PORT || 3000;
 const START_TIME = new Date();
 
 // ============================================================
-// 🌐 Rutas de prueba rápidas
-// ============================================================
-
-app.get("/", (_req, res) => res.type("text/plain").send("✅ Servidor BúhoLex operativo"));
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    env: NODE_ENV,
-    uptime: process.uptime(),
-    startedAt: START_TIME.toISOString(),
-    now: new Date().toISOString(),
-    version: process.env.npm_package_version || "1.0.0",
-  });
-});
-
-// ============================================================
 // 🚀 Inicialización principal
 // ============================================================
 
@@ -108,6 +92,22 @@ app.get("/api/health", (_req, res) => {
     app.use(express.json({ limit: "10mb" }));
     app.use(express.urlencoded({ extended: true }));
     app.use(morgan("dev"));
+
+    // ------------------------------------------------------------
+    // 🩺 Healthcheck (Railway)
+    // ------------------------------------------------------------
+    app.get("/api/health", (_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json({
+        ok: true,
+        service: "Buholex News Proxy",
+        env: NODE_ENV,
+        uptime: process.uptime(),
+        startedAt: START_TIME.toISOString(),
+        now: new Date().toISOString(),
+        version: process.env.npm_package_version || "1.0.0",
+      });
+    });
 
     // ------------------------------------------------------------
     // 🌐 Rutas API
