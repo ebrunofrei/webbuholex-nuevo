@@ -151,3 +151,11 @@ scripts/*.log
 # ✅ Mantener scripts útiles
 !scripts/test-fcm.js
 !scripts/send-fcm.js
+
+# === Carpetas internas y de pruebas ===
+importar_normas/
+tmp-puppeteer/
+scripts/
+screenshots/
+logs/
+tests/

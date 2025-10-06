@@ -103,3 +103,11 @@ scripts/fix-*.js
 scripts/find-*.js
 scripts/list-storage.js
 scripts/check-env.mjs
+
+# === Carpetas internas y de pruebas ===
+importar_normas/
+tmp-puppeteer/
+scripts/
+screenshots/
+logs/
+tests/

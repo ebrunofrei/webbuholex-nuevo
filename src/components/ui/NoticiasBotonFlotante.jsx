@@ -4,6 +4,9 @@ import { asAbsoluteUrl } from "@/utils/apiUrl";
 
 /* ===================== Config ===================== */
 const PAGE_SIZE = 8;
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+   "https://buholex-news-proxy-production.up.railway.app/api/noticias";
 const NEWS_URL = asAbsoluteUrl("/api/noticias");
 const CONTENT_URL = asAbsoluteUrl("/api/noticias/contenido");
 const TRANSLATE_URL = asAbsoluteUrl("/api/traducir");

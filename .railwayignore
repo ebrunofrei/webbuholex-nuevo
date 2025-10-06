@@ -1,0 +1,6 @@
+importar_normas/
+tmp-puppeteer/
+scripts/
+node_modules/
+screenshots/
+tests/

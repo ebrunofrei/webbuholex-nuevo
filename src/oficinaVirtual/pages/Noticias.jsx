@@ -15,8 +15,7 @@ import { asAbsoluteUrl } from "@/utils/apiUrl";
 // === CONFIG API ===
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:3000/api";
+  "https://buholex-news-proxy-production.up.railway.app/api";
 
 const PAGE_SIZE = 12;
 
