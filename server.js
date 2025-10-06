@@ -2,7 +2,8 @@
 // 🦉 BÚHOLEX | Backend Unificado con Conexión Garantizada a MongoDB
 // ============================================================
 // Arquitectura profesional: conexión segura, CORS dinámico, logs
-// estructurados, cron jobs y mantenimiento de índices automático.
+// estructurados, cron jobs y mantenimiento automático.
+// Compatible con Railway, Atlas, Vercel y entornos locales.
 // ============================================================
 
 import express from "express";
@@ -32,19 +33,19 @@ import traducirRoutes from "./backend/routes/traducir.js";
 import { cleanupLogs } from "./backend/jobs/cleanupLogs.js";
 import { jobNoticias } from "./backend/jobs/cronNoticias.js";
 
-// === Mantenimiento automático de índices ===
+// === Mantenimiento automático ===
 import { maintainIndexes } from "./scripts/maintain-indexes.js";
 
 // ============================================================
 // ⚙️ Configuración general
 // ============================================================
 
-// Detecta entorno automáticamente
 const NODE_ENV = process.env.NODE_ENV || "development";
 dotenv.config({ path: `.env.${NODE_ENV}` });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const START_TIME = new Date();
 
 // ============================================================
 // 🚀 Inicialización principal
@@ -57,7 +58,7 @@ const PORT = process.env.PORT || 3000;
     console.log(chalk.greenBright("✅ Conexión MongoDB establecida correctamente."));
 
     // ------------------------------------------------------------
-    // 🔧 CORS (control dinámico)
+    // 🔧 CORS Dinámico
     // ------------------------------------------------------------
     const defaultOrigins = [
       "http://localhost:5173",
@@ -76,10 +77,11 @@ const PORT = process.env.PORT || 3000;
         origin: (origin, cb) => {
           if (!origin) return cb(null, true);
           if (corsOrigins.includes(origin)) return cb(null, true);
-          console.warn(chalk.red(`⚠️ CORS bloqueado para: ${origin}`));
-          return cb(new Error(`CORS bloqueado para ${origin}`));
+          console.warn(chalk.red(`⚠️ [CORS] Bloqueado para: ${origin}`));
+          return cb(new Error(`CORS no permitido para ${origin}`));
         },
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
         credentials: true,
       })
     );
@@ -105,15 +107,17 @@ const PORT = process.env.PORT || 3000;
     app.use("/api/traducir", traducirRoutes);
 
     // ------------------------------------------------------------
-    // 🩺 Healthcheck simple
+    // 🩺 Healthcheck
     // ------------------------------------------------------------
-    app.get("/", (_req, res) => res.type("text/plain").send("ok"));
+    app.get("/", (_req, res) => res.send("ok"));
     app.get("/api/health", (_req, res) => {
       res.json({
         ok: true,
         env: NODE_ENV,
         uptime: process.uptime(),
+        startedAt: START_TIME.toISOString(),
         now: new Date().toISOString(),
+        version: process.env.npm_package_version || "1.0.0",
       });
     });
 
@@ -125,7 +129,7 @@ const PORT = process.env.PORT || 3000;
     app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
     // ------------------------------------------------------------
-    // 🚀 Iniciar servidor (tras conexión DB)
+    // 🚀 Iniciar servidor
     // ------------------------------------------------------------
     app.listen(PORT, "0.0.0.0", () => {
       console.log(chalk.greenBright(`🚀 Servidor BúhoLex operativo en puerto ${PORT}`));
@@ -134,12 +138,11 @@ const PORT = process.env.PORT || 3000;
     });
 
     // ------------------------------------------------------------
-    // 🕒 Cron jobs activos
+    // 🕒 Cron Jobs Activos
     // ------------------------------------------------------------
     cleanupLogs?.();
     jobNoticias?.();
 
-    // 🧹 Mantenimiento semanal (Domingo 3:00 AM)
     cron.schedule("0 3 * * 0", async () => {
       console.log(chalk.magentaBright("\n🧹 [Cron] Mantenimiento semanal de índices..."));
       try {
@@ -161,7 +164,7 @@ const PORT = process.env.PORT || 3000;
     // 🧩 Manejo de errores globales
     // ------------------------------------------------------------
     process.on("unhandledRejection", (reason) => {
-      console.error(chalk.red("⚠️ Rechazo no manejado:"), reason);
+      console.error(chalk.red("⚠️ [Rechazo no manejado]"), reason);
     });
 
     process.on("SIGINT", async () => {

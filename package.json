@@ -17,7 +17,7 @@
     "lint": "eslint .",
     "prepare": "husky install",
     "deploy": "git add . && git commit -m 'deploy automático' && git push origin main",
-    "sync-assets": "powershell -Command \"New-Item -ItemType Directory -Force -Path public/assets; Copy-Item -Path backend/public/assets/default-news.jpg -Destination public/assets/default-news.jpg -Force\"",
+    "sync-assets": "powershell -Command \"New-Item -ItemType Directory -Force -Path public/assets; Copy-Item -Path backend/public/* -Destination public/assets -Recurse\"",
     "test:news-all": "node scripts/test-news-all.js",
     "clean": "rimraf node_modules/.cache",
     "fix:imports": "node scripts/fix-imports.mjs",
