@@ -40,7 +40,7 @@ import { maintainIndexes } from "./scripts/maintain-indexes.js";
 
 dotenv.config(); // Detecta automáticamente Railway o .env.local
 const NODE_ENV = process.env.NODE_ENV || "production";
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 const app = express();
 const START_TIME = new Date();
 

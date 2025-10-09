@@ -64,7 +64,7 @@ export default function BibliotecaJuridica({ documentosIniciales = [] }) {
       </div>
 
       {/* Listado de documentos */}
-      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {documentos.length > 0 ? (
           documentos.map((doc) => (
             <div
