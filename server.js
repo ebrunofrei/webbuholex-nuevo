@@ -21,6 +21,7 @@ import { connectDB, disconnectDB } from "./backend/services/db.js";
 // === 🧭 Rutas principales ===
 import noticiasRoutes from "./backend/routes/noticias.js";
 import noticiasContenidoRoutes from "./backend/routes/noticiasContenido.js";
+import newsRoutes from "./backend/routes/news.js";  // Asegúrate de que la ruta sea correcta
 import iaRoutes from "./backend/routes/ia.js";
 import usuariosRoutes from "./backend/routes/usuarios.js";
 import culqiRoutes from "./backend/routes/culqi.js";
@@ -68,7 +69,7 @@ app.use(
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // Permitir sin encabezado origin
       if (corsOrigins.includes(origin)) return cb(null, true);
-      console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
+      console.warn(`⚠️ [CORS] Bloqueado: ${origin}`);
       return cb(new Error(`CORS no permitido: ${origin}`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -87,6 +88,39 @@ const BACKEND_URL = NODE_ENV === "production"
   : "http://localhost:3000"; // URL de backend en desarrollo (localhost)
 
 // ============================================================
+// Rutas de la API de Noticias Generales y Jurídicas
+// ============================================================
+
+// Ruta para noticias generales
+app.get("/api/noticias", (req, res) => {
+  // Lógica para obtener noticias generales (aquí se puede conectar a tu base de datos o fuente de noticias)
+  res.json({
+    noticias: [
+      { id: 1, titulo: "Noticia General 1", fecha: "2025-10-10" },
+      { id: 2, titulo: "Noticia General 2", fecha: "2025-10-09" },
+    ],
+  });
+});
+
+// Ruta para noticias jurídicas
+app.get("/api/noticias-juridicas", (req, res) => {
+  // Lógica para obtener noticias jurídicas (de la base de datos de noticias jurídicas)
+  res.json({
+    noticiasJuridicas: [
+      { id: 1, titulo: "Noticia Jurídica 1", fecha: "2025-10-10" },
+      { id: 2, titulo: "Noticia Jurídica 2", fecha: "2025-10-09" },
+    ],
+  });
+});
+
+// ============================================================
+// Iniciar el servidor
+// ============================================================
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en el puerto ${PORT}`);
+});
+
+// ============================================================
 // Iniciar servidor y conectar a MongoDB
 // ============================================================
 
@@ -101,6 +135,7 @@ const BACKEND_URL = NODE_ENV === "production"
     app.use("/api/noticias", noticiasRoutes);
     app.use("/api/noticias/contenido", noticiasContenidoRoutes);
     app.use("/api/noticias-guardadas", noticiasGuardadasRoutes);
+    app.use("/api", newsRoutes);
     app.use("/api/ia", iaRoutes);
     app.use("/api/usuarios", usuariosRoutes);
     app.use("/api/culqi", culqiRoutes);
