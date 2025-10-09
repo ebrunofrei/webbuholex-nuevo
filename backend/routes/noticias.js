@@ -1,13 +1,6 @@
-// ============================================================
-// 🦉 BÚHOLEX | API de Noticias Unificada
-// ============================================================
-// Devuelve noticias jurídicas o generales desde MongoDB.
-// Corrige diferencias entre "juridica/juridicas" y "general/generales".
-// Compatible con frontend y cronNoticias.js
-// ============================================================
-
 import express from "express";
-import { getNoticias } from "../services/noticiasService.js";
+import { getNoticias } from "../services/noticiasService.js";  // Asegúrate de que esta función esté correctamente implementada
+import chalk from "chalk";
 
 const router = express.Router();
 
@@ -36,7 +29,7 @@ router.get("/", async (req, res) => {
       hasMore: data?.hasMore || false,
     });
   } catch (err) {
-    console.error("❌ Error en /api/noticias:", err);
+    console.error(chalk.red("❌ Error en /api/noticias:", err));
     return res.status(500).json({
       ok: false,
       error: err.message || "Error interno del servidor",

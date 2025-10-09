@@ -39,23 +39,26 @@ import { maintainIndexes } from "./scripts/maintain-indexes.js";
 // ============================================================
 
 dotenv.config(); // Detecta automáticamente Railway o .env.local
+
+// Obtener el entorno de ejecución (desarrollo o producción)
 const NODE_ENV = process.env.NODE_ENV || "production";
 const PORT = process.env.PORT || 3000;
 const app = express();
 const START_TIME = new Date();
 
-// ============================================================
-// 🌍 CORS Dinámico + Middlewares base
-// ============================================================
+// ===============================
+// Configuración de CORS (diferente según entorno)
+// ===============================
 
 const defaultOrigins = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "https://buholex.com",
-  "https://www.buholex.com",
-  "https://webbuholex-nuevo.vercel.app",
+  "http://localhost:5173", // Para desarrollo local
+  "http://127.0.0.1:5173", // Para desarrollo local
+  "https://buholex.com", // URL de producción
+  "https://www.buholex.com", // URL de producción
+  "https://webbuholex-nuevo.vercel.app", // URL de producción en Vercel
 ];
 
+// Cargar orígenes desde las variables de entorno en producción
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((s) => s.trim())
   : defaultOrigins;
@@ -63,10 +66,10 @@ const corsOrigins = process.env.CORS_ORIGINS
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
+      if (!origin) return cb(null, true); // Permitir sin encabezado origin
       if (corsOrigins.includes(origin)) return cb(null, true);
-      console.warn(chalk.red(`⚠️ [CORS] Bloqueado para: ${origin}`));
-      return cb(new Error(`CORS no permitido para ${origin}`));
+      console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
+      return cb(new Error(`CORS no permitido: ${origin}`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -74,43 +77,26 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "15mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan("dev"));
-
 // ============================================================
-// 🩺 Healthcheck y estado general
+// Definición de las URLs de los servicios
 // ============================================================
 
-app.get("/", (_req, res) =>
-  res.type("text/plain").send("🦉 Servidor BúhoLex operativo 🚀")
-);
-
-app.get("/api/health", (_req, res) => {
-  res.status(200).json({
-    ok: true,
-    env: NODE_ENV,
-    uptime: `${process.uptime().toFixed(0)}s`,
-    startedAt: START_TIME.toISOString(),
-    now: new Date().toISOString(),
-    version: process.env.npm_package_version || "1.0.0",
-    database: "MongoDB Atlas conectado ✅",
-  });
-});
+// Para el entorno de desarrollo, la API estará en localhost
+const BACKEND_URL = NODE_ENV === "production"
+  ? process.env.VITE_BACKEND_URL // URL de backend en producción (ej. Railway, Vercel)
+  : "http://localhost:3000"; // URL de backend en desarrollo (localhost)
 
 // ============================================================
-// 🚀 Inicialización principal
+// Iniciar servidor y conectar a MongoDB
 // ============================================================
 
 (async () => {
   try {
     console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
-    await connectDB();
+    await connectDB(); // Conexión a MongoDB Atlas
     console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
 
-    // ------------------------------------------------------------
-    // 🔗 Cargar rutas de API
-    // ------------------------------------------------------------
+    // Definir rutas y middlewares de la API
     app.use("/api/media", mediaProxyRoutes);
     app.use("/api/noticias", noticiasRoutes);
     app.use("/api/noticias/contenido", noticiasContenidoRoutes);
@@ -121,52 +107,21 @@ app.get("/api/health", (_req, res) => {
     app.use("/api/notificaciones", notificacionesRoutes);
     app.use("/api/traducir", traducirRoutes);
 
-    // ------------------------------------------------------------
-    // 📂 Archivos estáticos (por si se suben imágenes)
-    // ------------------------------------------------------------
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-    // ------------------------------------------------------------
-    // 🕒 CronJobs Automáticos
-    // ------------------------------------------------------------
-    cleanupLogs?.();
-    jobNoticias?.();
-
-    cron.schedule("0 3 * * 0", async () => {
-      console.log(chalk.magentaBright("\n🧹 [Cron] Mantenimiento semanal..."));
-      try {
-        await maintainIndexes();
-        console.log(chalk.green("✅ Índices optimizados correctamente."));
-      } catch (err) {
-        console.error(chalk.red("❌ Error en mantenimiento:"), err.message);
-      }
+    // Rutas de Healthcheck
+    app.get("/", (_req, res) => res.send("🦉 Servidor BúhoLex operativo 🚀"));
+    app.get("/api/health", (_req, res) => {
+      res.status(200).json({
+        ok: true,
+        env: NODE_ENV,
+        uptime: `${process.uptime().toFixed(0)}s`,
+        startedAt: START_TIME.toISOString(),
+        now: new Date().toISOString(),
+        version: process.env.npm_package_version || "1.0.0",
+        database: "MongoDB Atlas conectado ✅",
+      });
     });
 
-    // ------------------------------------------------------------
-    // ❌ Ruta no encontrada (404)
-    // ------------------------------------------------------------
-    app.use((req, res) => {
-      res.status(404).json({ error: "Ruta no encontrada" });
-    });
-
-    // ------------------------------------------------------------
-    // 🧩 Manejo global de errores
-    // ------------------------------------------------------------
-    process.on("unhandledRejection", (reason) => {
-      console.error(chalk.red("⚠️ [Promesa no manejada]"), reason);
-    });
-
-    process.on("SIGINT", async () => {
-      console.log(chalk.yellow("\n🛑 Cerrando servidor..."));
-      await disconnectDB();
-      process.exit(0);
-    });
-
-    // ------------------------------------------------------------
-    // 🚀 Iniciar servidor único
-    // ------------------------------------------------------------
+    // Iniciar servidor
     app.listen(PORT, "0.0.0.0", () => {
       console.log(chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`));
       console.log(chalk.cyanBright("🌍 Orígenes permitidos por CORS:"));
