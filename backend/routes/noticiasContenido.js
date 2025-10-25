@@ -6,14 +6,20 @@ import NodeCache from "node-cache";
 import puppeteer from "puppeteer";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
+import chalk from "chalk";
 
 const router = express.Router();
-const cache = new NodeCache({ stdTTL: 3600 }); // 1h
+const cache = new NodeCache({ stdTTL: 3600 }); // Cache TTL de 1 hora
 
 // ---------- Utilidades ----------
+
+/**
+ * Función para hacer scroll infinito en una página utilizando Puppeteer
+ * @param {puppeteer.Page} page - Instancia de la página de Puppeteer
+ */
 async function autoScroll(page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => {
+  await page.evaluate(() => {
+    return new Promise((resolve) => {
       let totalHeight = 0;
       const distance = 600;
       const timer = setInterval(() => {
@@ -29,13 +35,22 @@ async function autoScroll(page) {
   });
 }
 
+/**
+ * Función para sanear texto eliminando etiquetas HTML.
+ * @param {string} text - Texto a sanitizar
+ * @returns {string} - Texto sanitizado
+ */
 function sanitizeText(text) {
   return sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} })
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-// Lee JSON-LD (NewsArticle/Article) por si el medio lo expone ahí
+/**
+ * Función para extraer información estructurada de JSON-LD.
+ * @param {cheerio.CheerioAPI} $ - Instancia de cheerio
+ * @returns {Object|null} - Objeto con el título y cuerpo extraído o null
+ */
 function extractFromJsonLd($) {
   const blocks = [];
   $('script[type="application/ld+json"]').each((_, el) => {
@@ -53,7 +68,6 @@ function extractFromJsonLd($) {
       });
     } catch (_) {}
   });
-  // Devuelve el más largo
   if (blocks.length) {
     const best = blocks.sort((a, b) => (b.body?.length || 0) - (a.body?.length || 0))[0];
     if (best.body && best.body.length > 200) {
@@ -63,7 +77,12 @@ function extractFromJsonLd($) {
   return null;
 }
 
-// Readability (Mozilla) sobre el HTML completo
+/**
+ * Función para extraer el contenido utilizando la librería Readability.
+ * @param {string} html - HTML de la página
+ * @param {string} url - URL de la página
+ * @returns {Object|null} - Objeto con el título y cuerpo extraído o null
+ */
 function extractWithReadability(html, url) {
   const dom = new JSDOM(html, { url });
   const reader = new Readability(dom.window.document);
@@ -74,15 +93,16 @@ function extractWithReadability(html, url) {
   return null;
 }
 
-// Selectores inteligentes (fallback final)
+/**
+ * Función para extraer contenido utilizando Cheerio.
+ * @param {string} html - HTML de la página
+ * @returns {Object|null} - Objeto con el título y cuerpo extraído o null
+ */
 function extractWithCheerio(html) {
   const $ = cheerio.load(html);
-
-  // No remuevas scripts antes de leer JSON-LD
   const ld = extractFromJsonLd($);
   if (ld) return ld;
 
-  // Ahora sí limpia ruido
   $("script, style, nav, header, footer, iframe, svg, noscript").remove();
 
   const title =
@@ -91,7 +111,6 @@ function extractWithCheerio(html) {
     $("title").text().trim() ||
     "Sin título";
 
-  // Contenedores comunes de artículos
   let container =
     $("article").first() ||
     $("div[itemprop='articleBody']").first() ||
@@ -122,6 +141,12 @@ function extractWithCheerio(html) {
 }
 
 // ---------- Descarga HTML ----------
+
+/**
+ * Función para obtener HTML usando Axios.
+ * @param {string} url - URL de la página
+ * @returns {Promise<string>} - HTML de la página
+ */
 async function fetchHtmlAxios(url) {
   const { data } = await axios.get(url, {
     timeout: 20000,
@@ -135,6 +160,11 @@ async function fetchHtmlAxios(url) {
   return data;
 }
 
+/**
+ * Función para obtener HTML usando Puppeteer.
+ * @param {string} url - URL de la página
+ * @returns {Promise<{html: string, pre: Object|null}>} - HTML de la página y contenido procesado
+ */
 async function fetchHtmlPuppeteer(url) {
   const browser = await puppeteer.launch({
     headless: true,
@@ -145,6 +175,7 @@ async function fetchHtmlPuppeteer(url) {
       "--disable-blink-features=AutomationControlled",
     ],
   });
+
   try {
     const page = await browser.newPage();
     await page.setUserAgent(
@@ -153,11 +184,9 @@ async function fetchHtmlPuppeteer(url) {
     await page.setViewport({ width: 1366, height: 900 });
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
 
-    // Espera elementos típicos y fuerza carga perezosa
     await page.waitForSelector("article, main, p", { timeout: 12000 }).catch(() => {});
     await autoScroll(page);
 
-    // Intenta extraer directo en el DOM (mejor para sitios como Infobae)
     const direct = await page.evaluate(() => {
       const pick = (...sels) => sels.map((s) => document.querySelector(s)).find(Boolean);
       const t =
@@ -195,7 +224,6 @@ async function fetchHtmlPuppeteer(url) {
 
       if (containers.length) containers.forEach(take);
       if (paras.length < 5) {
-        // fallback global
         const ps = Array.from(document.querySelectorAll("p")).map((p) => p.innerText.trim());
         paras.push(
           ...ps.filter(
@@ -217,7 +245,6 @@ async function fetchHtmlPuppeteer(url) {
       return { html: await page.content(), pre: { title: direct.title, body: direct.body } };
     }
 
-    // Si la extracción directa no fue suficiente, retorna HTML para Readability/Cheerio
     return { html: await page.content(), pre: null };
   } finally {
     await browser.close();
@@ -225,6 +252,7 @@ async function fetchHtmlPuppeteer(url) {
 }
 
 // ---------- Endpoint ----------
+
 router.get("/", async (req, res) => {
   try {
     const { url } = req.query;
@@ -236,27 +264,20 @@ router.get("/", async (req, res) => {
     let html;
     let preExtract = null;
 
-    // 1) Axios
     try {
       html = await fetchHtmlAxios(url);
     } catch {
-      // 2) Puppeteer
       const { html: h, pre } = await fetchHtmlPuppeteer(url);
       html = h;
       preExtract = pre;
     }
 
-    // 3) Si Puppeteer ya extrajo texto útil, úsalo
     if (preExtract && preExtract.body && preExtract.body.length > 200) {
-      const payload = {
-        title: preExtract.title || "Sin título",
-        body: sanitizeText(preExtract.body),
-      };
+      const payload = { title: preExtract.title || "Sin título", body: sanitizeText(preExtract.body) };
       cache.set(url, payload);
       return res.json({ cached: false, ...payload });
     }
 
-    // 4) Readability (Mozilla)
     const r = extractWithReadability(html, url);
     if (r && r.body && r.body.length > 200) {
       const payload = { title: r.title, body: sanitizeText(r.body) };
@@ -264,7 +285,6 @@ router.get("/", async (req, res) => {
       return res.json({ cached: false, ...payload });
     }
 
-    // 5) Fallback Cheerio + selectores
     const c = extractWithCheerio(html);
     if (c && c.body && c.body.length > 200) {
       const payload = { title: c.title, body: sanitizeText(c.body) };

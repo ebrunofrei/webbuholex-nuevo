@@ -17,14 +17,24 @@ export async function scrapeNoticias(tipo = "general") {
     // 1️⃣ Obtiene todas las noticias desde los providers activos
     const todas = await obtenerNoticiasDeFuentes();
 
-    // 2️⃣ Filtrado opcional por tipo
-    let filtradas = todas;
-    if (tipo === "juridica") filtradas = todas.filter(n => n.tipo === "juridica");
-    else if (tipo === "general") filtradas = todas.filter(n => n.tipo === "general");
+    // 2️⃣ Validar que la respuesta de noticias no esté vacía o nula
+    if (!Array.isArray(todas) || todas.length === 0) {
+      console.warn("⚠️ No se han obtenido noticias de los proveedores.");
+      return [];
+    }
+
+    // 3️⃣ Filtrado opcional por tipo: "juridica" o "general"
+    const filtradas = tipo === "juridica"
+      ? todas.filter(n => n.tipo === "juridica")
+      : tipo === "general"
+      ? todas.filter(n => n.tipo === "general")
+      : todas; // Si tipo no es "juridica" ni "general", no filtra
 
     console.log(`✅ ${filtradas.length} noticias procesadas (${tipo})`);
     return filtradas;
+
   } catch (error) {
+    // 4️⃣ Manejo de errores mejorado: log detallado
     console.error("❌ Error en scrapeNoticias:", error.message);
     return [];
   }

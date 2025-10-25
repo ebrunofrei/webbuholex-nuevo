@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Megaphone, X, Globe2 } from "lucide-react";
 import { asAbsoluteUrl } from "@/utils/apiUrl";
 
@@ -6,12 +6,11 @@ import { asAbsoluteUrl } from "@/utils/apiUrl";
 const PAGE_SIZE = 8;
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
-   "https://buholex-news-proxy-production.up.railway.app/api/noticias";
+  "https://buholex-news-proxy-production.up.railway.app/api/noticias";
 const NEWS_URL = asAbsoluteUrl("/api/noticias");
 const CONTENT_URL = asAbsoluteUrl("/api/noticias/contenido");
 const TRANSLATE_URL = asAbsoluteUrl("/api/traducir");
 
-/** Tópicos con equivalentes ES/EN para consulta bilingüe */
 const TOPICS = [
   { es: "política", en: "politics" },
   { es: "economía", en: "economy" },
@@ -22,19 +21,21 @@ const TOPICS = [
 ];
 
 /* ===================== Utils ===================== */
-function hashString(s) {
+const hashString = (s) => {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
   return String(h);
-}
-function detectLang(text = "") {
+};
+
+const detectLang = (text = "") => {
   const t = text.toLowerCase();
-  const es = (t.match(/[áéíóúñ¡¿]| el | la | de | que | los | las | para | con | del /g) || []).length;
+  const es = (t.match(/[áéíóúñ¡¿]| el | la | de | que | los | las | para | con | del /g) || [])
+    .length;
   const en = (t.match(/ the | of | and | to | in | is | for | on | with | by /g) || []).length;
   return es >= en ? "es" : "en";
-}
-/** Acepta forma {items:[...]} o arreglo directo */
-function normalize(json) {
+};
+
+const normalize = (json) => {
   const arr = Array.isArray(json)
     ? json
     : Array.isArray(json?.items)
@@ -53,19 +54,19 @@ function normalize(json) {
     fecha: n.fecha || n.date || n.publishedAt || "",
     fuente: n.fuente || n.source || n.provider || "",
   }));
-}
-/** Devuelve el par "es,en" para query; si no está en diccionario, deja literal */
-function topicQueryValue(topic) {
+};
+
+const topicQueryValue = (topic) => {
   if (!topic) return "";
   const t = TOPICS.find((x) => x.es === topic || x.en === topic);
   return t ? `${t.es},${t.en}` : topic;
-}
+};
 
-/* ================== Componente principal ================== */
-export default function NoticiasBotonFlotante({
-  endpoint = "general", // este componente SOLO usa "general"
+/* ================== Componente Principal ================== */
+const NoticiasBotonFlotante = ({
+  endpoint = "general",
   titulo = "Noticias",
-}) {
+}) => {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
@@ -80,18 +81,16 @@ export default function NoticiasBotonFlotante({
   const listRef = useRef(null);
   const observerRef = useRef(null);
 
-  /* =============== Fetch noticias (GENERAL + bilingüe) =============== */
-  async function fetchNoticias(nextPage = 1, selectedTopic = topic) {
+  /* =============== Fetch Noticias (General + bilingüe) =============== */
+  const fetchNoticias = async (nextPage = 1, selectedTopic = topic) => {
     setLoading(true);
     try {
-      // Construimos el query base obligando tipo=general
       const qsBase = new URLSearchParams({
         tipo: "general",
         page: String(nextPage),
         limit: String(PAGE_SIZE),
       });
 
-      // 1) Intento principal: q=es,en (bilingüe)
       let qs = new URLSearchParams(qsBase);
       if (selectedTopic) qs.set("q", topicQueryValue(selectedTopic));
       let url = `${NEWS_URL}?${qs.toString()}`;
@@ -99,7 +98,6 @@ export default function NoticiasBotonFlotante({
       let json = await res.json();
       let data = normalize(json);
 
-      // 2) Fallback: si el backend usa "tema" en vez de "q"
       if (data.length === 0 && selectedTopic) {
         qs = new URLSearchParams(qsBase);
         qs.set("tema", topicQueryValue(selectedTopic));
@@ -109,7 +107,6 @@ export default function NoticiasBotonFlotante({
         data = normalize(json);
       }
 
-      // 3) Fallback: si sigue vacío y había filtro, prueba SIN filtro (últimas generales)
       if (data.length === 0 && selectedTopic) {
         qs = new URLSearchParams(qsBase);
         url = `${NEWS_URL}?${qs.toString()}`;
@@ -130,21 +127,16 @@ export default function NoticiasBotonFlotante({
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  // Carga inicial al montar o si (por error) pasaran otro endpoint, lo forzamos a general
   useEffect(() => {
     fetchNoticias(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-carga cuando abres el panel si está vacío
   useEffect(() => {
     if (open && items.length === 0 && !loading) fetchNoticias(1, topic);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Scroll infinito
   useEffect(() => {
     if (!listRef.current) return;
     const sentinel = document.createElement("div");
@@ -156,8 +148,8 @@ export default function NoticiasBotonFlotante({
     return () => observerRef.current?.disconnect();
   }, [listRef.current, hasMore, loading, page, topic]);
 
-  /* ================== Modal lectura + traducción ================== */
-  async function openModal(noticia) {
+  /* ================== Modal Lectura + Traducción ================== */
+  const openModal = async (noticia) => {
     if (!noticia) return;
     setLoadingContent(true);
     setTranslating(false);
@@ -217,7 +209,7 @@ export default function NoticiasBotonFlotante({
     } finally {
       setLoadingContent(false);
     }
-  }
+  };
 
   const closeModal = () => setModal(null);
   const toggleTranslate = () =>
@@ -390,4 +382,6 @@ export default function NoticiasBotonFlotante({
       )}
     </>
   );
-}
+};
+
+export default NoticiasBotonFlotante;

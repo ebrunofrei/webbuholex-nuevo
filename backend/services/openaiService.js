@@ -1,70 +1,94 @@
-import axios from "axios";
+// backend/services/openaiService.js
+// ============================================================
+// 🧠 Servicio OpenAI – robusto a orden de imports (.env bootstrap)
+// ============================================================
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+import OpenAI from "openai";
+import chalk from "chalk";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import dotenv from "dotenv";
 
-/**
- * Cliente Axios dinámico que siempre lee la API key actual del entorno.
- */
-function getOpenAIClient() {
-  const API_KEY = process.env.OPENAI_API_KEY;
-  if (!API_KEY) {
-    throw new Error("Falta configurar OPENAI_API_KEY en el entorno");
+// ---------- Carga .env local (independiente de server.js) ----------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// raíz del proyecto: /backend/services/.. -> sube dos niveles
+const ROOT = path.resolve(__dirname, "..", "..");
+const CANDIDATES = [".env.local", ".env.development", ".env.production", ".env"];
+
+let loadedEnv = null;
+for (const f of CANDIDATES) {
+  const p = path.join(ROOT, f);
+  if (fs.existsSync(p)) {
+    dotenv.config({ path: p });
+    loadedEnv = f;
+    break;
   }
+}
+if (!loadedEnv) dotenv.config(); // fallback
 
-  return axios.create({
-    baseURL: "https://api.openai.com/v1",
-    timeout: 25000,
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
-    },
-  });
+// -------------------------------------------------------------------
+let openai = null;
+
+// Acepta `sk-` y `sk-proj-`
+const key = process.env.OPENAI_API_KEY;
+const isValidKey = typeof key === "string" && /^sk(-proj)?-[A-Za-z0-9_\-]+/.test(key);
+
+if (!isValidKey) {
+  console.warn(
+    chalk.redBright(
+      "⚠️ OPENAI_API_KEY ausente o con formato inválido.\n" +
+      "   Asegúrate de que comience con 'sk-' o 'sk-proj-'."
+    )
+  );
+} else {
+  openai = new OpenAI({ apiKey: key });
+  console.log(
+    chalk.greenBright(
+      `✅ OpenAI listo (env: ${loadedEnv ?? "process.env"} · key: ${key.slice(0, 8)}… )`
+    )
+  );
 }
 
 /**
- * Llama al endpoint de Chat Completions de OpenAI.
- * @param {Array<{role:'system'|'user'|'assistant', content:string}>} messages
- * @param {{model?:string, max_tokens?:number, temperature?:number}} [opts]
- * @returns {Promise<{text: string, raw: any}>}
+ * Llama a OpenAI y devuelve el string de la respuesta.
+ * @param {Array<{role:string, content:string}>} messages
+ * @param {{model?:string, temperature?:number, max_tokens?:number}} options
+ * @returns {Promise<string>}
  */
-export async function callOpenAI(
-  messages,
-  { model = "gpt-4o-mini", max_tokens = 1024, temperature = 0.3 } = {}
-) {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    throw new Error("El parámetro 'messages' debe ser un array con al menos un mensaje.");
+export async function callOpenAI(messages, options = {}) {
+  if (!openai) {
+    console.error(chalk.redBright("❌ No se puede llamar a OpenAI: API Key no configurada."));
+    return "⚠️ El sistema no puede procesar la consulta en este momento (configuración de IA).";
   }
 
-  const client = getOpenAIClient();
-  const payload = { model, messages, max_tokens, temperature };
+  const {
+    model = "gpt-4o-mini",
+    temperature = 0.7,
+    max_tokens = 800,
+  } = options;
 
-  let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const { data } = await client.post("/chat/completions", payload);
-      const text = data?.choices?.[0]?.message?.content ?? "";
-      return { text, raw: data };
-    } catch (err) {
-      lastErr = err;
-      const status = err?.response?.status;
+  try {
+    console.log(chalk.cyanBright(`💬 OpenAI → modelo: ${model}`));
 
-      if (status === 429 || (status >= 500 && status < 600)) {
-        await sleep(400 * (attempt + 1));
-        continue;
-      }
+    const completion = await openai.chat.completions.create({
+      model,
+      messages,
+      temperature,
+      max_tokens,
+    });
 
-      const detail = err?.response?.data || err.message || "Error desconocido";
-      throw new Error(
-        typeof detail === "string" ? detail : JSON.stringify(detail)
-      );
-    }
+    const respuesta = completion?.choices?.[0]?.message?.content?.trim() ?? "";
+    console.log(chalk.greenBright(`🧩 Respuesta IA (${respuesta.length} chars)`));
+    return respuesta;
+  } catch (err) {
+    // Log detallado para depurar claves/permiso/modelo
+    console.error(
+      chalk.red(
+        `❌ Error OpenAI: ${err?.status ?? ""} ${err?.code ?? ""} – ${err?.message ?? err}`
+      )
+    );
+    return "❌ No pude obtener respuesta de la IA. Inténtalo de nuevo.";
   }
-
-  const status = lastErr?.response?.status ?? "unknown";
-  const body = lastErr?.response?.data ?? lastErr?.message ?? "Error desconocido";
-  throw new Error(
-    `OpenAI error (status ${status}): ${
-      typeof body === "string" ? body : JSON.stringify(body)
-    }`
-  );
 }

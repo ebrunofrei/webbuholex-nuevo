@@ -1,11 +1,3 @@
-// ============================================================
-// 🦉 BÚHOLEX | Servicio de Noticias (versión final unificada)
-// ============================================================
-// Inserta, actualiza, consulta y limpia noticias en MongoDB.
-// Clasifica entre noticias jurídicas y generales de forma automática.
-// Compatible con frontend público y Oficina Virtual.
-// ============================================================
-
 import { Noticia } from "../models/Noticia.js";
 import chalk from "chalk";
 
@@ -15,34 +7,22 @@ import chalk from "chalk";
 function inferirEspecialidad(noticia = {}) {
   const texto = `${noticia.titulo || ""} ${noticia.resumen || ""} ${noticia.contenido || ""}`.toLowerCase();
 
-  if (texto.includes("penal") || texto.includes("delito") || texto.includes("fiscalía"))
-    return "penal";
-  if (texto.includes("civil") || texto.includes("contrato") || texto.includes("propiedad"))
-    return "civil";
-  if (texto.includes("laboral") || texto.includes("trabajador") || texto.includes("sindicato"))
-    return "laboral";
-  if (
-    texto.includes("constitucional") ||
-    texto.includes("tribunal constitucional") ||
-    texto.includes("amparo")
-  )
-    return "constitucional";
-  if (texto.includes("familiar") || texto.includes("hijo") || texto.includes("matrimonio"))
-    return "familiar";
-  if (
-    texto.includes("administrativo") ||
-    texto.includes("procedimiento administrativo") ||
-    texto.includes("resolución directoral")
-  )
-    return "administrativo";
-  if (texto.includes("ambiental") || texto.includes("medio ambiente"))
-    return "ambiental";
-  if (texto.includes("registral") || texto.includes("sunarp"))
-    return "registral";
-  if (texto.includes("notarial"))
-    return "notarial";
-  if (texto.includes("tributario") || texto.includes("impuesto"))
-    return "tributario";
+  const categorias = {
+    penal: ["penal", "delito", "fiscalía"],
+    civil: ["civil", "contrato", "propiedad"],
+    laboral: ["laboral", "trabajador", "sindicato"],
+    constitucional: ["constitucional", "tribunal constitucional", "amparo"],
+    familiar: ["familiar", "hijo", "matrimonio"],
+    administrativo: ["administrativo", "procedimiento administrativo", "resolución directoral"],
+    ambiental: ["ambiental", "medio ambiente"],
+    registral: ["registral", "sunarp"],
+    notarial: ["notarial"],
+    tributario: ["tributario", "impuesto"]
+  };
+
+  for (let [key, values] of Object.entries(categorias)) {
+    if (values.some((value) => texto.includes(value))) return key;
+  }
 
   return "general";
 }
@@ -154,7 +134,6 @@ export async function getNoticias({ tipo = "general", especialidad = "todas", pa
   // --- Filtros por tipo ---
   if (tipo) {
     if (tipo === "general") {
-      // ✅ Abarca todas las variantes usadas en BD
       query.tipo = { $in: ["general", "generales", "internacional", "tecnologia", "tecnología", null, ""] };
     } else if (tipo === "juridica" || tipo === "juridicas") {
       query.tipo = { $in: ["juridica", "juridicas", "legal", "jurídica", "jurídicas"] };

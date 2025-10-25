@@ -26,62 +26,102 @@ import {
   saveFile,
   deleteFile,
 } from "@/services/chatStorage";
-
 /* ============================================================
-   Utilidades de red (un solo endpoint: /api/ia?action=chat)
+   🧠 LitisBot Chat – Utilidades de red unificadas
+   Endpoint principal: /api/ia/chat (Express Backend)
+   🔊 Incluye voz varonil tipo abogado profesional en audiencia
 ============================================================ */
 
-// utils/net.js 
-export function buildIaUrl() {
-  const raw = (import.meta.env.VITE_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
-
-  // Sin config → directo al handler
-  if (!raw) return "/api/ia?action=chat";
-
-  // URL absoluta
-  if (/^https?:\/\//i.test(raw)) {
-    if (/\baction=/.test(raw)) return raw;
-    const sep = raw.includes("?") ? "&" : "?";
-    return raw + `${sep}action=chat`;
-  }
-
-  // /api/*
-  const base = raw;
-  if (base.startsWith("/api/")) {
-    if (/\baction=/.test(base)) return base;
-    const sep = base.includes("?") ? "&" : "?";
-    return `${base}${sep}action=chat`;
-  }
-
-  return `${base}/api/ia?action=chat`;
+// ✅ Construye correctamente la URL según el entorno (local o producción)
+export function buildUrl(path = "/ia/chat") {
+  const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+  return `${base}${path}`;
 }
 
-export async function enviarAlLitisbot(IA_URL, payload, onStreamChunk) {
-  const resp = await fetch(IA_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+// 🎙️ Reproduce voz varonil con tono de abogado profesional
+async function reproducirVozVaronil(texto) {
+  try {
+    const VOZ_URL = buildUrl("/voz");
+    const promptVoz = `
+      Lee el siguiente texto con voz de abogado profesional:
+      tono varonil, formal, claro y pausado, como en una audiencia judicial:
+      "${texto}"
+    `;
 
-  const ctype = resp.headers.get("content-type") || "";
+    const resp = await fetch(VOZ_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: promptVoz }),
+    });
 
-  if (resp.body && /text\/event-stream/i.test(ctype)) {
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let total = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      total += chunk;
-      onStreamChunk?.(chunk, total);
+    if (!resp.ok) {
+      console.warn("⚠️ No se pudo generar voz:", resp.status);
+      return;
     }
-    return { respuesta: total.trim() };
-  }
 
-  const json = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
-  return json; // { respuesta }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.play().catch((e) => console.error("🎧 Error al reproducir voz:", e));
+  } catch (err) {
+    console.error("❌ Error en la conversión de texto a voz:", err);
+  }
+}
+
+// ✅ Envía mensaje al backend (con soporte JSON y streaming opcional)
+export async function enviarALitisbot(payload, onStreamChunk) {
+  try {
+    const IA_URL = buildUrl("/ia/chat");
+    const resp = await fetch(IA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    // 📡 Detectar tipo de respuesta
+    const ctype = resp.headers.get("content-type") || "";
+
+    // 🎧 Si el backend usa Streaming (Server-Sent Events)
+    if (resp.body && /event-stream/i.test(ctype)) {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let total = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        total += chunk;
+        onStreamChunk?.(chunk, total);
+      }
+
+      // 🔊 Reproduce voz cuando se completa la respuesta
+      if (total.trim()) reproducirVozVaronil(total.trim());
+
+      return { respuesta: total.trim() };
+    }
+
+    // 🧾 Si la respuesta es JSON estándar
+    const data = await resp.json().catch(() => ({}));
+
+    if (!resp.ok) {
+      throw new Error(data?.error || `HTTP ${resp.status}`);
+    }
+
+    const textoFinal =
+      data.respuesta || data.text || "⚠️ No se recibió respuesta válida del servidor.";
+
+    // 🔊 Generar voz de abogado automáticamente
+    reproducirVozVaronil(textoFinal);
+
+    return { respuesta: textoFinal };
+  } catch (error) {
+    console.error("❌ Error al enviar mensaje a LitisBot:", error);
+    return {
+      respuesta: "❌ Error al procesar la consulta. Verifica la conexión con el servidor.",
+    };
+  }
 }
 
 /* ============================================================
@@ -546,9 +586,10 @@ const INIT_MSG = {
       "🦉 Bienvenido al Asistente Legal LitisBot PRO. Analiza expedientes, agenda plazos y recibe ayuda jurídica con herramientas avanzadas.",
   },
 };
-
- /* ============================================================
-   Componente Principal
+/* ============================================================
+   🦉 Componente Principal: LitisBotChatBase
+   Controla la interfaz del chat, los estados, archivos adjuntos
+   y la comunicación directa con el backend Express (IA jurídica)
 ============================================================ */
 export default function LitisBotChatBase({
   user = {},
@@ -564,7 +605,7 @@ export default function LitisBotChatBase({
     const prev = getMessages(casoActivo);
     if (prev && prev.length) return prev;
     const init = [pro ? INIT_MSG.pro : INIT_MSG.general];
-    saveMessage(casoActivo, init[0]); // guarda mensaje inicial
+    saveMessage(casoActivo, init[0]); // Guarda mensaje inicial
     return init;
   });
 
@@ -578,9 +619,25 @@ export default function LitisBotChatBase({
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // =================== CONSTANTES ===================
   const MAX_ADJUNTOS = pro ? 10 : 3;
   const MAX_MB = 25;
-  const IA_URL = buildIaUrl();
+
+  // ✅ URL unificada del backend Express (según entorno)
+  const IA_URL = buildUrl("/ia/chat");
+
+  /* ------------------------------------------------------------
+     ✳️ Justificación técnica:
+     Se reemplaza buildIaUrl() (deprecated) por buildUrl("/ia/chat")
+     para apuntar directamente al backend Express (ruta /api/ia/chat),
+     compatible tanto en desarrollo (localhost:3000) como en producción
+     (Railway / Vercel). Evita errores ReferenceError y mantiene
+     la comunicación centralizada en la función buildUrl.
+  ------------------------------------------------------------- */
+
+  // Ahora el componente continúa con su lógica de interacción,
+  // renderizado de mensajes, manejo de adjuntos, envío a LitisBot, etc.
+
 
   // =================== EFECTOS ===================
 
@@ -638,86 +695,159 @@ export default function LitisBotChatBase({
       return copia;
     });
   }
+// ============================================================
+// 🧠 CONSULTAS IA – Núcleo de interacción del LitisBot
+// ============================================================
+// Cada función gestiona un contexto distinto (general, jurídico, investigación)
+// y comunica con el backend Express unificado (/api/ia/chat) vía enviarALitisbot().
+// Totalmente compatible con respuestas streaming (SSE) o JSON normal.
 
-  // =================== CONSULTAS ===================
-
-  async function handleConsultaGeneral(mensaje) {
-    await procesarConsulta(() =>
-      enviarAlChat({
-        prompt: mensaje,
+// 🟤 Consulta general (uso cotidiano)
+async function handleConsultaGeneral(mensaje) {
+  await procesarConsulta(async (onStreamChunk) => {
+    return await enviarALitisbot(
+      {
+        prompt: mensaje.trim(),
         historial: obtenerHistorial(),
-        usuarioId: user?.uid,
-        userEmail: user?.email,
-      })
+        usuarioId: user?.uid || "invitado",
+        userEmail: user?.email || "",
+        modo: "general",
+        materia: "general",
+        idioma: "es",
+      },
+      onStreamChunk
     );
-  }
+  });
+}
 
-  async function handleConsultaLegal({ mensaje, materia = "general" }) {
-    await procesarConsulta(() =>
-      enviarAlLitisbot({
-        prompt: mensaje,
+// ⚖️ Consulta jurídica especializada
+async function handleConsultaLegal({ mensaje, materia = "general" }) {
+  await procesarConsulta(async (onStreamChunk) => {
+    return await enviarALitisbot(
+      {
+        prompt: mensaje.trim(),
         historial: obtenerHistorial(),
-        usuarioId: user?.uid,
-        userEmail: user?.email,
+        usuarioId: user?.uid || "invitado",
+        userEmail: user?.email || "",
+        modo: "juridico",
         materia,
-      })
+        idioma: "es",
+      },
+      onStreamChunk
     );
-  }
+  });
+}
 
-  async function handleConsultaInvestigacion(mensaje) {
-    await procesarConsulta(() =>
-      enviarAlLitisbot({
-        prompt: mensaje,
+// 🎓 Consulta académica / investigación jurídica
+async function handleConsultaInvestigacion(mensaje) {
+  await procesarConsulta(async (onStreamChunk) => {
+    return await enviarALitisbot(
+      {
+        prompt: mensaje.trim(),
         historial: obtenerHistorial(),
-        usuarioId: user?.uid,
-        userEmail: user?.email,
+        usuarioId: user?.uid || "invitado",
+        userEmail: user?.email || "",
+        modo: "investigacion",
         materia: "investigacion",
-        preferencias: { modo: "investigacion" },
-      })
+        idioma: "es",
+      },
+      onStreamChunk
     );
+  });
+}
+
+/* -----------------------------------------------------------
+🧩 Justificación técnica:
+- Se validan inputs para evitar solicitudes vacías.
+- Se pasa todo el contexto (modo, materia, usuario, historial).
+- Se soporta streaming progresivo o respuesta JSON según backend.
+- Se eliminan duplicaciones entre modos, manteniendo consistencia.
+- Se deja abierta la posibilidad de extender con nuevos "modos IA".
+----------------------------------------------------------- */
+
+
+// ============================================================
+// 🧩 HELPERS Y PROCESAMIENTO DE CONSULTAS
+// ============================================================
+
+// 🧾 Construye el historial en formato OpenAI
+function obtenerHistorial() {
+  return mensajes
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      role: m.role,
+      content: m.content || "",
+    }));
+}
+
+// 🧠 Encapsula toda la lógica de procesamiento de la consulta
+async function procesarConsulta(fn) {
+  const pregunta = input?.trim();
+  if (!pregunta) {
+    setError("⚠️ Escribe una consulta antes de enviar.");
+    return;
   }
 
-  // =================== HELPERS ===================
+  setCargando(true);
+  setError("");
 
-  function obtenerHistorial() {
-    return mensajes
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role, content: m.content }));
-  }
+  // Guarda y muestra el mensaje del usuario
+  const userMsg = { role: "user", content: pregunta };
+  setMensajes((prev) => [...prev, userMsg]);
+  saveMessage(casoActivo, userMsg);
 
-  async function procesarConsulta(fn) {
-    setCargando(true);
-    let idxAssistant = null;
-    setMensajes((msgs) => {
-      idxAssistant = msgs.length;
-      return [...msgs, { role: "assistant", content: "…" }];
+  // Agrega un mensaje temporal del asistente (placeholder)
+  const tempMsg = { role: "assistant", content: "💬 Analizando tu consulta..." };
+  setMensajes((prev) => [...prev, tempMsg]);
+  let respuestaAcumulada = "";
+
+  try {
+    // 🔁 Ejecutar función de envío y capturar streaming
+    const { respuesta } = await fn((chunk) => {
+      if (!chunk) return;
+      respuestaAcumulada = chunk;
+      setMensajes((prev) => {
+        const copia = [...prev];
+        copia[copia.length - 1] = { role: "assistant", content: chunk };
+        return copia;
+      });
     });
 
-    try {
-      const respuesta = await fn();
-      if (respuesta && respuesta !== "…") {
-        setMensajes((ms) =>
-          ms.map((m, i) => (i === idxAssistant ? { ...m, content: respuesta } : m))
-        );
-        saveMessage(casoActivo, { role: "assistant", content: respuesta });
-      }
-    } catch (err) {
-      console.error("❌ Error en consulta:", err);
-      setMensajes((ms) =>
-        ms.map((m, i) =>
-          i === idxAssistant
-            ? {
-                ...m,
-                content: "❌ Ocurrió un error al procesar tu consulta.",
-              }
-            : m
-        )
-      );
-    } finally {
-      setCargando(false);
-    }
-  }
+    const finalText = respuesta || respuestaAcumulada || "⚠️ No se recibió respuesta válida del servidor.";
+    const msgFinal = { role: "assistant", content: finalText };
 
+    // Guardar localmente
+    saveMessage(casoActivo, msgFinal);
+
+    // Actualizar UI final
+    setMensajes((prev) => {
+      const copia = [...prev];
+      copia[copia.length - 1] = msgFinal;
+      return copia;
+    });
+
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+  } catch (err) {
+    console.error("❌ Error en procesarConsulta:", err);
+
+    // Análisis del tipo de error
+    let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
+    if (err.message?.includes("Falta el prompt")) msgError = "⚠️ La consulta no puede enviarse vacía.";
+    else if (err.message?.includes("429")) msgError = "🚫 Has superado el límite de consultas por minuto.";
+    else if (err.message?.includes("500")) msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
+    else if (err.message?.includes("Failed to fetch")) msgError = "🌐 No se pudo conectar al servidor. Verifica tu conexión.";
+
+    setMensajes((prev) => {
+      const copia = [...prev];
+      copia[copia.length - 1] = { role: "assistant", content: msgError };
+      return copia;
+    });
+  } finally {
+    setCargando(false);
+    setInput("");
+  }
+}
   // =================== ENVÍO ===================
 
   async function handleSend(e) {
