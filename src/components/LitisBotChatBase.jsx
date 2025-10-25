@@ -28,98 +28,225 @@ import {
 } from "@/services/chatStorage";
 /* ============================================================
    🧠 LitisBot Chat – Utilidades de red unificadas
-   Endpoint principal: /api/ia/chat (Express Backend)
-   🔊 Incluye voz varonil tipo abogado profesional en audiencia
-============================================================ */
+   Punto central de comunicación con el backend Express
+   - buildUrl: resuelve la base URL (local vs producción)
+   - enviarALitisbot: envía la pregunta al backend /ia/chat
+   - reproducirVozVaronil: pide al backend /voz que genere audio
+   =========================================================== */
 
-// ✅ Construye correctamente la URL según el entorno (local o producción)
+/**
+ * Construye correctamente la URL según el entorno.
+ * - En producción usamos VITE_API_BASE_URL (ej. https://web-production-xxxxx.up.railway.app/api)
+ * - En local hacemos fallback a http://localhost:3000/api
+ *
+ * IMPORTANTE:
+ *  VITE_API_BASE_URL debe TERMINAR SIN slash final.
+ *  Ejemplo correcto:
+ *      VITE_API_BASE_URL=https://web-production-7b1c4.up.railway.app/api
+ *  y NO:
+ *      https://web-production-7b1c4.up.railway.app/api/
+ */
 export function buildUrl(path = "/ia/chat") {
-  const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+  const base =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
   return `${base}${path}`;
 }
 
-// 🎙️ Reproduce voz varonil con tono de abogado profesional
-async function reproducirVozVaronil(texto) {
+/**
+ * 🔊 Reproduce voz varonil con tono "abogado profesional"
+ *    usando el endpoint /voz del backend.
+ *
+ * - NO usamos speechSynthesis del navegador.
+ * - El backend devuelve un MP3 ya con la voz correcta.
+ * - Esto evita la "segunda voz" y garantiza consistencia.
+ */
+export async function reproducirVozVaronil(textoPlano) {
   try {
-    const VOZ_URL = buildUrl("/voz");
-    const promptVoz = `
-      Lee el siguiente texto con voz de abogado profesional:
-      tono varonil, formal, claro y pausado, como en una audiencia judicial:
-      "${texto}"
-    `;
+    // Limpieza defensiva: si viene vacío o muy corto, no hablamos.
+    const limpio = (textoPlano || "").trim();
+    if (!limpio) return;
 
+    const VOZ_URL = buildUrl("/voz");
+
+    // Le mandamos SOLO el texto que debe leerse. Nada de "lee con voz varonil..."
     const resp = await fetch(VOZ_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texto: promptVoz }),
+      body: JSON.stringify({
+        texto: limpio,
+      }),
     });
 
     if (!resp.ok) {
-      console.warn("⚠️ No se pudo generar voz:", resp.status);
+      console.warn(
+        "⚠️ No se pudo generar voz en el backend /voz:",
+        resp.status,
+        await resp.text()
+      );
       return;
     }
 
+    // Backend responde audio/mp3 (o similar).
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.play().catch((e) => console.error("🎧 Error al reproducir voz:", e));
+
+    // Limpieza de memoria cuando termina
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+    };
+    audio.onerror = (e) => {
+      console.error("🔇 Error al reproducir audio:", e);
+      URL.revokeObjectURL(url);
+    };
+
+    // Intentar reproducir
+    audio.play().catch((e) => {
+      console.error("🔇 Error al iniciar reproducción:", e);
+      URL.revokeObjectURL(url);
+    });
   } catch (err) {
-    console.error("❌ Error en la conversión de texto a voz:", err);
+    console.error("❌ Error en reproducirVozVaronil():", err);
   }
 }
 
-// ✅ Envía mensaje al backend (con soporte JSON y streaming opcional)
+/**
+ * 📡 enviarALitisbot(payload, onStreamChunk?)
+ *
+ * Envía la consulta del usuario al backend Express:
+ *   POST /ia/chat
+ *
+ * Soporta DOS modos de respuesta:
+ *   1. Streaming (text/event-stream): el backend manda el texto por partes
+ *      - Actualizamos UI parcial usando onStreamChunk(chunk, acumulado)
+ *      - Al final devolvemos la respuesta completa y disparamos TTS una sola vez
+ *
+ *   2. JSON normal:
+ *      {
+ *        respuesta: "texto final del bot",
+ *        sugerencias: [...?]
+ *      }
+ *      - Disparamos TTS una sola vez con el texto final
+ *
+ * SIEMPRE devolvemos un objeto:
+ *   {
+ *     ok: boolean,
+ *     respuesta: string,         // texto final ya consolidado
+ *     sugerencias: string[]      // si el backend manda sugerencias
+ *   }
+ */
 export async function enviarALitisbot(payload, onStreamChunk) {
   try {
     const IA_URL = buildUrl("/ia/chat");
+
     const resp = await fetch(IA_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    // 📡 Detectar tipo de respuesta
+    // Detectar formato de respuesta del backend
     const ctype = resp.headers.get("content-type") || "";
 
-    // 🎧 Si el backend usa Streaming (Server-Sent Events)
+    /* -------------------------------------------------
+       CASO 1: STREAMING (Server-Sent Events / text/event-stream)
+       ------------------------------------------------- */
     if (resp.body && /event-stream/i.test(ctype)) {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder("utf-8");
-      let total = "";
+
+      let textoAcumulado = "";
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
+        // chunk "crudo" (pueden venir tokens parciales)
         const chunk = decoder.decode(value, { stream: true });
-        total += chunk;
-        onStreamChunk?.(chunk, total);
+
+        // sumar al total
+        textoAcumulado += chunk;
+
+        // avisar al frontend para render parcial
+        if (onStreamChunk) {
+          // onStreamChunk(parcialRecienLlegado, totalHastaAhora)
+          onStreamChunk(chunk, textoAcumulado);
+        }
       }
 
-      // 🔊 Reproduce voz cuando se completa la respuesta
-      if (total.trim()) reproducirVozVaronil(total.trim());
+      const finalLimpio = (textoAcumulado || "").trim();
 
-      return { respuesta: total.trim() };
+      // 🔊 Importante: reproducimos voz SOLO una vez con el final
+      if (finalLimpio) {
+        reproducirVozVaronil(finalLimpio);
+      }
+
+      return {
+        ok: true,
+        respuesta: finalLimpio || "⚠️ (sin texto recibido)",
+        sugerencias: [], // streaming normalmente no trae sugerencias separadas
+      };
     }
 
-    // 🧾 Si la respuesta es JSON estándar
-    const data = await resp.json().catch(() => ({}));
+    /* -------------------------------------------------
+       CASO 2: RESPUESTA JSON NORMAL
+       ------------------------------------------------- */
+    let data = {};
+    try {
+      data = await resp.json();
+    } catch {
+      data = {};
+    }
 
+    // Manejo de error HTTP
     if (!resp.ok) {
-      throw new Error(data?.error || `HTTP ${resp.status}`);
+      const mensajeError =
+        data?.error ||
+        data?.message ||
+        `❌ Error HTTP ${resp.status} tratando de procesar tu consulta.`;
+
+      return {
+        ok: false,
+        respuesta: mensajeError,
+        sugerencias: [],
+      };
     }
 
+    // Éxito HTTP
+    // Estructura esperada:
+    // {
+    //   respuesta: "texto final del bot",
+    //   sugerencias: ["pregunta A", "pregunta B", ...] // opcional
+    // }
     const textoFinal =
-      data.respuesta || data.text || "⚠️ No se recibió respuesta válida del servidor.";
+      data.respuesta ||
+      data.text ||
+      "⚠️ No se recibió respuesta válida del servidor.";
 
-    // 🔊 Generar voz de abogado automáticamente
-    reproducirVozVaronil(textoFinal);
+    const sugerenciasDelBot = Array.isArray(data.sugerencias)
+      ? data.sugerencias
+      : [];
 
-    return { respuesta: textoFinal };
-  } catch (error) {
-    console.error("❌ Error al enviar mensaje a LitisBot:", error);
+    const limpio = (textoFinal || "").trim();
+
+    // 🔊 Sólo hablamos UNA VEZ, con el texto final completo
+    if (limpio) {
+      reproducirVozVaronil(limpio);
+    }
+
     return {
-      respuesta: "❌ Error al procesar la consulta. Verifica la conexión con el servidor.",
+      ok: true,
+      respuesta: limpio,
+      sugerencias: sugerenciasDelBot,
+    };
+  } catch (err) {
+    console.error("❌ Error al enviar mensaje a LitisBot:", err);
+
+    return {
+      ok: false,
+      respuesta:
+        "❌ Error al procesar la consulta. Verifica tu conexión o inténtalo nuevamente.",
+      sugerencias: [],
     };
   }
 }
@@ -601,6 +728,7 @@ export default function LitisBotChatBase({
 }) {
   // =================== ESTADOS ===================
   const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
+
   const [mensajes, setMensajes] = useState(() => {
     const prev = getMessages(casoActivo);
     if (prev && prev.length) return prev;
@@ -616,6 +744,9 @@ export default function LitisBotChatBase({
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
 
+  // ⚠️ Nueva bandera para evitar envíos dobles / spam de Enter
+  const [isSending, setIsSending] = useState(false);
+
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -628,16 +759,10 @@ export default function LitisBotChatBase({
 
   /* ------------------------------------------------------------
      ✳️ Justificación técnica:
-     Se reemplaza buildIaUrl() (deprecated) por buildUrl("/ia/chat")
-     para apuntar directamente al backend Express (ruta /api/ia/chat),
-     compatible tanto en desarrollo (localhost:3000) como en producción
-     (Railway / Vercel). Evita errores ReferenceError y mantiene
-     la comunicación centralizada en la función buildUrl.
+     buildUrl("/ia/chat") apunta directamente a tu backend Express
+     tanto en desarrollo (localhost:3000) como en producción
+     (Railway / Vercel). Esto mantiene estable la capa de red.
   ------------------------------------------------------------- */
-
-  // Ahora el componente continúa con su lógica de interacción,
-  // renderizado de mensajes, manejo de adjuntos, envío a LitisBot, etc.
-
 
   // =================== EFECTOS ===================
 
@@ -695,166 +820,170 @@ export default function LitisBotChatBase({
       return copia;
     });
   }
-// ============================================================
-// 🧠 CONSULTAS IA – Núcleo de interacción del LitisBot
-// ============================================================
-// Cada función gestiona un contexto distinto (general, jurídico, investigación)
-// y comunica con el backend Express unificado (/api/ia/chat) vía enviarALitisbot().
-// Totalmente compatible con respuestas streaming (SSE) o JSON normal.
 
-// 🟤 Consulta general (uso cotidiano)
-async function handleConsultaGeneral(mensaje) {
-  await procesarConsulta(async (onStreamChunk) => {
-    return await enviarALitisbot(
-      {
-        prompt: mensaje.trim(),
-        historial: obtenerHistorial(),
-        usuarioId: user?.uid || "invitado",
-        userEmail: user?.email || "",
-        modo: "general",
-        materia: "general",
-        idioma: "es",
-      },
-      onStreamChunk
-    );
-  });
-}
+  // ============================================================
+  // 🧠 CONSULTAS IA – Núcleo de interacción del LitisBot
+  // ============================================================
+  // Cada función gestiona un contexto distinto (general, jurídico, investigación)
+  // y comunica con el backend Express unificado (/api/ia/chat) vía enviarALitisbot().
+  // Totalmente compatible con respuestas streaming (SSE) o JSON normal.
 
-// ⚖️ Consulta jurídica especializada
-async function handleConsultaLegal({ mensaje, materia = "general" }) {
-  await procesarConsulta(async (onStreamChunk) => {
-    return await enviarALitisbot(
-      {
-        prompt: mensaje.trim(),
-        historial: obtenerHistorial(),
-        usuarioId: user?.uid || "invitado",
-        userEmail: user?.email || "",
-        modo: "juridico",
-        materia,
-        idioma: "es",
-      },
-      onStreamChunk
-    );
-  });
-}
-
-// 🎓 Consulta académica / investigación jurídica
-async function handleConsultaInvestigacion(mensaje) {
-  await procesarConsulta(async (onStreamChunk) => {
-    return await enviarALitisbot(
-      {
-        prompt: mensaje.trim(),
-        historial: obtenerHistorial(),
-        usuarioId: user?.uid || "invitado",
-        userEmail: user?.email || "",
-        modo: "investigacion",
-        materia: "investigacion",
-        idioma: "es",
-      },
-      onStreamChunk
-    );
-  });
-}
-
-/* -----------------------------------------------------------
-🧩 Justificación técnica:
-- Se validan inputs para evitar solicitudes vacías.
-- Se pasa todo el contexto (modo, materia, usuario, historial).
-- Se soporta streaming progresivo o respuesta JSON según backend.
-- Se eliminan duplicaciones entre modos, manteniendo consistencia.
-- Se deja abierta la posibilidad de extender con nuevos "modos IA".
------------------------------------------------------------ */
-
-
-// ============================================================
-// 🧩 HELPERS Y PROCESAMIENTO DE CONSULTAS
-// ============================================================
-
-// 🧾 Construye el historial en formato OpenAI
-function obtenerHistorial() {
-  return mensajes
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({
-      role: m.role,
-      content: m.content || "",
-    }));
-}
-
-// 🧠 Encapsula toda la lógica de procesamiento de la consulta
-async function procesarConsulta(fn) {
-  const pregunta = input?.trim();
-  if (!pregunta) {
-    setError("⚠️ Escribe una consulta antes de enviar.");
-    return;
+  // 🟤 Consulta general (uso cotidiano)
+  async function handleConsultaGeneral(pregunta) {
+    await procesarConsulta(pregunta, async (onStreamChunk) => {
+      return await enviarALitisbot(
+        {
+          prompt: pregunta.trim(),
+          historial: obtenerHistorial(),
+          usuarioId: user?.uid || "invitado",
+          userEmail: user?.email || "",
+          modo: "general",
+          materia: "general",
+          idioma: "es",
+        },
+        onStreamChunk
+      );
+    });
   }
 
-  setCargando(true);
-  setError("");
+  // ⚖️ Consulta jurídica especializada
+  async function handleConsultaLegal({ mensaje, materia = "general" }) {
+    await procesarConsulta(mensaje, async (onStreamChunk) => {
+      return await enviarALitisbot(
+        {
+          prompt: mensaje.trim(),
+          historial: obtenerHistorial(),
+          usuarioId: user?.uid || "invitado",
+          userEmail: user?.email || "",
+          modo: "juridico",
+          materia,
+          idioma: "es",
+        },
+        onStreamChunk
+      );
+    });
+  }
 
-  // Guarda y muestra el mensaje del usuario
-  const userMsg = { role: "user", content: pregunta };
-  setMensajes((prev) => [...prev, userMsg]);
-  saveMessage(casoActivo, userMsg);
+  // 🎓 Consulta académica / investigación jurídica
+  async function handleConsultaInvestigacion(pregunta) {
+    await procesarConsulta(pregunta, async (onStreamChunk) => {
+      return await enviarALitisbot(
+        {
+          prompt: pregunta.trim(),
+          historial: obtenerHistorial(),
+          usuarioId: user?.uid || "invitado",
+          userEmail: user?.email || "",
+          modo: "investigacion",
+          materia: "investigacion",
+          idioma: "es",
+        },
+        onStreamChunk
+      );
+    });
+  }
 
-  // Agrega un mensaje temporal del asistente (placeholder)
-  const tempMsg = { role: "assistant", content: "💬 Analizando tu consulta..." };
-  setMensajes((prev) => [...prev, tempMsg]);
-  let respuestaAcumulada = "";
+  /* -----------------------------------------------------------
+  🧩 Justificación técnica:
+  - Pasamos la PREGUNTA explícita a procesarConsulta.
+  - Eso evita que procesarConsulta vuelva a leer `input`
+    (que ya fue limpiado) o agregue el mensaje two times.
+  - Así eliminamos los mensajes duplicados.
+  ----------------------------------------------------------- */
 
-  try {
-    // 🔁 Ejecutar función de envío y capturar streaming
-    const { respuesta } = await fn((chunk) => {
-      if (!chunk) return;
-      respuestaAcumulada = chunk;
+  // ============================================================
+  // 🧩 HELPERS Y PROCESAMIENTO DE CONSULTAS
+  // ============================================================
+
+  // 🧾 Construye el historial en formato OpenAI
+  function obtenerHistorial() {
+    return mensajes
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({
+        role: m.role,
+        content: m.content || "",
+      }));
+  }
+
+  // 🧠 Encapsula toda la lógica de procesamiento de la consulta
+  async function procesarConsulta(pregunta, fn) {
+    const texto = (pregunta || "").trim();
+    if (!texto) {
+      setError("⚠️ Escribe una consulta antes de enviar.");
+      return;
+    }
+
+    setCargando(true);
+    setIsSending(true);
+    setError("");
+
+    // Agregamos SOLO el placeholder del asistente.
+    // El mensaje del usuario ya fue agregado en handleSend.
+    const tempMsg = { role: "assistant", content: "💬 Analizando tu consulta..." };
+    setMensajes((prev) => [...prev, tempMsg]);
+
+    let respuestaAcumulada = "";
+
+    try {
+      // Ejecutar función que llama a enviarALitisbot
+      // y monitorear chunks de streaming
+      const { respuesta } = await fn((chunk) => {
+        if (!chunk) return;
+        respuestaAcumulada = chunk;
+        setMensajes((prev) => {
+          const copia = [...prev];
+          copia[copia.length - 1] = { role: "assistant", content: chunk };
+          return copia;
+        });
+      });
+
+      const finalText =
+        (respuesta || respuestaAcumulada || "⚠️ No se recibió respuesta válida del servidor.")
+          .trim();
+
+      const msgFinal = { role: "assistant", content: finalText };
+
+      // Guardar localmente
+      saveMessage(casoActivo, msgFinal);
+
+      // Actualizar UI final
       setMensajes((prev) => {
         const copia = [...prev];
-        copia[copia.length - 1] = { role: "assistant", content: chunk };
+        copia[copia.length - 1] = msgFinal;
         return copia;
       });
-    });
 
-    const finalText = respuesta || respuestaAcumulada || "⚠️ No se recibió respuesta válida del servidor.";
-    const msgFinal = { role: "assistant", content: finalText };
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    } catch (err) {
+      console.error("❌ Error en procesarConsulta:", err);
 
-    // Guardar localmente
-    saveMessage(casoActivo, msgFinal);
+      let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
+      if (err.message?.includes("Falta el prompt")) msgError = "⚠️ La consulta no puede enviarse vacía.";
+      else if (err.message?.includes("429")) msgError = "🚫 Has superado el límite de consultas por minuto.";
+      else if (err.message?.includes("500")) msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
+      else if (err.message?.includes("Failed to fetch")) msgError =
+        "🌐 No se pudo conectar al servidor. Verifica tu conexión.";
 
-    // Actualizar UI final
-    setMensajes((prev) => {
-      const copia = [...prev];
-      copia[copia.length - 1] = msgFinal;
-      return copia;
-    });
-
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-
-  } catch (err) {
-    console.error("❌ Error en procesarConsulta:", err);
-
-    // Análisis del tipo de error
-    let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
-    if (err.message?.includes("Falta el prompt")) msgError = "⚠️ La consulta no puede enviarse vacía.";
-    else if (err.message?.includes("429")) msgError = "🚫 Has superado el límite de consultas por minuto.";
-    else if (err.message?.includes("500")) msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
-    else if (err.message?.includes("Failed to fetch")) msgError = "🌐 No se pudo conectar al servidor. Verifica tu conexión.";
-
-    setMensajes((prev) => {
-      const copia = [...prev];
-      copia[copia.length - 1] = { role: "assistant", content: msgError };
-      return copia;
-    });
-  } finally {
-    setCargando(false);
-    setInput("");
+      setMensajes((prev) => {
+        const copia = [...prev];
+        copia[copia.length - 1] = { role: "assistant", content: msgError };
+        return copia;
+      });
+    } finally {
+      setCargando(false);
+      setIsSending(false);
+      setInput("");
+    }
   }
-}
+
   // =================== ENVÍO ===================
 
   async function handleSend(e) {
     e?.preventDefault?.();
+    if (isSending) return;
+
     setAlertaAdjuntos("");
 
-    // Si hay adjuntos
+    // Si hay adjuntos, los gestionamos como mensajes "archivo"
     if (adjuntos.length > 0) {
       const msgsParaGuardar = [];
       const msgsParaUI = [];
@@ -879,31 +1008,35 @@ async function procesarConsulta(fn) {
       return;
     }
 
-    if (!input.trim()) return;
+    const pregunta = input.trim();
+    if (!pregunta) return;
 
-    const nuevo = { role: "user", content: input };
+    // Agregamos el mensaje del usuario SOLO AQUÍ (una sola vez)
+    const nuevo = { role: "user", content: pregunta };
     setMensajes((msgs) => [...msgs, nuevo]);
     saveMessage(casoActivo, nuevo);
 
-    const pregunta = input;
+    // Limpiamos input antes de mandar
     setInput("");
 
-    // 👉 detección automática de modo y materia
-    const texto = pregunta.toLowerCase();
+    // Detección automática de modo / materia
+    const textoLower = pregunta.toLowerCase();
     const materias = {
       civil: /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
       penal: /penal|delito|crimen|homicidio|robo|violencia|acusaci(ón|on)|condena/i,
       laboral: /laboral|trabajo|sindicato|despido|remuneraci(ón|on)|indemnizaci(ón|on)/i,
-      constitucional: /constituci(ón|on)|derechos fundamentales|amparo|habeas|tc|tribunal constitucional/i,
-      administrativo: /administrativo|procedimiento|sancionador|sunat|sunafil|municipalidad/i,
+      constitucional:
+        /constituci(ón|on)|derechos fundamentales|amparo|habeas|tc|tribunal constitucional/i,
+      administrativo:
+        /administrativo|procedimiento|sancionador|sunat|sunafil|municipalidad/i,
     };
 
-    if (/investigaci(ón|on)|tesis|hipótesis|metodolog/i.test(texto)) {
+    if (/investigaci(ón|on)|tesis|hipótesis|metodolog/i.test(textoLower)) {
       await handleConsultaInvestigacion(pregunta);
     } else {
       let materiaDetectada = null;
       for (const [materia, regex] of Object.entries(materias)) {
-        if (regex.test(texto)) {
+        if (regex.test(textoLower)) {
           materiaDetectada = materia;
           break;
         }
@@ -936,6 +1069,7 @@ async function procesarConsulta(fn) {
     setMensajes((ms) => {
       const copia = [...ms];
       copia[idx].content = nuevoTexto;
+      // reescribimos en storage:
       deleteMessage(casoActivo, idx);
       saveMessage(casoActivo, copia[idx]);
       return copia;
@@ -943,7 +1077,9 @@ async function procesarConsulta(fn) {
   }
 
   function handleFeedback(idx, type) {
-    setMensajes((ms) => ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m)));
+    setMensajes((ms) =>
+      ms.map((m, i) => (i === idx ? { ...m, feedback: type } : m))
+    );
   }
 
   const closeHerramientas = () => {
@@ -954,185 +1090,354 @@ async function procesarConsulta(fn) {
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (input.trim() || adjuntos.length) handleSend(e);
+      if ((input.trim() || adjuntos.length) && !isSending) {
+        handleSend(e);
+      }
     }
   };
 
-   /* --------------------------- Render ----------------------- */
+  /* --------------------------- Render ----------------------- */
   return (
     <div
-      className="flex flex-col w-full items-center bg-white litisbot-fill"
-      style={{ minHeight: "100vh" }}
-      onPaste={(e) => {
-        if (e.clipboardData?.files?.length) {
-          handleFileChange({ target: { files: e.clipboardData.files } });
-        }
-      }}
-    >
-      {/* Área del chat */}
-<div
-  id="litisbot-feed"
-  className="flex flex-col w-full mx-auto bg-white overflow-y-auto no-scrollbar
-               sm:px-3 md:px-4 max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
-  style={{
-    // altura: viewport menos header (~80px) y barra de entrada (~96px)
-    height: "calc(100vh - 176px)",
-    marginTop: 24,
-    marginBottom: 12,
-    borderRadius: 24,
-    boxShadow: "0 4px 26px 0 #0001",  
+  className="flex flex-col w-full items-center bg-white litisbot-fill"
+  style={{ minHeight: "100vh" }}
+  onPaste={(e) => {
+    // permite pegar archivos directamente (ej. desde galería en móvil)
+    if (e.clipboardData?.files?.length) {
+      handleFileChange({ target: { files: e.clipboardData.files } });
+    }
   }}
 >
-  <div className="flex flex-col gap-2 w-full py-3 px-2">
-    {mensajes.map((m, i) => (
-      <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} w-full`}>
-        <div
-          className={`
-            px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4
-            rounded-[1.75rem] shadow max-w-[92%] md:max-w-[85%] break-words
-            ${m.role === "user" ? "text-white self-end" : "bg-yellow-50 text-[#5C2E0B] self-start"}
-            sm:text-[15px] md:text-[18px] lg:text-[20px] font-medium
-          `}
-          style={{ background: m.role === "user" ? "#5C2E0B" : undefined, border: 0 }}
-        >
-          {m.role === "assistant" ? (
-            <MensajeBurbuja
-              msg={m}
-              onCopy={handleCopy}
-              onEdit={(nuevo) => handleEdit(i, nuevo)}
-              onFeedback={(type) => handleFeedback(i, type)}
-            />
-          ) : (
-            <span dangerouslySetInnerHTML={{ __html: m.content }} />
-          )}
-        </div>
-      </div>
-    ))}
-
-    {cargando && (
-      <div className="flex justify-start w-full">
-        <div className="px-5 py-3.5 rounded-[1.75rem] shadow bg-yellow-100 text-[#5C2E0B] sm:text-[15px] md:text-[18px]">
-          Buscando en bases legales…
-        </div>
-      </div>
-    )}
-    <div ref={chatEndRef} />
-  </div>
-</div>
-
-{/* Barra de entrada */}
-<form
-  onSubmit={handleSend}
-  className="w-full mx-auto flex items-end gap-2 bg-white shadow-xl rounded-[2rem] border-2 border-yellow-300
-             px-3 sm:px-4 py-2 sm:py-2.5 sticky bottom-0 z-50
-             max-w-[92vw] sm:max-w-3xl md:max-w-4xl"
->
-  {/* Adjuntar */}
-  <label
-    className={`cursor-pointer flex-shrink-0 p-2 rounded-full hover:opacity-90 transition ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}`}
-    style={{ background: "#5C2E0B", color: "#fff" }}
-    title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
-    aria-label="Adjuntar archivo"
+  {/* ====== FEED DEL CHAT ====== */}
+  <div
+    id="litisbot-feed"
+    className="
+      flex flex-col
+      w-full
+      mx-auto
+      bg-white
+      overflow-y-auto
+      no-scrollbar
+      px-2 sm:px-3 md:px-4
+      max-w-full sm:max-w-3xl md:max-w-4xl
+    "
+    style={{
+      // alto visible del historial:
+      // viewport menos (header aprox) y menos la barra de entrada
+      height: "calc(100vh - 168px)",
+      marginTop: 16,
+      marginBottom: 12,
+      borderRadius: 20,
+      boxShadow: "0 4px 26px 0 #0001",
+      backgroundColor: "#ffffff",
+    }}
   >
-    <FaPaperclip size={22} />
-    <input
-      type="file"
-      className="hidden"
-      multiple
-      onChange={handleFileChange}
-      disabled={adjuntos.length >= MAX_ADJUNTOS}
-    />
-  </label>
-
-  {/* Previews */}
-  {adjuntos.length > 0 && (
-    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-      {adjuntos.map((adj, idx) => (
-        <div key={idx} className="relative flex-shrink-0">
-          {adj.type?.startsWith("image/") ? (
-            <img
-              src={URL.createObjectURL(adj)}
-              alt={adj.name}
-              className="rounded-xl border-2 border-yellow-300 shadow object-cover"
-              style={{ width: 100, height: 72 }}
-            />
-          ) : (
-            <div
-              className="bg-yellow-50 border-2 border-yellow-300 rounded-xl flex flex-col items-center justify-center text-[#5C2E0B] font-semibold shadow"
-              style={{ width: 120, height: 72, fontSize: 14, padding: 6 }}
-            >
-              <div style={{ fontSize: 26, marginBottom: 2 }}>
-                {adj.name.toLowerCase().endsWith(".pdf")
-                  ? "📄"
-                  : /\.(doc|docx)$/i.test(adj.name)
-                  ? "📝"
-                  : /\.(xls|xlsx)$/i.test(adj.name)
-                  ? "📊"
-                  : "📎"}
-              </div>
-              <div className="truncate w-full text-center" title={adj.name}>
-                {adj.name}
-              </div>
-            </div>
-          )}
-          <button
-            type="button"
-            aria-label="Quitar archivo"
-            className="absolute -top-1 -right-1 bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center"
-            onClick={() => handleRemoveAdjunto(idx)}
-            title="Eliminar archivo"
+    <div className="flex flex-col gap-2 w-full py-3 px-1 sm:px-2">
+      {mensajes.map((m, i) => (
+        <div
+          key={i}
+          className={`flex w-full ${
+            m.role === "user" ? "justify-end" : "justify-start"
+          }`}
+        >
+          <div
+            className={`
+              rounded-[1.5rem]
+              shadow
+              whitespace-pre-wrap
+              break-words
+              leading-relaxed
+              text-[15px] sm:text-[15px] md:text-[17px] lg:text-[18px]
+              font-medium
+              px-4 py-3
+              ${
+                m.role === "user"
+                  ? "bg-[#5C2E0B] text-white self-end"
+                  : "bg-yellow-50 text-[#5C2E0B] self-start border-0"
+              }
+            `}
+            style={{
+              // burbujas responsivas:
+              // en móvil: usan casi todo el ancho para NO apilar palabra por línea
+              maxWidth: "92%",
+            }}
           >
-            ×
-          </button>
+            {m.role === "assistant" ? (
+              <MensajeBurbuja
+                msg={m}
+                onCopy={handleCopy}
+                onEdit={(nuevo) => handleEdit(i, nuevo)}
+                onFeedback={(type) => handleFeedback(i, type)}
+              />
+            ) : (
+              <span dangerouslySetInnerHTML={{ __html: m.content }} />
+            )}
+          </div>
         </div>
       ))}
+
+      {cargando && (
+        <div className="flex justify-start w-full">
+          <div
+            className="
+              px-4 py-3
+              rounded-[1.5rem]
+              shadow
+              bg-yellow-100
+              text-[#5C2E0B]
+              text-[15px] sm:text-[15px] md:text-[17px]
+              leading-relaxed
+              max-w-[80%]
+            "
+          >
+            Buscando en bases legales…
+          </div>
+        </div>
+      )}
+
+      <div ref={chatEndRef} />
     </div>
-  )}
+  </div>
 
-  {/* Entrada */}
-  <textarea
-    ref={textareaRef}
-    className="flex-1 bg-transparent outline-none px-1 sm:px-2 py-2 border-none resize-none sm:text-[15px] md:text-[17px]"
-    placeholder="Escribe o pega tu pregunta legal aquí…"
-    value={input}
-    onChange={(e) => setInput(e.target.value)}
-    onKeyDown={handleKeyDown}
-    disabled={grabando}
-    rows={1}
-    style={{ minHeight: 40, maxHeight: 168, overflowY: "auto" }}
-  />
-
-  {/* Micrófono */}
-  <button
-    type="button"
-    aria-label="Dictar voz"
-    className="p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
-    style={{ background: "#5C2E0B", color: "#fff", minWidth: 38, minHeight: 38 }}
-    onClick={handleVoice}
-    disabled={grabando}
-    title="Dictar voz"
+  {/* ====== BARRA DE ENTRADA / ACCIONES ======
+     nota: adjuntar, dictado y enviar
+     sticky bottom-0 con z alto para que quede visible sobre el feed
+  */}
+  <form
+    onSubmit={handleSend}
+    className="
+      w-full
+      mx-auto
+      flex items-end gap-2
+      shadow-xl
+      rounded-[2rem]
+      border-2 border-yellow-300
+      sticky bottom-0 z-[60]
+      px-3 py-2 sm:px-4 sm:py-2.5
+      max-w-full sm:max-w-3xl md:max-w-4xl
+      bg-[#fff8e1]
+    "
   >
-    <FaMicrophone size={20} />
-  </button>
+    {/* === Botón Adjuntar === */}
+    <label
+      className={`
+        cursor-pointer flex-shrink-0
+        rounded-full hover:opacity-90 transition
+        ${
+          adjuntos.length >= MAX_ADJUNTOS
+            ? "opacity-40 pointer-events-none"
+            : ""
+        }
+      `}
+      style={{
+        background: "#5C2E0B",
+        color: "#fff",
+        width: 40,
+        height: 40,
+        minWidth: 40,
+        minHeight: 40,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
+      aria-label="Adjuntar archivo"
+    >
+      <FaPaperclip size={20} />
+      <input
+        type="file"
+        className="hidden"
+        multiple
+        onChange={handleFileChange}
+        disabled={adjuntos.length >= MAX_ADJUNTOS}
+      />
+    </label>
 
-  {/* Enviar */}
-  <button
-    type="submit"
-    aria-label="Enviar"
-    title="Enviar"
-    className={`p-2 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 ${
-      !input.trim() && adjuntos.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-    }`}
-    style={{ background: "#5C2E0B", color: "#fff", minWidth: 44, minHeight: 44, fontWeight: "bold" }}
-    disabled={(!input.trim() && adjuntos.length === 0) || cargando}
-  >
-    <MdSend size={24} />
-  </button>
-</form>
+    {/* === Previews de adjuntos (scroll horizontal en móvil) === */}
+    {adjuntos.length > 0 && (
+      <div
+        className="
+          flex gap-2 py-1
+          overflow-x-auto no-scrollbar
+          max-w-[40%] sm:max-w-[50%]
+        "
+      >
+        {adjuntos.map((adj, idx) => (
+          <div key={idx} className="relative flex-shrink-0">
+            {adj.type?.startsWith("image/") ? (
+              <img
+                src={URL.createObjectURL(adj)}
+                alt={adj.name}
+                className="
+                  rounded-xl
+                  border-2 border-yellow-300
+                  shadow
+                  object-cover
+                "
+                style={{
+                  width: 80,
+                  height: 60,
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <div
+                className="
+                  bg-yellow-50
+                  border-2 border-yellow-300
+                  rounded-xl
+                  flex flex-col items-center justify-center
+                  text-[#5C2E0B]
+                  font-semibold
+                  shadow
+                  text-[12px]
+                "
+                style={{
+                  width: 90,
+                  height: 60,
+                  padding: 4,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 22,
+                    marginBottom: 2,
+                    lineHeight: 1,
+                  }}
+                >
+                  {adj.name.toLowerCase().endsWith(".pdf")
+                    ? "📄"
+                    : /\.(doc|docx)$/i.test(adj.name)
+                    ? "📝"
+                    : /\.(xls|xlsx)$/i.test(adj.name)
+                    ? "📊"
+                    : "📎"}
+                </div>
+                <div
+                  className="truncate w-full text-center"
+                  title={adj.name}
+                >
+                  {adj.name}
+                </div>
+              </div>
+            )}
 
-{alertaAdjuntos && <div className="text-red-600 text-center w-full pb-2">{alertaAdjuntos}</div>}
-{error && <div className="p-2 mt-2 text-red-700 text-lg">{error}</div>}
+            {/* Quitar adjunto */}
+            <button
+              type="button"
+              aria-label="Quitar archivo"
+              className="
+                absolute -top-1 -right-1
+                bg-black/70 text-white rounded-full
+                w-5 h-5 flex items-center justify-center
+                text-[12px] leading-none
+              "
+              onClick={() => handleRemoveAdjunto(idx)}
+              title="Eliminar archivo"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    )}
 
+    {/* === Área de texto === */}
+    <textarea
+      ref={textareaRef}
+      className="
+        flex-1
+        bg-transparent
+        outline-none border-none
+        resize-none
+        text-[15px] sm:text-[15px] md:text-[17px]
+        leading-relaxed
+        text-[#5C2E0B]
+      "
+      placeholder="Escribe o dicta tu pregunta legal…"
+      value={input}
+      onChange={(e) => setInput(e.target.value)}
+      onKeyDown={handleKeyDown}
+      disabled={grabando}
+      rows={1}
+      style={{
+        minHeight: 40,
+        maxHeight: 140,
+        overflowY: "auto",
+        wordBreak: "break-word",
+        whiteSpace: "pre-wrap",
+      }}
+    />
+
+    {/* === Micrófono / Dictado de voz === */}
+    <button
+      type="button"
+      aria-label="Dictar voz"
+      className="
+        flex-shrink-0
+        rounded-full
+        transition
+        flex items-center justify-center
+        hover:opacity-90
+      "
+      style={{
+        background: grabando ? "#b71c1c" : "#5C2E0B", // rojo si está grabando
+        color: "#fff",
+        width: 40,
+        height: 40,
+        minWidth: 40,
+        minHeight: 40,
+        cursor: grabando ? "not-allowed" : "pointer",
+        opacity: grabando ? 0.85 : 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      onClick={handleVoice}
+      title={grabando ? "Grabando…" : "Dictar voz"}
+      disabled={grabando}
+    >
+      <FaMicrophone size={18} />
+    </button>
+
+    {/* === Enviar === */}
+    <button
+      type="submit"
+      aria-label="Enviar"
+      title="Enviar"
+      className={`
+        flex-shrink-0
+        rounded-full
+        flex items-center justify-center
+        transition
+        hover:opacity-90
+        ${
+          (!input.trim() && adjuntos.length === 0) || isSending
+            ? "opacity-50 cursor-not-allowed"
+            : ""
+        }
+      `}
+      style={{
+        background: "#5C2E0B",
+        color: "#fff",
+        width: 44,
+        height: 44,
+        minWidth: 44,
+        minHeight: 44,
+        fontWeight: "bold",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      disabled={
+        (!input.trim() && adjuntos.length === 0) ||
+        cargando ||
+        isSending
+      }
+    >
+      <MdSend size={22} />
+    </button>
+  </form>
 
       {/* MODAL HERRAMIENTAS */}
       {showModal && (
@@ -1150,7 +1455,11 @@ async function procesarConsulta(fn) {
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @media (max-width: 1024px) {
-          .litisbot-fill { max-width: 100vw !important; padding-left: 8px; padding-right: 8px; }
+          .litisbot-fill {
+            max-width: 100vw !important;
+            padding-left: 8px;
+            padding-right: 8px;
+          }
         }
       `}</style>
     </div>
@@ -1159,22 +1468,73 @@ async function procesarConsulta(fn) {
 
 /* ============================================================
    MensajeBot (con TTS/copy/edit/feedback)
+   Versión prod: usa /voz del backend y NO usa speechSynthesis
+   → evita la "doble voz" y fuerza la voz varonil generada server-side
 ============================================================ */
 function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
   const [editando, setEditando] = useState(false);
   const [editValue, setEditValue] = useState(msg.content);
   const [leyendo, setLeyendo] = useState(false);
 
-  function handleSpeak() {
+  // Base URL del backend (prod usa VITE_API_BASE_URL, local fallback)
+  const API_BASE =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+  const VOZ_URL = `${API_BASE}/voz`;
+
+  async function handleSpeak() {
+    // Reproducir audio generado por el backend con voz "varonil"
+    // sin usar speechSynthesis para evitar la segunda voz del navegador
     try {
       setLeyendo(true);
-      const plain = (msg.content || "");
-      const speech = new window.SpeechSynthesisUtterance(plain);
-      speech.lang = "es-PE";
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(speech);
-      speech.onend = () => setLeyendo(false);
-    } catch {
+
+      // Limpia HTML y frases tipo "LEE CON VOZ VARONIL..."
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = msg.content || "";
+      const plainText = tempDiv.textContent || tempDiv.innerText || "";
+
+      const resp = await fetch(VOZ_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          texto: plainText, // 👈 sólo el texto legible
+        }),
+      });
+
+      if (!resp.ok) {
+        console.warn(
+          "⚠️ No se pudo generar voz. Status:",
+          resp.status,
+          await resp.text()
+        );
+        setLeyendo(false);
+        return;
+      }
+
+      // Recibimos MP3 de backend y lo reproducimos como Audio()
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+
+      audio.onended = () => {
+        setLeyendo(false);
+        URL.revokeObjectURL(url);
+      };
+
+      audio.onerror = (e) => {
+        console.error("🔇 Error al reproducir audio:", e);
+        setLeyendo(false);
+        URL.revokeObjectURL(url);
+      };
+
+      audio
+        .play()
+        .catch((e) => {
+          console.error("🔇 Error al iniciar reproducción:", e);
+          setLeyendo(false);
+          URL.revokeObjectURL(url);
+        });
+    } catch (err) {
+      console.error("💥 Error en handleSpeak:", err);
       setLeyendo(false);
     }
   }
@@ -1193,17 +1553,27 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
             style={{ color: "#6b2f12" }}
             dangerouslySetInnerHTML={{ __html: msg.content }}
           />
+
+          {/* Botón leer en voz alta (sólo backend TTS) */}
           <button
             aria-label="Leer en voz alta"
-            style={{ background: "#5C2E0B", color: "#fff", minWidth: 34, minHeight: 34 }}
+            style={{
+              background: "#5C2E0B",
+              color: "#fff",
+              minWidth: 34,
+              minHeight: 34,
+              opacity: leyendo ? 0.6 : 1,
+              cursor: leyendo ? "not-allowed" : "pointer",
+            }}
             className="p-1 rounded-full flex items-center justify-center hover:bg-[#8b4e18] transition"
             onClick={handleSpeak}
             disabled={leyendo}
-            title="Leer en voz alta"
+            title={leyendo ? "Reproduciendo..." : "Leer en voz alta"}
           >
             <FaVolumeUp size={16} />
           </button>
 
+          {/* Copiar */}
           <button
             className="ml-1 hover:text-[#8b4e18]"
             onClick={() => onCopy(msg.content)}
@@ -1212,6 +1582,8 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
           >
             <FaRegCopy />
           </button>
+
+          {/* Editar */}
           <button
             className="ml-1 hover:text-[#8b4e18]"
             onClick={() => setEditando(true)}
@@ -1220,6 +1592,8 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
           >
             <FaRegEdit />
           </button>
+
+          {/* Feedback 👍 */}
           <button
             className="ml-1 hover:text-green-700"
             onClick={() => onFeedback("up")}
@@ -1228,6 +1602,8 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
           >
             <FaRegThumbsUp />
           </button>
+
+          {/* Feedback 👎 */}
           <button
             className="ml-1 hover:text-red-700"
             onClick={() => onFeedback("down")}
@@ -1244,10 +1620,16 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
             onChange={(e) => setEditValue(e.target.value)}
             className="border border-yellow-300 px-2 py-1 rounded flex-1"
           />
-          <button onClick={handleGuardar} className="text-green-700 font-semibold">
+          <button
+            onClick={handleGuardar}
+            className="text-green-700 font-semibold"
+          >
             Guardar
           </button>
-          <button onClick={() => setEditando(false)} className="text-red-700">
+          <button
+            onClick={() => setEditando(false)}
+            className="text-red-700"
+          >
             Cancelar
           </button>
         </div>

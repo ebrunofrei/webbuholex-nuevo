@@ -1,43 +1,101 @@
-// models/Mensaje.js
-// ===============================================
-// 💬 Modelo Mensaje de Chat para LitisBot / BúhoLex
-// Guarda cada interacción (usuario y asistente)
-// ===============================================
+// backend/models/Mensaje.js
+// ============================================================
+// 💬 Log de Mensajes de LitisBot / BúhoLex
+// Uso: auditoría y trazabilidad fina
+// - Cada fila = un mensaje enviado o respondido
+// - Esto NO es lo que el front usa para reconstruir contexto;
+//   para eso usamos Conversacion.js con el array mensajes.
+// - Aquí guardamos evidencia legal (quién dijo qué, cuándo).
+// ============================================================
 
 import mongoose from "mongoose";
 
-const MensajeSchema = new mongoose.Schema(
+const MensajeAuditoriaSchema = new mongoose.Schema(
   {
-    userId: {
+    // ----- Identidad / caso -----
+    usuarioId: {
       type: String,
       required: true,
-      index: true, // para filtrar rápido por usuario
+      index: true, // búsquedas por usuario
     },
-    rol: {
+    expedienteId: {
+      type: String,
+      default: "default",
+      index: true, // búsquedas por expediente
+    },
+
+    // ----- Rol -----
+    role: {
       type: String,
       enum: ["user", "assistant"],
       required: true,
+      index: true,
     },
-    texto: {
+
+    // ----- Contenido bruto entregado/vuelto -----
+    content: {
       type: String,
       required: true,
       trim: true,
     },
-    // contexto opcional: ej. "Expediente 045-2024 alimentos", "Cliente Juan Pérez", etc.
+
+    // ----- Metadatos jurídicos/contextuales -----
+    intencion: {
+      type: String,
+      enum: [
+        "redaccion",
+        "analisis_juridico",
+        "traduccion",
+        "consulta_general",
+        null,
+      ],
+      default: null,
+      index: true,
+    },
+
+    materiaDetectada: {
+      type: String,
+      default: null, // "civil", "penal", etc.
+      index: true,
+    },
+
+    idioma: {
+      type: String,
+      default: "es-PE", // ej. es-PE, qu-PE, ay-BO, en-US
+    },
+
+    pais: {
+      type: String,
+      default: "Perú",
+    },
+
+    // opcional: para trazabilidad interna o tagging manual
     contexto: {
       type: String,
-      default: null,
       trim: true,
+      default: null,
     },
   },
   {
-    timestamps: true, // crea createdAt y updatedAt
+    timestamps: true, // createdAt / updatedAt
+    collection: "mensajes_auditoria",
   }
 );
 
-// Índice compuesto opcional para consultas tipo "dame últimos mensajes de X":
-MensajeSchema.index({ userId: 1, createdAt: -1 });
+// Índice compuesto: ver últimos mensajes de un expediente concreto rápido
+MensajeAuditoriaSchema.index(
+  { usuarioId: 1, expedienteId: 1, createdAt: -1 },
+  { name: "idx_usuario_expediente_ts" }
+);
 
-const Mensaje = mongoose.models.Mensaje || mongoose.model("Mensaje", MensajeSchema);
+// Índice para buscar todos los mensajes del bot en materia laboral, etc.
+MensajeAuditoriaSchema.index(
+  { role: 1, materiaDetectada: 1, createdAt: -1 },
+  { name: "idx_role_materia_ts" }
+);
+
+const Mensaje =
+  mongoose.models.Mensaje ||
+  mongoose.model("Mensaje", MensajeAuditoriaSchema);
 
 export default Mensaje;
