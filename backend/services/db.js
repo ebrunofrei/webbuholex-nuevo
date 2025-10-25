@@ -1,99 +1,74 @@
+// backend/services/db.js
 // ============================================================
-// 🦉 BÚHOLEX | Conexión central a MongoDB (Atlas o Local)
-// ============================================================
-// Con reconexión automática, fallback local, logs detallados,
-// y compatibilidad total con Atlas, Railway y Windows local.
+// 🦉 Conexión a MongoDB Atlas centralizada
+// Maneja conexión única y reuso en producción
 // ============================================================
 
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-import path from "path";
 import chalk from "chalk";
 
-// ====== Cargar entorno dinámicamente ======
-const envFile =
-  process.env.NODE_ENV === "production"
-    ? ".env.production"
-    : ".env.development";
+let isConnecting = false;
 
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
-
-let isConnected = false;
-let retries = 0;
-const MAX_RETRIES = 5;
-
-/**
- * 🧠 Conecta a MongoDB (Atlas o fallback local)
- */
 export async function connectDB() {
-  if (isConnected) {
-    console.log(chalk.blue("⚡ Conexión MongoDB ya activa. Reutilizando conexión existente."));
-    return mongoose.connection;
+  // Priorizamos nombres que sí existen en Railway
+  const MONGO_URI =
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URI || // fallback por si local usaba otro nombre
+    "";
+
+  const DB_NAME =
+    process.env.MONGODB_DBNAME ||
+    process.env.MONGO_DBNAME ||
+    process.env.DB_NAME ||
+    "buholex";
+
+  if (!MONGO_URI) {
+    console.error(
+      chalk.redBright(
+        "❌ No se encontró MONGODB_URI / MONGO_URI en las variables de entorno."
+      )
+    );
+    throw new Error("No se encontró MONGODB_URI");
   }
 
-  const atlasUri = process.env.MONGO_URI;
-  const localUri = process.env.MONGO_URI_LOCAL || "mongodb://127.0.0.1:27017/buholex";
-
-  if (!atlasUri) {
-    throw new Error(chalk.red("❌ No se encontró MONGO_URI en el archivo .env."));
+  // Ya hay conexión activa reutilizable
+  if (global.mongoose && global.mongoose.connection?.readyState === 1) {
+    console.log(
+      chalk.greenBright("✅ Reusando conexión existente a MongoDB Atlas.")
+    );
+    return global.mongoose;
   }
 
-  mongoose.set("strictQuery", true);
-  mongoose.set("bufferCommands", false);
-
-  // Función interna de intento con backoff exponencial
-  async function tryConnect(uri, label) {
-    const start = Date.now();
-    try {
-      await mongoose.connect(uri, {
-        maxPoolSize: 10,
-        serverSelectionTimeoutMS: 15000,
-        socketTimeoutMS: 30000,
-        connectTimeoutMS: 15000,
-        retryWrites: true,
-      });
-      const elapsed = ((Date.now() - start) / 1000).toFixed(2);
-      console.log(chalk.greenBright(`✅ Conectado a MongoDB [${label}] en ${elapsed}s`));
-      isConnected = true;
-      return true;
-    } catch (err) {
-      console.error(chalk.red(`⚠️ Error conectando a ${label}:`), err.message);
-      return false;
-    }
+  if (isConnecting) {
+    console.log(
+      chalk.yellow("⏳ Conexión a MongoDB ya en progreso, reutilizando promesa...")
+    );
+    return;
   }
 
-  // --- Intentar conexión con Atlas, luego fallback local ---
-  const connectedToAtlas = await tryConnect(atlasUri, "Atlas");
-  if (connectedToAtlas) return mongoose.connection;
-
-  console.log(chalk.yellow("↩️ Intentando fallback a MongoDB local..."));
-  const connectedToLocal = await tryConnect(localUri, "Local");
-  if (connectedToLocal) return mongoose.connection;
-
-  // --- Si falla todo, reintentar con backoff ---
-  while (!isConnected && retries < MAX_RETRIES) {
-    retries++;
-    const delay = Math.pow(2, retries) * 1000;
-    console.log(chalk.yellow(`🔄 Reintentando conexión (${retries}/${MAX_RETRIES}) en ${delay / 1000}s...`));
-    await new Promise((res) => setTimeout(res, delay));
-
-    const retried = await tryConnect(atlasUri, "Atlas");
-    if (retried) return mongoose.connection;
-  }
-
-  throw new Error(chalk.red("❌ Falló la conexión a MongoDB después de múltiples intentos."));
-}
-
-/**
- * 🔌 Desconecta MongoDB limpiamente
- */
-export async function disconnectDB() {
-  if (!isConnected) return;
   try {
-    await mongoose.disconnect();
-    isConnected = false;
-    console.log(chalk.yellow("🛑 Conexión MongoDB cerrada correctamente."));
+    console.log(chalk.yellow("⏳ Intentando conectar a MongoDB Atlas..."));
+    isConnecting = true;
+
+    const conn = await mongoose.connect(MONGO_URI, {
+      dbName: DB_NAME,
+      // useNewUrlParser y useUnifiedTopology ya no hacen falta en mongoose >=6
+    });
+
+    global.mongoose = conn;
+
+    console.log(
+      chalk.greenBright("✅ Conectado a MongoDB Atlas."),
+      chalk.gray(`DB: ${DB_NAME}`)
+    );
+    return conn;
   } catch (err) {
-    console.error(chalk.red("⚠️ Error al desconectar MongoDB:"), err.message);
+    console.error(
+      chalk.redBright("❌ Error al conectar a MongoDB Atlas:"),
+      err.message
+    );
+    throw err;
+  } finally {
+    isConnecting = false;
   }
 }
