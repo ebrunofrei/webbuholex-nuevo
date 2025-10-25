@@ -10,7 +10,6 @@ import chalk from "chalk";
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
-import cron from "node-cron";
 
 // ============================================================
 // ⚙️ Carga temprana del entorno (.env)
@@ -60,7 +59,7 @@ console.log(
 import { connectDB } from "./backend/services/db.js";
 
 // ============================================================
-// 🧭 Importación de rutas principales
+// 🧭 Importación de rutas principales (estas sí están en repo)
 // ============================================================
 
 import noticiasRoutes from "./backend/routes/noticias.js";
@@ -74,17 +73,7 @@ import noticiasGuardadasRoutes from "./backend/routes/noticiasGuardadas.js";
 import mediaProxyRoutes from "./backend/routes/mediaProxy.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 import vozRoutes from "./backend/routes/voz.js";
-
-// 🚨 Próximo paso: ruta del chat
-// import chatRoutes from "./backend/routes/chat.js"; // <- la vamos a crear luego
-
-// ============================================================
-// 🕒 Cron Jobs
-// ============================================================
-
-import { cleanupLogs } from "./backend/jobs/cleanupLogs.js";
-import { jobNoticias } from "./backend/jobs/cronNoticias.js";
-import { maintainIndexes } from "./scripts/maintain-indexes.js";
+// import chatRoutes from "./backend/routes/chat.js"; // lo activamos luego
 
 // ============================================================
 // 🚀 Inicialización de Express
@@ -99,12 +88,6 @@ app.use(morgan("dev"));
 // ============================================================
 // 🔒 Configuración dinámica de CORS
 // ============================================================
-//
-// Reglas:
-// 1. Permitimos localhost y 127.0.0.1 en puertos 5170-5199 para desarrollo Vite.
-// 2. Permitimos explícitamente los orígenes declarados en FRONTEND_ORIGIN
-//    (que tú configuras en Railway Variables).
-//
 
 // localhost para desarrollo
 const localOrigins = [
@@ -112,20 +95,19 @@ const localOrigins = [
   ...Array.from({ length: 30 }, (_, i) => `http://127.0.0.1:${5170 + i}`),
 ];
 
-// dominios declarados en entorno (producción y previsualizaciones vercel)
+// dominios declarados en entorno (Railway → FRONTEND_ORIGIN)
 const envOrigins = (process.env.FRONTEND_ORIGIN || "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
 
-// fallback de seguridad en caso no exista FRONTEND_ORIGIN (lo ideal es que sí exista)
+// fallback por si FRONTEND_ORIGIN está vacío
 const defaultProdOrigins = [
   "https://buholex.com",
   "https://www.buholex.com",
   "https://webbuholex-nuevo.vercel.app",
 ];
 
-// lista final
 const allowedOrigins = Array.from(
   new Set([...localOrigins, ...envOrigins, ...defaultProdOrigins])
 );
@@ -133,12 +115,8 @@ const allowedOrigins = Array.from(
 app.use(
   cors({
     origin: (origin, cb) => {
-      // llamadas tipo Postman/cURL no traen origin → las dejamos pasar
-      if (!origin) return cb(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return cb(null, true);
-      }
+      if (!origin) return cb(null, true); // Postman / curl
+      if (allowedOrigins.includes(origin)) return cb(null, true);
 
       console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
       return cb(new Error(`CORS no permitido: ${origin}`));
@@ -197,8 +175,59 @@ app.use("/api/notificaciones", notificacionesRoutes);
 app.use("/api/traducir", traducirRoutes);
 app.use("/api", vozRoutes);
 
-// 🗣 Chat IA (lo montamos en el siguiente paso)
+// 🗣 Chat IA (cuando creemos backend/routes/chat.js)
 // app.use("/api/chat", chatRoutes);
+
+// ============================================================
+// 🕒 Cargas opcionales SOLO en desarrollo/local
+// ============================================================
+//
+// Estos son procesos pesados (cron scraping, mantenimiento índices, logs)
+// que NO están subidos a GitHub porque están ignorados (.gitignore).
+// Si intentamos importarlos en producción, Railway revienta.
+// Solución: cargarlos solo si existen y solo fuera de production.
+//
+
+async function cargarTareasOpcionales() {
+  if (NODE_ENV === "production") {
+    console.log(chalk.gray("⏭ Saltando tareas internas (cron / maintain-indexes) en producción"));
+    return;
+  }
+
+  // cleanupLogs, jobNoticias, maintainIndexes solo se intentan en dev/local
+  try {
+    const { cleanupLogs } = await import("./backend/jobs/cleanupLogs.js");
+    const { jobNoticias } = await import("./backend/jobs/cronNoticias.js");
+    console.log(chalk.gray("🧹 cleanupLogs y jobNoticias cargados en entorno no productivo"));
+
+    // si quieres programar cron aquí en local:
+    // import cron from "node-cron";
+    // cron.schedule("0 */3 * * *", jobNoticias); // cada 3 horas por ejemplo
+    // cron.schedule("0 0 * * *", cleanupLogs); // cada medianoche
+  } catch (err) {
+    console.warn(
+      chalk.yellow(
+        "⚠️ No se pudieron cargar cleanupLogs/cronNoticias (esto es normal si estás en producción o si faltan esos archivos)",
+        err.message
+      )
+    );
+  }
+
+  try {
+    const { maintainIndexes } = await import("./scripts/maintain-indexes.js");
+    if (typeof maintainIndexes === "function") {
+      console.log(chalk.gray("🛠 Ejecutando maintainIndexes() en entorno no productivo..."));
+      await maintainIndexes();
+    }
+  } catch (err) {
+    console.warn(
+      chalk.yellow(
+        "⚠️ maintain-indexes.js no disponible (ignorado en repo o estás en producción)",
+        err.message
+      )
+    );
+  }
+}
 
 // ============================================================
 // 🧠 Conexión y arranque del servidor
@@ -206,26 +235,20 @@ app.use("/api", vozRoutes);
 
 (async () => {
   try {
-    console.log(
-      chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas...")
-    );
+    console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
     await connectDB();
     console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
 
+    // Cargamos las tareas opcionales solo en entorno no productivo
+    await cargarTareasOpcionales();
+
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(
-        chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`)
-      );
+      console.log(chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`));
       console.log(chalk.cyanBright("🌍 Orígenes permitidos por CORS:"));
-      allowedOrigins.forEach((o) =>
-        console.log("   ", chalk.gray("-", o))
-      );
+      allowedOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
     });
   } catch (err) {
-    console.error(
-      chalk.red("❌ Error crítico al iniciar servidor:"),
-      err.message
-    );
+    console.error(chalk.red("❌ Error crítico al iniciar servidor:"), err.message);
     process.exit(1);
   }
 })();
