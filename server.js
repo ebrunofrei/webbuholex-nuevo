@@ -33,7 +33,9 @@ if (fs.existsSync(envPath)) {
   console.log(chalk.cyanBright(`📦 Variables cargadas desde ${envFile}`));
 } else {
   dotenv.config();
-  console.warn(chalk.yellow(`⚠️ No se encontró ${envFile}, usando .env por defecto.`));
+  console.warn(
+    chalk.yellow(`⚠️ No se encontró ${envFile}, usando .env por defecto.`)
+  );
 }
 
 // ============================================================
@@ -73,6 +75,9 @@ import mediaProxyRoutes from "./backend/routes/mediaProxy.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 import vozRoutes from "./backend/routes/voz.js";
 
+// 🚨 Próximo paso: ruta del chat
+// import chatRoutes from "./backend/routes/chat.js"; // <- la vamos a crear luego
+
 // ============================================================
 // 🕒 Cron Jobs
 // ============================================================
@@ -92,25 +97,49 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 
 // ============================================================
-// 🔒 Configuración dinámica de CORS (versión unificada)
+// 🔒 Configuración dinámica de CORS
 // ============================================================
+//
+// Reglas:
+// 1. Permitimos localhost y 127.0.0.1 en puertos 5170-5199 para desarrollo Vite.
+// 2. Permitimos explícitamente los orígenes declarados en FRONTEND_ORIGIN
+//    (que tú configuras en Railway Variables).
+//
 
-const corsOrigins = [
-  // Desarrollo (localhost y 127.0.0.1)
+// localhost para desarrollo
+const localOrigins = [
   ...Array.from({ length: 30 }, (_, i) => `http://localhost:${5170 + i}`),
   ...Array.from({ length: 30 }, (_, i) => `http://127.0.0.1:${5170 + i}`),
+];
 
-  // Producción
+// dominios declarados en entorno (producción y previsualizaciones vercel)
+const envOrigins = (process.env.FRONTEND_ORIGIN || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+// fallback de seguridad en caso no exista FRONTEND_ORIGIN (lo ideal es que sí exista)
+const defaultProdOrigins = [
   "https://buholex.com",
   "https://www.buholex.com",
   "https://webbuholex-nuevo.vercel.app",
 ];
 
+// lista final
+const allowedOrigins = Array.from(
+  new Set([...localOrigins, ...envOrigins, ...defaultProdOrigins])
+);
+
 app.use(
   cors({
     origin: (origin, cb) => {
+      // llamadas tipo Postman/cURL no traen origin → las dejamos pasar
       if (!origin) return cb(null, true);
-      if (corsOrigins.includes(origin)) return cb(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+
       console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
       return cb(new Error(`CORS no permitido: ${origin}`));
     },
@@ -135,9 +164,6 @@ app.get("/api/health", async (_req, res) => {
         ? "✅ Conectado a MongoDB Atlas"
         : "⚠️ MongoDB no conectado";
 
-    const corsOrigs =
-      process.env.CORS_ORIGINS?.split(",") || corsOrigins;
-
     return res.status(200).json({
       ok: true,
       entorno: NODE_ENV,
@@ -145,7 +171,7 @@ app.get("/api/health", async (_req, res) => {
       version: process.env.npm_package_version || "1.0.0",
       openai: openaiStatus,
       mongo: mongoStatus,
-      cors: corsOrigs,
+      cors: allowedOrigins,
       uptime: `${process.uptime().toFixed(0)}s`,
       startedAt: START_TIME.toISOString(),
     });
@@ -171,23 +197,35 @@ app.use("/api/notificaciones", notificacionesRoutes);
 app.use("/api/traducir", traducirRoutes);
 app.use("/api", vozRoutes);
 
+// 🗣 Chat IA (lo montamos en el siguiente paso)
+// app.use("/api/chat", chatRoutes);
+
 // ============================================================
 // 🧠 Conexión y arranque del servidor
 // ============================================================
 
 (async () => {
   try {
-    console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
+    console.log(
+      chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas...")
+    );
     await connectDB();
     console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
 
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`));
+      console.log(
+        chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`)
+      );
       console.log(chalk.cyanBright("🌍 Orígenes permitidos por CORS:"));
-      corsOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
+      allowedOrigins.forEach((o) =>
+        console.log("   ", chalk.gray("-", o))
+      );
     });
   } catch (err) {
-    console.error(chalk.red("❌ Error crítico al iniciar servidor:"), err.message);
+    console.error(
+      chalk.red("❌ Error crítico al iniciar servidor:"),
+      err.message
+    );
     process.exit(1);
   }
 })();
