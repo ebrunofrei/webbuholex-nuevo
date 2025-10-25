@@ -95,12 +95,9 @@ app.use(morgan("dev"));
 // 🔒 Configuración dinámica de CORS (versión unificada)
 // ============================================================
 
-// Orígenes permitidos automáticamente para entornos de desarrollo y producción
 const corsOrigins = [
-  // Permitir puertos locales de desarrollo (5170–5199)
+  // Desarrollo (localhost y 127.0.0.1)
   ...Array.from({ length: 30 }, (_, i) => `http://localhost:${5170 + i}`),
-
-  // También versiones en 127.0.0.1
   ...Array.from({ length: 30 }, (_, i) => `http://127.0.0.1:${5170 + i}`),
 
   // Producción
@@ -109,18 +106,12 @@ const corsOrigins = [
   "https://webbuholex-nuevo.vercel.app",
 ];
 
-// Aplicar CORS globalmente
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Permite peticiones sin header Origin (por ejemplo desde Postman o cron jobs)
       if (!origin) return cb(null, true);
-
-      // Verifica si el origen está permitido
       if (corsOrigins.includes(origin)) return cb(null, true);
-
-      // Bloquea si no está permitido
-      console.warn(`⚠️ [CORS] Bloqueado: ${origin}`);
+      console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
       return cb(new Error(`CORS no permitido: ${origin}`));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -130,40 +121,39 @@ app.use(
 );
 
 // ============================================================
-// 🌐 Rutas de prueba y de salud
+// 🌡️ Ruta de diagnóstico /api/health
 // ============================================================
 
-app.get("/api/noticias", (_req, res) =>
-  res.json({
-    noticias: [
-      { id: 1, titulo: "Noticia General 1", fecha: "2025-10-10" },
-      { id: 2, titulo: "Noticia General 2", fecha: "2025-10-09" },
-    ],
-  })
-);
-
-app.get("/api/noticias-juridicas", (_req, res) =>
-  res.json({
-    noticiasJuridicas: [
-      { id: 1, titulo: "Noticia Jurídica 1", fecha: "2025-10-10" },
-      { id: 2, titulo: "Noticia Jurídica 2", fecha: "2025-10-09" },
-    ],
-  })
-);
-
-app.get("/api/health", (_req, res) =>
-  res.status(200).json({
-    ok: true,
-    env: NODE_ENV,
-    uptime: `${process.uptime().toFixed(0)}s`,
-    startedAt: START_TIME.toISOString(),
-    version: process.env.npm_package_version || "1.0.0",
-    database: "MongoDB Atlas conectado ✅",
-    openai: process.env.OPENAI_API_KEY
+app.get("/api/health", async (_req, res) => {
+  try {
+    const openaiStatus = process.env.OPENAI_API_KEY
       ? "✅ OpenAI API Key cargada correctamente"
-      : "❌ Falta OPENAI_API_KEY",
-  })
-);
+      : "❌ Falta configurar OPENAI_API_KEY";
+
+    const mongoStatus =
+      global.mongoose?.connection?.readyState === 1
+        ? "✅ Conectado a MongoDB Atlas"
+        : "⚠️ MongoDB no conectado";
+
+    const corsOrigs =
+      process.env.CORS_ORIGINS?.split(",") || corsOrigins;
+
+    return res.status(200).json({
+      ok: true,
+      entorno: NODE_ENV,
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || "1.0.0",
+      openai: openaiStatus,
+      mongo: mongoStatus,
+      cors: corsOrigs,
+      uptime: `${process.uptime().toFixed(0)}s`,
+      startedAt: START_TIME.toISOString(),
+    });
+  } catch (err) {
+    console.error("❌ Error en /api/health:", err.message);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 // ============================================================
 // 🧩 Rutas API principales
