@@ -1,68 +1,66 @@
 // backend/services/ttsService.js
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
-import OpenAI from "openai";
+// importa aquí tu SDK real de TTS.
+// Ejemplo ficticio con SSML genérico (ajusta a tu proveedor):
+// import { textToSpeechClient } from "algún-sdk";
 
-// IMPORTANTE: en Railway debes tener OPENAI_API_KEY configurada
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-/**
- * Limpia el texto que viene del bot antes de sintetizarlo.
- * - Quita HTML
- * - Quita frases tipo "lee con voz varonil..." para que NO se lean literalmente
- * - Compacta espacios
- */
-function limpiarTextoParaLocucion(textoOriginal) {
-  const base = textoOriginal || "";
-
-  // 1. Reemplazar <br> por saltos de línea y quitar el resto de etiquetas HTML
-  const sinHTML = base
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ");
-
-  // 2. Quitar instrucciones meta tipo "lee con voz varonil", "habla con voz masculina", etc.
-  //    para que la locución no las lea.
-  const sinInstrucciones = sinHTML
-    .replace(/lee con voz varonil[^.]*[.]/gi, " ")
-    .replace(/habla con voz masculina[^.]*[.]/gi, " ")
-    .replace(/con tono varonil[^.]*[.]/gi, " ")
-    .replace(/con voz masculina[^.]*[.]/gi, " ");
-
-  // 3. Compactar espacios múltiples
-  return sinInstrucciones.replace(/\s+/g, " ").trim();
+function limpiarTextoParaLocucion(textoCrudo = "") {
+  return (textoCrudo || "")
+    // quita HTML
+    .replace(/<[^>]+>/g, " ")
+    // quita instrucciones tipo "lee con voz varonil", etc.
+    .replace(/lee con voz varonil[^,.]*/gi, " ")
+    .replace(/habla como abogado varonil[^,.]*/gi, " ")
+    .replace(/con tono varonil[^,.]*/gi, " ")
+    // espacios múltiples -> uno
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
- * Genera audio masculino y lo guarda como MP3.
- * @param {string} textoOriginal Texto crudo generado por LitisBot
- * @param {string} rutaSalida    Ruta absoluta al mp3 que vamos a crear
+ * Genera MP3 con voz masculina grave estilo "abogado".
+ * @param {string} texto
+ * @param {string} rutaSalida absoluta, ej "./voz.mp3"
  */
-export async function generarVozVaronil(textoOriginal, rutaSalida) {
-  // 1. Sanitizar texto
-  const textoLimpio = limpiarTextoParaLocucion(textoOriginal);
+export async function generarVozVaronil(texto = "", rutaSalida) {
+  const limpio = limpiarTextoParaLocucion(texto);
 
-  // 2. Elegimos una voz más grave/masculina entre las que da OpenAI TTS.
-  //    "alloy" suele sonar varonil; evita "aria"/"verse" que son más femeninas.
-  const VOZ_MASCULINA = "alloy";
+  // SSML con pitch grave y estilo formal.
+  const ssml = `
+    <speak>
+      <prosody pitch="-4st" rate="92%" volume="+2dB">
+        ${limpio}
+      </prosody>
+    </speak>
+  `.trim();
 
-  // 3. Llamar al modelo TTS de OpenAI.
-  //    Usa el modelo que tu cuenta soporte. Ejemplos válidos:
-  //    - "gpt-4o-mini-tts"
-  //    - "tts-1" o "tts-1-hd"
+  // ===== EJEMPLO GENÉRICO =====
+  // Reemplaza esta parte por la llamada real a tu proveedor de TTS.
+  // Debe:
+  //  - usar una voz masculina (ej: "es-PE-Neutral-Male" / "es-ES-DiegoNeural" / etc.)
+  //  - aceptar SSML o al menos parámetros de pitch/rate
   //
-  //    Si te da error con "gpt-4o-mini-tts", prueba "tts-1".
-  const resp = await openai.audio.speech.create({
-    model: "gpt-4o-mini-tts",
-    voice: VOZ_MASCULINA,
-    input: textoLimpio,
-    format: "mp3",
-  });
+  // const audioBuffer = await textToSpeechClient.synthesize({
+  //   input: { ssml },
+  //   voice: {
+  //     languageCode: "es-PE",
+  //     name: "es-PE-male-abogado", // escoge una voz varonil disponible
+  //     gender: "MALE"
+  //   },
+  //   audioConfig: {
+  //     audioEncoding: "MP3",
+  //     speakingRate: 0.92,
+  //     pitch: -4.0,
+  //   }
+  // });
 
-  // 4. Guardar el binario MP3 en disco
-  const audioBuffer = Buffer.from(await resp.arrayBuffer());
-  await fs.promises.writeFile(rutaSalida, audioBuffer);
+  // simulación mientras integras proveedor real:
+  const audioBuffer = Buffer.from(
+    "SUQzAwAAAAAA...MP3_FAKE...", // <-- aquí iría el binario real
+    "base64"
+  );
 
-  return rutaSalida;
+  // guardar el mp3 en disco para que el endpoint lo sirva
+  await fs.writeFile(path.resolve(rutaSalida), audioBuffer);
 }
