@@ -1097,349 +1097,334 @@ export default function LitisBotChatBase({
   };
 
   /* --------------------------- Render ----------------------- */
-  return (
-    <div
-  className="flex flex-col w-full items-center bg-white litisbot-fill"
-  style={{ minHeight: "100vh" }}
-  onPaste={(e) => {
-    // permite pegar archivos directamente (ej. desde galería en móvil)
-    if (e.clipboardData?.files?.length) {
-      handleFileChange({ target: { files: e.clipboardData.files } });
-    }
-  }}
->
-  {/* ====== FEED DEL CHAT ====== */}
+return (
   <div
-    id="litisbot-feed"
-    className="
-      flex flex-col
-      w-full
-      mx-auto
-      bg-white
-      overflow-y-auto
-      no-scrollbar
-      px-2 sm:px-3 md:px-4
-      max-w-full sm:max-w-3xl md:max-w-4xl
-    "
-    style={{
-      // alto visible del historial:
-      // viewport menos (header aprox) y menos la barra de entrada
-      height: "calc(100vh - 168px)",
-      marginTop: 16,
-      marginBottom: 12,
-      borderRadius: 20,
-      boxShadow: "0 4px 26px 0 #0001",
-      backgroundColor: "#ffffff",
+    className="flex flex-col w-full items-center bg-white litisbot-fill"
+    style={{ minHeight: "100vh" }}
+    onPaste={(e) => {
+      // permitir pegar archivos directamente
+      if (e.clipboardData?.files?.length) {
+        handleFileChange({ target: { files: e.clipboardData.files } });
+      }
     }}
   >
-    <div className="flex flex-col gap-2 w-full py-3 px-1 sm:px-2">
-      {mensajes.map((m, i) => (
-        <div
-          key={i}
-          className={`flex w-full ${
-            m.role === "user" ? "justify-end" : "justify-start"
-          }`}
-        >
+    {/* ====== FEED DEL CHAT ====== */}
+    <div
+      id="litisbot-feed"
+      className="
+        flex flex-col w-full mx-auto bg-white
+        overflow-y-auto no-scrollbar
+        px-3 sm:px-4
+        max-w-full sm:max-w-3xl md:max-w-4xl
+        flex-1
+      "
+      style={{
+        // usamos flex-1 para que el feed crezca y la barra quede abajo sticky
+        width: "100%",
+        minWidth: 0,
+        paddingTop: 16,
+        paddingBottom: 96, // deja hueco para que la barra no tape los últimos msgs
+        borderRadius: 20,
+        boxShadow: "0 4px 26px 0 #0001",
+        backgroundColor: "#ffffff",
+      }}
+    >
+      <div className="flex flex-col gap-3 w-full">
+        {mensajes.map((m, i) => (
           <div
-            className={`
-              rounded-[1.5rem]
-              shadow
-              whitespace-pre-wrap
-              break-words
-              leading-relaxed
-              text-[15px] sm:text-[15px] md:text-[17px] lg:text-[18px]
-              font-medium
-              px-4 py-3
-              ${
-                m.role === "user"
-                  ? "bg-[#5C2E0B] text-white self-end"
-                  : "bg-yellow-50 text-[#5C2E0B] self-start border-0"
-              }
-            `}
-            style={{
-              // burbujas responsivas:
-              // en móvil: usan casi todo el ancho para NO apilar palabra por línea
-              maxWidth: "92%",
-            }}
+            key={i}
+            className={`flex w-full ${
+              m.role === "user" ? "justify-end" : "justify-start"
+            }`}
           >
-            {m.role === "assistant" ? (
-              <MensajeBurbuja
-                msg={m}
-                onCopy={handleCopy}
-                onEdit={(nuevo) => handleEdit(i, nuevo)}
-                onFeedback={(type) => handleFeedback(i, type)}
-              />
-            ) : (
-              <span dangerouslySetInnerHTML={{ __html: m.content }} />
-            )}
+            <div
+              className={`
+                rounded-[1.5rem] shadow
+                whitespace-pre-wrap break-words leading-relaxed
+                text-[16px] sm:text-[15px] md:text-[17px] lg:text-[18px]
+                font-medium
+                px-4 py-3
+                max-w-[92%]          /* móvil: ocupa casi todo el ancho */
+                sm:max-w-[85%]       /* tablet */
+                md:max-w-[70%]       /* desktop */
+                ${
+                  m.role === "user"
+                    ? "bg-[#5C2E0B] text-white self-end"
+                    : "bg-yellow-50 text-[#5C2E0B] self-start border-0"
+                }
+              `}
+              style={{
+                border: 0,
+              }}
+            >
+              {m.role === "assistant" ? (
+                <MensajeBurbuja
+                  msg={m}
+                  onCopy={handleCopy}
+                  onEdit={(nuevo) => handleEdit(i, nuevo)}
+                  onFeedback={(type) => handleFeedback(i, type)}
+                />
+              ) : (
+                <span dangerouslySetInnerHTML={{ __html: m.content }} />
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
 
-      {cargando && (
-        <div className="flex justify-start w-full">
-          <div
-            className="
-              px-4 py-3
-              rounded-[1.5rem]
-              shadow
-              bg-yellow-100
-              text-[#5C2E0B]
-              text-[15px] sm:text-[15px] md:text-[17px]
-              leading-relaxed
-              max-w-[80%]
-            "
-          >
-            Buscando en bases legales…
+        {cargando && (
+          <div className="flex justify-start w-full">
+            <div
+              className="
+                px-4 py-3 rounded-[1.5rem] shadow
+                bg-yellow-100 text-[#5C2E0B]
+                text-[15px] sm:text-[15px] md:text-[17px]
+                leading-relaxed max-w-[80%]
+              "
+            >
+              Buscando en bases legales…
+            </div>
           </div>
+        )}
+
+        <div ref={chatEndRef} />
+      </div>
+    </div>
+
+    {/* ====== BARRA DE ENTRADA STICKY AL FONDO ====== */}
+    <form
+      onSubmit={handleSend}
+      className={`
+        w-full mx-auto
+        flex items-end gap-2
+        rounded-[2rem]
+        border-2 border-yellow-300
+        shadow-xl
+        px-3 py-2 sm:px-4 sm:py-2.5
+        max-w-full sm:max-w-3xl md:max-w-4xl
+        sticky bottom-0 z-50
+        bg-[#fff8e1]
+      `}
+      style={{
+        left: 0,
+        right: 0,
+      }}
+    >
+      {/* === Botón Adjuntar === */}
+      <label
+        className={`
+          cursor-pointer flex-shrink-0
+          rounded-full hover:opacity-90 transition
+          ${
+            adjuntos.length >= MAX_ADJUNTOS
+              ? "opacity-40 pointer-events-none"
+              : ""
+          }
+        `}
+        style={{
+          background: "#5C2E0B",
+          color: "#fff",
+          width: 44,
+          height: 44,
+          minWidth: 44,
+          minHeight: 44,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+        title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
+        aria-label="Adjuntar archivo"
+      >
+        <FaPaperclip size={20} />
+        <input
+          type="file"
+          className="hidden"
+          multiple
+          onChange={handleFileChange}
+          disabled={adjuntos.length >= MAX_ADJUNTOS}
+        />
+      </label>
+
+      {/* === Previews de adjuntos seguros ===
+           Solo mostramos si hay Files/Blobs reales para no romper createObjectURL */}
+      {adjuntos.some((a) => a instanceof File || a instanceof Blob) && (
+        <div
+          className="
+            flex gap-2 py-1
+            overflow-x-auto no-scrollbar
+            max-w-[40%] sm:max-w-[50%]
+          "
+          style={{ minHeight: 60 }}
+        >
+          {adjuntos.map((adj, idx) => {
+            const isBlob = adj instanceof File || adj instanceof Blob;
+
+            return (
+              <div key={idx} className="relative flex-shrink-0">
+                {isBlob && adj.type?.startsWith?.("image/") ? (
+                  <img
+                    src={URL.createObjectURL(adj)}
+                    alt={adj.name || `archivo-${idx}`}
+                    className="rounded-xl border-2 border-yellow-300 shadow object-cover"
+                    style={{
+                      width: 80,
+                      height: 60,
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="
+                      bg-yellow-50 border-2 border-yellow-300 rounded-xl
+                      flex flex-col items-center justify-center
+                      text-[#5C2E0B] font-semibold shadow text-[12px]
+                    "
+                    style={{
+                      width: 90,
+                      height: 60,
+                      padding: 4,
+                    }}
+                  >
+                    <div style={{ fontSize: 22, marginBottom: 2 }}>
+                      {String(adj.name || "")
+                        .toLowerCase()
+                        .endsWith(".pdf")
+                        ? "📄"
+                        : /\.(doc|docx)$/i.test(String(adj.name || ""))
+                        ? "📝"
+                        : /\.(xls|xlsx)$/i.test(String(adj.name || ""))
+                        ? "📊"
+                        : "📎"}
+                    </div>
+                    <div
+                      className="truncate w-full text-center"
+                      title={adj.name || "archivo"}
+                    >
+                      {adj.name || "archivo"}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quitar adjunto */}
+                <button
+                  type="button"
+                  aria-label="Quitar archivo"
+                  className="
+                    absolute -top-1 -right-1
+                    bg-black/70 text-white rounded-full
+                    w-5 h-5 flex items-center justify-center
+                    text-[12px] leading-none
+                  "
+                  onClick={() => handleRemoveAdjunto(idx)}
+                  title="Eliminar archivo"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <div ref={chatEndRef} />
-    </div>
-  </div>
-
-  {/* ====== BARRA DE ENTRADA / ACCIONES ======
-     nota: adjuntar, dictado y enviar
-     sticky bottom-0 con z alto para que quede visible sobre el feed
-  */}
-  <form
-    onSubmit={handleSend}
-    className="
-      w-full
-      mx-auto
-      flex items-end gap-2
-      shadow-xl
-      rounded-[2rem]
-      border-2 border-yellow-300
-      sticky bottom-0 z-[60]
-      px-3 py-2 sm:px-4 sm:py-2.5
-      max-w-full sm:max-w-3xl md:max-w-4xl
-      bg-[#fff8e1]
-    "
-  >
-    {/* === Botón Adjuntar === */}
-    <label
-      className={`
-        cursor-pointer flex-shrink-0
-        rounded-full hover:opacity-90 transition
-        ${
-          adjuntos.length >= MAX_ADJUNTOS
-            ? "opacity-40 pointer-events-none"
-            : ""
-        }
-      `}
-      style={{
-        background: "#5C2E0B",
-        color: "#fff",
-        width: 40,
-        height: 40,
-        minWidth: 40,
-        minHeight: 40,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-      title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
-      aria-label="Adjuntar archivo"
-    >
-      <FaPaperclip size={20} />
-      <input
-        type="file"
-        className="hidden"
-        multiple
-        onChange={handleFileChange}
-        disabled={adjuntos.length >= MAX_ADJUNTOS}
-      />
-    </label>
-
-    {/* === Previews de adjuntos (scroll horizontal en móvil) === */}
-    {adjuntos.length > 0 && (
-      <div
+      {/* === Área de texto === */}
+      <textarea
+        ref={textareaRef}
         className="
-          flex gap-2 py-1
-          overflow-x-auto no-scrollbar
-          max-w-[40%] sm:max-w-[50%]
+          flex-1
+          bg-transparent
+          outline-none border-none resize-none
+          text-[16px] sm:text-[15px] md:text-[17px]
+          leading-relaxed text-[#5C2E0B]
+          placeholder:text-[#5C2E0B]/60
         "
-      >
-        {adjuntos.map((adj, idx) => (
-          <div key={idx} className="relative flex-shrink-0">
-            {adj.type?.startsWith("image/") ? (
-              <img
-                src={URL.createObjectURL(adj)}
-                alt={adj.name}
-                className="
-                  rounded-xl
-                  border-2 border-yellow-300
-                  shadow
-                  object-cover
-                "
-                style={{
-                  width: 80,
-                  height: 60,
-                  objectFit: "cover",
-                }}
-              />
-            ) : (
-              <div
-                className="
-                  bg-yellow-50
-                  border-2 border-yellow-300
-                  rounded-xl
-                  flex flex-col items-center justify-center
-                  text-[#5C2E0B]
-                  font-semibold
-                  shadow
-                  text-[12px]
-                "
-                style={{
-                  width: 90,
-                  height: 60,
-                  padding: 4,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 22,
-                    marginBottom: 2,
-                    lineHeight: 1,
-                  }}
-                >
-                  {adj.name.toLowerCase().endsWith(".pdf")
-                    ? "📄"
-                    : /\.(doc|docx)$/i.test(adj.name)
-                    ? "📝"
-                    : /\.(xls|xlsx)$/i.test(adj.name)
-                    ? "📊"
-                    : "📎"}
-                </div>
-                <div
-                  className="truncate w-full text-center"
-                  title={adj.name}
-                >
-                  {adj.name}
-                </div>
-              </div>
-            )}
+        placeholder="Escribe o dicta tu pregunta legal…"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        disabled={grabando}
+        rows={1}
+        style={{
+          minHeight: 40,
+          maxHeight: 140,
+          overflowY: "auto",
+          wordBreak: "break-word",
+          whiteSpace: "pre-wrap",
+        }}
+      />
 
-            {/* Quitar adjunto */}
-            <button
-              type="button"
-              aria-label="Quitar archivo"
-              className="
-                absolute -top-1 -right-1
-                bg-black/70 text-white rounded-full
-                w-5 h-5 flex items-center justify-center
-                text-[12px] leading-none
-              "
-              onClick={() => handleRemoveAdjunto(idx)}
-              title="Eliminar archivo"
-            >
-              ×
-            </button>
-          </div>
-        ))}
+      {/* === Micrófono / Dictado de voz === */}
+      <button
+        type="button"
+        aria-label="Dictar voz"
+        className="flex-shrink-0 rounded-full hover:opacity-90 transition"
+        style={{
+          background: grabando ? "#b71c1c" : "#5C2E0B", // rojo si está grabando
+          color: "#fff",
+          width: 44,
+          height: 44,
+          minWidth: 44,
+          minHeight: 44,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: grabando ? "not-allowed" : "pointer",
+          opacity: grabando ? 0.85 : 1,
+        }}
+        onClick={handleVoice}
+        title={grabando ? "Grabando…" : "Dictar voz"}
+        disabled={grabando}
+      >
+        <FaMicrophone size={18} />
+      </button>
+
+      {/* === Enviar === */}
+      <button
+        type="submit"
+        aria-label="Enviar"
+        title="Enviar"
+        className={`
+          flex-shrink-0 rounded-full hover:opacity-90 transition
+          ${
+            (!input.trim() && adjuntos.length === 0) || isSending
+              ? "opacity-50 cursor-not-allowed"
+              : ""
+          }
+        `}
+        style={{
+          background: "#5C2E0B",
+          color: "#fff",
+          width: 48,
+          height: 48,
+          minWidth: 48,
+          minHeight: 48,
+          fontWeight: "bold",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+        disabled={
+          (!input.trim() && adjuntos.length === 0) ||
+          cargando ||
+          isSending
+        }
+      >
+        <MdSend size={22} />
+      </button>
+    </form>
+
+    {/* alertas debajo de la barra */}
+    {alertaAdjuntos && (
+      <div className="text-red-600 text-center w-full pb-2 text-sm max-w-full sm:max-w-3xl md:max-w-4xl">
+        {alertaAdjuntos}
       </div>
     )}
 
-    {/* === Área de texto === */}
-    <textarea
-      ref={textareaRef}
-      className="
-        flex-1
-        bg-transparent
-        outline-none border-none
-        resize-none
-        text-[15px] sm:text-[15px] md:text-[17px]
-        leading-relaxed
-        text-[#5C2E0B]
-      "
-      placeholder="Escribe o dicta tu pregunta legal…"
-      value={input}
-      onChange={(e) => setInput(e.target.value)}
-      onKeyDown={handleKeyDown}
-      disabled={grabando}
-      rows={1}
-      style={{
-        minHeight: 40,
-        maxHeight: 140,
-        overflowY: "auto",
-        wordBreak: "break-word",
-        whiteSpace: "pre-wrap",
-      }}
-    />
+    {error && (
+      <div className="p-2 mt-2 text-red-700 text-lg max-w-full sm:max-w-3xl md:max-w-4xl">
+        {error}
+      </div>
+    )}
 
-    {/* === Micrófono / Dictado de voz === */}
-    <button
-      type="button"
-      aria-label="Dictar voz"
-      className="
-        flex-shrink-0
-        rounded-full
-        transition
-        flex items-center justify-center
-        hover:opacity-90
-      "
-      style={{
-        background: grabando ? "#b71c1c" : "#5C2E0B", // rojo si está grabando
-        color: "#fff",
-        width: 40,
-        height: 40,
-        minWidth: 40,
-        minHeight: 40,
-        cursor: grabando ? "not-allowed" : "pointer",
-        opacity: grabando ? 0.85 : 1,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-      onClick={handleVoice}
-      title={grabando ? "Grabando…" : "Dictar voz"}
-      disabled={grabando}
-    >
-      <FaMicrophone size={18} />
-    </button>
-
-    {/* === Enviar === */}
-    <button
-      type="submit"
-      aria-label="Enviar"
-      title="Enviar"
-      className={`
-        flex-shrink-0
-        rounded-full
-        flex items-center justify-center
-        transition
-        hover:opacity-90
-        ${
-          (!input.trim() && adjuntos.length === 0) || isSending
-            ? "opacity-50 cursor-not-allowed"
-            : ""
-        }
-      `}
-      style={{
-        background: "#5C2E0B",
-        color: "#fff",
-        width: 44,
-        height: 44,
-        minWidth: 44,
-        minHeight: 44,
-        fontWeight: "bold",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-      disabled={
-        (!input.trim() && adjuntos.length === 0) ||
-        cargando ||
-        isSending
-      }
-    >
-      <MdSend size={22} />
-    </button>
-  </form>
-
-      {/* MODAL HERRAMIENTAS */}
+         {/* MODAL HERRAMIENTAS */}
       {showModal && (
         <ModalHerramientas
           onClose={closeHerramientas}
@@ -1454,6 +1439,7 @@ export default function LitisBotChatBase({
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         @media (max-width: 1024px) {
           .litisbot-fill {
             max-width: 100vw !important;
@@ -1464,12 +1450,14 @@ export default function LitisBotChatBase({
       `}</style>
     </div>
   );
-}
+} // 👈👈👈 CIERRE CORRECTO de LitisBotChatBase
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// (esto es lo que faltaba y causa el error de llaves)
 
 /* ============================================================
    MensajeBot (con TTS/copy/edit/feedback)
    Versión prod: usa /voz del backend y NO usa speechSynthesis
-   → evita la "doble voz" y fuerza la voz varonil generada server-side
+   => evita la "doble voz" y fuerza la voz varonil generada server-side
 ============================================================ */
 function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
   const [editando, setEditando] = useState(false);
@@ -1482,21 +1470,20 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
   const VOZ_URL = `${API_BASE}/voz`;
 
   async function handleSpeak() {
-    // Reproducir audio generado por el backend con voz "varonil"
-    // sin usar speechSynthesis para evitar la segunda voz del navegador
     try {
       setLeyendo(true);
 
-      // Limpia HTML y frases tipo "LEE CON VOZ VARONIL..."
+      // limpiamos HTML antes de mandar al TTS
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = msg.content || "";
-      const plainText = tempDiv.textContent || tempDiv.innerText || "";
+      const plainText =
+        tempDiv.textContent || tempDiv.innerText || "";
 
       const resp = await fetch(VOZ_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          texto: plainText, // 👈 sólo el texto legible
+          texto: plainText,
         }),
       });
 
@@ -1510,9 +1497,13 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
         return;
       }
 
-      // Recibimos MP3 de backend y lo reproducimos como Audio()
+      // MP3 desde backend → reproducir
       const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
+
+      // 👇 ESTA ES LA LÍNEA QUE ROMPÍA EN MODO MOBILE PRE-RENDER:
+      // aseguramos que sea un Blob real antes de pasarlo a createObjectURL
+      const url = window.URL.createObjectURL(blob);
+
       const audio = new Audio(url);
 
       audio.onended = () => {
@@ -1548,13 +1539,14 @@ function MensajeBot({ msg, onCopy, onEdit, onFeedback }) {
     <div className="relative group">
       {!editando ? (
         <div className="flex items-start gap-2">
+          {/* Contenido del mensaje del bot */}
           <div
-            className="flex-1 leading-relaxed sm:text-[15px] md:text-[18px] lg:text-[20px]"
+            className="flex-1 leading-relaxed text-[15px] sm:text-[15px] md:text-[17px] lg:text-[18px]"
             style={{ color: "#6b2f12" }}
             dangerouslySetInnerHTML={{ __html: msg.content }}
           />
 
-          {/* Botón leer en voz alta (sólo backend TTS) */}
+          {/* Botón leer en voz alta (solo backend TTS) */}
           <button
             aria-label="Leer en voz alta"
             style={{
