@@ -1,4 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+} from "react";
 import {
   FaPaperclip,
   FaMicrophone,
@@ -9,20 +14,24 @@ import {
   FaRegThumbsUp,
   FaRegThumbsDown,
 } from "react-icons/fa";
+import litisLogo from "@/assets/litisbot-logo.png";
 
-/* =========================================================
-   UTIL: Voz varonil desde backend (misma idea que tu TTS)
-   ========================================================= */
+/* ============================================================
+   🔊 Texto → voz varonil desde backend (POST /voz)
+============================================================ */
 async function reproducirVozServidor(textoPlano) {
   try {
     const API_BASE =
       import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
 
+    const clean = (textoPlano || "").trim();
+    if (!clean) return;
+
     const resp = await fetch(`${API_BASE}/voz`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        texto: textoPlano,
+        texto: clean,
         voz: "masculina_profesional",
       }),
     });
@@ -36,16 +45,10 @@ async function reproducirVozServidor(textoPlano) {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
 
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-    };
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.onerror = () => URL.revokeObjectURL(url);
 
-    audio.onerror = (e) => {
-      console.error("🎧 Error al reproducir voz:", e);
-      URL.revokeObjectURL(url);
-    };
-
-    audio.play().catch((e) => {
+    await audio.play().catch((e) => {
       console.error("🎧 Error al hacer play():", e);
       URL.revokeObjectURL(url);
     });
@@ -54,10 +57,28 @@ async function reproducirVozServidor(textoPlano) {
   }
 }
 
-/* =========================================================
-   Mensaje del ASISTENTE dentro del bubble chat
-   - Botonera funcional: voz, copiar, editar, like, dislike
-   ========================================================= */
+/* ============================================================
+   Utilidades de formato (copiar limpio para Word)
+============================================================ */
+function toPlain(html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html || "";
+  return tmp.textContent || tmp.innerText || html || "";
+}
+
+function prepararTextoParaCopia(html) {
+  const plano = toPlain(html);
+
+  // normalizar saltos de línea para que el abogado pegue en Word
+  return plano
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/* ============================================================
+   💬 Mensaje del ASISTENTE (burbuja blanca)
+============================================================ */
 function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
   const [editando, setEditando] = useState(false);
   const [editValue, setEditValue] = useState(msg.content || "");
@@ -65,16 +86,9 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
 
   async function handleSpeak() {
     if (leyendo) return;
+    setLeyendo(true);
     try {
-      setLeyendo(true);
-
-      // limpiar HTML → texto plano
-      const tmp = document.createElement("div");
-      tmp.innerHTML = msg.content || "";
-      const plainText =
-        tmp.textContent || tmp.innerText || msg.content || "";
-
-      await reproducirVozServidor(plainText);
+      await reproducirVozServidor(toPlain(msg.content));
     } finally {
       setLeyendo(false);
     }
@@ -86,44 +100,52 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
   }
 
   function handleCopiar() {
-    // quitamos etiquetas HTML si las hubiera
-    const tmp = document.createElement("div");
-    tmp.innerHTML = msg.content || "";
-    const plainText =
-      tmp.textContent || tmp.innerText || msg.content || "";
-
-    navigator.clipboard.writeText(plainText).catch(() => {});
+    const limpio = prepararTextoParaCopia(msg.content);
+    navigator.clipboard
+      .writeText(limpio)
+      .then(() => {
+        onCopy && onCopy(limpio);
+      })
+      .catch(() => {});
   }
 
   return (
     <div
-      className="flex flex-col w-full bg-yellow-50 text-[#5C2E0B] rounded-[1.5rem] shadow border-0 px-4 py-4"
+      className="flex flex-col w-fit max-w-[92%] rounded-[1.5rem] shadow border px-4 py-4"
       style={{
-        maxWidth: "92%",
+        backgroundColor: "#ffffff",
+        borderColor: "rgba(92,46,11,0.15)",
+        color: "#5C2E0B",
       }}
     >
       {!editando ? (
         <div
-          className="leading-relaxed whitespace-pre-wrap break-words text-[16px] sm:text-[16px]"
+          className="leading-relaxed whitespace-pre-wrap break-words text-[16px]"
+          style={{ textAlign: "justify", wordBreak: "break-word" }}
           dangerouslySetInnerHTML={{ __html: msg.content }}
         />
       ) : (
         <div className="flex flex-col gap-2 w-full">
           <textarea
-            className="w-full border border-yellow-300 rounded p-2 text-[15px] leading-relaxed"
+            className="w-full border rounded p-2 text-[15px] leading-relaxed"
+            style={{
+              borderColor: "rgba(92,46,11,0.3)",
+              color: "#5C2E0B",
+            }}
             rows={4}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
           />
           <div className="flex gap-4 text-[15px]">
             <button
-              className="text-green-700 font-semibold"
+              className="font-semibold"
+              style={{ color: "#0f5132" }}
               onClick={handleGuardar}
             >
               Guardar
             </button>
             <button
-              className="text-red-700"
+              style={{ color: "#842029" }}
               onClick={() => {
                 setEditando(false);
                 setEditValue(msg.content || "");
@@ -155,27 +177,27 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
 
           {/* copiar */}
           <button
-            className="text-[#5C2E0B]"
+            style={{ color: "#5C2E0B" }}
             onClick={handleCopiar}
-            title="Copiar"
+            title="Copiar para Word / PDF"
             aria-label="Copiar"
           >
             <FaRegCopy size={18} />
           </button>
 
           {/* editar */}
-          <button
-            className="text-[#5C2E0B]"
-            onClick={() => setEditando(true)}
-            title="Editar"
-            aria-label="Editar"
-          >
-            <FaRegEdit size={18} />
-          </button>
+            <button
+              style={{ color: "#5C2E0B" }}
+              onClick={() => setEditando(true)}
+              title="Editar borrador"
+              aria-label="Editar"
+            >
+              <FaRegEdit size={18} />
+            </button>
 
-          {/* like */}
+          {/* like / dislike */}
           <button
-            className="text-green-700"
+            style={{ color: "#0f5132" }} // verde
             onClick={() => onFeedback && onFeedback("up")}
             title="Respuesta útil"
             aria-label="Respuesta útil"
@@ -183,9 +205,8 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
             <FaRegThumbsUp size={18} />
           </button>
 
-          {/* dislike */}
           <button
-            className="text-red-700"
+            style={{ color: "#842029" }} // rojo
             onClick={() => onFeedback && onFeedback("down")}
             title="Respuesta no útil"
             aria-label="Respuesta no útil"
@@ -198,18 +219,15 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
   );
 }
 
-/* =========================================================
-   Mensaje del USUARIO
-   ========================================================= */
+/* ============================================================
+   💬 Mensaje del USUARIO (burbuja marrón)
+============================================================ */
 function MensajeUsuarioBubble({ texto }) {
   return (
     <div className="flex justify-end w-full">
       <div
-        className="rounded-[1.5rem] shadow px-4 py-3 text-white text-[16px] leading-relaxed font-medium"
-        style={{
-          maxWidth: "88%",
-          background: "#5C2E0B",
-        }}
+        className="rounded-[1.5rem] shadow px-4 py-3 text-white text-[16px] leading-relaxed font-medium max-w-[88%]"
+        style={{ background: "#5C2E0B" }}
       >
         {texto}
       </div>
@@ -217,16 +235,405 @@ function MensajeUsuarioBubble({ texto }) {
   );
 }
 
-/* =========================================================
-   Componente principal flotante LitisBotBubbleChat
-   - Burbujita DRAGGABLE
-   - Chat anclado a esa posición
-   ========================================================= */
+/* ============================================================
+   📱 Hook: detectar si estamos en móvil
+============================================================ */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 640px)").matches
+      : false
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  return isMobile;
+}
+
+/* ============================================================
+   🪟 ChatWindow
+   - YA NO está definido dentro del componente principal.
+   - Esto evita el remount constante y mantiene el cursor.
+============================================================ */
+function ChatWindow({
+  isOpen,
+  isMobile,
+  pro,
+  feedRef,
+  mensajes,
+  cargando,
+  input,
+  setInput,
+  handleKeyDown,
+  enviarMensaje,
+  setMensajes,
+  setIsOpen,
+}) {
+  if (!isOpen) return null;
+
+  const headerBg = "#5C2E0B";
+  const headerColor = "#fff";
+
+  /* ============ MODO MÓVIL: fullscreen tipo app de mensajería ============ */
+  if (isMobile) {
+    return (
+      <div
+        className="fixed inset-0 z-[9998] flex flex-col bg-white"
+        style={{
+          backgroundColor: "#ffffff",
+          color: "#5C2E0B",
+        }}
+      >
+        {/* Header fijo arriba */}
+        <div
+          className="flex items-center justify-between px-3 py-2 shadow-md"
+          style={{ background: headerBg, color: headerColor }}
+        >
+          <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
+            <div
+              className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
+              style={{
+                color: "#5C2E0B",
+                fontWeight: "bold",
+                fontSize: "11px",
+              }}
+            >
+              <img
+                src={litisLogo}
+                alt="LitisBot"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span>LitisBot</span>
+              <span className="text-[11px] font-normal opacity-80">
+                {pro ? "Acceso Pro" : "Asistencia básica"}
+              </span>
+            </div>
+          </div>
+
+          <button
+            className="text-white font-bold text-xl leading-none px-2"
+            onClick={() => setIsOpen(false)}
+            aria-label="Cerrar chat"
+            title="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Mensajes scroll */}
+        <div
+          ref={feedRef}
+          className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-3 py-3"
+          style={{ backgroundColor: "#ffffff" }}
+        >
+          <div className="flex flex-col gap-4">
+            {mensajes.map((m, idx) =>
+              m.role === "assistant" ? (
+                <div
+                  key={idx}
+                  className="flex w-full justify-start text-[#5C2E0B]"
+                >
+                  <MensajeBotBubble
+                    msg={m}
+                    onCopy={(textoLimpio) => {
+                      // hook de métrica "copiado"
+                      console.log("copiado:", textoLimpio);
+                    }}
+                    onEdit={(nuevo) => {
+                      setMensajes((prev) => {
+                        const cl = [...prev];
+                        cl[idx] = { ...cl[idx], content: nuevo };
+                        return cl;
+                      });
+                    }}
+                    onFeedback={(tipo) => {
+                      // hook de métrica feedback
+                      console.log("feedback burbuja", tipo);
+                    }}
+                  />
+                </div>
+              ) : (
+                <MensajeUsuarioBubble key={idx} texto={m.content} />
+              )
+            )}
+
+            {cargando && (
+              <div className="flex w-full justify-start">
+                <div
+                  className="rounded-[1.5rem] shadow text-[15px] max-w-[80%] px-4 py-3"
+                  style={{
+                    backgroundColor: "#ffffff",
+                    border: "1px solid rgba(92,46,11,0.15)",
+                    color: "#5C2E0B",
+                  }}
+                >
+                  Procesando…
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Barra fija abajo */}
+        <div
+          className="flex items-end gap-3 px-3 py-3 border-t"
+          style={{
+            borderColor: "rgba(92,46,11,0.2)",
+            backgroundColor: "#ffffff",
+            flexShrink: 0,
+          }}
+        >
+          {/* Adjuntar (placeholder visual) */}
+          <button
+            className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+            style={{ background: "#5C2E0B" }}
+            title="Adjuntar archivo"
+          >
+            <FaPaperclip size={18} />
+          </button>
+
+          {/* Área de texto controlada */}
+          <textarea
+            className="
+              flex-1 bg-transparent outline-none border rounded-lg
+              text-[15px] leading-relaxed text-[#5C2E0B]
+              max-h-[160px] overflow-y-auto px-3 py-2
+            "
+            style={{
+              borderColor: "rgba(92,46,11,0.2)",
+              minHeight: "48px",
+              backgroundColor: "#ffffff",
+            }}
+            placeholder="Escribe tu consulta legal…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={2}
+          />
+
+          {/* Mic (placeholder visual) */}
+          <button
+            className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+            style={{ background: "#5C2E0B" }}
+            title="Dictado por voz"
+          >
+            <FaMicrophone size={18} />
+          </button>
+
+          {/* Enviar */}
+          <button
+            className={`flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform ${
+              !input.trim() || cargando ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+            style={{ background: "#5C2E0B" }}
+            disabled={!input.trim() || cargando}
+            onClick={enviarMensaje}
+            title="Enviar"
+          >
+            <FaPaperPlane size={18} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ============ MODO DESKTOP: tarjeta flotante elegante ============ */
+  return (
+    <div
+      className="fixed z-[9998] flex flex-col rounded-[1rem] shadow-2xl border overflow-hidden bg-white"
+      style={{
+        borderColor: "rgba(92,46,11,0.3)",
+        backgroundColor: "#ffffff",
+        color: "#5C2E0B",
+        bottom: "96px", // deja espacio sobre botón Noticias
+        right: "24px",
+        width: "460px",
+        maxHeight: "80vh",
+      }}
+    >
+      {/* Header marrón */}
+      <div
+        className="flex items-center justify-between px-4 py-3"
+        style={{ background: headerBg, color: headerColor }}
+      >
+        <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
+          <div
+            className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
+            style={{
+              color: "#5C2E0B",
+              fontWeight: "bold",
+              fontSize: "11px",
+            }}
+          >
+            <img
+              src={litisLogo}
+              alt="LitisBot"
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span>LitisBot</span>
+            <span className="text-[11px] font-normal opacity-80">
+              {pro
+                ? "Acceso Pro • Estrategia legal avanzada"
+                : "Asistencia básica"}
+            </span>
+          </div>
+        </div>
+
+        <button
+          className="text-white font-bold text-xl leading-none px-2"
+          onClick={() => setIsOpen(false)}
+          aria-label="Cerrar chat"
+          title="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Lista de mensajes */}
+      <div
+        ref={feedRef}
+        className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-4 py-4"
+        style={{ backgroundColor: "#ffffff" }}
+      >
+        <div className="flex flex-col gap-4">
+          {mensajes.map((m, idx) =>
+            m.role === "assistant" ? (
+              <div
+                key={idx}
+                className="flex w-full justify-start text-[#5C2E0B]"
+              >
+                <MensajeBotBubble
+                  msg={m}
+                  onCopy={(textoLimpio) => {
+                    console.log("copiado:", textoLimpio);
+                  }}
+                  onEdit={(nuevo) => {
+                    setMensajes((prev) => {
+                      const cl = [...prev];
+                      cl[idx] = { ...cl[idx], content: nuevo };
+                      return cl;
+                    });
+                  }}
+                  onFeedback={(tipo) => {
+                    console.log("feedback burbuja", tipo);
+                  }}
+                />
+              </div>
+            ) : (
+              <MensajeUsuarioBubble key={idx} texto={m.content} />
+            )
+          )}
+
+          {cargando && (
+            <div className="flex w-full justify-start">
+              <div
+                className="rounded-[1.5rem] shadow text-[15px] max-w-[80%] px-4 py-3"
+                style={{
+                  backgroundColor: "#ffffff",
+                  border: "1px solid rgba(92,46,11,0.15)",
+                  color: "#5C2E0B",
+                }}
+              >
+                Procesando…
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer de redacción */}
+      <div
+        className="flex items-end gap-3 px-4 py-3 border-t"
+        style={{
+          borderColor: "rgba(92,46,11,0.2)",
+          backgroundColor: "#ffffff",
+          flexShrink: 0,
+        }}
+      >
+        {/* Adjuntar */}
+        <button
+          className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+          style={{ background: "#5C2E0B" }}
+          title="Adjuntar archivo"
+        >
+          <FaPaperclip size={18} />
+        </button>
+
+        {/* Textarea amplia y cómoda */}
+        <textarea
+          className="
+            flex-1 bg-transparent outline-none border rounded-lg
+            text-[15px] leading-relaxed text-[#5C2E0B]
+            max-h-[160px] overflow-y-auto px-3 py-2
+          "
+          style={{
+            borderColor: "rgba(92,46,11,0.2)",
+            minHeight: "48px",
+            backgroundColor: "#ffffff",
+          }}
+          placeholder={
+            pro
+              ? "Formula tu consulta jurídica avanzada…"
+              : "Escribe tu consulta legal…"
+          }
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          rows={2}
+        />
+
+        {/* Mic (placeholder) */}
+        <button
+          className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+          style={{ background: "#5C2E0B" }}
+          title="Dictado por voz"
+        >
+          <FaMicrophone size={18} />
+        </button>
+
+        {/* Enviar */}
+        <button
+          className={`flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform ${
+            !input.trim() || cargando ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+          style={{ background: "#5C2E0B" }}
+          disabled={!input.trim() || cargando}
+          onClick={enviarMensaje}
+          title="Enviar"
+        >
+          <FaPaperPlane size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   🌐 Componente principal flotante LitisBotBubbleChat
+============================================================ */
 export default function LitisBotBubbleChat({ usuarioId, pro }) {
-  // === estado chat interno ===
-  const [openChat, setOpenChat] = useState(false); // ahora controlamos mostrar/ocultar chat
+  const isMobile = useIsMobile();
+
+  // abrir / cerrar ventana de chat
+  const [isOpen, setIsOpen] = useState(false);
+
+  // input del usuario
   const [input, setInput] = useState("");
+
+  // flag de request en curso
   const [cargando, setCargando] = useState(false);
+
+  // historial mínimo
   const [mensajes, setMensajes] = useState([
     {
       role: "assistant",
@@ -235,101 +642,67 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     },
   ]);
 
-  // === refs para scroll del feed ===
+  // autoscroll al final cuando llegan mensajes nuevos
   const feedRef = useRef(null);
+  useEffect(() => {
+    if (feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+  }, [mensajes, isOpen]);
 
-  // === posición flotante de la burbuja (draggable) ===
-  // guardamos top/left en px, relativos a la ventana
-  const [bubblePos, setBubblePos] = useState(() => {
-    // intentar leer posición previa
-    try {
-      const raw = localStorage.getItem("litisbot-bubble-pos");
-      if (raw) {
-        const { top, left } = JSON.parse(raw);
-        return {
-          top: top ?? 100,
-          left: left ?? 100,
-        };
-      }
-    } catch (_) {}
-    return { top: 100, left: 100 };
-  });
+  /* ---------------- Drag del botón flotante (solo desktop) ---------------- */
+  const [pos, setPos] = useState({ x: null, y: null }); // posición manual
+  const dragRef = useRef(null);
+  const dragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
-  // arrastre
-  const draggingRef = useRef(false);
-  const offsetRef = useRef({ x: 0, y: 0 });
+  const onMouseDownBubble = useCallback(
+    (e) => {
+      if (isMobile) return;
+      dragging.current = true;
+      const rect = dragRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      dragOffset.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+      e.preventDefault();
+    },
+    [isMobile]
+  );
 
-  function handleMouseDown(e) {
-    draggingRef.current = true;
-    offsetRef.current = {
-      x: e.clientX - bubblePos.left,
-      y: e.clientY - bubblePos.top,
-    };
-    e.preventDefault();
-  }
+  const onMouseMove = useCallback(
+    (e) => {
+      if (!dragging.current || isMobile) return;
+      const newX = e.clientX - dragOffset.current.x;
+      const newY = e.clientY - dragOffset.current.y;
+      setPos({ x: newX, y: newY });
+    },
+    [isMobile]
+  );
 
-  function handleMouseMove(e) {
-    if (!draggingRef.current) return;
-    const newLeft = e.clientX - offsetRef.current.x;
-    const newTop = e.clientY - offsetRef.current.y;
-
-    // límites simples para que no se vaya muy fuera
-    const clampedLeft = Math.min(
-      Math.max(newLeft, 8),
-      window.innerWidth - 200
-    );
-    const clampedTop = Math.min(
-      Math.max(newTop, 8),
-      window.innerHeight - 80
-    );
-
-    setBubblePos({ top: clampedTop, left: clampedLeft });
-  }
-
-  function handleMouseUp() {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-
-    // guardamos posición
-    localStorage.setItem(
-      "litisbot-bubble-pos",
-      JSON.stringify(bubblePos)
-    );
-  }
+  const onMouseUp = useCallback(() => {
+    dragging.current = false;
+  }, []);
 
   useEffect(() => {
-    function stopDrag() {
-      if (draggingRef.current) {
-        draggingRef.current = false;
-        localStorage.setItem(
-          "litisbot-bubble-pos",
-          JSON.stringify(bubblePos)
-        );
-      }
-    }
-    window.addEventListener("mouseup", stopDrag);
-    window.addEventListener("mouseleave", stopDrag);
+    if (isMobile) return;
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
     return () => {
-      window.removeEventListener("mouseup", stopDrag);
-      window.removeEventListener("mouseleave", stopDrag);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [bubblePos]);
+  }, [isMobile, onMouseMove, onMouseUp]);
 
-  // follow scroll al final del feed
-  useEffect(() => {
-    const el = feedRef.current;
-    if (el) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [mensajes, openChat]);
-
+  /* ---------------- Enviar mensaje al backend ---------------- */
   async function enviarMensaje() {
     if (!input.trim() || cargando) return;
     const pregunta = input.trim();
     setInput("");
     setCargando(true);
 
-    // Pintamos mensaje usuario y placeholder "Espera un momento…"
+    // pinta usuario + placeholder del bot
     setMensajes((prev) => [
       ...prev,
       { role: "user", content: pregunta },
@@ -337,7 +710,6 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     ]);
 
     try {
-      // llamada backend real
       const API_BASE =
         import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
 
@@ -347,6 +719,7 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
         expedienteId: "burbuja",
         idioma: "es-PE",
         pais: "Perú",
+        // si pro === true podrías pasar { modo: "pro" } para lógica premium
       };
 
       const resp = await fetch(`${API_BASE}/ia/chat`, {
@@ -357,7 +730,7 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
 
       const data = await resp.json();
 
-      // Reemplazar el último "Espera un momento…" con la respuesta real
+      // reemplazar "Espera un momento…" por la respuesta final
       setMensajes((prev) => {
         const temp = [...prev];
         if (
@@ -367,14 +740,18 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
         ) {
           temp.pop();
         }
+
         temp.push({
           role: "assistant",
-          content: data?.respuesta || "No pude generar respuesta.",
+          content:
+            data?.respuesta ||
+            "No pude generar respuesta. ¿Quieres intentar de nuevo?",
         });
+
         return temp;
       });
     } catch (err) {
-      console.error("❌ Error en burbuja:", err);
+      console.error("❌ Error burbuja:", err);
 
       setMensajes((prev) => {
         const temp = [...prev];
@@ -404,275 +781,63 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     }
   }
 
-  // helper para mobile fullscreen
-  const isMobile = window.matchMedia("(max-width: 640px)").matches;
+  /* ---------------- FAB flotante (botón redondo con logo) ---------------- */
+  const bubbleStyleDesktop =
+    pos.x !== null && pos.y !== null
+      ? { left: pos.x, top: pos.y }
+      : { bottom: "24px", right: "24px" };
 
-  /* ============================================
-     RENDER
-     ============================================ */
+  const bubbleStyleMobile = {
+    bottom: "96px", // levantado para no chocar con "Noticias"
+    right: "16px",
+  };
 
   return (
     <>
-      {/* ============ BURBUJA DRAGGABLE ============ */}
-      {!openChat && (
-        <div
-          // wrapper flotante independiente, con pointerEvents on
-          style={{
-            position: "fixed",
-            top: bubblePos.top,
-            left: bubblePos.left,
-            zIndex: 9999,
-            cursor: "grab",
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          // si el user hace click (sin arrastrar) abrimos chat
-          onClick={(e) => {
-            // si estaba arrastrando no abrir de inmediato
-            if (draggingRef.current) return;
-            setOpenChat(true);
-          }}
-        >
-          <div
-            className="flex items-center gap-2 rounded-xl shadow-xl px-3 py-2 text-white"
-            style={{
-              backgroundColor: "#5C2E0B",
-              minWidth: "140px",
-              maxWidth: "200px",
-            }}
-          >
-            {/* avatar LitisBot */}
-            <div
-              className="w-8 h-8 rounded-full overflow-hidden border border-white flex items-center justify-center text-[10px] font-bold"
-              style={{
-                backgroundColor: "#fff",
-                color: "#5C2E0B",
-              }}
-            >
-              {/* aquí puedes usar tu logo litisbot real */}
-              <img
-                src="/src/assets/litisbot-logo.png"
-                alt="LitisBot"
-                className="w-full h-full object-cover"
-              />
-            </div>
+      {/* Ventana del chat (card desktop / fullscreen móvil) */}
+      <ChatWindow
+        isOpen={isOpen}
+        isMobile={isMobile}
+        pro={pro}
+        feedRef={feedRef}
+        mensajes={mensajes}
+        cargando={cargando}
+        input={input}
+        setInput={setInput}
+        handleKeyDown={handleKeyDown}
+        enviarMensaje={enviarMensaje}
+        setMensajes={setMensajes}
+        setIsOpen={setIsOpen}
+      />
 
-            <div className="flex flex-col leading-tight text-[13px]">
-              <span className="font-semibold">LitisBot</span>
-              <span className="opacity-90">
-                ¿Necesitas ayuda?
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============ MINI CHAT (anclado a la burbuja en desktop, fullscreen en móvil) ============ */}
-      {openChat && (
-        <>
-          {/* overlay táctil SOLO en mobile para dar experiencia modal */}
-          {isMobile && (
-            <div
-              className="fixed inset-0 bg-black/40 z-[9998]"
-              onClick={() => setOpenChat(false)}
-              style={{ touchAction: "none" }}
-            />
-          )}
-
-          <div
-            className={`
-              fixed z-[9999] flex flex-col shadow-2xl border border-[#5C2E0B]/30 overflow-hidden
-              bg-white rounded-[1rem]
-            `}
-            style={{
-              // si es mobile => fullscreen tipo modal inferior
-              ...(isMobile
-                ? {
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    top: "20vh",
-                    borderRadius: "1rem 1rem 0 0",
-                  }
-                : {
-                    // desktop: anclado justo encima de la burbuja
-                    top: bubblePos.top - 320 < 8 ? 8 : bubblePos.top - 320,
-                    left:
-                      bubblePos.left + 280 > window.innerWidth
-                        ? window.innerWidth - 300
-                        : bubblePos.left,
-                    width: 300,
-                    maxHeight: 320,
-                  }),
-            }}
-          >
-            {/* HEADER */}
-            <div
-              className="flex items-center justify-between px-3 py-2 text-white"
-              style={{ background: "#5C2E0B" }}
-            >
-              <div className="flex items-center gap-2 text-white font-semibold text-[15px]">
-                <div
-                  className="w-9 h-9 rounded bg-white flex items-center justify-center overflow-hidden"
-                  style={{
-                    color: "#5C2E0B",
-                    fontWeight: "bold",
-                    fontSize: "11px",
-                  }}
-                >
-                  <img
-                    src="/src/assets/litisbot-logo.png"
-                    alt="LitisBot"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="flex flex-col leading-tight">
-                  <span>LitisBot</span>
-                  <span className="text-[11px] font-normal opacity-80">
-                    {pro ? "Acceso Pro" : "Asistencia básica"}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                className="text-white font-bold text-xl leading-none px-2"
-                onClick={() => setOpenChat(false)}
-                aria-label="Cerrar chat"
-                title="Cerrar"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* FEED */}
-            <div
-              ref={feedRef}
-              className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-3 py-3 bg-white"
-              style={{
-                backgroundColor: "#fff",
-              }}
-            >
-              <div className="flex flex-col gap-3">
-                {mensajes.map((m, idx) => {
-                  if (m.role === "assistant") {
-                    return (
-                      <div
-                        key={idx}
-                        className="flex w-full justify-start text-[#5C2E0B]"
-                      >
-                        <MensajeBotBubble
-                          msg={m}
-                          onCopy={() => {
-                            // copiar ya está dentro del propio bubble
-                          }}
-                          onEdit={(nuevo) => {
-                            setMensajes((prev) => {
-                              const clone = [...prev];
-                              clone[idx] = {
-                                ...clone[idx],
-                                content: nuevo,
-                              };
-                              return clone;
-                            });
-                          }}
-                          onFeedback={(tipo) => {
-                            console.log(
-                              "feedback burbuja",
-                              tipo
-                            );
-                          }}
-                        />
-                      </div>
-                    );
-                  } else {
-                    return (
-                      <MensajeUsuarioBubble
-                        key={idx}
-                        texto={m.content}
-                      />
-                    );
-                  }
-                })}
-
-                {cargando && (
-                  <div className="flex w-full justify-start">
-                    <div
-                      className="rounded-[1.5rem] bg-yellow-50 text-[#5C2E0B] border-0 px-4 py-3 shadow text-[15px]"
-                      style={{ maxWidth: "80%" }}
-                    >
-                      Procesando…
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* INPUT BAR */}
-            <div
-              className="flex items-end gap-2 border-t border-yellow-300 bg-[#fff8e1] px-3 py-2"
-              style={{ flexShrink: 0 }}
-            >
-              {/* Adjuntar archivo (placeholder futuro) */}
-              <button
-                className="flex items-center justify-center rounded-full w-9 h-9 text-white"
-                style={{
-                  background: "#5C2E0B",
-                }}
-                title="Adjuntar archivo"
-              >
-                <FaPaperclip size={16} />
-              </button>
-
-              {/* textarea */}
-              <textarea
-                className="flex-1 bg-transparent outline-none border-0 resize-none text-[15px] leading-relaxed text-[#5C2E0B] max-h-[120px] overflow-y-auto"
-                placeholder="Escribe o dicta tu pregunta legal…"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                style={{
-                  minHeight: "36px",
-                }}
-              />
-
-              {/* micrófono (placeholder) */}
-              <button
-                className="flex items-center justify-center rounded-full w-9 h-9 text-white"
-                style={{
-                  background: "#5C2E0B",
-                }}
-                title="Dictado por voz"
-              >
-                <FaMicrophone size={16} />
-              </button>
-
-              {/* enviar */}
-              <button
-                className={`flex items-center justify-center rounded-full w-9 h-9 text-white ${
-                  !input.trim() || cargando
-                    ? "opacity-50 cursor-not-allowed"
-                    : ""
-                }`}
-                style={{
-                  background: "#5C2E0B",
-                }}
-                disabled={!input.trim() || cargando}
-                onClick={enviarMensaje}
-                title="Enviar"
-              >
-                <FaPaperPlane size={16} />
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      {/* Botón flotante circular */}
+      <div
+        ref={dragRef}
+        className={`
+          fixed z-[9999] flex items-center justify-center
+          rounded-full shadow-xl border bg-white
+          cursor-pointer select-none
+          active:scale-95 transition-transform
+          animate-[pulse_2s_ease-in-out_infinite]
+        `}
+        style={{
+          borderColor: "rgba(92,46,11,0.3)",
+          width: "60px",
+          height: "60px",
+          ...(isMobile ? bubbleStyleMobile : bubbleStyleDesktop),
+        }}
+        onMouseDown={onMouseDownBubble}
+        onClick={() => {
+          setIsOpen(true);
+        }}
+      >
+        <img
+          src={litisLogo}
+          alt="LitisBot"
+          className="w-11 h-11 object-contain"
+          draggable={false}
+        />
+      </div>
     </>
   );
 }
-
-/* extra util CSS global (déjalo donde ya tienes .no-scrollbar):
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-*/

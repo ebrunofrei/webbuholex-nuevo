@@ -111,3 +111,7 @@ scripts/
 screenshots/
 logs/
 tests/
+
+# === Audio TTS temporal ===
+backend/voz.mp3
+*.mp3

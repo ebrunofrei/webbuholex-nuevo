@@ -69,6 +69,7 @@
     "formidable": "^3.5.4",
     "framer-motion": "^12.19.1",
     "glob": "^11.0.3",
+    "gtts": "^0.2.1",
     "html2canvas": "^1.4.1",
     "jsdom": "^27.0.0",
     "jspdf": "^3.0.2",

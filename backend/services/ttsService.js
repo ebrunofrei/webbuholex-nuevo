@@ -1,32 +1,44 @@
 // backend/services/ttsService.js
-import fs from "fs/promises";
-import path from "path";
-// importa aquí tu SDK real de TTS.
-// Ejemplo ficticio con SSML genérico (ajusta a tu proveedor):
-// import { textToSpeechClient } from "algún-sdk";
+// Este servicio genera voz (MP3) a partir de texto.
+// Objetivo: devolver Buffer en memoria (sin escribir archivo temporal).
+
+// IMPORTANTE:
+// - Aquí debes integrar tu proveedor real de TTS.
+//   Ejemplos reales comunes:
+//   - Google Cloud Text-to-Speech
+//   - Azure Cognitive Services Speech
+//   - ElevenLabs
+//   - Amazon Polly
+//
+// En este esqueleto asumimos que al final obtienes un Buffer de audio MP3.
 
 function limpiarTextoParaLocucion(textoCrudo = "") {
   return (textoCrudo || "")
-    // quita HTML
+    // elimina etiquetas HTML del mensaje del bot
     .replace(/<[^>]+>/g, " ")
-    // quita instrucciones tipo "lee con voz varonil", etc.
+    // saca instrucciones meta tipo "lee con voz varonil"
     .replace(/lee con voz varonil[^,.]*/gi, " ")
     .replace(/habla como abogado varonil[^,.]*/gi, " ")
     .replace(/con tono varonil[^,.]*/gi, " ")
-    // espacios múltiples -> uno
+    // colapsa espacios múltiples
     .replace(/\s+/g, " ")
     .trim();
 }
 
 /**
- * Genera MP3 con voz masculina grave estilo "abogado".
- * @param {string} texto
- * @param {string} rutaSalida absoluta, ej "./voz.mp3"
+ * Genera audio MP3 estilo "abogado varonil, formal y seguro".
+ * Devuelve Buffer listo para mandarlo en res.send(...)
+ *
+ * @param {string} texto Texto legal que quieres leer
+ * @returns {Promise<Buffer>} audio MP3
  */
-export async function generarVozVaronil(texto = "", rutaSalida) {
+export async function generarVozVaronil(texto = "") {
+  // 1. saneamos el texto
   const limpio = limpiarTextoParaLocucion(texto);
 
-  // SSML con pitch grave y estilo formal.
+  // 2. armamos SSML con voz grave, ritmo ligeramente pausado
+  // nota: algunos proveedores aceptan SSML directamente,
+  // otros quieren "texto" y parámetros separados.
   const ssml = `
     <speak>
       <prosody pitch="-4st" rate="92%" volume="+2dB">
@@ -35,32 +47,38 @@ export async function generarVozVaronil(texto = "", rutaSalida) {
     </speak>
   `.trim();
 
-  // ===== EJEMPLO GENÉRICO =====
-  // Reemplaza esta parte por la llamada real a tu proveedor de TTS.
-  // Debe:
-  //  - usar una voz masculina (ej: "es-PE-Neutral-Male" / "es-ES-DiegoNeural" / etc.)
-  //  - aceptar SSML o al menos parámetros de pitch/rate
+  // 3. Llamada al proveedor real de TTS
   //
-  // const audioBuffer = await textToSpeechClient.synthesize({
-  //   input: { ssml },
+  // ── EJEMPLO (pseudo-código) ─────────────────────────
+  // const result = await textToSpeechClient.synthesize({
+  //   input: { ssml },                // o { text: limpio } según el provider
   //   voice: {
-  //     languageCode: "es-PE",
-  //     name: "es-PE-male-abogado", // escoge una voz varonil disponible
-  //     gender: "MALE"
+  //     languageCode: "es-PE",        // o "es-ES", etc.
+  //     name: "es-PE-FormalMale",     // voz masculina seria
+  //     gender: "MALE",
   //   },
   //   audioConfig: {
   //     audioEncoding: "MP3",
-  //     speakingRate: 0.92,
-  //     pitch: -4.0,
-  //   }
+  //     speakingRate: 0.92,           // un poco más pausado
+  //     pitch: -4.0,                  // tono más grave
+  //   },
   // });
+  //
+  // const audioBuffer = result.audioContent; // normalmente viene como Buffer o base64
+  // return audioBuffer;
+  //
+  // ───────────────────────────────────────────────────
 
-  // simulación mientras integras proveedor real:
-  const audioBuffer = Buffer.from(
-    "SUQzAwAAAAAA...MP3_FAKE...", // <-- aquí iría el binario real
+  // 4. Mientras no tengamos la voz real conectada:
+  // devolvemos un MP3 falso (silencio / placeholder)
+  // para que el flujo front→back ya funcione sin reventar.
+  //
+  // NOTA: Cambia esto apenas conectes tu TTS real,
+  // porque este "audio" no es reproducible de verdad.
+  const audioBufferFalso = Buffer.from(
+    "SUQzAwAAAAAA...MP3_FAKE...",
     "base64"
   );
 
-  // guardar el mp3 en disco para que el endpoint lo sirva
-  await fs.writeFile(path.resolve(rutaSalida), audioBuffer);
+  return audioBufferFalso;
 }
