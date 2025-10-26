@@ -198,35 +198,55 @@ function LitisBotPageIntegrada() {
 
       {/* DRAWER MÓVIL */}
       {sidebarOpenMobile && (
-        <div className="lg:hidden fixed inset-0 z-[400] flex">
-          {/* overlay oscurecido */}
-          <div
-            className="flex-1 bg-black/40"
-            onClick={() => setSidebarOpenMobile(false)}
-          />
-          {/* panel lateral deslizable */}
-          <aside
-            className="w-[80vw] max-w-[320px] h-full bg-white shadow-xl flex flex-col border-r border-[#f4e6c7]"
-            style={{
-              height: "100dvh",
-              maxHeight: "100dvh",
-              overflowY: "auto",
-              WebkitOverflowScrolling: "touch",
-            }}
-          >
-            <SidebarChats
-              casos={casos}
-              setCasos={setCasos}
-              casoActivo={casoActivo}
-              setCasoActivo={setCasoActivo}
-              user={userInfo}
-              onOpenHerramientas={() => setShowModalHerramientas(true)}
-              isOpen={sidebarOpenMobile}
-              onCloseSidebar={() => setSidebarOpenMobile(false)}
-            />
-          </aside>
-        </div>
-      )}
+  <>
+    {/* capa oscura que cubre el fondo y cierra al tocar */}
+    <div
+      className="
+        fixed inset-0
+        bg-black/40
+        z-[200]
+        lg:hidden
+      "
+      style={{ pointerEvents: "auto" }}
+      onClick={() => setSidebarOpenMobile(false)}
+    />
+
+    {/* panel lateral encima del overlay */}
+    <aside
+      className="
+        fixed right-0 top-0
+        lg:hidden
+        flex flex-col
+        w-[80vw] max-w-[320px]
+        h-[100dvh]
+        bg-white
+        shadow-2xl
+        border-l border-[#f4e6c7]
+        z-[210]
+      "
+      style={{
+        pointerEvents: "auto",
+        WebkitOverflowScrolling: "touch",
+        overflowY: "auto",
+      }}
+    >
+      <SidebarChats
+        casos={casos}
+        setCasos={setCasos}
+        casoActivo={casoActivo}
+        setCasoActivo={setCasoActivo}
+        user={userInfo}
+        onOpenHerramientas={() => {
+          setShowModalHerramientas(true);
+          // opcional: cerramos el drawer cuando entra a Herramientas
+          setSidebarOpenMobile(false);
+        }}
+        isOpen={sidebarOpenMobile}
+        onCloseSidebar={() => setSidebarOpenMobile(false)}
+      />
+    </aside>
+  </>
+)}
 
       {/* ÁREA PRINCIPAL DEL CHAT */}
       <main

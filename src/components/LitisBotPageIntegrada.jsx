@@ -1,144 +1,112 @@
-/* ============================================================
-   LitisBotPageIntegrada
-   - Sidebar fijo en escritorio
-   - Drawer deslizable en móvil
-   - Header móvil fijo arriba
-   - Chat ocupa toda la altura visible
-============================================================ */
-function LitisBotPageIntegrada() {
+import React from "react";
+import { useAuth } from "@/context/AuthContext";
+import SidebarChats from "@/components/SidebarChats";
+import LitisBotChatBase from "@/components/LitisBotChatBase";
+import { FolderKanban } from "lucide-react";
+
+export default function LitisBotPageIntegrada() {
+  // estado de expedientes / caso activo
   const [casos, setCasos] = React.useState([]);
   const [casoActivo, setCasoActivo] = React.useState(null);
-  const [showModalHerramientas, setShowModalHerramientas] = React.useState(false);
 
-  // Drawer móvil abierto?
+  // modal herramientas bot
+  const [showModalHerramientas, setShowModalHerramientas] =
+    React.useState(false);
+
+  // sheet móvil (panel "Mis casos")
   const [sidebarOpenMobile, setSidebarOpenMobile] = React.useState(false);
 
   const { user } = useAuth() || {};
   const userInfo = user || { nombre: "Invitado", pro: false };
 
-  // Bloquear scroll del <body> cuando el drawer está abierto en móvil
+  // cuando el sheet móvil está abierto, bloqueamos scroll del body
   React.useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    if (sidebarOpenMobile) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = prevOverflow || "";
-    }
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = sidebarOpenMobile ? "hidden" : prev || "";
     return () => {
-      document.body.style.overflow = prevOverflow || "";
+      document.body.style.overflow = prev || "";
     };
   }, [sidebarOpenMobile]);
 
   return (
-    <div className="relative flex w-full h-screen bg-white overflow-hidden">
-
-      {/* 🟤 HEADER MÓVIL (oculto en escritorio)
-          fijo arriba => deja espacio con padding-top en el main */}
+    <div
+      className="relative flex w-full bg-white text-[#5C2E0B]"
+      style={{
+        minHeight: "100dvh",
+        maxHeight: "100dvh",
+        overflow: "hidden",
+      }}
+    >
+      {/* HEADER MÓVIL FIJO ARRIBA */}
       <header
-        className="lg:hidden fixed top-0 left-0 right-0 z-40
-                   flex items-center justify-between
-                   px-4 py-3
-                   bg-[#5C2E0B] text-white shadow-md"
-      >
-        {/* Botón abrir drawer de casos/herramientas */}
-        <button
-          onClick={() => setSidebarOpenMobile(true)}
-          aria-label="Abrir menú de casos"
-          className="flex items-center gap-2 active:scale-95"
-          style={{ fontSize: 14, fontWeight: 600 }}
-        >
-          <FolderKanban size={22} />
-          <span>Casos</span>
-        </button>
-
-        <span className="text-sm font-semibold select-none">
-          LitisBot
-        </span>
-
-        {/* placeholder para mantener spacing simétrico */}
-        <span className="w-[22px]" />
-      </header>
-
-      {/* 🟤 SIDEBAR ESCRITORIO (lg y más) */}
-      <aside
-        className="hidden lg:flex lg:flex-col lg:flex-shrink-0
-                   lg:h-full lg:overflow-y-auto
-                   bg-white"
+        className="
+          lg:hidden
+          fixed top-0 left-0 right-0 z-[150]
+          flex items-center h-12 px-4 shadow-md
+        "
         style={{
-          width: "300px",
-          borderRight: "1px solid #eee",
+          backgroundColor: "#5C2E0B",
+          color: "#fff",
         }}
       >
-        <SidebarChats
-          casos={casos}
-          setCasos={setCasos}
-          casoActivo={casoActivo}
-          setCasoActivo={setCasoActivo}
-          user={userInfo}
-          onOpenHerramientas={() => setShowModalHerramientas(true)}
-        />
-      </aside>
+        {/* botón abrir sheet de casos/herramientas */}
+        <button
+          onClick={() => setSidebarOpenMobile(true)}
+          className="
+            flex items-center justify-center
+            w-9 h-9 rounded-full bg-white text-[#5C2E0B]
+            active:scale-95 shadow
+          "
+          aria-label="Abrir lista de casos y herramientas"
+          title="Casos / Herramientas"
+        >
+          <FolderKanban size={20} />
+        </button>
 
-      {/* 🟤 DRAWER MÓVIL (solo cuando sidebarOpenMobile = true) */}
-      {sidebarOpenMobile && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          {/* Capa oscura clickeable para cerrar */}
-          <div
-            className="flex-1 bg-black/40"
-            onClick={() => setSidebarOpenMobile(false)}
-          />
-
-          {/* Panel lateral */}
-          <aside
-            className="relative flex flex-col h-full w-[80vw] max-w-[320px]
-                       bg-[#fffef4] text-[#5C2E0B]
-                       shadow-xl border-r border-[#f4e6c7]
-                       overflow-y-auto"
-          >
-            {/* Barra arriba del drawer con botón cerrar */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#f4e6c7] sticky top-0 bg-[#fffef4] z-10">
-              <div className="font-semibold text-[#5C2E0B] text-base flex items-center gap-2">
-                <FolderKanban size={20} />
-                <span>Mis casos</span>
-              </div>
-
-              <button
-                onClick={() => setSidebarOpenMobile(false)}
-                aria-label="Cerrar menú"
-                className="text-[#5C2E0B] text-xl font-bold leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Contenido del drawer: SidebarChats reutilizado */}
-            <SidebarChats
-              casos={casos}
-              setCasos={setCasos}
-              casoActivo={casoActivo}
-              setCasoActivo={setCasoActivo}
-              user={userInfo}
-              onOpenHerramientas={() => {
-                setShowModalHerramientas(true);
-                setSidebarOpenMobile(false); // opcional cerrar el drawer
-              }}
-              isOpen={sidebarOpenMobile}
-              onCloseSidebar={() => setSidebarOpenMobile(false)}
-            />
-          </aside>
+        <div className="flex-1 text-center text-[14px] font-semibold leading-none">
+          LitisBot
         </div>
-      )}
 
-      {/* 🟤 ÁREA DEL CHAT
-          - en mobile le damos padding-top = altura header (pt-[52px])
-          - en desktop sin padding-top
-          - overflow-hidden + flex-col para que el feed interno maneje scroll
-      */}
+        {/* elemento fantasma para equilibrar */}
+        <div className="w-9 h-9" />
+      </header>
+
+      {/* SIDEBAR DESKTOP (fijo a la izquierda) */}
+      <SidebarChats
+        // desktop siempre visible
+        isOpen={true}
+        onCloseSidebar={() => {}}
+        user={userInfo}
+        setCasos={setCasos}
+        setCasoActivo={setCasoActivo}
+        onOpenHerramientas={() => setShowModalHerramientas(true)}
+      />
+
+      {/* SHEET MÓVIL A PANTALLA COMPLETA */}
+      <SidebarChats
+        // en móvil solo mostramos si sidebarOpenMobile === true
+        isOpen={sidebarOpenMobile}
+        onCloseSidebar={() => setSidebarOpenMobile(false)}
+        user={userInfo}
+        setCasos={setCasos}
+        setCasoActivo={setCasoActivo}
+        onOpenHerramientas={() => {
+          setShowModalHerramientas(true);
+          setSidebarOpenMobile(false);
+        }}
+      />
+
+      {/* ÁREA PRINCIPAL DEL CHAT */}
       <main
-        className="flex-1 flex flex-col bg-white overflow-hidden
-                   pt-[52px] lg:pt-0"
+        className="
+          flex-1 flex flex-col items-stretch
+          bg-white text-[#5C2E0B] min-w-0
+          overflow-y-auto
+        "
         style={{
-          minWidth: 0,
+          height: "100dvh",
+          WebkitOverflowScrolling: "touch",
+          paddingTop: "48px", // espacio para header móvil
         }}
       >
         <LitisBotChatBase

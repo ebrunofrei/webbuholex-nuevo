@@ -16,6 +16,8 @@ import { enviarAlChat } from "@/services/chat";
 // --- Herramientas integradas en este archivo (mock UI simples).
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
 import HerramientaLiquidacionLaboral from "./Herramientas/HerramientaLiquidacionLaboral";
+import { reproducirVozVaronil } from "@/services/vozService.js";
+import MensajeBurbuja from "./MensajeBurbuja.jsx";
 
 // --- Persistencia local (chat + archivos)
 import {
@@ -46,71 +48,68 @@ import {
  *  y NO:
  *      https://web-production-7b1c4.up.railway.app/api/
  */
-export function buildUrl(path = "/ia/chat") {
-  const base =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
-  return `${base}${path}`;
+// ======================================================
+// 🔌 CONFIG: Base URL del backend IA / voz
+// ======================================================
+// MUY IMPORTANTE:
+//   import.meta.env.VITE_API_BASE_URL debe venir SIN slash final.
+//   ✅ "https://web-production-7b1c4.up.railway.app/api"
+//   ❌ "https://web-production-7b1c4.up.railway.app/api/"
+// Si estás en local y no hay .env, cae en http://localhost:3000/api
+// ======================================================
+
+function getApiBaseUrl() {
+  const raw = import.meta.env?.VITE_API_BASE_URL?.trim();
+  if (!raw || raw === "") {
+    return "http://localhost:3000/api";
+  }
+  // quitamos slash final si el dev por error lo dejó
+  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 }
 
 /**
- * 🔊 Reproduce voz varonil con tono "abogado profesional"
- *    usando el endpoint /voz del backend.
- *
- * - NO usamos speechSynthesis del navegador.
- * - El backend devuelve un MP3 ya con la voz correcta.
- * - Esto evita la "segunda voz" y garantiza consistencia.
+ * buildUrl("/ia/chat") -> "https://.../api/ia/chat"
  */
-export async function reproducirVozVaronil(textoPlano) {
+function buildUrl(path = "/ia/chat") {
+  return `${getApiBaseUrl()}${path}`;
+}
+
+// ======================================================
+// 🎙️ Reproductor global para evitar audios solapados
+// ======================================================
+let currentAudio = null;
+
+/**
+ * 🧹 Limpia el audio anterior si sigue sonando
+ */
+function stopCurrentAudio() {
   try {
-    // Limpieza defensiva: si viene vacío o muy corto, no hablamos.
-    const limpio = (textoPlano || "").trim();
-    if (!limpio) return;
-
-    const VOZ_URL = buildUrl("/voz");
-
-    // Le mandamos SOLO el texto que debe leerse. Nada de "lee con voz varonil..."
-    const resp = await fetch(VOZ_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        texto: limpio,
-      }),
-    });
-
-    if (!resp.ok) {
-      console.warn(
-        "⚠️ No se pudo generar voz en el backend /voz:",
-        resp.status,
-        await resp.text()
-      );
-      return;
+    if (currentAudio) {
+      currentAudio.pause?.();
+      currentAudio.src = "";
+      currentAudio = null;
     }
-
-    // Backend responde audio/mp3 (o similar).
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-
-    // Limpieza de memoria cuando termina
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-    };
-    audio.onerror = (e) => {
-      console.error("🔇 Error al reproducir audio:", e);
-      URL.revokeObjectURL(url);
-    };
-
-    // Intentar reproducir
-    audio.play().catch((e) => {
-      console.error("🔇 Error al iniciar reproducción:", e);
-      URL.revokeObjectURL(url);
-    });
-  } catch (err) {
-    console.error("❌ Error en reproducirVozVaronil():", err);
+  } catch {
+    // no bloqueamos la app si falla
   }
 }
 
 /**
+ * 🧑‍⚖️ reproducirVozVaronil
+ *
+ * Lógica:
+ * - Envía el texto al backend /voz
+ * - Backend devuelve un MP3 ya con voz varonil / tono "abogado profesional"
+ * - Reproducimos ese MP3 sin usar speechSynthesis del navegador
+ *
+ * Beneficios:
+ * - Siempre misma voz (coherencia de marca).
+ * - Evita voz femenina random del browser.
+ * - Funciona en móvil (Android Chrome) sin speechSynthesis raro.
+ *
+ * Requisitos backend:
+ *   POST /voz
+ *   body: { "texto": "..." }
  * 📡 enviarALitisbot(payload, onStreamChunk?)
  *
  * Envía la consulta del usuario al backend Express:
@@ -685,35 +684,6 @@ function ModalHerramientas({
 }
 
 /* ============================================================
-   Mensaje burbuja del asistente (wrapper -> usa MensajeBot)
-============================================================ */
-function MensajeBurbuja({ msg, onCopy, onEdit, onFeedback }) {
-  return (
-    <MensajeBot
-      msg={msg}
-      onCopy={onCopy}
-      onEdit={onEdit}
-      onFeedback={onFeedback}
-    />
-  );
-}
-
-/* ============================================================
-   Mensaje inicial (ÚNICA DECLARACIÓN – evita conflictos)
-============================================================ */
-const INIT_MSG = {
-  general: {
-    role: "system",
-    content:
-      "🦉 Bienvenido a LitisBot. Consulta tus dudas legales y recibe respuestas rápidas y confiables.",
-  },
-  pro: {
-    role: "system",
-    content:
-      "🦉 Bienvenido al Asistente Legal LitisBot PRO. Analiza expedientes, agenda plazos y recibe ayuda jurídica con herramientas avanzadas.",
-  },
-};
-/* ============================================================
    🦉 Componente Principal: LitisBotChatBase
    Controla la interfaz del chat, los estados, archivos adjuntos
    y la comunicación directa con el backend Express (IA jurídica)
@@ -1096,19 +1066,24 @@ export default function LitisBotChatBase({
     }
   };
 
-  /* --------------------------- Render ----------------------- */
+/* --------------------------- Render ----------------------- */
 return (
   <div
-    className="flex flex-col w-full items-center bg-white litisbot-fill"
-    style={{ minHeight: "100vh" }}
+    className="flex flex-col w-full items-center bg-white text-[#5C2E0B]"
+    style={{
+      minHeight: "100dvh",       // alto real en móvil
+      maxHeight: "100dvh",
+      width: "100%",
+      overflow: "hidden",        // evita doble scroll body+feed
+    }}
     onPaste={(e) => {
-      // permitir pegar archivos directamente
+      // permitir pegar archivos directamente (captura imágenes / pdf desde clipboard)
       if (e.clipboardData?.files?.length) {
         handleFileChange({ target: { files: e.clipboardData.files } });
       }
     }}
   >
-    {/* ====== FEED DEL CHAT ====== */}
+    {/* ====== FEED DEL CHAT (scrollable) ====== */}
     <div
       id="litisbot-feed"
       className="
@@ -1119,14 +1094,16 @@ return (
         flex-1
       "
       style={{
-        // usamos flex-1 para que el feed crezca y la barra quede abajo sticky
+        // este contenedor es el que scrollea
+        flexGrow: 1,
+        minHeight: 0,             // clave: deja que flex calcule altura
         width: "100%",
-        minWidth: 0,
         paddingTop: 16,
-        paddingBottom: 96, // deja hueco para que la barra no tape los últimos msgs
+        paddingBottom: 96,        // deja hueco para que la barra sticky no tape últimos msgs
         borderRadius: 20,
         boxShadow: "0 4px 26px 0 #0001",
         backgroundColor: "#ffffff",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       <div className="flex flex-col gap-3 w-full">
@@ -1144,7 +1121,7 @@ return (
                 text-[16px] sm:text-[15px] md:text-[17px] lg:text-[18px]
                 font-medium
                 px-4 py-3
-                max-w-[92%]          /* móvil: ocupa casi todo el ancho */
+                max-w-[92%]          /* móvil casi todo el ancho */
                 sm:max-w-[85%]       /* tablet */
                 md:max-w-[70%]       /* desktop */
                 ${

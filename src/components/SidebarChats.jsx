@@ -1,4 +1,3 @@
-// src/components/SidebarChats.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   FaHome,
@@ -21,7 +20,7 @@ function Modal({ open, onClose, children }) {
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/40"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
@@ -43,13 +42,24 @@ function Modal({ open, onClose, children }) {
   );
 }
 
+/**
+ * SidebarChats
+ *
+ * - En DESKTOP (lg+): sidebar fijo de 300px siempre visible
+ * - En MÓVIL (<lg): se muestra como UNA PANTALLA COMPLETA modal (tipo hoja)
+ *   que cubre todo, con su propio header "Mis casos" + botón "X".
+ *
+ * Props importantes:
+ *   isOpen (bool)        -> solo relevante en móvil
+ *   onCloseSidebar()     -> cerrar en móvil
+ */
 export default function SidebarChats({
   user = { nombre: "Invitado", pro: false, uid: "" },
   setCasos: setCasosProp,
   setCasoActivo: setCasoActivoProp,
   onOpenHerramientas,
-  isOpen = true, // control externo (drawer móvil)
-  onCloseSidebar, // cerrar sidebar en móvil
+  isOpen = true, // quién controla si el sheet móvil está visible
+  onCloseSidebar, // cerrar en móvil
 }) {
   /* ============================================================
      Claves de almacenamiento (aisladas por usuario)
@@ -65,7 +75,7 @@ export default function SidebarChats({
   const [casos, setCasos] = useState([]);
   const [casoActivo, setCasoActivo] = useState("");
 
-  // Estados internos
+  // Estados internos de UI
   const [modalNuevo, setModalNuevo] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [editId, setEditId] = useState("");
@@ -117,7 +127,7 @@ export default function SidebarChats({
     }
   }, [casoActivo, ACTIVO_KEY, setCasoActivoProp]);
 
-  // Asegura que siempre haya un caso activo válido
+  // Asegura caso activo válido
   useEffect(() => {
     if (!casos.length) {
       if (casoActivo) setCasoActivo("");
@@ -145,13 +155,15 @@ export default function SidebarChats({
     setCasoActivo(nuevo.id);
     setNombreNuevo("");
     setModalNuevo(false);
-    onCloseSidebar?.(); // en móvil cerramos el drawer
+    onCloseSidebar?.(); // en móvil cerramos "pantalla"
   }
 
   function handleRenombrar(id, nuevoNombre) {
     const name = (nuevoNombre || "").trim();
     if (!name) return;
-    setCasos((prev) => prev.map((c) => (c.id === id ? { ...c, nombre: name } : c)));
+    setCasos((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, nombre: name } : c))
+    );
     setEditId("");
     setEditNombre("");
   }
@@ -160,287 +172,325 @@ export default function SidebarChats({
     if (permanente) {
       setCasos((prev) => prev.filter((c) => c.id !== id));
     } else {
-      setCasos((prev) => prev.map((c) => (c.id === id ? { ...c, papelera: true } : c)));
+      setCasos((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, papelera: true } : c))
+      );
     }
     setDeleteId("");
     if (casoActivo === id) setCasoActivo("");
   }
 
   function handleRestaurar(id) {
-    setCasos((prev) => prev.map((c) => (c.id === id ? { ...c, papelera: false } : c)));
+    setCasos((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, papelera: false } : c))
+    );
   }
 
   const seleccionarCaso = useCallback(
     (id) => {
       setCasoActivo(id);
-      onCloseSidebar?.(); // en móvil cerramos el drawer
+      onCloseSidebar?.(); // cerrar pantalla en móvil
     },
     [onCloseSidebar]
   );
 
   /* ============================================================
-     Render
+     Render helpers
   ============================================================ */
   const chatsVisibles = casos.filter((c) => !c.papelera);
   const chatsPapelera = casos.filter((c) => c.papelera);
 
+  // --- Bloque lista de casos + acciones (sin wrapper responsive)
+  const ListaContenido = (
+    <>
+      {/* Botones de navegación / acciones principales */}
+      <button
+        className="flex items-center gap-2 font-bold text-brown-900 py-3 px-4 hover:bg-yellow-100 transition text-base border-b border-yellow-200"
+        onClick={() => (window.location.href = "/")}
+      >
+        <FaHome size={20} /> Home
+      </button>
+
+      <button
+        className="flex items-center gap-2 font-bold text-brown-900 py-3 px-4 hover:bg-yellow-100 transition text-base border-b border-yellow-200"
+        onClick={onOpenHerramientas}
+      >
+        <FaCog size={18} /> Herramientas
+      </button>
+
+      <button
+        className="flex items-center gap-2 font-bold text-brown-900 py-3 px-4 hover:bg-yellow-100 transition text-base border-b border-yellow-200"
+        onClick={() => setModalNuevo(true)}
+      >
+        <FaPlus size={18} /> Nuevo caso
+      </button>
+
+      {/* Casos recientes */}
+      <div className="px-4 pt-3 pb-1 text-[15px] font-semibold text-brown-900">
+        Casos recientes
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-2 min-h-0">
+        {chatsVisibles.length === 0 && (
+          <div className="text-sm text-brown-400 px-1">
+            Aún no has creado ningún caso.
+          </div>
+        )}
+
+        {chatsVisibles.map((c) => (
+          <div
+            key={c.id}
+            className={`flex items-center px-2 py-2 mb-1 rounded-lg cursor-pointer transition
+              ${
+                casoActivo === c.id
+                  ? "bg-yellow-200 font-bold"
+                  : "hover:bg-yellow-100"
+              }`}
+            style={{ fontSize: 16 }}
+            onClick={() => seleccionarCaso(c.id)}
+            title={c.nombre}
+          >
+            <span className="mr-2">💬</span>
+
+            {editId === c.id ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleRenombrar(c.id, editNombre);
+                }}
+                className="flex-1 flex items-center"
+              >
+                <input
+                  className="border-b border-yellow-600 bg-transparent px-1 text-brown-900 w-full"
+                  value={editNombre}
+                  autoFocus
+                  onChange={(e) => setEditNombre(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setEditId("");
+                      setEditNombre("");
+                    }
+                  }}
+                  maxLength={36}
+                />
+                <button
+                  type="submit"
+                  className="ml-1 text-green-700"
+                  aria-label="Guardar nombre"
+                >
+                  <FaEdit />
+                </button>
+              </form>
+            ) : (
+              <>
+                <span
+                  className="flex-1 truncate"
+                  onDoubleClick={() => {
+                    setEditId(c.id);
+                    setEditNombre(c.nombre);
+                  }}
+                >
+                  {c.nombre}
+                </span>
+
+                <button
+                  className="ml-2 text-yellow-900 hover:text-yellow-700"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditId(c.id);
+                    setEditNombre(c.nombre);
+                  }}
+                  aria-label="Renombrar"
+                  title="Renombrar"
+                >
+                  <FaEdit size={16} />
+                </button>
+
+                <button
+                  className="ml-1 text-red-700 hover:text-red-900"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteId(c.id);
+                    setDeleteFinal(false);
+                  }}
+                  aria-label="Enviar a papelera"
+                  title="Eliminar"
+                >
+                  <FaTrash size={16} />
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+
+        {/* Papelera */}
+        {chatsPapelera.length > 0 && (
+          <>
+            <div className="px-1 pt-4 pb-1 text-yellow-700 font-semibold flex items-center gap-1">
+              <FaRecycle /> Papelera
+            </div>
+            {chatsPapelera.map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center px-2 py-2 mb-1 rounded-lg bg-yellow-100 text-yellow-800"
+                style={{ fontSize: 16, opacity: 0.8 }}
+              >
+                <span className="mr-2">💬</span>
+                <span className="flex-1 truncate">{c.nombre}</span>
+
+                <button
+                  className="ml-1 text-green-800 hover:text-green-900"
+                  onClick={() => handleRestaurar(c.id)}
+                  aria-label="Restaurar"
+                  title="Restaurar"
+                >
+                  <FaRecycle size={16} />
+                </button>
+
+                <button
+                  className="ml-1 text-red-700 hover:text-red-900"
+                  onClick={() => {
+                    setDeleteId(c.id);
+                    setDeleteFinal(true);
+                  }}
+                  aria-label="Eliminar definitivamente"
+                  title="Eliminar definitivamente"
+                >
+                  <FaTrash size={16} />
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Footer usuario */}
+      <div className="flex items-center px-4 py-3 border-t border-yellow-200 bg-yellow-50 mt-auto">
+        <div className="rounded-full bg-yellow-700 text-white flex items-center justify-center w-8 h-8 mr-2">
+          <FaUser size={18} />
+        </div>
+        <div>
+          <div className="font-bold text-brown-900">
+            {user.nombre || "Invitado"}
+          </div>
+          <div className="text-xs text-yellow-800">
+            {user.pro ? "Acceso PRO" : "Acceso Básico"}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  /* ============================================================
+     RENDER RESPONSIVE
+     - Desktop: sidebar fijo (siempre renderizado)
+     - Móvil: pantalla completa modal SOLO si isOpen === true
+  ============================================================ */
+
   return (
     <>
-      {/* Backdrop para móvil */}
+      {/* DESKTOP (>=lg): sidebar fijo */}
+      <aside
+        className="
+          hidden lg:flex lg:flex-col
+          lg:w-[300px] lg:flex-shrink-0
+          lg:h-[100dvh]
+          lg:border-r lg:border-yellow-200
+          lg:bg-white lg:text-[#5C2E0B]
+          lg:shadow-none
+        "
+      >
+        {/* En desktop no hay header propio, el contenido arranca directo */}
+        <div className="flex flex-col min-h-0 flex-1">{ListaContenido}</div>
+      </aside>
+
+      {/* MÓVIL (<lg): hoja a pantalla completa */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-[60] lg:hidden"
-          onClick={onCloseSidebar}
-        />
+          className="
+            fixed inset-0 z-[200] lg:hidden
+            flex flex-col bg-white text-[#5C2E0B]
+            shadow-2xl
+          "
+        >
+          {/* Header móvil fijo */}
+          <div
+            className="
+              flex items-center justify-between
+              px-4 h-12 flex-shrink-0
+              border-b border-yellow-200
+              bg-yellow-50
+              text-[#5C2E0B] font-semibold
+            "
+          >
+            <span className="text-[15px] font-bold">Mis casos</span>
+            <button
+              onClick={onCloseSidebar}
+              className="text-[#5C2E0B] text-xl font-bold p-1"
+              aria-label="Cerrar panel"
+            >
+              <FaTimes />
+            </button>
+          </div>
+
+          {/* Contenido scrollable debajo del header */}
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+            {ListaContenido}
+          </div>
+        </div>
       )}
 
-      {/* Sidebar */}
-      <aside
-        className={`
-          h-full flex flex-col
-          bg-white
-          ${isOpen ? "translate-x-0" : "-translate-x-full"}
-          lg:translate-x-0 lg:flex
-          transition-transform duration-300
-        `}
-        style={{ width: "100%" }}
-        aria-label="Lista de casos"
-      >
-        {/* Botón de cierre móvil */}
-        <div className="flex lg:hidden justify-end p-2 border-b border-yellow-200 bg-yellow-100">
+      {/* MODALES (para ambos modos) */}
+      <Modal open={modalNuevo} onClose={() => setModalNuevo(false)}>
+        <form onSubmit={handleNuevoChat}>
+          <div className="font-bold text-lg text-yellow-900 mb-3">
+            ¿Nuevo Caso?
+          </div>
+          <div className="text-brown-800 mb-2 text-sm">
+            Cada caso conserva su chat y archivos asociados.
+          </div>
+          <input
+            className="border rounded px-2 py-1 w-full mb-3"
+            placeholder="Nombre del caso"
+            value={nombreNuevo}
+            maxLength={40}
+            autoFocus
+            onChange={(e) => setNombreNuevo(e.target.value)}
+          />
           <button
-            onClick={onCloseSidebar}
-            className="text-yellow-800 text-xl hover:text-red-600"
-            aria-label="Cerrar barra lateral"
-            title="Cerrar"
+            type="submit"
+            className="w-full py-2 bg-yellow-700 text-white font-bold rounded shadow hover:bg-yellow-800 transition"
+            disabled={!nombreNuevo.trim()}
           >
-            <FaTimes />
+            Crear caso
+          </button>
+        </form>
+      </Modal>
+
+      <Modal open={!!deleteId} onClose={() => setDeleteId("")}>
+        <div className="font-bold text-lg text-yellow-900 mb-3">
+          {deleteFinal ? "Eliminar definitivamente" : "Eliminar caso"}
+        </div>
+        <div className="mb-4 text-brown-800 text-sm">
+          {deleteFinal
+            ? "¿Seguro que deseas eliminar este caso de forma permanente? Esta acción no se puede deshacer."
+            : "¿Seguro que deseas eliminar este caso? Podrás restaurarlo desde la papelera."}
+        </div>
+        <div className="flex gap-2">
+          <button
+            className="flex-1 py-2 bg-yellow-700 text-white rounded font-bold hover:bg-yellow-900"
+            onClick={() => handleEliminar(deleteId, deleteFinal)}
+          >
+            Sí, eliminar
+          </button>
+          <button
+            className="flex-1 py-2 bg-gray-200 rounded font-bold hover:bg-gray-300"
+            onClick={() => setDeleteId("")}
+          >
+            Cancelar
           </button>
         </div>
-
-        {/* Home */}
-        <button
-          className="flex items-center gap-2 font-bold text-brown-900 py-3 px-6 hover:bg-yellow-100 transition text-lg border-b border-yellow-200"
-          onClick={() => (window.location.href = "/")}
-        >
-          <FaHome size={22} /> Home
-        </button>
-
-        {/* Herramientas */}
-        <button
-          className="flex items-center gap-2 font-bold text-brown-900 py-3 px-6 hover:bg-yellow-100 transition text-lg border-b border-yellow-200"
-          onClick={onOpenHerramientas}
-        >
-          <FaCog size={18} /> Herramientas
-        </button>
-
-        {/* Nuevo caso */}
-        <button
-          className="flex items-center gap-2 font-bold text-brown-900 py-3 px-6 hover:bg-yellow-100 transition text-md border-b border-yellow-200"
-          onClick={() => setModalNuevo(true)}
-        >
-          <FaPlus size={18} /> Nuevo caso
-        </button>
-
-        {/* Título lista */}
-        <div className="px-4 pt-3 pb-1 text-[15px] font-medium text-brown-900">
-          Casos recientes
-        </div>
-
-        {/* Lista con scroll propia */}
-        <div className="flex-1 overflow-y-auto px-2 min-h-0">
-          {chatsVisibles.length === 0 && (
-            <div className="text-sm text-brown-400 px-1">
-              Aún no has creado ningún caso.
-            </div>
-          )}
-
-          {chatsVisibles.map((c) => (
-            <div
-              key={c.id}
-              className={`flex items-center px-2 py-2 mb-1 rounded-lg cursor-pointer transition
-              ${casoActivo === c.id ? "bg-yellow-200 font-bold" : "hover:bg-yellow-100"}`}
-              style={{ fontSize: 16 }}
-              onClick={() => seleccionarCaso(c.id)}
-              title={c.nombre}
-            >
-              <span className="mr-2">💬</span>
-
-              {editId === c.id ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleRenombrar(c.id, editNombre);
-                  }}
-                  className="flex-1 flex items-center"
-                >
-                  <input
-                    className="border-b border-yellow-600 bg-transparent px-1 text-brown-900 w-full"
-                    value={editNombre}
-                    autoFocus
-                    onChange={(e) => setEditNombre(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        setEditId("");
-                        setEditNombre("");
-                      }
-                    }}
-                    maxLength={36}
-                  />
-                  <button type="submit" className="ml-1 text-green-700" aria-label="Guardar nombre">
-                    <FaEdit />
-                  </button>
-                </form>
-              ) : (
-                <>
-                  <span
-                    className="flex-1 truncate"
-                    onDoubleClick={() => {
-                      setEditId(c.id);
-                      setEditNombre(c.nombre);
-                    }}
-                  >
-                    {c.nombre}
-                  </span>
-
-                  <button
-                    className="ml-2 text-yellow-900 hover:text-yellow-700"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditId(c.id);
-                      setEditNombre(c.nombre);
-                    }}
-                    aria-label="Renombrar"
-                    title="Renombrar"
-                  >
-                    <FaEdit size={16} />
-                  </button>
-
-                  <button
-                    className="ml-1 text-red-700 hover:text-red-900"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteId(c.id);
-                      setDeleteFinal(false);
-                    }}
-                    aria-label="Enviar a papelera"
-                    title="Eliminar"
-                  >
-                    <FaTrash size={16} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-
-          {/* Papelera */}
-          {chatsPapelera.length > 0 && (
-            <>
-              <div className="px-1 pt-4 pb-1 text-yellow-700 font-semibold flex items-center gap-1">
-                <FaRecycle /> Papelera
-              </div>
-              {chatsPapelera.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center px-2 py-2 mb-1 rounded-lg bg-yellow-100 text-yellow-800"
-                  style={{ fontSize: 16, opacity: 0.8 }}
-                >
-                  <span className="mr-2">💬</span>
-                  <span className="flex-1 truncate">{c.nombre}</span>
-
-                  <button
-                    className="ml-1 text-green-800 hover:text-green-900"
-                    onClick={() => handleRestaurar(c.id)}
-                    aria-label="Restaurar"
-                    title="Restaurar"
-                  >
-                    <FaRecycle size={16} />
-                  </button>
-
-                  <button
-                    className="ml-1 text-red-700 hover:text-red-900"
-                    onClick={() => {
-                      setDeleteId(c.id);
-                      setDeleteFinal(true);
-                    }}
-                    aria-label="Eliminar definitivamente"
-                    title="Eliminar definitivamente"
-                  >
-                    <FaTrash size={16} />
-                  </button>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-
-        {/* Footer usuario */}
-        <div className="flex items-center px-3 py-3 border-t border-yellow-200 bg-yellow-50 mt-auto">
-          <div className="rounded-full bg-yellow-700 text-white flex items-center justify-center w-8 h-8 mr-2">
-            <FaUser size={18} />
-          </div>
-          <div>
-            <div className="font-bold text-brown-900">
-              {user.nombre || "Invitado"}
-            </div>
-            <div className="text-xs text-yellow-800">
-              {user.pro ? "Acceso PRO" : "Acceso Básico"}
-            </div>
-          </div>
-        </div>
-
-        {/* MODALES */}
-        <Modal open={modalNuevo} onClose={() => setModalNuevo(false)}>
-          <form onSubmit={handleNuevoChat}>
-            <div className="font-bold text-lg text-yellow-900 mb-3">
-              ¿Nuevo Caso?
-            </div>
-            <div className="text-brown-800 mb-2 text-sm">
-              Cada caso conserva su chat y archivos asociados.
-            </div>
-            <input
-              className="border rounded px-2 py-1 w-full mb-3"
-              placeholder="Nombre del caso"
-              value={nombreNuevo}
-              maxLength={40}
-              autoFocus
-              onChange={(e) => setNombreNuevo(e.target.value)}
-            />
-            <button
-              type="submit"
-              className="w-full py-2 bg-yellow-700 text-white font-bold rounded shadow hover:bg-yellow-800 transition"
-              disabled={!nombreNuevo.trim()}
-            >
-              Crear caso
-            </button>
-          </form>
-        </Modal>
-
-        <Modal open={!!deleteId} onClose={() => setDeleteId("")}>
-          <div className="font-bold text-lg text-yellow-900 mb-3">
-            {deleteFinal ? "Eliminar definitivamente" : "Eliminar caso"}
-          </div>
-          <div className="mb-4 text-brown-800 text-sm">
-            {deleteFinal
-              ? "¿Seguro que deseas eliminar este caso de forma permanente? Esta acción no se puede deshacer."
-              : "¿Seguro que deseas eliminar este caso? Podrás restaurarlo desde la papelera."}
-          </div>
-          <div className="flex gap-2">
-            <button
-              className="flex-1 py-2 bg-yellow-700 text-white rounded font-bold hover:bg-yellow-900"
-              onClick={() => handleEliminar(deleteId, deleteFinal)}
-            >
-              Sí, eliminar
-            </button>
-            <button
-              className="flex-1 py-2 bg-gray-200 rounded font-bold hover:bg-gray-300"
-              onClick={() => setDeleteId("")}
-            >
-              Cancelar
-            </button>
-          </div>
-        </Modal>
-      </aside>
+      </Modal>
     </>
   );
 }
