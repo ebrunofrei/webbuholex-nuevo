@@ -24,11 +24,11 @@ import usuariosRoutes from "./backend/routes/usuarios.js";
 import culqiRoutes from "./backend/routes/culqi.js";
 import notificacionesRoutes from "./backend/routes/notificaciones.js";
 import noticiasGuardadasRoutes from "./backend/routes/noticiasGuardadas.js";
-import mediaProxyRoutes from "./backend/routes/mediaProxy.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 import vozRoutes from "./backend/routes/voz.js";
 import newsLiveRouter from "./backend/routes/news-live.js";
-import mediaMetaRoute from "./backend/routes/mediaMeta.js";
+import mediaMetaRoute from "./backend/routes/media.js";
+import mediaRoutes from "./backend/routes/media.js";
 
 // ============================================================
 // ⚙️ Carga temprana del entorno (.env)
@@ -158,7 +158,6 @@ app.get("/api/health", (_req, res) => {
 // 🧩 Rutas API principales (orden específico)
 // ============================================================
 
-app.use("/api/media", mediaProxyRoutes);
 app.use("/api/noticias/contenido", noticiasContenidoRoutes); // específico primero
 app.use("/api/news", newsLiveRouter);                         // live primero
 app.use("/api/noticias", noticiasRoutes);
@@ -170,7 +169,7 @@ app.use("/api/culqi", culqiRoutes);
 app.use("/api/notificaciones", notificacionesRoutes);
 app.use("/api/traducir", traducirRoutes);
 app.use("/api/voz", vozRoutes);
-app.use("/api/media", mediaMetaRoute);
+app.use("/api/media", mediaRoutes);
 
 // 404 JSON solo /api
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));

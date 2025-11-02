@@ -1,9 +1,9 @@
 /* ============================================================
    🦉 BÚHOLEX | Noticias Jurídicas Inteligentes (Oficina Virtual)
-   - Sidebar de chips en desktop; carrusel en móvil/tablet
-   - Filtros robustos (alias) y degradación si el backend no etiqueta
-   - Paginación real; diagnóstico rápido en consola
-   - Lector unificado (ReaderModal) con contenido completo
+   - Imagen robusta: imagenResuelta → logo → artículo → og → favicon → fallback → SVG
+   - Proxy anti-hotlink con retry a URL directa
+   - Soporte para URLs relativas y root-relative de proveedores
+   - Prioriza legis.pe en jurídicas
    ============================================================ */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReaderModal from "@/components/ui/ReaderModal";
@@ -11,16 +11,27 @@ import {
   API_BASE,
   getNoticiasRobust,
   getEspecialidades,
-  proxifyMedia,
   clearNoticiasCache,
-} from "@/services/noticiasClientService"; // lista/alias/utils
-// (El ReaderModal gestiona la extracción completa con getContenidoNoticia)
+} from "@/services/noticiasClientService";
 
 /* ----------------------- Config ----------------------- */
 const PAGE_SIZE = 12;
-const FALLBACK_IMG = "/assets/default-news.jpg";
+const FALLBACK_IMG = "/assets/img/noticia_fallback.png"; // en public/
 
-/* Chips base */
+// Último recurso: SVG embebido (nunca falla)
+const ULTIMATE_SVG =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <defs><linearGradient id="g" x1="0" x2="1">
+    <stop offset="0%" stop-color="#f6f2ee"/><stop offset="100%" stop-color="#eee4dc"/>
+  </linearGradient></defs>
+  <rect width="800" height="450" fill="url(#g)"/>
+  <g fill="#b03a1a" opacity="0.9"><rect x="40" y="340" width="720" height="36" rx="6"/></g>
+  <text x="60" y="365" font-family="Arial, sans-serif" font-size="24" fill="#fff">BúhoLex</text>
+</svg>`);
+
+/* ----------------------- Chips/UX ----------------------- */
 const CHIPS_JURIDICAS_FALLBACK = [
   "todas","penal","civil","laboral","constitucional","familiar","administrativo",
   "comercial","tributario","procesal","registral","ambiental","notarial",
@@ -32,7 +43,6 @@ const CHIPS_GENERALES_FALLBACK = [
 const OTRAS = ["comercial","tributario","procesal","registral","ambiental","notarial","penitenciario","consumidor","seguridad social"];
 const AFINES = ["jurisprudencia","doctrina","procesal","reformas","precedente","casación","tribunal constitucional"];
 
-/* ----------------------- Utils ----------------------- */
 const norm = (s) => (s ?? "").toString().normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
 const ALIAS = {
   tc: "constitucional",
@@ -42,7 +52,7 @@ const ALIAS = {
   procedimiento: "procesal",
   regístral: "registral",
   seguridadsocial: "seguridad social",
-  "derechos humanos": "constitucional", 
+  "derechos humanos": "constitucional",
   internacional: "constitucional",
 };
 const mapAlias = (s) => ALIAS[norm(s)] || norm(s);
@@ -90,36 +100,136 @@ const matchEspecialidad = (needle, valorTexto) => {
   return (mapa[n]||[]).some(k=>v.includes(k));
 };
 
-const mediaSrc = (url) => {
-  if (!url) return FALLBACK_IMG;
-  if (/^\/(assets|uploads)\//i.test(url)) return url;     // locales
-  if (/^https?:\/\//i.test(url)) return proxifyMedia(url); // absolutas → proxy anti-403
-  return FALLBACK_IMG;
+/* ---------- Imagen y proxy ---------- */
+// Logos locales (en public/assets/providers)
+const PROVIDER_LOGOS = {
+  "legis.pe": "/assets/providers/legispe.png",
+  "poder judicial": "/assets/providers/poder-judicial.png",
+  "tribunal constitucional": "/assets/providers/tc.png",
+  "tc": "/assets/providers/tc.png",
+  "el país": "/assets/providers/elpais.png",
+  "rpp": "/assets/providers/rpp.png",
 };
+
+const isExternal = (u) => /^https?:\/\//i.test(u);
+const slug = (s) => (s || "").toString().trim().toLowerCase();
+
+/** Absolutiza rutas relativas y root-relative usando el enlace/base del artículo */
+function absolutize(u, enlace) {
+  const raw = (u ?? "").toString().trim();
+  if (!raw) return "";
+  if (/^(data:|blob:)/i.test(raw)) return raw; // ya válida
+  try {
+    if (isExternal(raw)) return raw;           // absoluta
+    if (raw.startsWith("/")) {                 // root-relative
+      if (enlace && /^https?:\/\//i.test(enlace)) return new URL(raw, enlace).href;
+      return raw;
+    }
+    if (enlace && /^https?:\/\//i.test(enlace)) return new URL(raw, enlace).href; // relativa
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
+function normalizeUrl(u) {
+  const s = (u ?? "").toString().trim();
+  if (!s) return "";
+  return s.replace(/\s+/g, "");
+}
+
+function proxyUrl(absUrl) {
+  const url = normalizeUrl(absUrl);
+  if (!url) return "";
+  if (isExternal(url)) {
+    return `${API_BASE.replace(/\/+$/, "")}/media/proxy?url=${encodeURIComponent(url)}`;
+  }
+  return url; // ya local/relativa
+}
+
+/**
+ * Devuelve { src, raw }:
+ * - src: lo que se intentará primero (proxificado si es externo)
+ * - raw: URL directa (sin proxy) para reintentar si el proxy falla
+ */
+function resolveCardImage(n = {}) {
+  const enlace = n.enlace || n.url || n.link || "";
+
+  // 0) Si el backend ya persistió la imagen final:
+  if (n.imagenResuelta) {
+    const u = absolutize(n.imagenResuelta, enlace);
+    if (/^https?:\/\//i.test(u)) return { src: proxyUrl(u), raw: u };
+    return { src: u, raw: "" };
+  }
+
+  // 1) Logo del proveedor (local)
+  const fuente = slug(n.fuente || n.source);
+  if (fuente && PROVIDER_LOGOS[fuente]) {
+    return { src: PROVIDER_LOGOS[fuente], raw: "" };
+  }
+
+  // 2) Imagen del artículo (coalesce + absolutize)
+  const mediaCandidates = [
+    n.imagen, n.image, n.imageUrl, n.urlToImage, n.thumbnail, n.thumbnailUrl,
+    n?.enclosure?.url, n?.enclosure?.link,
+    Array.isArray(n.multimedia) && n.multimedia[0]?.url,
+    Array.isArray(n.media) && (n.media[0]?.url || n.media[0]?.src),
+    Array.isArray(n.images) && n.images[0]?.url,
+  ].filter(Boolean);
+
+  for (const cand of mediaCandidates) {
+    const abs = absolutize(cand, enlace);
+    const clean = normalizeUrl(abs);
+    if (!clean) continue;
+    if (/^https?:\/\//i.test(clean)) {
+      return { src: proxyUrl(clean), raw: clean }; // proxy → retry RAW si falla
+    } else {
+      return { src: clean, raw: "" };
+    }
+  }
+
+  // 3) Intento Open Graph del artículo (backend devuelve la imagen)
+  if (enlace) {
+    const ogEndpoint = `${API_BASE.replace(/\/+$/,"")}/media/og?url=${encodeURIComponent(enlace)}`;
+    return { src: ogEndpoint, raw: "" };
+  }
+
+  // 4) Favicon del sitio como mini-imagen
+  if (enlace) {
+    const fav = `${API_BASE.replace(/\/+$/,"")}/media/favicon?url=${encodeURIComponent(enlace)}`;
+    return { src: fav, raw: "" };
+  }
+
+  // 5) Fallback local definitivo
+  return { src: FALLBACK_IMG, raw: "" };
+}
+
+// Ordena poniendo primero noticias de legis.pe (solo para jurídicas)
+function prioritizeLegis(list = []) {
+  const isLegis = (n) => /legis\.pe/i.test(n?.fuente || n?.source || "");
+  const a = [], b = [];
+  for (const it of list) (isLegis(it) ? a : b).push(it);
+  return [...a, ...b];
+}
 
 /* ======================= Componente ======================= */
 export default function NoticiasOficina() {
-  /* filtros */
-  const [tipo, setTipo] = useState("juridica");  // "juridica" | "general"
+  const [tipo, setTipo] = useState("juridica");
   const [especialidad, setEspecialidad] = useState("todas");
-  const [tema, setTema] = useState("");          // chips “afines”
+  const [tema, setTema] = useState("");
   const [mostrarOtras, setMostrarOtras] = useState(false);
   const [q, setQ] = useState("");
 
-  /* chips */
   const [chips, setChips] = useState(CHIPS_JURIDICAS_FALLBACK);
 
-  /* datos */
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  /* lector */
   const [open, setOpen] = useState(false);
   const [sel, setSel] = useState(null);
 
-  /* diagnóstico */
   const [lastUrl, setLastUrl] = useState("");
   const [lastErr, setLastErr] = useState("");
 
@@ -129,9 +239,7 @@ export default function NoticiasOficina() {
   useEffect(() => {
     setEspecialidad("todas");
     setTema("");
-    setItems([]);
-    setPage(1);
-    setHasMore(true);
+    setItems([]); setPage(1); setHasMore(true);
 
     if (tipo === "general") {
       setChips(CHIPS_GENERALES_FALLBACK);
@@ -143,9 +251,8 @@ export default function NoticiasOficina() {
       try {
         const list = await getEspecialidades({ tipo: "juridica", providers: "all" });
         const fromApi = Array.isArray(list)
-          ? list
-              .map(x => String(x?.key || x).trim().toLowerCase())
-              .filter(k => k && k!=="todas" && k!=="general")
+          ? list.map(x => String(x?.key || x).trim().toLowerCase())
+                .filter(k => k && k!=="todas" && k!=="general")
           : [];
         const merged = Array.from(new Set(["todas", ...CHIP_PRIORITY.filter(k=>"todas"!==k), ...fromApi]));
         if (!cancelled) setChips(merged);
@@ -168,19 +275,14 @@ export default function NoticiasOficina() {
 
     try {
       const nextPage = reset ? 1 : page;
-
       const params = {
         tipo,
         page: nextPage,
         limit: PAGE_SIZE,
-        // En jurídicas, filtramos por especialidad (salvo "todas")
         especialidad: tipo === "juridica" && especialidad !== "todas" ? especialidad : undefined,
-        // Tema (chips afines) via q para ambos tipos; si está vacío, no lo enviamos
         q: tema || undefined,
         signal: controller.signal,
       };
-
-      // Diagnóstico URL (sin undefined/false/vacíos)
       const qs = new URLSearchParams(
         Object.entries(params).reduce((acc,[k,v])=>{
           if (v !== undefined && v !== null && v !== "" && v !== false) acc[k] = String(v);
@@ -192,21 +294,18 @@ export default function NoticiasOficina() {
       const { items: nuevos, pagination } = await getNoticiasRobust(params);
       const base = Array.isArray(nuevos) ? nuevos : [];
 
-      // Filtro de degradación si el backend no etiqueta
       const esc = mapAlias(especialidad);
-      const filtrados =
+      const preFiltrados =
         tipo === "general" || esc === "todas"
           ? base
           : base.filter((n) => {
-              const bag = new Set(
-                []
-                  .concat(n?.especialidades || [], n?.etiquetas || [], n?.tags || [])
-                  .map(mapAlias)
-              );
+              const bag = new Set([].concat(n?.especialidades||[], n?.etiquetas||[], n?.tags||[]).map(mapAlias));
               if (bag.has(esc)) return true;
               const texto = `${n?.titulo||""} ${n?.resumen||""} ${n?.fuente||""}`;
               return matchEspecialidad(esc, texto);
             });
+
+      const filtrados = (tipo === "juridica") ? prioritizeLegis(preFiltrados) : preFiltrados;
 
       setItems((prev) => (reset ? filtrados : [...prev, ...filtrados]));
       setPage(nextPage + 1);
@@ -218,12 +317,8 @@ export default function NoticiasOficina() {
       }
 
       if (reset) {
-        console.log("[Noticias OV] tipo=", tipo,
-          "| especialidad=", especialidad,
-          "| tema(q)=", tema,
-          "| page=", nextPage,
-          "| recibidas=", base.length,
-          "| mostradas=", filtrados.length);
+        console.log("[Noticias OV] tipo=", tipo, "| especialidad=", especialidad, "| tema(q)=", tema,
+                    "| page=", nextPage, "| recibidas=", base.length, "| mostradas=", filtrados.length);
       }
     } catch (e) {
       if (e?.name !== "AbortError") {
@@ -238,7 +333,6 @@ export default function NoticiasOficina() {
 
   /* ---- Recargas por filtro ---- */
   useEffect(() => {
-    // limpiar cache suave ante cambios fuertes
     clearNoticiasCache?.();
     setItems([]); setPage(1); setHasMore(true);
     abortRef.current?.abort();
@@ -278,8 +372,8 @@ export default function NoticiasOficina() {
                 key={t.key}
                 onClick={() => setTipo(t.key)}
                 className={`px-3 py-1.5 rounded-full font-semibold transition ${
-                  tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
-                }`}
+                  tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"}
+                `}
               >
                 {t.label}
               </button>
@@ -366,8 +460,8 @@ export default function NoticiasOficina() {
                   key={t.key}
                   onClick={() => setTipo(t.key)}
                   className={`px-3 py-1.5 rounded-full font-semibold transition ${
-                    tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
-                  }`}
+                    tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"}
+                  `}
                 >
                   {t.label}
                 </button>
@@ -428,45 +522,86 @@ export default function NoticiasOficina() {
           {/* Lista */}
           <section className="px-3 sm:px-5 py-5">
             {loading && items.length === 0 ? (
-              <p className="text-center text-gray-500">Cargando noticias…</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-[#f1e5dc] overflow-hidden">
+                    <div className="animate-pulse bg-[#f0e7e1] aspect-[16/9]" />
+                    <div className="p-3 space-y-2 animate-pulse">
+                      <div className="h-4 bg-[#f0e7e1] rounded" />
+                      <div className="h-4 bg-[#f0e7e1] rounded w-2/3" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : filtradas.length === 0 ? (
               <p className="text-center text-[#b03a1a] font-semibold">
                 No hay noticias en esta especialidad.
               </p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                {filtradas.map((n, i) => (
-                  <article
-                    key={n.id || n._id || n.enlace || `${n.titulo}#${i}`}
-                    className="rounded-xl bg-white border border-[#f1e5dc] shadow-sm hover:shadow-md overflow-hidden cursor-pointer transition"
-                    onClick={() => openReader(n)}
-                    title="Abrir lector"
-                  >
-                    <div className="relative aspect-[16/9] bg-[#f6f2ee]">
-                      <img
-                        src={mediaSrc(n.imagen)}
-                        alt={n.titulo || "Noticia"}
-                        className="w-full h-full object-cover"
-                        onError={(e) => (e.currentTarget.src = FALLBACK_IMG)}
-                        loading="lazy"
-                      />
-                      <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white px-3 py-2 text-sm line-clamp-2">
-                        {n.titulo || "(Sin título)"}
+                {filtradas.map((n, i) => {
+                  const img = resolveCardImage(n);
+                  return (
+                    <article
+                      key={n.id || n._id || n.enlace || `${n.titulo}#${i}`}
+                      className="rounded-xl bg-white border border-[#f1e5dc] shadow-sm hover:shadow-md overflow-hidden cursor-pointer transition"
+                      onClick={() => openReader(n)}
+                      title="Abrir lector"
+                    >
+                      <div className="relative aspect-[16/9] bg-[#f6f2ee]">
+                        <img
+                          src={img.src}
+                          data-raw={img.raw || ""}
+                          alt={n.titulo || "Noticia"}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const el = e.currentTarget;
+                            const raw = el.getAttribute("data-raw") || "";
+                            const triedRaw = el.getAttribute("data-tried-raw") === "1";
+                            const triedFallback = el.getAttribute("data-tried-fallback") === "1";
+
+                            // 1) Proxy falló → probar URL directa
+                            if (raw && !triedRaw && el.src !== raw) {
+                              el.setAttribute("data-tried-raw", "1");
+                              console.warn("[IMG] Proxy falló, intento RAW:", raw);
+                              el.src = raw;
+                              return;
+                            }
+                            // 2) URL directa falló → fallback local
+                            if (!triedFallback && el.src !== FALLBACK_IMG) {
+                              el.setAttribute("data-tried-fallback", "1");
+                              console.warn("[IMG] RAW falló, Fallback:", FALLBACK_IMG);
+                              el.src = FALLBACK_IMG;
+                              return;
+                            }
+                            // 3) Fallback ausente → SVG embebido
+                            if (el.src !== ULTIMATE_SVG) {
+                              console.error("[IMG] Fallback ausente. Usando SVG.");
+                              el.src = ULTIMATE_SVG;
+                            }
+                          }}
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white px-3 py-2 text-sm line-clamp-3 md:line-clamp-2">
+                          {n.titulo || "(Sin título)"}
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-3">
-                      {(n.resumen || n.description) && (
-                        <p className="text-sm text-[#6b4d3e] line-clamp-5">
-                          {n.resumen || n.description}
-                        </p>
-                      )}
-                      <div className="mt-3 flex justify-between text-xs text-[#8a6e60]">
-                        <span className="truncate">{n.fuente || n.source || "—"}</span>
-                        {n.fecha && <time>{new Date(n.fecha).toLocaleDateString("es-PE")}</time>}
+                      <div className="p-3">
+                        {(n.resumen || n.description) && (
+                          <p className="text-sm text-[#6b4d3e] line-clamp-5">
+                            {n.resumen || n.description}
+                          </p>
+                        )}
+                        <div className="mt-3 flex justify-between text-xs text-[#8a6e60]">
+                          <span className="truncate">{n.fuente || n.source || "—"}</span>
+                          {n.fecha && <time>{new Date(n.fecha).toLocaleDateString("es-PE")}</time>}
+                        </div>
                       </div>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             )}
 

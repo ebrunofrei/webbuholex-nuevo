@@ -1,71 +1,110 @@
-/* ============================
-   Tailwind base
-============================ */
+/* ===== Tailwind ===== */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ============================
-   Global reset
-============================ */
+/* ===== Reset global mínimo ===== */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
   font-family: 'Inter', system-ui, sans-serif;
-  background-color: #fff; /* Blanco puro institucional */
-  color: #2b1107; /* Marrón institucional */
+  background: #fff;     /* Blanco institucional */
+  color: #2b1107;       /* Marrón institucional */
 }
 
-/* ============================
-   Scrollbar personalizado
-============================ */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #fff;
-}
+/* ===== Scrollbar (1 sola definición) ===== */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #fff; }
 ::-webkit-scrollbar-thumb {
-  background-color: #5C2E0B; /* Marrón institucional */
+  background-color: #5C2E0B;
   border-radius: 10px;
   border: 2px solid #fff;
 }
-::-webkit-scrollbar-thumb:hover {
-  background-color: #a52e00; /* Marrón/rojo más intenso */
+::-webkit-scrollbar-thumb:hover { background-color: #a52e00; }
+
+/* ===== Helpers ===== */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+input, textarea, button, select { font-family: inherit; }
+a { color: #a52e00; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ===== Estilos institucionales reutilizables (provenían de App.css) ===== */
+.layout-buholex {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  background: #fff;
+}
+.sidebar-buholex {
+  width: 230px;
+  min-width: 200px;
+  background: linear-gradient(180deg, #a42409 0%, #fff7f0 100%);
+  color: #5b2300;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  box-shadow: 2px 0 16px 0 #a4240933;
+  z-index: 10;
+}
+.main-content-buholex {
+  flex: 1;
+  min-height: 100vh;
+  background: #f3f7fe;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  text-align: left;
+  overflow-x: auto;
+  position: relative;
+}
+.navbar-buholex {
+  width: 100%;
+  background: #fff;
+  box-shadow: 0 4px 18px -8px #c14e1699;
+  padding: 0.6rem 1.6rem;
+  position: sticky; top: 0; z-index: 20;
+}
+.footer-buholex {
+  width: 100%;
+  padding: 1.1rem 1rem 0.9rem 1rem;
+  text-align: center;
+  background: #a42409;
+  color: #fff;
+  font-size: 0.93rem;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  margin-top: 18px;
+  box-shadow: 0 -4px 12px 0 #a4240933;
+}
+.card-buholex {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 6px 32px #a4240915;
+  padding: 2rem 1.2rem;
+  margin-bottom: 1.6rem;
 }
 
-/* ============================
-   Helpers
-============================ */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+h1, h2, h3 { color: #a42409; font-weight: 700; margin-top: 0; }
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+  .sidebar-buholex { width: 72px; min-width: 56px; padding: 0; font-size: 13px; }
+  .main-content-buholex { padding: 0.5rem; }
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+@media (max-width: 650px) {
+  .layout-buholex { flex-direction: column; }
+  .sidebar-buholex {
+    width: 100vw; min-width: 100vw; min-height: unset;
+    box-shadow: none; border-bottom: 3px solid #a42409;
+    flex-direction: row; overflow-x: auto;
+  }
+  .main-content-buholex { padding: 0.4rem; }
 }
 
-/* Ajuste para evitar contenido pegado al borde en móviles con notch */
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0);
-}
-
-/* ============================
-   Inputs y formularios
-============================ */
-input, textarea, button, select {
-  font-family: inherit;
-}
-
-/* ============================
-   Links
-============================ */
-a {
-  color: #a52e00; /* Rojo institucional */
-  text-decoration: none;
-}
-a:hover {
-  text-decoration: underline;
+/* ===== Print limpio ===== */
+@media print {
+  .sidebar-buholex, .navbar-buholex, .footer-buholex { display: none !important; }
+  .main-content-buholex { background: #fff !important; padding: 0 !important; }
 }

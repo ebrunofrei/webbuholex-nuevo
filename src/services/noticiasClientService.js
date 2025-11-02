@@ -261,7 +261,73 @@ async function fetchNewsLive(params, { signal } = {}) {
   return { items, pagination, filtros, raw: data };
 }
 
-/* ----------------------- API pública ----------------------- */
+/* ----------------------- API pública: LIVE directo -----------------------
+ * Export que faltaba: getNewsLive()
+ * Evita el error "does not provide an export named 'getNewsLive'".
+ * Usa /api/news con cache y normalización, sin tocar la arquitectura.
+ ------------------------------------------------------------------------- */
+export async function getNewsLive({
+  page = 1,
+  limit = PAGE_SIZE,
+  q,
+  tema,
+  lang,            // "all" | "es" | "en"
+  providers,       // csv o array
+  signal,
+  noCache = false,
+  cacheTtlMs = 5 * 60 * 1000,
+} = {}) {
+  await waitForApiReady(API_BASE, { signal });
+
+  const qParam = q ?? tema;
+  const providersCsv = Array.isArray(providers)
+    ? providers.map((s) => String(s).trim().toLowerCase()).filter(Boolean).join(",")
+    : String(providers || "")
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .join(",");
+
+  const cacheKey = `newslive:${page}:${limit}:${qParam || ""}:${lang || "all"}:${providersCsv || "-"}`;
+  if (!noCache) {
+    const cached = safeSessionGet(cacheKey, cacheTtlMs);
+    if (cached) return cached;
+  }
+
+  const paramsBase = {
+    q: qParam,
+    lang: lang && lang !== "all" ? lang : undefined,
+    providers: providersCsv || undefined,
+    page,
+    limit,
+  };
+
+  try {
+    const live = await fetchNewsLive(paramsBase, { signal });
+    const payload = {
+      items: live.items,
+      pagination: live.pagination,
+      filtros: live.filtros,
+      page: live.pagination.page || Number(page) || 1,
+      raw: live.raw,
+    };
+    if (!noCache || (payload.items && payload.items.length)) {
+      safeSessionSet(cacheKey, payload);
+    }
+    return payload;
+  } catch (e) {
+    // devolvemos estructura vacía coherente
+    DEBUG && console.warn("[Noticias] getNewsLive falló:", e?.message || e);
+    return {
+      items: [],
+      pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false },
+      filtros: {},
+      raw: null,
+    };
+  }
+}
+
+/* ----------------------- API pública (robusto) ----------------------- */
 export async function getNoticiasRobust({
   tipo = "general",
   page = 1,
@@ -410,7 +476,9 @@ export async function getEspecialidades({ tipo = "juridica", lang, signal } = {}
   })}`;
   DEBUG && console.debug("[Noticias] GET", url);
   const data = await fetchJSON(url, { signal });
-  const list = Array.isArray(data?.items) ? data.items : Array.isArray(data?.data?.items) ? data.data.items : [];
+  const list =
+    Array.isArray(data?.items) ? data.items :
+    Array.isArray(data?.data?.items) ? data.data.items : [];
   return list;
 }
 
@@ -418,7 +486,7 @@ export function clearNoticiasCache() {
   try {
     if (!isBrowser) return;
     Object.keys(sessionStorage).forEach((k) => {
-      if (k.startsWith("news:")) sessionStorage.removeItem(k);
+      if (k.startsWith("news:") || k.startsWith("newslive:")) sessionStorage.removeItem(k);
     });
   } catch {}
 }
