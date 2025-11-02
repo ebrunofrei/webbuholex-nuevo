@@ -7,9 +7,18 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 
 export default defineConfig({
-  base: "/",
   plugins: [react()],
 
+  build: {
+    minify: false,     // para que el error apunte al source real
+    sourcemap: true,   // mapa para ver línea exacta
+    target: "es2022",
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: "es2022",       // <-- alinea optimización previa
+    },
+  },
   // ============================================================
   // ⚙️ Servidor local (Vite + Proxy Backend)
   // ============================================================

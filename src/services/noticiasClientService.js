@@ -504,3 +504,8 @@ export function proxifyMedia(url) {
 
 /* Reexport del extractor de contenidos */
 export { getContenidoNoticia } from "./noticiasContenido.js";
+
+// ---- Compatibilidad con imports antiguos ----
+export { getNoticiasRobust as getNoticias };
+export { getNoticiasRobust as fetchNoticias };
+export { getNoticiasRobust as getNoticiasLive };
