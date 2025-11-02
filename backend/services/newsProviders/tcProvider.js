@@ -1,5 +1,5 @@
-import * as cheerio from "cheerio";
-import { fetchHTML, absUrl } from "./_helpers.js";
+﻿import * as cheerio from "cheerio";
+import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
 import { normalizeNoticia } from "./normalizer.js";
 
 export async function fetchTC({ max = 10 } = {}) {
@@ -33,10 +33,10 @@ export async function fetchTC({ max = 10 } = {}) {
       }
     });
 
-    console.log(`📘 TC: ${noticias.length} noticias obtenidas`);
+    console.log(`ðŸ“˜ TC: ${noticias.length} noticias obtenidas`);
     return noticias;
   } catch (e) {
-    console.error("❌ Error en fetchTC:", e.message);
+    console.error("âŒ Error en fetchTC:", e.message);
     return [];
   }
 }

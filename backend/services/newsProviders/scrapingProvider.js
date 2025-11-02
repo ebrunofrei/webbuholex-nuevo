@@ -1,41 +1,58 @@
-// ============================================================
-// 🔹 Servicio puente de scraping (versión compatible BúhoLex)
-// ============================================================
+﻿import { REGISTRY, DEFAULTS } from "./newsProviders/index.js";
+import { normalizeItem, filterByLang, filterByTopics, isCompleteBySummary } from "./newsProviders/_helpers.js";
 
-import { obtenerNoticiasDeFuentes } from "./noticiasScraperService.js";
+export async function obtenerNoticias({ 
+  tipo = "general", page = 1, limit = 10, q = "", lang = "es", 
+  especialidad = "todas", providers = [], completos = 0 
+}) {
+  const keys = (Array.isArray(providers) && providers.length)
+    ? providers
+    : DEFAULTS[tipo] || DEFAULTS.general;
 
-/**
- * Scrapea noticias jurídicas y generales desde todas las fuentes registradas.
- * Mantiene compatibilidad con versiones anteriores que llamaban a scrapeNoticias(tipo)
- * @param {string} tipo - "juridica", "general" u "otro"
- * @returns {Promise<Array>} Lista de noticias normalizadas
- */
-export async function scrapeNoticias(tipo = "general") {
-  try {
-    console.log(`📡 Iniciando scraping unificado para tipo: ${tipo}`);
+  // Ejecuta en paralelo y tolera errores
+  const settled = await Promise.allSettled(
+    keys
+      .filter(k => REGISTRY[k])
+      .map(k => REGISTRY[k].fetchNoticias({ q, page, limit, lang, especialidad }))
+  );
 
-    // 1️⃣ Obtiene todas las noticias desde los providers activos
-    const todas = await obtenerNoticiasDeFuentes();
-
-    // 2️⃣ Validar que la respuesta de noticias no esté vacía o nula
-    if (!Array.isArray(todas) || todas.length === 0) {
-      console.warn("⚠️ No se han obtenido noticias de los proveedores.");
-      return [];
+  // Junta y normaliza
+  let items = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled" && Array.isArray(r.value)) {
+      items.push(...r.value.map(normalizeItem));
     }
-
-    // 3️⃣ Filtrado opcional por tipo: "juridica" o "general"
-    const filtradas = tipo === "juridica"
-      ? todas.filter(n => n.tipo === "juridica")
-      : tipo === "general"
-      ? todas.filter(n => n.tipo === "general")
-      : todas; // Si tipo no es "juridica" ni "general", no filtra
-
-    console.log(`✅ ${filtradas.length} noticias procesadas (${tipo})`);
-    return filtradas;
-
-  } catch (error) {
-    // 4️⃣ Manejo de errores mejorado: log detallado
-    console.error("❌ Error en scrapeNoticias:", error.message);
-    return [];
   }
+
+  // Filtros
+  if (lang && lang !== "all") items = filterByLang(items, lang);
+  if (q && q.trim()) {
+    const topics = q.split(",").map(s => s.trim()).filter(Boolean);
+    items = filterByTopics(items, topics);
+  }
+  if (completos) {
+    items = items.filter(n => isCompleteBySummary(n));
+  }
+
+  // Orden por fecha desc y luego por multimedia
+  const mediaScore = (n) => (n.video ? 2 : (n.imagen ? 1 : 0));
+  items.sort((a, b) => {
+    const mf = mediaScore(b) - mediaScore(a);
+    if (mf) return mf;
+    const db = new Date(b.fecha || 0).getTime();
+    const da = new Date(a.fecha || 0).getTime();
+    return db - da;
+  });
+
+  // PaginaciÃ³n (simple en memoria)
+  const start = (page - 1) * limit;
+  const end = start + limit;
+  const pageItems = items.slice(start, end);
+
+  return {
+    ok: true,
+    items: pageItems,
+    pagination: { page, limit, total: items.length, pages: Math.ceil(items.length / limit) || 0, nextPage: end < items.length ? page + 1 : null },
+    filtros: { tipo, especialidad, q, lang, providers: keys },
+  };
 }

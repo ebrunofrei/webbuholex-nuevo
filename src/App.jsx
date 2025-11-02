@@ -42,6 +42,7 @@ import ServicioDetalle from "@/pages/ServicioDetalle";
 import ServiciosAdmin from "@/pages/admin/ServiciosAdmin";
 import RecuperarPassword from "./components/RecuperarPassword";
 import PersonalizacionView from "./views/PersonalizacionView";
+import PruebaNoticias from "@/pages/PruebaNoticias";
 
 // Contextos globales
 import { LitisBotChatProvider } from "./context/LitisBotChatContext";
@@ -273,6 +274,17 @@ function LitisBotPageIntegrada() {
     </section>
   );
 }
+        function LegacyOficinaRedirect() {
+        const loc = useLocation();
+  // conserva el resto del path, query y hash
+        const rest = loc.pathname.replace(/^\/oficina/, "");
+         return (
+          <Navigate
+         to={`/oficinaVirtual${rest}${loc.search}${loc.hash}`}
+        replace
+    />
+  );
+}
 
 /* ────────────────────────────────────────────────
    AppContent
@@ -346,11 +358,10 @@ function AppContent() {
               <Routes>
                 <Route path="/" element={<Home />} />
 
-                {/* redirección legacy /oficina → /oficinaVirtual */}
-                <Route
-                  path="/oficina"
-                  element={<Navigate to="/oficinaVirtual" replace />}
-                />
+                {/* redirecciones legacy /oficina → /oficinaVirtual */}
+                <Route path="/oficina" element={<Navigate to="/oficinaVirtual" replace />} />
+                <Route path="/oficina/*" element={<LegacyOficinaRedirect />} />
+
 
                 <Route path="/servicios" element={<Servicios />} />
                 <Route path="/contacto" element={<Contacto />} />
@@ -477,6 +488,7 @@ function AppContent() {
                 />
 
                 <Route path="/seed-branding" element={<SeedBrandingPage />} />
+                <Route path="/prueba-noticias" element={<PruebaNoticias />} />
 
                 {/* 404 fallback */}
                 <Route path="*" element={<Error404 />} />

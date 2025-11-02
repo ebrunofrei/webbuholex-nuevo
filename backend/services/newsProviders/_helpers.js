@@ -1,106 +1,212 @@
-// Utilidades comunes para scrapers BúhoLex (ESM)
+﻿// backend/services/newsProviders/_helpers.js
 
-import axios from "axios";
-import https from "https";
+/* =========================
+ * Texto / Normalización
+ * ========================= */
+export const stripHtml = (html = "") =>
+  String(html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
-// Agente para webs con SSL quisquilloso
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+export const normalizeText = (s = "") =>
+  String(s || "").replace(/\s+/g, " ").replace(/\u00A0/g, " ").trim();
 
-// UA y headers por defecto
-const DEFAULT_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
-  "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
-  "Cache-Control": "no-cache",
-};
+/* =========================
+ * URL helpers
+ * ========================= */
+function ensureHttps(u = "") {
+  try {
+    if (!u) return "";
+    const url = new URL(u, "https://");
+    if (!/^https?:$/i.test(url.protocol)) url.protocol = "https:";
+    return url.toString();
+  } catch {
+    return String(u || "");
+  }
+}
 
-/**
- * Descarga HTML de una URL (con timeout y headers)
- */
-export async function fetchHTML(
-  url,
-  { timeout = 25000, headers = {} } = {}
-) {
-  const { data } = await axios.get(url, {
-    timeout,
-    httpsAgent,
-    headers: { ...DEFAULT_HEADERS, ...headers },
-    // aceptamos 3xx si los hay (algunas webs redirigen)
-    validateStatus: (s) => s >= 200 && s < 400,
-  });
-  return data;
+export function absUrl(href = "", base = "") {
+  try {
+    if (!href) return "";
+    return new URL(href, base || "https://").toString();
+  } catch {
+    // si falla, al menos asegura https
+    return ensureHttps(href);
+  }
 }
 
 /**
- * Prueba varias URLs hasta que una responda (útil para mirrors)
+ * En backend, si no tienes proxy de imágenes, déjalo passthrough.
+ * Si implementas /api/media?url=..., adapta aquí.
  */
-export async function tryFetchHTML(urls, opts = {}) {
-  let lastErr;
-  for (const u of urls) {
+export function proxifyMedia(u = "") {
+  return String(u || "");
+}
+
+/* =========================
+ * Fechas / Idioma
+ * ========================= */
+export function toISODate(d) {
+  try {
+    if (!d) return null;
+    const s = String(d).trim();
+
+    // ISO directo
+    const parsed = Date.parse(s);
+    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+
+    // dd/mm/yyyy o dd-mm-yyyy
+    const m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    if (m) {
+      const [, dd, mm, yy] = m;
+      const year = Number(yy) < 100 ? 2000 + Number(yy) : Number(yy);
+      const dt = new Date(year, Number(mm) - 1, Number(dd));
+      if (!Number.isNaN(dt.getTime())) return dt.toISOString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function guessLang(text = "") {
+  const T = (text || "").toLowerCase();
+  if (!T.trim()) return "es";
+  const es =
+    (T.match(/[áéíóúñ¡¿]| el | la | de | que | los | las | para | con | del /g) || []).length;
+  const en = (T.match(/ the | of | and | to | in | is | for | on | with | by /g) || []).length;
+  if (!es && !en) return "es";
+  return es >= en ? "es" : "en";
+}
+
+/* =========================
+ * HTTP helper (HTML)
+ * ========================= */
+export async function fetchHTML(urlOrList, { timeoutMs = 12000 } = {}) {
+  const urls = Array.isArray(urlOrList) ? urlOrList : [urlOrList];
+  let lastErr = null;
+
+  for (const url of urls) {
     try {
-      return await fetchHTML(u, opts);
+      const ctrl = new AbortController();
+      const id = setTimeout(() => ctrl.abort(new Error("timeout")), timeoutMs);
+
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari",
+          accept: "text/html,application/xhtml+xml",
+        },
+      });
+
+      clearTimeout(id);
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      if (html && html.length > 100) return html; // heurística mínima válida
     } catch (e) {
       lastErr = e;
+      // intentar siguiente candidato
     }
   }
-  throw lastErr ?? new Error("Ninguna URL respondió correctamente.");
+  if (lastErr) throw lastErr;
+  return "";
 }
 
-/**
- * Ejecuta una función async con reintentos
- */
-export async function withRetry(fn, retries = 2, delay = 2000) {
-  let attempt = 0;
-  while (attempt <= retries) {
-    try {
-      return await fn();
-    } catch (err) {
-      attempt++;
-      if (attempt > retries) throw err;
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-}
-
-/**
- * Convierte URL relativa a absoluta respecto de un base
- */
-export function absUrl(href, base) {
-  if (!href) return null;
+/* =========================
+ * Normalización principal
+ * ========================= */
+function hostFromUrl(u = "") {
   try {
-    return new URL(href, base).href;
+    const h = new URL(u).hostname;
+    return h.replace(/^www\./i, "");
   } catch {
-    return href; // si ya es absoluta o es rara, la devolvemos igual
+    return "";
   }
 }
 
-// -------- RSS (parser cacheado) --------
-let _parser = null;
-async function getRSSParser() {
-  if (_parser) return _parser;
-  const mod = await import("rss-parser");
-  const Parser = mod.default;
-  _parser = new Parser({
-    timeout: 20000,
-    headers: DEFAULT_HEADERS,
+export function normalizeItem(n = {}) {
+  const titulo = (n.titulo ?? n.title ?? "").toString().trim();
+
+  // Resumen preferentemente en texto plano
+  const resumenRaw = n.resumen ?? n.description ?? n.summary ?? n.abstract ?? "";
+  const resumen = /<\/?[a-z][\s\S]*>/i.test(resumenRaw)
+    ? stripHtml(resumenRaw)
+    : String(resumenRaw || "");
+
+  const url = ensureHttps(n.url ?? n.link ?? n.enlace ?? "");
+  const imagen = ensureHttps(n.imagen ?? n.image ?? n.thumbnail ?? n.cover ?? "");
+  const fuente = (n.fuente ?? n.source ?? hostFromUrl(url) ?? "").toString().trim();
+  const fecha = toISODate(n.fecha ?? n.pubDate ?? n.date ?? n.publishedAt ?? null);
+
+  // idioma: respeta el declarado; si no hay, infiere
+  const lang = ((n.lang ?? guessLang(`${titulo} ${resumen}`)) || "es").toLowerCase();
+
+  // id estable
+  const id =
+    n.id ??
+    n._id ??
+    n.guid ??
+    url ??
+    `${fuente}-${titulo}`.slice(0, 96);
+
+  const video = Boolean(n.video || n.videoUrl || (n.media && /video/i.test(n.media)));
+
+  return {
+    id,
+    titulo,
+    resumen,
+    url,
+    imagen,
+    fuente,
+    fecha, // ISO o null
+    lang,  // 'es' | 'en' | ...
+    video,
+  };
+}
+
+/* =========================
+ * Filtros de colección
+ * ========================= */
+export function filterByTopics(items = [], topics = []) {
+  if (!topics || !topics.length) return items;
+  const bag = topics.map((s) => s.toLowerCase());
+  return items.filter((n) => {
+    const t = `${n.titulo || ""} ${n.resumen || ""}`.toLowerCase();
+    return bag.some((k) => t.includes(k));
   });
-  return _parser;
+}
+
+export function filterByLang(items = [], lang = "es") {
+  if (!lang || lang === "all") return items;
+  return items.filter((n) => (n.lang || "es") === lang);
 }
 
 /**
- * Lee un feed RSS y devuelve items normalizados básicos
+ * Artículo “completo”: mínimo de texto o HTML significativo
  */
-export async function fetchRSS(url, max = 10) {
-  const parser = await getRSSParser();
-  const feed = await parser.parseURL(url);
-  const items = feed.items || [];
-  return items.slice(0, max).map((i) => ({
-    titulo: (i.title || "").trim(),
-    resumen:
-      (i.contentSnippet || i.content || "").toString().trim(),
-    url: (i.link || "").trim(),
-    fecha: i.isoDate || i.pubDate || null,
-    fuente: feed.title || url,
-    imagen: i.enclosure?.url || null,
-  }));
+export function isCompleteEnough(plain = "", html = "") {
+  const txt = String(plain || "").trim();
+  const len = txt.length;
+  const para = (txt.match(/\.\s|\n/g) || []).length;
+  const htmlLen = stripHtml(html || "").length;
+  return (len >= 700 && para >= 3) || htmlLen >= 900;
+}
+
+/**
+ * Quitar duplicados por URL o por (fuente+titulo)
+ */
+export function dedupe(items = []) {
+  const seenUrl = new Set();
+  const seenFT = new Set();
+  const out = [];
+  for (const n of items) {
+    const k1 = (n.url || "").toLowerCase();
+    const k2 = `${(n.fuente || "").toLowerCase()}|${(n.titulo || "").toLowerCase()}`;
+    if (k1 && seenUrl.has(k1)) continue;
+    if (!k1 && seenFT.has(k2)) continue;
+    if (k1) seenUrl.add(k1);
+    else seenFT.add(k2);
+    out.push(n);
+  }
+  return out;
 }

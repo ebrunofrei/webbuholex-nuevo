@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 import * as cheerio from "cheerio";
 
 /**
@@ -35,7 +35,7 @@ export async function fetchCyberNews({ max = 15 } = {}) {
       });
     });
   } catch (err) {
-    console.error("❌ Error en fetchCyberNews:", err.message);
+    console.error("âŒ Error en fetchCyberNews:", err.message);
   }
 
   return results;

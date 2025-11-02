@@ -42,8 +42,8 @@ const HAS_CORE =
   Boolean(firebaseConfig.projectId) &&
   Boolean(firebaseConfig.appId);
 
-if (!HAS_CORE) {
-  console.warn("⚠️ Firebase config incompleta. Verifica variables .env");
+if (!HAS_CORE && import.meta.env.DEV) {
+  throw new Error("Firebase: variables VITE_FIREBASE_* incompletas en .env.local");
 }
 
 // =========================

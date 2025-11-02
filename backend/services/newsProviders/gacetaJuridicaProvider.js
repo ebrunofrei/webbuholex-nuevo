@@ -1,4 +1,4 @@
-// backend/services/newsProviders/gacetaJuridicaProvider.js
+﻿// backend/services/newsProviders/gacetaJuridicaProvider.js
 import puppeteer from "puppeteer";
 import { normalizeNoticia, detectEspecialidad } from "./normalizer.js";
 
@@ -13,7 +13,7 @@ export async function fetchGacetaJuridica({ max = 10 } = {}) {
       { waitUntil: "domcontentloaded", timeout: 60000 }
     );
 
-    // esperar explícitamente a que carguen los artículos
+    // esperar explÃ­citamente a que carguen los artÃ­culos
     await page.waitForSelector("article, .item.noticia, .views-row");
 
     const noticias = await page.$$eval("article, .item.noticia, .views-row", (els) =>
@@ -31,7 +31,7 @@ export async function fetchGacetaJuridica({ max = 10 } = {}) {
           url: enlace,
           fecha,
           imagen,
-          fuente: "Gaceta Jurídica",
+          fuente: "Gaceta JurÃ­dica",
           tipo: "juridica",
         };
       })
@@ -46,7 +46,7 @@ export async function fetchGacetaJuridica({ max = 10 } = {}) {
     ).slice(0, max);
 
   } catch (err) {
-    console.error("❌ Error fetchGacetaJuridica:", err.message);
+    console.error("âŒ Error fetchGacetaJuridica:", err.message);
     return [];
   } finally {
     if (browser) await browser.close();

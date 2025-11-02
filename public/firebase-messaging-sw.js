@@ -1,15 +1,14 @@
-// /public/firebase-messaging-sw.js
 /* eslint-disable no-undef */
 
-// 1) Librerías compat para SW
+// 1) Librerías compat para SW (v9.x)
 importScripts("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js");
 
-// 2) Control inmediato del SW
+// 2) Toma control inmediato del SW
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
-// 3) Inicializa Firebase con toda la config (NO solo senderId)
+// 3) Inicializa Firebase (SW no puede leer import.meta.env)
 firebase.initializeApp({
   apiKey: "AIzaSyDOMhMqkNzpHC-6Lex6c-vDR_Sb3oev0HE",
   authDomain: "buholex-ab588.firebaseapp.com",
@@ -20,59 +19,108 @@ firebase.initializeApp({
   measurementId: "G-NQQZ7P48YX",
 });
 
-// 4) Inicializa messaging
+// 4) Inicializa Messaging
 const messaging = firebase.messaging();
 
 /**
- * Listener de mensajes cuando la app está en segundo plano.
- * - Si el payload incluye "notification", FCM muestra la notificación automáticamente
- *   y NO se llama a onBackgroundMessage.
- * - Si envías solo "data", este handler debe mostrar la notificación.
+ * onBackgroundMessage:
+ * - Solo se invoca con payloads "data-only".
+ * - Si llega "notification", FCM muestra el banner y NO pasa por aquí.
  */
 messaging.onBackgroundMessage((payload) => {
-  console.log("📩 [firebase-messaging-sw] Background message:", payload);
+  // Debug visible en Application > Service Workers
+  console.log("[SW] Background message:", payload);
 
   const notif = payload?.notification || {};
   const data = payload?.data || {};
 
-  const notificationTitle = notif.title || "Notificación";
-  const notificationOptions = {
-    body: notif.body || "",
-    icon: notif.icon || "/favicon.ico",
-    badge: notif.badge || "/favicon.ico",
-    data: {
-      url: data.url || data.link || notif.click_action || "/",
-      ...data,
-    },
-  };
+  // Si el servidor ya mandó "notification", evita duplicar
+  if (notif && (notif.title || notif.body)) {
+    // Normalmente no se ejecuta este bloque por el comportamiento de FCM,
+    // pero lo dejamos como guard para proveedores no estándar.
+    return;
+  }
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  const title = data.title || "BúhoLex";
+  const body  = data.body  || "";
+  const icon  = data.icon  || "/icons/icon-192.png";
+  const badge = data.badge || "/icons/icon-192.png";
+  const url   = data.url   || data.link || "/";
+
+  self.registration.showNotification(title, {
+    body,
+    icon,
+    badge,
+    data: { url, ...data },
+  });
 });
 
 /**
- * Click en la notificación:
- *  - Enfoca una pestaña existente si la hay
- *  - Si no, abre la URL (data.url) o la home por defecto
+ * Click en notificación:
+ * - Enfoca una ventana existente con misma origen/URL base.
+ * - Si no existe, abre una nueva.
  */
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl =
-    (event.notification?.data && event.notification.data.url) ||
-    self.location.origin + "/";
 
-  event.waitUntil(
-    (async () => {
-      const allClients = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
+  const raw = (event.notification?.data && event.notification.data.url) || "/";
+  // Normaliza para comparar sin query/hash
+  const targetUrl = new URL(raw, self.location.origin).toString();
+  const targetBase = targetUrl.split("#")[0].split("?")[0];
 
-      const client =
-        allClients.find((c) => c.url.startsWith(targetUrl)) ||
-        allClients.find((c) => c.url.startsWith(self.location.origin));
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
 
-      if (client) return client.focus();
-      return self.clients.openWindow(targetUrl);
-    })()
-  );
+    // Busca cliente que empiece con mismo origen y path base
+    const match = clients.find((c) => {
+      try {
+        const u = new URL(c.url);
+        const base = (u.origin + u.pathname).replace(/\/+$/, "");
+        const tgt  = targetBase.replace(/\/+$/, "");
+        return base === tgt || base.startsWith(tgt) || tgt.startsWith(base);
+      } catch {
+        return false;
+      }
+    });
+
+    if (match) {
+      await match.focus();
+      return;
+    }
+    await self.clients.openWindow(targetUrl);
+  })());
+});
+
+/**
+ * Fallback opcional: algunos envíos "raw" disparan 'push' sin pasar por FCM handler.
+ * Si no quieres fallback, elimina este bloque.
+ */
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  try {
+    const payload = event.data.json();
+    const notif = payload?.notification || {};
+    const data = payload?.data || {};
+
+    // Evita duplicar si ya hay "notification"
+    if (notif && (notif.title || notif.body)) return;
+
+    const title = data.title || "BúhoLex";
+    const body  = data.body  || "";
+    const icon  = data.icon  || "/icons/icon-192.png";
+    const badge = data.badge || "/icons/icon-192.png";
+    const url   = data.url   || "/";
+
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body,
+        icon,
+        badge,
+        data: { url, ...data },
+      })
+    );
+  } catch (e) {
+    // Si no es JSON, ignora
+  }
 });

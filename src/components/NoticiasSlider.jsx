@@ -1,34 +1,74 @@
-import React from "react";
+// src/components/NoticiasSlider.jsx
+import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom"; // <—
+import { getNoticiasRobust, clearNoticiasCache, API_BASE } from "@/services/noticiasClientService";
 
-export default function NoticiasSlidebar({ open, onClose, noticias }) {
+const PROVIDERS_TOP = ["elpais", "elcomercio", "rpp"]; // ajusta a gusto
+
+export default function NoticiasSlider({ variant = "inline", className = "" }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const { pathname } = useLocation(); // <—
+
+  // 🔒 Solo render en rutas permitidas:
+  const allow =
+    pathname.startsWith("/noticias") ||
+    pathname.startsWith("/oficinavirtual") ||
+    pathname.startsWith("/oficina-virtual");
+
+  useEffect(() => {
+    if (!allow) return;
+    (async () => {
+      setLoading(true);
+      try {
+        const { items: arr } = await getNoticiasRobust({
+          tipo: "general",
+          page: 1,
+          limit: 10,
+          lang: "es",
+          providers: PROVIDERS_TOP,
+        });
+        setItems((arr || []).slice(0, 10));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [allow]);
+
+  if (!allow) return null; // ⛔️ no se muestra en Home
+
   return (
-    <div
-      className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl border-l-4 border-[#b03a1a] z-[1000] transition-transform duration-300 ${
-        open ? "translate-x-0" : "translate-x-full"
-      }`}
-      style={{ maxWidth: "90vw" }}
-    >
-      <div className="flex justify-between items-center px-5 py-4 border-b">
-        <h2 className="text-xl font-bold text-[#b03a1a]">Noticias</h2>
-        <button
-          onClick={onClose}
-          className="text-2xl font-bold text-[#b03a1a] hover:text-[#a87247] focus:outline-none"
-        >
-          ×
-        </button>
-      </div>
-      <div className="px-5 py-3 overflow-y-auto h-[90vh]">
-        {noticias && noticias.length > 0 ? (
-          noticias.map((n, i) => (
-            <div key={i} className="mb-4">
-              <div className="font-semibold text-[#4b2e19]">{n.titulo}</div>
-              <div className="text-sm text-[#b03a1a]">{n.resumen}</div>
-            </div>
-          ))
-        ) : (
-          <div className="text-gray-400 text-center mt-12">No hay noticias recientes.</div>
+    <aside className={`blx-actualidad w-full h-full bg-white/0 ${className}`}>
+      <div className="sticky top-0">
+        <h3 className="text-base font-bold mb-3 text-[#5C2E0B]">Actualidad</h3>
+        {loading && <p className="text-sm text-gray-500">Cargando…</p>}
+        {!loading && items.length === 0 && (
+          <p className="text-sm text-gray-500">Sin noticias.</p>
         )}
+        <ul className="space-y-3">
+          {items.map((n, idx) => (
+            <li key={n.id || n.enlace || idx} className="border rounded-lg p-3 bg-white hover:shadow transition">
+              <a
+                href={n.enlace}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-sm hover:underline"
+              >
+                {n.titulo}
+              </a>
+              <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-1">
+                {n.fuente && <span className="px-1.5 py-0.5 border rounded">{n.fuente}</span>}
+                {n.fecha && <span>{new Date(n.fecha).toLocaleDateString("es-PE")}</span>}
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
+      {/* RESET anti-fugas */}
+      <style>{`
+        .blx-actualidad { position: static !important; inset: auto !important; right: auto !important; left: auto !important; bottom: auto !important; z-index: 1 !important; background: transparent; }
+        .blx-actualidad h3 { position: static !important; }
+      `}</style>
+    </aside>
   );
 }

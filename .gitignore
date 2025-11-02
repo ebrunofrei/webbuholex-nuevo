@@ -70,6 +70,7 @@ firebase-service-account.json
 # ============================
 *.local
 *.history
+_legacy/**
 
 # ============================
 # FIREBASE CONFIG FILES (solo Admin o privados)
@@ -159,3 +160,6 @@ scripts/
 screenshots/
 logs/
 tests/
+
+# Audios generados por TTS/chat (no versionar)
+*.mp3

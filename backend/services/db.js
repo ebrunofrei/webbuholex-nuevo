@@ -1,74 +1,174 @@
 // backend/services/db.js
 // ============================================================
-// 🦉 Conexión a MongoDB Atlas centralizada
-// Maneja conexión única y reuso en producción
+// 🦉 BúhoLex | Conexión única y robusta a MongoDB (IPv4 + reintentos)
 // ============================================================
 
 import mongoose from "mongoose";
 import chalk from "chalk";
 
-let isConnecting = false;
+/* ------------------------ Cache global ------------------------ */
+const GLOBAL_KEY = "__buholex_mongoose";
+const cached = global[GLOBAL_KEY] || { conn: null, promise: null, listeners: false };
+global[GLOBAL_KEY] = cached;
 
-export async function connectDB() {
-  // Priorizamos nombres que sí existen en Railway
-  const MONGO_URI =
+/* ------------------------ Helpers entorno --------------------- */
+export function getMongoUri() {
+  return (
     process.env.MONGODB_URI ||
-    process.env.MONGO_URI || // fallback por si local usaba otro nombre
-    "";
-
-  const DB_NAME =
+    process.env.MONGO_URI ||
+    process.env.DATABASE_URL ||
+    ""
+  );
+}
+export function getDbName() {
+  return (
     process.env.MONGODB_DBNAME ||
     process.env.MONGO_DBNAME ||
     process.env.DB_NAME ||
-    "buholex";
+    "buholex"
+  );
+}
+const isServerless =
+  !!process.env.VERCEL || !!process.env.RAILWAY_ENVIRONMENT || process.env.SERVERLESS === "1";
 
-  if (!MONGO_URI) {
-    console.error(
-      chalk.redBright(
-        "❌ No se encontró MONGODB_URI / MONGO_URI en las variables de entorno."
-      )
-    );
-    throw new Error("No se encontró MONGODB_URI");
+/* ------------------------ Util IPv4 --------------------------- */
+function ensureIPv4(uri = "") {
+  if (!uri) return uri;
+  if (/\bfamily=/.test(uri)) return uri;
+  return uri + (uri.includes("?") ? "&" : "?") + "family=4";
+}
+
+/* ------------------------ Estado ------------------------------ */
+export function mongoState() {
+  // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+  return mongoose.connection?.readyState ?? 0;
+}
+export function mongoReady() {
+  return mongoState() === 1;
+}
+export async function waitMongoReady({ timeoutMs = 6000, intervalMs = 150 } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    if (mongoReady()) return true;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return mongoReady();
+}
+
+/* ------------------------ Listeners (una vez) ----------------- */
+function hookListenersOnce() {
+  if (cached.listeners) return;
+  mongoose.connection.once("connected", () => {
+    console.log(chalk.green("✅ Mongo conectado."), chalk.gray(`(${getDbName()})`));
+  });
+  mongoose.connection.on("error", (e) => {
+    console.error(chalk.red("❌ Mongo error:"), e?.message || e);
+  });
+  mongoose.connection.on("disconnected", () => {
+    console.warn(chalk.yellow("⚠️ Mongo desconectado."));
+  });
+  cached.listeners = true;
+}
+
+/* ------------------------ Conexión con reintentos ------------- */
+async function connectWithRetry(uri, dbName, { attempts = 5 } = {}) {
+  const u = ensureIPv4(uri);
+  const opts = {
+    dbName,
+    family: 4,
+    serverSelectionTimeoutMS: 10_000,
+    socketTimeoutMS: 20_000,
+    minPoolSize: 1,
+    maxPoolSize: 10,
+  };
+
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const conn = await mongoose.connect(u, opts);
+      hookListenersOnce();
+      return conn;
+    } catch (err) {
+      lastErr = err;
+      const base = Math.min(2000 * i, 8000);
+      const jitter = Math.floor(Math.random() * 350);
+      const wait = base + jitter;
+      console.warn(
+        chalk.yellow(
+          `🔁 Intento ${i}/${attempts} falló: ${err?.message || err}. Reintento en ${wait}ms...`
+        )
+      );
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
+}
+
+/* ------------------------ API pública ------------------------- */
+/** Conexión “fuerte”: lanza error si no logra conectar */
+export async function dbConnect() {
+  const uri = getMongoUri();
+  const dbName = getDbName();
+
+  if (!uri) {
+    const msg = "No se encontró MONGODB_URI / MONGO_URI / DATABASE_URL en el entorno";
+    console.error(chalk.red(`❌ ${msg}`));
+    throw new Error(msg);
   }
 
-  // Ya hay conexión activa reutilizable
-  if (global.mongoose && global.mongoose.connection?.readyState === 1) {
-    console.log(
-      chalk.greenBright("✅ Reusando conexión existente a MongoDB Atlas.")
-    );
-    return global.mongoose;
-  }
+  if (cached.conn && mongoReady()) return cached.conn;
 
-  if (isConnecting) {
-    console.log(
-      chalk.yellow("⏳ Conexión a MongoDB ya en progreso, reutilizando promesa...")
-    );
-    return;
+  if (!cached.promise) {
+    console.log(chalk.yellow("⏳ Conectando a MongoDB..."), chalk.gray(`DB: ${dbName}`));
+    cached.promise = connectWithRetry(uri, dbName).then((c) => (cached.conn = c));
   }
 
   try {
-    console.log(chalk.yellow("⏳ Intentando conectar a MongoDB Atlas..."));
-    isConnecting = true;
-
-    const conn = await mongoose.connect(MONGO_URI, {
-      dbName: DB_NAME,
-      // useNewUrlParser y useUnifiedTopology ya no hacen falta en mongoose >=6
-    });
-
-    global.mongoose = conn;
-
-    console.log(
-      chalk.greenBright("✅ Conectado a MongoDB Atlas."),
-      chalk.gray(`DB: ${DB_NAME}`)
-    );
-    return conn;
-  } catch (err) {
-    console.error(
-      chalk.redBright("❌ Error al conectar a MongoDB Atlas:"),
-      err.message
-    );
-    throw err;
+    cached.conn = await cached.promise;
+    return cached.conn;
   } finally {
-    isConnecting = false;
+    if (!mongoReady()) cached.promise = null; // limpia si falló
   }
 }
+
+/** Conexión “suave”: NO lanza; retorna conexión o null */
+export async function dbTryConnect() {
+  try {
+    return await dbConnect();
+  } catch (e) {
+    console.warn(chalk.yellow("⚠️ dbTryConnect: continúa sin Mongo (" + (e?.message || e) + ")"));
+    return null;
+  }
+}
+
+/** Desconexión segura */
+export async function dbDisconnect() {
+  if (mongoose.connection.readyState !== 0) {
+    try {
+      await mongoose.disconnect();
+    } catch {}
+  }
+  cached.conn = null;
+  cached.promise = null;
+}
+
+/* ------------------------ Cierre limpio ----------------------- */
+if (!isServerless) {
+  for (const sig of ["SIGINT", "SIGTERM"]) {
+    process.on(sig, async () => {
+      try { await dbDisconnect(); } finally { process.exit(0); }
+    });
+  }
+}
+
+/* ------------------------ Default (compat) -------------------- */
+export default {
+  dbConnect,
+  dbTryConnect,
+  dbDisconnect,
+  mongoState,
+  mongoReady,
+  waitMongoReady,
+  getMongoUri,
+  getDbName,
+};

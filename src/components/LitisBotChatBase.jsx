@@ -30,6 +30,22 @@ import {
 } from "@/services/chatStorage";
 
 /* ============================================================
+   🦉 Mensaje inicial base (tono humano consistente)
+============================================================ */
+const INIT_MSG = {
+  general: {
+    role: "assistant",
+    content:
+      "Hola 👋. Soy LitisBot. Estoy aquí para ayudarte con cualquier duda legal o situación personal que te preocupe. Puedes contarme qué pasó y te explico tus opciones con palabras claras.",
+  },
+  pro: {
+    role: "assistant",
+    content:
+      "Hola 👋. Soy LitisBot PRO. Puedo ayudarte con estrategia legal práctica, redacción de escritos y próximos pasos procesales. Cuéntame tu caso y avanzamos juntos.",
+  },
+};
+
+/* ============================================================
    🧠 Helper: construir URL base al backend Express
    (prod usa VITE_API_BASE_URL, dev fallback a localhost:3000/api)
 ============================================================ */
@@ -73,7 +89,9 @@ export async function enviarALitisbot(payload, onStreamChunk) {
 
     const ctype = resp.headers.get("content-type") || "";
 
-    // ===== Caso 1: streaming (text/event-stream) =====
+       /* ============================================================
+       Caso 1: respuesta tipo streaming (text/event-stream)
+    ============================================================ */
     if (resp.body && /event-stream/i.test(ctype)) {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -84,9 +102,11 @@ export async function enviarALitisbot(payload, onStreamChunk) {
         const { value, done } = await reader.read();
         if (done) break;
 
+        // decodificamos el fragmento actual
         const chunk = decoder.decode(value, { stream: true });
         textoAcumulado += chunk;
 
+        // permitimos streaming en UI (onStreamChunk viene de procesarConsulta)
         if (onStreamChunk) {
           onStreamChunk(chunk, textoAcumulado);
         }
@@ -94,10 +114,7 @@ export async function enviarALitisbot(payload, onStreamChunk) {
 
       const finalLimpio = (textoAcumulado || "").trim();
 
-      if (finalLimpio) {
-        // Voz varonil PRO solo una vez al final
-        await reproducirVozVaronil(finalLimpio);
-      }
+      // 👇 importante: NO llamamos reproducirVozVaronil(finalLimpio)
 
       return {
         ok: true,
@@ -106,14 +123,18 @@ export async function enviarALitisbot(payload, onStreamChunk) {
       };
     }
 
-    // ===== Caso 2: JSON normal =====
+    /* ============================================================
+       Caso 2: respuesta JSON normal
+      ============================================================ */
     let data = {};
     try {
       data = await resp.json();
     } catch {
+      // si no se pudo parsear JSON, dejamos data = {}
       data = {};
     }
 
+    // si el backend respondió con error HTTP (4xx / 5xx)
     if (!resp.ok) {
       const mensajeError =
         data?.error ||
@@ -127,6 +148,7 @@ export async function enviarALitisbot(payload, onStreamChunk) {
       };
     }
 
+    // respuesta "buena"
     const textoFinal =
       data.respuesta ||
       data.text ||
@@ -138,15 +160,14 @@ export async function enviarALitisbot(payload, onStreamChunk) {
 
     const limpio = (textoFinal || "").trim();
 
-    if (limpio) {
-      await reproducirVozVaronil(limpio);
-    }
-
+    // 👇 otra vez: NO reproducimos voz automáticamente aquí.
+    
     return {
       ok: true,
       respuesta: limpio,
       sugerencias: sugerenciasDelBot,
     };
+
   } catch (err) {
     console.error("❌ Error al enviar mensaje a LitisBot:", err);
     return {
@@ -182,13 +203,17 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
   const [editValue, setEditValue] = useState(msg.content || "");
   const [leyendo, setLeyendo] = useState(false);
 
+  const feedback = msg.feedback;
+
   async function handleSpeak() {
     if (leyendo) return;
     setLeyendo(true);
     try {
       const plain = toPlain(msg.content || "");
-      // reproducir voz varonil desde backend
-      await reproducirVozVaronil(plain);
+      // ✅ usar el servicio correcto:
+      await reproducirVozVaronil(plain, { voz: "masculina_profesional" });
+    } catch (err) {
+      console.error("Error TTS:", err);
     } finally {
       setLeyendo(false);
     }
@@ -207,6 +232,13 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
       .catch(() => {});
   }
 
+  // estilos dinámicos para like/dislike
+  const likeActive = feedback === "up";
+  const dislikeActive = feedback === "down";
+
+  const baseBtnClass =
+    "transition-all duration-150 flex items-center justify-center";
+
   return (
     <div
       className="flex flex-col w-fit max-w-[92%] rounded-[1.5rem] shadow border px-4 py-4"
@@ -216,6 +248,7 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
         color: "#5C2E0B",
       }}
     >
+      {/* CONTENIDO MENSAJE */}
       {!editando ? (
         <div
           className="leading-relaxed whitespace-pre-wrap break-words text-[16px]"
@@ -255,15 +288,18 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
         </div>
       )}
 
+      {/* ACCIONES SOLO SI NO ESTAMOS EDITANDO */}
       {!editando && (
         <div className="flex flex-row flex-wrap items-center gap-4 mt-4 text-[18px]">
-          {/* voz */}
+          {/* ▶ Voz */}
           <button
-            className="flex items-center justify-center w-9 h-9 rounded-full"
+            className={`${baseBtnClass} w-9 h-9 rounded-full`}
             style={{
               background: "#5C2E0B",
               color: "#fff",
               opacity: leyendo ? 0.6 : 1,
+              cursor: leyendo ? "not-allowed" : "pointer",
+              transform: leyendo ? "scale(0.95)" : "scale(1)",
             }}
             aria-label="Leer en voz alta"
             title="Leer en voz alta"
@@ -273,9 +309,9 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
             <FaVolumeUp size={16} />
           </button>
 
-          {/* copiar */}
+          {/* 📋 Copiar */}
           <button
-            style={{ color: "#5C2E0B" }}
+            className={`${baseBtnClass} text-[#5C2E0B] hover:opacity-70`}
             onClick={handleCopiar}
             title="Copiar para Word / PDF"
             aria-label="Copiar"
@@ -283,9 +319,9 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
             <FaRegCopy size={18} />
           </button>
 
-          {/* editar */}
+          {/* ✍ Editar */}
           <button
-            style={{ color: "#5C2E0B" }}
+            className={`${baseBtnClass} text-[#5C2E0B] hover:opacity-70`}
             onClick={() => setEditando(true)}
             title="Editar borrador"
             aria-label="Editar"
@@ -293,22 +329,60 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
             <FaRegEdit size={18} />
           </button>
 
-          {/* like */}
+          {/* 👍 Like */}
           <button
-            style={{ color: "#0f5132" }}
-            onClick={() => onFeedback && onFeedback("up")}
-            title="Respuesta útil"
+            className={baseBtnClass}
+            style={{
+              color: likeActive ? "#0f5132" : "#0f5132",
+              backgroundColor: likeActive
+                ? "rgba(15,81,50,0.08)"
+                : "transparent",
+              border: likeActive ? "1px solid #0f5132" : "1px solid transparent",
+              borderRadius: "9999px",
+              width: "36px",
+              height: "36px",
+              opacity: dislikeActive ? 0.4 : 1,
+              transform: likeActive ? "scale(1.1)" : "scale(1)",
+            }}
+            title={likeActive ? "Marcado como útil" : "Respuesta útil"}
             aria-label="Respuesta útil"
+            onClick={() => {
+              if (dislikeActive) return; // si ya marcó 👎 no dejamos marcar 👍
+              if (!likeActive) {
+                onFeedback && onFeedback("up");
+              }
+            }}
           >
             <FaRegThumbsUp size={18} />
           </button>
 
-          {/* dislike */}
+          {/* 👎 Dislike */}
           <button
-            style={{ color: "#842029" }}
-            onClick={() => onFeedback && onFeedback("down")}
-            title="Respuesta no útil"
+            className={baseBtnClass}
+            style={{
+              color: dislikeActive ? "#842029" : "#842029",
+              backgroundColor: dislikeActive
+                ? "rgba(132,32,41,0.08)"
+                : "transparent",
+              border: dislikeActive
+                ? "1px solid #842029"
+                : "1px solid transparent",
+              borderRadius: "9999px",
+              width: "36px",
+              height: "36px",
+              opacity: likeActive ? 0.4 : 1,
+              transform: dislikeActive ? "scale(1.1)" : "scale(1)",
+            }}
+            title={
+              dislikeActive ? "Marcado como no útil" : "Respuesta no útil"
+            }
             aria-label="Respuesta no útil"
+            onClick={() => {
+              if (likeActive) return; // si ya marcó 👍 no dejamos marcar 👎
+              if (!dislikeActive) {
+                onFeedback && onFeedback("down");
+              }
+            }}
           >
             <FaRegThumbsDown size={18} />
           </button>
@@ -317,7 +391,6 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
     </div>
   );
 }
-
 /* ============================================================
    💬 UserBubblePremium
    - burbuja marrón del usuario (igual que en el widget flotante)
@@ -831,24 +904,18 @@ export default function LitisBotChatBase({
   expedientes = [],
 }) {
   // ====== ESTADOS ======
-  const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
-  const [mensajes, setMensajes] = useState(() => {
-    const prev = getMessages(casoActivo);
-    if (prev && prev.length) return prev;
-    const bienvenida = pro
-      ? {
-          role: "assistant",
-          content:
-            "Hola. Estoy aquí para ayudarte con consultas jurídicas avanzadas, estrategia procesal y apoyo en audiencias. ¿Cuál es tu caso?",
-        }
-      : {
-          role: "assistant",
-          content:
-            "Hola, soy LitisBot. ¿En qué puedo ayudarte hoy? 👋",
-        };
-    saveMessage(casoActivo, bienvenida);
-    return [bienvenida];
-  });
+const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
+
+const [mensajes, setMensajes] = useState(() => {
+  const prev = getMessages(casoActivo);
+  if (prev && prev.length) {
+    // caso/expediente ya tenía historial guardado
+    return prev;
+  }
+  // caso nuevo → aún no ponemos bienvenida aquí
+  // la bienvenida la sembramos en el useEffect de abajo
+  return [];
+});
 
   const [input, setInput] = useState("");
   const [grabando, setGrabando] = useState(false);
@@ -871,26 +938,23 @@ export default function LitisBotChatBase({
 
   // ====== EFECTOS ======
   useEffect(() => {
-    // recargar historial al cambiar de caso
-    const prev = getMessages(casoActivo);
-    if (prev && prev.length) {
-      setMensajes(prev);
-    } else {
-      const bienvenida = pro
-        ? {
-            role: "assistant",
-            content:
-              "Hola. Estoy aquí para ayudarte con consultas jurídicas avanzadas, estrategia procesal y apoyo en audiencias. ¿Cuál es tu caso?",
-          }
-        : {
-            role: "assistant",
-            content:
-              "Hola, soy LitisBot. ¿En qué puedo ayudarte hoy? 👋",
-          };
-      setMensajes([bienvenida]);
-    }
-    setAdjuntos(getFiles(casoActivo) || []);
-  }, [casoActivo, pro]);
+  // cuando cambias de caso activo (expediente / chat separado)
+  const prev = getMessages(casoActivo);
+
+  if (prev && prev.length) {
+    // ya existe historial guardado para este caso
+    setMensajes(prev);
+  } else {
+    // no hay historial → sembramos mensaje humano inicial según plan pro / básico
+    const bienvenida = pro ? INIT_MSG.pro : INIT_MSG.general;
+
+    setMensajes([bienvenida]);
+    saveMessage(casoActivo, bienvenida);
+  }
+
+  // también cargamos adjuntos guardados para ese caso
+  setAdjuntos(getFiles(casoActivo) || []);
+}, [casoActivo, pro]);
 
   // scroll siempre al último mensaje
   useEffect(() => {
@@ -1248,6 +1312,7 @@ export default function LitisBotChatBase({
                 >
                   <BotBubblePremium
                     msg={m}
+                    feedback={m.feedback} // <--- pásalo
                     onCopy={() => handleCopy(m.content)}
                     onEdit={(nuevo) => handleEdit(i, nuevo)}
                     onFeedback={(type) => handleFeedback(i, type)}

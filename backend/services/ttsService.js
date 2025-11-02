@@ -1,84 +1,85 @@
 // backend/services/ttsService.js
-// Este servicio genera voz (MP3) a partir de texto.
-// Objetivo: devolver Buffer en memoria (sin escribir archivo temporal).
+import { TextEncoder } from "node:util";
 
-// IMPORTANTE:
-// - Aquí debes integrar tu proveedor real de TTS.
-//   Ejemplos reales comunes:
-//   - Google Cloud Text-to-Speech
-//   - Azure Cognitive Services Speech
-//   - ElevenLabs
-//   - Amazon Polly
-//
-// En este esqueleto asumimos que al final obtienes un Buffer de audio MP3.
-
-function limpiarTextoParaLocucion(textoCrudo = "") {
-  return (textoCrudo || "")
-    // elimina etiquetas HTML del mensaje del bot
+/**
+ * Sanitiza texto para SSML: elimina HTML y controla espacios.
+ */
+export function sanitizarTexto(texto = "") {
+  return String(texto)
     .replace(/<[^>]+>/g, " ")
-    // saca instrucciones meta tipo "lee con voz varonil"
-    .replace(/lee con voz varonil[^,.]*/gi, " ")
-    .replace(/habla como abogado varonil[^,.]*/gi, " ")
-    .replace(/con tono varonil[^,.]*/gi, " ")
-    // colapsa espacios múltiples
     .replace(/\s+/g, " ")
     .trim();
 }
 
 /**
- * Genera audio MP3 estilo "abogado varonil, formal y seguro".
- * Devuelve Buffer listo para mandarlo en res.send(...)
- *
- * @param {string} texto Texto legal que quieres leer
- * @returns {Promise<Buffer>} audio MP3
+ * Escapa &, <, >, " y ' para SSML.
  */
-export async function generarVozVaronil(texto = "") {
-  // 1. saneamos el texto
-  const limpio = limpiarTextoParaLocucion(texto);
+function escapeSSML(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
-  // 2. armamos SSML con voz grave, ritmo ligeramente pausado
-  // nota: algunos proveedores aceptan SSML directamente,
-  // otros quieren "texto" y parámetros separados.
-  const ssml = `
-    <speak>
-      <prosody pitch="-4st" rate="92%" volume="+2dB">
-        ${limpio}
-      </prosody>
-    </speak>
-  `.trim();
+/**
+ * Construye SSML con controles de pitch y rate (en semitonos st).
+ */
+function buildSSML(texto, { voice, rate = 0, pitch = 0 }) {
+  return `
+<speak version="1.0" xml:lang="es-ES">
+  <voice name="${voice}">
+    <prosody rate="${rate}st" pitch="${pitch}st">${escapeSSML(texto)}</prosody>
+  </voice>
+</speak>`.trim();
+}
 
-  // 3. Llamada al proveedor real de TTS
-  //
-  // ── EJEMPLO (pseudo-código) ─────────────────────────
-  // const result = await textToSpeechClient.synthesize({
-  //   input: { ssml },                // o { text: limpio } según el provider
-  //   voice: {
-  //     languageCode: "es-PE",        // o "es-ES", etc.
-  //     name: "es-PE-FormalMale",     // voz masculina seria
-  //     gender: "MALE",
-  //   },
-  //   audioConfig: {
-  //     audioEncoding: "MP3",
-  //     speakingRate: 0.92,           // un poco más pausado
-  //     pitch: -4.0,                  // tono más grave
-  //   },
-  // });
-  //
-  // const audioBuffer = result.audioContent; // normalmente viene como Buffer o base64
-  // return audioBuffer;
-  //
-  // ───────────────────────────────────────────────────
+/**
+ * Llama directo a Azure TTS y devuelve un Buffer MP3.
+ * Requiere env: AZURE_SPEECH_REGION, AZURE_SPEECH_KEY, AZURE_SPEECH_VOICE
+ */
+export async function generarVozVaronil(texto = "", opts = {}) {
+  const region = process.env.AZURE_SPEECH_REGION?.trim();
+  const key    = process.env.AZURE_SPEECH_KEY?.trim();
+  const voice  = (opts.voice || process.env.AZURE_SPEECH_VOICE || "es-ES-AlvaroNeural").trim();
 
-  // 4. Mientras no tengamos la voz real conectada:
-  // devolvemos un MP3 falso (silencio / placeholder)
-  // para que el flujo front→back ya funcione sin reventar.
-  //
-  // NOTA: Cambia esto apenas conectes tu TTS real,
-  // porque este "audio" no es reproducible de verdad.
-  const audioBufferFalso = Buffer.from(
-    "SUQzAwAAAAAA...MP3_FAKE...",
-    "base64"
-  );
+  if (!region || !key) {
+    throw new Error("Faltan AZURE_SPEECH_REGION / AZURE_SPEECH_KEY");
+  }
 
-  return audioBufferFalso;
+  const limpio = sanitizarTexto(texto);
+  if (!limpio) throw new Error("Texto vacío");
+
+  // Límite defensivo típico de Azure SSML (~5000 chars)
+  const MAX = Number.parseInt(process.env.AZURE_TTS_MAX_CHARS || "5000", 10);
+  if (limpio.length > MAX) throw new Error(`Texto demasiado largo (máx ${MAX})`);
+
+  const ssml = buildSSML(limpio, {
+    voice,
+    rate: 0,   // ajusta si quieres (-20..20)
+    pitch: 0,  // ajusta si quieres (-20..20)
+  });
+
+  const resp = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+    method: "POST",
+    headers: {
+      "Ocp-Apim-Subscription-Key": key,
+      "Ocp-Apim-Subscription-Region": region, // importante
+      "Content-Type": "application/ssml+xml",
+      "X-Microsoft-OutputFormat": "audio-24khz-160kbitrate-mono-mp3",
+      "User-Agent": "Buholex-TTS",
+    },
+    body: ssml,
+  });
+
+  if (!resp.ok || !/audio\/|octet-stream/i.test(resp.headers.get("content-type") || "")) {
+    const txt = await resp.text().catch(() => "");
+    let detail = txt;
+    try { detail = JSON.parse(txt); } catch {}
+    throw new Error(`Azure TTS falló (${resp.status}): ${typeof detail === "string" ? detail : JSON.stringify(detail)}`);
+  }
+
+  const arr = new Uint8Array(await resp.arrayBuffer());
+  return Buffer.from(arr);
 }

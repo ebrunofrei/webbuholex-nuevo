@@ -1,11 +1,11 @@
-import * as cheerio from "cheerio";
-import { tryFetchHTML, absUrl } from "./_helpers.js";
+﻿import * as cheerio from "cheerio";
+import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
 import { normalizeNoticia } from "./normalizer.js";
 
 export async function fetchJNJ({ max = 10 } = {}) {
   const bases = ["https://www.jnj.gob.pe", "https://jnj.gob.pe"];
   try {
-    const html = await tryFetchHTML(bases.map(b => `${b}/noticias/`));
+    const html = await fetchHTML(bases.map(b => `${b}/noticias/`));
     const base = bases.find(b => html.includes(b.split("//")[1])) || bases[0];
 
     const $ = cheerio.load(html);
@@ -22,7 +22,7 @@ export async function fetchJNJ({ max = 10 } = {}) {
 
     return out;
   } catch (e) {
-    console.error("❌ JNJ:", e.message);
+    console.error("âŒ JNJ:", e.message);
     return [];
   }
 }

@@ -1,87 +1,141 @@
-// ============================================================
-// 🦉 BÚHOLEX | Modelo de Noticia (versión corregida)
-// ============================================================
-// Define el esquema y los índices para noticias en MongoDB.
-// Optimizado para rendimiento sin índices duplicados.
-// ============================================================
-
+// backend/models/Noticia.js
 import mongoose from "mongoose";
+
+// -------------------------------
+// Normalizador para arrays de strings (tema)
+// -------------------------------
+const normArray = (arr) =>
+  Array.from(
+    new Set(
+      (arr || [])
+        .map((s) => String(s || "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
 
 const NoticiaSchema = new mongoose.Schema(
   {
-    titulo: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    resumen: {
+    // ===========================
+    // Contenido principal
+    // ===========================
+    titulo: { type: String, required: true, trim: true },
+    resumen: { type: String, default: "", trim: true },
+    contenido: { type: String, default: "", trim: true },
+
+    // ===========================
+    // Metadatos de procedencia
+    // ===========================
+    fuente: { type: String, default: "", trim: true }, // p.ej. "Poder Judicial"
+    enlace: {
       type: String,
       default: "",
       trim: true,
+      // Útil para evitar duplicados por URL. Sparse para no bloquear docs sin URL.
+      index: { unique: false, sparse: true },
     },
-    contenido: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-    fuente: {
-      type: String,
-      default: "Desconocida",
-      trim: true,
-      index: true, // ✅ deja este, elimina la declaración manual más abajo
-    },
-    url: {
-      type: String,
-      required: true,
-      unique: true, // 🔒 asegura unicidad real
-      trim: true,
-    },
-    imagen: {
-      type: String,
-      default: null,
-    },
+    imagen: { type: String, default: "", trim: true },
+
+    // ===========================
+    // Fechas
+    // ===========================
+    fecha: { type: Date, default: Date.now },
+
+    // ===========================
+    // Claves de filtrado
+    // ===========================
     tipo: {
       type: String,
-      enum: ["juridica", "general", "ciencia", "tecnologia"],
+      enum: ["juridica", "general"],
       default: "general",
+      lowercase: true,
+      trim: true,
       index: true,
     },
+
+    // ⚠️ Para NOTICIAS JURÍDICAS (filtro por especialidad en UI/Oficina Virtual)
     especialidad: {
       type: String,
       default: "general",
+      lowercase: true,
       trim: true,
       index: true,
     },
-    fecha: {
-      type: Date,
-      default: Date.now,
+
+    // ⚠️ Para NOTICIAS GENERALES (botón flotante): temas (array)
+    tema: {
+      type: [String],
+      default: [],
+      set: normArray,
       index: true,
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-      immutable: true,
+
+    lang: {
+      type: String,
+      default: "es",
+      lowercase: true,
+      trim: true,
+      // No añadir otro índice simple; abajo hay compuestos
     },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
+
+    // Compat suave (no se expone): por si el scraper viejo manda 'especialidadSlug'
+    // No se indexa, solo para mapeo en pre-validate.
+    especialidadSlug: { type: String, select: false },
   },
-  {
-    versionKey: false,
-    collection: "noticias",
-  }
+  { timestamps: true }
 );
 
-// 🧠 Índices compuestos optimizados
-NoticiaSchema.index({ tipo: 1, especialidad: 1, fecha: -1 });
-NoticiaSchema.index({ titulo: "text", resumen: "text" }); // 🔍 búsqueda por texto
+/* ======================================
+   Hooks de saneo / compatibilidad
+   ====================================== */
 
-// 🔁 Actualización automática de updatedAt
-NoticiaSchema.pre("save", function (next) {
-  this.updatedAt = new Date();
-  next();
+// Asegura lower/trim y compat con especialidadSlug
+NoticiaSchema.pre("validate", function (next) {
+  // titulo obligatorio ya lo valida Mongoose
+  if (this.fuente) this.fuente = String(this.fuente).trim();
+  if (this.enlace) this.enlace = String(this.enlace).trim();
+
+  // Compat: si llega especialidadSlug y no hay especialidad, mapea
+  if (!this.especialidad && this.especialidadSlug) {
+    this.especialidad = String(this.especialidadSlug).trim().toLowerCase();
+  }
+
+  // Normaliza especialidad
+  if (this.especialidad) {
+    this.especialidad = String(this.especialidad).trim().toLowerCase();
+  }
+
+  // Normaliza lang
+  if (this.lang) {
+    this.lang = String(this.lang).trim().toLowerCase();
+  }
+
+  // Normaliza tema (usa setter, pero por si vienen mutaciones directas)
+  if (Array.isArray(this.tema)) {
+    this.tema = normArray(this.tema);
+  }
+
+  return next();
 });
 
-export const Noticia =
-  mongoose.models.Noticia || mongoose.model("Noticia", NoticiaSchema);
+/* ===========================
+   Índices recomendados
+   =========================== */
+
+// ÚNICO índice de texto (no dupliques). Incluye 'fuente' para búsquedas libres.
+NoticiaSchema.index(
+  { titulo: "text", resumen: "text", contenido: "text", fuente: "text" },
+  { name: "noticia_text_idx" }
+);
+
+// Ordenación frecuente por fecha (y desempate por _id)
+NoticiaSchema.index({ fecha: -1, _id: -1 });
+
+// Compuestos para queries típicas
+NoticiaSchema.index({ tipo: 1, especialidad: 1, fecha: -1 }); // Jurídicas por especialidad
+NoticiaSchema.index({ tipo: 1, fecha: -1 });                   // Listado general por tipo
+NoticiaSchema.index({ fuente: 1, fecha: -1 });                  // Por proveedor/fuente
+NoticiaSchema.index({ tipo: 1, lang: 1, fecha: -1 });           // Filtro por idioma + tipo
+
+// Export seguro (evita recompilar el modelo en hot-reload)
+export default mongoose.models.Noticia ||
+  mongoose.model("Noticia", NoticiaSchema);

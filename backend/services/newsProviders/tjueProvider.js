@@ -1,5 +1,5 @@
-import * as cheerio from "cheerio";
-import { tryFetchHTML, absUrl } from "./_helpers.js";
+﻿import * as cheerio from "cheerio";
+import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
 import { normalizeNoticia } from "./normalizer.js";
 
 export async function fetchTJUE({ max = 10 } = {}) {
@@ -9,7 +9,7 @@ export async function fetchTJUE({ max = 10 } = {}) {
     `${base}/jcms/jcms/P_95680/es/`,    // noticias (alterno)
   ];
   try {
-    const html = await tryFetchHTML(urls);
+    const html = await fetchHTML(urls);
     const $ = cheerio.load(html);
     const out = [];
 
@@ -25,7 +25,7 @@ export async function fetchTJUE({ max = 10 } = {}) {
 
     return out;
   } catch (e) {
-    console.error("❌ TJUE:", e.message);
+    console.error("âŒ TJUE:", e.message);
     return [];
   }
 }

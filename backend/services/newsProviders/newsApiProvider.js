@@ -1,12 +1,12 @@
-import axios from "axios";
+﻿import axios from "axios";
 import { normalizeNoticia } from "./normalizer.js";
 
 export async function fetchNewsAPI({ apiKey, max = 20 } = {}) {
   if (!apiKey || apiKey.length < 8) {
-    console.warn("⚠️ NewsAPI omitido: API key inválida o no configurada.");
+    console.warn("âš ï¸ NewsAPI omitido: API key invÃ¡lida o no configurada.");
     return [];
   }
-  const q = encodeURIComponent("Perú derecho OR tribunal OR corte suprema OR jurisprudencia OR política OR economía OR tecnología");
+  const q = encodeURIComponent("PerÃº derecho OR tribunal OR corte suprema OR jurisprudencia OR polÃ­tica OR economÃ­a OR tecnologÃ­a");
   const url = `https://newsapi.org/v2/top-headlines?q=${q}&language=es&pageSize=${max}&apiKey=${apiKey}`;
   try {
     const { data } = await axios.get(url, { timeout: 20000 });
@@ -23,7 +23,7 @@ export async function fetchNewsAPI({ apiKey, max = 20 } = {}) {
       })
     );
   } catch (e) {
-    console.error("❌ NewsAPI:", e.response?.status || e.message);
+    console.error("âŒ NewsAPI:", e.response?.status || e.message);
     return [];
   }
 }

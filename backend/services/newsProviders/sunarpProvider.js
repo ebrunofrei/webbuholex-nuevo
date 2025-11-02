@@ -1,4 +1,4 @@
-import { fetchRSS } from "./_helpers.js";
+﻿import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
 import { normalizeNoticia } from "./normalizer.js";
 
 export async function fetchSUNARP({ max = 10 } = {}) {
@@ -12,7 +12,7 @@ export async function fetchSUNARP({ max = 10 } = {}) {
       especialidad: "registral",
     }));
   } catch (err) {
-    console.error("❌ Error fetchSUNARP:", err.message);
+    console.error("âŒ Error fetchSUNARP:", err.message);
     return [];
   }
 }

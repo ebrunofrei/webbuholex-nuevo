@@ -1,9 +1,5 @@
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-} from "react";
+// src/components/LitisBotBubbleChat.jsx
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   FaPaperclip,
   FaMicrophone,
@@ -17,9 +13,37 @@ import {
 import litisLogo from "@/assets/litisbot-logo.png";
 
 /* ============================================================
-   🔊 Texto → voz varonil desde backend (POST /voz)
+   ⚙️ Preferencias TTS (voz, velocidad, tono) + storage
 ============================================================ */
-async function reproducirVozServidor(textoPlano) {
+const VOICES = [
+  { id: "es-ES-AlvaroNeural", label: "Álvaro (varón, ES-ES)" },
+  { id: "es-ES-ElviraNeural", label: "Elvira (mujer, ES-ES)" },
+  { id: "es-MX-JorgeNeural", label: "Jorge (varón, ES-MX)" },
+  { id: "es-MX-DaliaNeural", label: "Dalia (mujer, ES-MX)" },
+];
+
+const TTS_STORE_KEY = "ttsPrefs";
+
+function loadTtsPrefs() {
+  try {
+    const raw = localStorage.getItem(TTS_STORE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveTtsPrefs(prefs) {
+  try {
+    localStorage.setItem(TTS_STORE_KEY, JSON.stringify(prefs));
+  } catch {}
+}
+
+/* ============================================================
+   🔊 Texto → voz (POST /api/voz) con preferencias
+============================================================ */
+async function reproducirVozServidor(textoPlano, opts) {
   try {
     const API_BASE =
       import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
@@ -27,17 +51,30 @@ async function reproducirVozServidor(textoPlano) {
     const clean = (textoPlano || "").trim();
     if (!clean) return;
 
+    // Mezcla de preferencias guardadas + overrides recibidos
+    const persisted =
+      loadTtsPrefs() || { voiceId: "es-ES-AlvaroNeural", rate: 1.0, pitch: 0 };
+    const prefs = { ...persisted, ...(opts || {}) };
+
+    // Back acepta: texto, voz, rate, pitch
     const resp = await fetch(`${API_BASE}/voz`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         texto: clean,
-        voz: "masculina_profesional",
+        voz: prefs.voiceId,
+        rate: prefs.rate, // 1.0=100%, 1.15=115% (el back lo normaliza a %)
+        pitch: prefs.pitch, // semitonos (-6..+6)
       }),
     });
 
     if (!resp.ok) {
       console.warn("⚠️ No se pudo generar voz:", resp.status);
+      // Si el backend devolvió JSON de error, para debugging:
+      try {
+        const j = await resp.json();
+        console.warn("Detalle TTS:", j);
+      } catch {}
       return;
     }
 
@@ -49,11 +86,15 @@ async function reproducirVozServidor(textoPlano) {
     audio.onerror = () => URL.revokeObjectURL(url);
 
     await audio.play().catch((e) => {
+      // Autoplay bloqueado: el usuario debe interactuar antes
       console.error("🎧 Error al hacer play():", e);
       URL.revokeObjectURL(url);
+      alert(
+        "Tu navegador bloqueó la reproducción automática. Haz clic nuevamente para escuchar."
+      );
     });
   } catch (err) {
-    console.error("❌ Error en TTS burbuja:", err);
+    console.error("❌ Error en TTS:", err);
   }
 }
 
@@ -68,18 +109,13 @@ function toPlain(html) {
 
 function prepararTextoParaCopia(html) {
   const plano = toPlain(html);
-
-  // normalizar saltos de línea para que el abogado pegue en Word
-  return plano
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return plano.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /* ============================================================
    💬 Mensaje del ASISTENTE (burbuja blanca)
 ============================================================ */
-function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
+function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback, ttsPrefs }) {
   const [editando, setEditando] = useState(false);
   const [editValue, setEditValue] = useState(msg.content || "");
   const [leyendo, setLeyendo] = useState(false);
@@ -88,7 +124,10 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
     if (leyendo) return;
     setLeyendo(true);
     try {
-      await reproducirVozServidor(toPlain(msg.content));
+      const plain = toPlain(msg.content || "");
+      await reproducirVozServidor(plain, ttsPrefs);
+    } catch (err) {
+      console.error("🔇 Error en handleSpeak():", err);
     } finally {
       setLeyendo(false);
     }
@@ -99,14 +138,12 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
     onEdit && onEdit(editValue);
   }
 
-  function handleCopiar() {
-    const limpio = prepararTextoParaCopia(msg.content);
-    navigator.clipboard
-      .writeText(limpio)
-      .then(() => {
-        onCopy && onCopy(limpio);
-      })
-      .catch(() => {});
+  async function handleCopiar() {
+    try {
+      const limpio = prepararTextoParaCopia(msg.content);
+      await navigator.clipboard.writeText(limpio);
+      onCopy && onCopy(limpio);
+    } catch {}
   }
 
   return (
@@ -166,6 +203,7 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
               background: "#5C2E0B",
               color: "#fff",
               opacity: leyendo ? 0.6 : 1,
+              cursor: leyendo ? "not-allowed" : "pointer",
             }}
             aria-label="Leer en voz alta"
             title="Leer en voz alta"
@@ -186,18 +224,18 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
           </button>
 
           {/* editar */}
-            <button
-              style={{ color: "#5C2E0B" }}
-              onClick={() => setEditando(true)}
-              title="Editar borrador"
-              aria-label="Editar"
-            >
-              <FaRegEdit size={18} />
-            </button>
+          <button
+            style={{ color: "#5C2E0B" }}
+            onClick={() => setEditando(true)}
+            title="Editar borrador"
+            aria-label="Editar"
+          >
+            <FaRegEdit size={18} />
+          </button>
 
           {/* like / dislike */}
           <button
-            style={{ color: "#0f5132" }} // verde
+            style={{ color: "#0f5132" }}
             onClick={() => onFeedback && onFeedback("up")}
             title="Respuesta útil"
             aria-label="Respuesta útil"
@@ -206,7 +244,7 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback }) {
           </button>
 
           <button
-            style={{ color: "#842029" }} // rojo
+            style={{ color: "#842029" }}
             onClick={() => onFeedback && onFeedback("down")}
             title="Respuesta no útil"
             aria-label="Respuesta no útil"
@@ -257,9 +295,22 @@ function useIsMobile() {
 }
 
 /* ============================================================
-   🪟 ChatWindow
-   - YA NO está definido dentro del componente principal.
-   - Esto evita el remount constante y mantiene el cursor.
+   🧠 Util: último mensaje relevante del hilo
+============================================================ */
+function obtenerUltimoMensaje(mensajes = []) {
+  if (!mensajes?.length) return "";
+  const asis = [...mensajes]
+    .reverse()
+    .find((m) => m?.role === "assistant" && m?.content?.trim());
+  if (asis?.content) return asis.content.trim();
+  return (
+    [...mensajes].reverse().find((m) => m?.content?.trim())?.content?.trim() ||
+    ""
+  );
+}
+
+/* ============================================================
+   🪟 ChatWindow (no remonta al escribir)
 ============================================================ */
 function ChatWindow({
   isOpen,
@@ -274,23 +325,91 @@ function ChatWindow({
   enviarMensaje,
   setMensajes,
   setIsOpen,
+  ttsPrefs, // <-- nuevas preferencias para voz
+  showTtsCfg,
+  setShowTtsCfg,
+  setTtsPrefs,
 }) {
   if (!isOpen) return null;
 
   const headerBg = "#5C2E0B";
   const headerColor = "#fff";
 
+  // Panel compacto de configuración TTS (voz / velocidad / tono)
+  const PanelTTS = (
+    <>
+      <button
+        className="rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+        style={{ background: "#5C2E0B" }}
+        title="Configurar voz"
+        onClick={() => setShowTtsCfg((v) => !v)}
+      >
+        ⚙️
+      </button>
+
+      {showTtsCfg && (
+        <div
+          className="w-full mt-2 p-3 rounded-lg border text-[14px]"
+          style={{ borderColor: "rgba(92,46,11,0.25)", color: "#5C2E0B" }}
+        >
+          <label className="block mb-2 font-semibold">Voz</label>
+          <select
+            className="w-full border rounded px-2 py-1 mb-3"
+            style={{ borderColor: "rgba(92,46,11,0.3)", color: "#5C2E0B" }}
+            value={ttsPrefs.voiceId}
+            onChange={(e) =>
+              setTtsPrefs((p) => ({ ...p, voiceId: e.target.value }))
+            }
+          >
+            {VOICES.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+
+          <label className="block mb-1 font-semibold">
+            Velocidad: {(ttsPrefs.rate * 100).toFixed(0)}%
+          </label>
+          <input
+            type="range"
+            min="0.5"
+            max="1.5"
+            step="0.05"
+            value={ttsPrefs.rate}
+            onChange={(e) =>
+              setTtsPrefs((p) => ({ ...p, rate: parseFloat(e.target.value) }))
+            }
+            className="w-full mb-3"
+          />
+
+          <label className="block mb-1 font-semibold">
+            Tono: {ttsPrefs.pitch > 0 ? `+${ttsPrefs.pitch}` : ttsPrefs.pitch} st
+          </label>
+          <input
+            type="range"
+            min="-6"
+            max="6"
+            step="1"
+            value={ttsPrefs.pitch}
+            onChange={(e) =>
+              setTtsPrefs((p) => ({ ...p, pitch: parseInt(e.target.value, 10) }))
+            }
+            className="w-full"
+          />
+        </div>
+      )}
+    </>
+  );
+
   /* ============ MODO MÓVIL: fullscreen tipo app de mensajería ============ */
   if (isMobile) {
     return (
       <div
         className="fixed inset-0 z-[9998] flex flex-col bg-white"
-        style={{
-          backgroundColor: "#ffffff",
-          color: "#5C2E0B",
-        }}
+        style={{ backgroundColor: "#ffffff", color: "#5C2E0B" }}
       >
-        {/* Header fijo arriba */}
+        {/* Header */}
         <div
           className="flex items-center justify-between px-3 py-2 shadow-md"
           style={{ background: headerBg, color: headerColor }}
@@ -298,17 +417,9 @@ function ChatWindow({
           <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
             <div
               className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
-              style={{
-                color: "#5C2E0B",
-                fontWeight: "bold",
-                fontSize: "11px",
-              }}
+              style={{ color: "#5C2E0B", fontWeight: "bold", fontSize: "11px" }}
             >
-              <img
-                src={litisLogo}
-                alt="LitisBot"
-                className="w-full h-full object-contain"
-              />
+              <img src={litisLogo} alt="LitisBot" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col leading-tight">
               <span>LitisBot</span>
@@ -328,7 +439,7 @@ function ChatWindow({
           </button>
         </div>
 
-        {/* Mensajes scroll */}
+        {/* Feed */}
         <div
           ref={feedRef}
           className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-3 py-3"
@@ -337,26 +448,20 @@ function ChatWindow({
           <div className="flex flex-col gap-4">
             {mensajes.map((m, idx) =>
               m.role === "assistant" ? (
-                <div
-                  key={idx}
-                  className="flex w-full justify-start text-[#5C2E0B]"
-                >
+                <div key={idx} className="flex w-full justify-start text-[#5C2E0B]">
                   <MensajeBotBubble
                     msg={m}
-                    onCopy={(textoLimpio) => {
-                      // hook de métrica "copiado"
-                      console.log("copiado:", textoLimpio);
-                    }}
-                    onEdit={(nuevo) => {
+                    ttsPrefs={ttsPrefs}
+                    onCopy={() => {}}
+                    onEdit={(nuevo) =>
                       setMensajes((prev) => {
                         const cl = [...prev];
                         cl[idx] = { ...cl[idx], content: nuevo };
                         return cl;
-                      });
-                    }}
+                      })
+                    }
                     onFeedback={(tipo) => {
-                      // hook de métrica feedback
-                      console.log("feedback burbuja", tipo);
+                      console.log("feedback:", tipo);
                     }}
                   />
                 </div>
@@ -382,64 +487,73 @@ function ChatWindow({
           </div>
         </div>
 
-        {/* Barra fija abajo */}
-        <div
-          className="flex items-end gap-3 px-3 py-3 border-t"
-          style={{
-            borderColor: "rgba(92,46,11,0.2)",
-            backgroundColor: "#ffffff",
-            flexShrink: 0,
-          }}
-        >
-          {/* Adjuntar (placeholder visual) */}
+        {/* Acciones sobre el feed */}
+        <div className="px-3 pb-1">
           <button
-            className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+            className="text-white px-3 py-2 rounded-md"
             style={{ background: "#5C2E0B" }}
-            title="Adjuntar archivo"
-          >
-            <FaPaperclip size={18} />
-          </button>
-
-          {/* Área de texto controlada */}
-          <textarea
-            className="
-              flex-1 bg-transparent outline-none border rounded-lg
-              text-[15px] leading-relaxed text-[#5C2E0B]
-              max-h-[160px] overflow-y-auto px-3 py-2
-            "
-            style={{
-              borderColor: "rgba(92,46,11,0.2)",
-              minHeight: "48px",
-              backgroundColor: "#ffffff",
+            onClick={async () => {
+              const texto = obtenerUltimoMensaje(mensajes);
+              if (!texto) return;
+              const div = document.createElement("div");
+              div.innerHTML = texto;
+              const plain = div.textContent || div.innerText || texto;
+              await reproducirVozServidor(plain, ttsPrefs);
             }}
-            placeholder="Escribe tu consulta legal…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={2}
-          />
-
-          {/* Mic (placeholder visual) */}
-          <button
-            className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
-            style={{ background: "#5C2E0B" }}
-            title="Dictado por voz"
+            title="Leer el último mensaje del hilo"
           >
-            <FaMicrophone size={18} />
+            🔊 Leer último
           </button>
+        </div>
 
-          {/* Enviar */}
-          <button
-            className={`flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform ${
-              !input.trim() || cargando ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-            style={{ background: "#5C2E0B" }}
-            disabled={!input.trim() || cargando}
-            onClick={enviarMensaje}
-            title="Enviar"
-          >
-            <FaPaperPlane size={18} />
-          </button>
+        {/* Input */}
+        <div
+          className="flex flex-col gap-2 px-3 py-3 border-t"
+          style={{ borderColor: "rgba(92,46,11,0.2)", backgroundColor: "#ffffff" }}
+        >
+          {/* Panel TTS */}
+          <div className="flex items-center gap-2">{PanelTTS}</div>
+
+          {/* Barra de redacción */}
+          <div className="flex items-end gap-3">
+            <button
+              className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+              style={{ background: "#5C2E0B" }}
+              title="Adjuntar archivo"
+            >
+              <FaPaperclip size={18} />
+            </button>
+
+            <textarea
+              className="flex-1 bg-transparent outline-none border rounded-lg text-[15px] leading-relaxed text-[#5C2E0B] max-h-[160px] overflow-y-auto px-3 py-2"
+              style={{ borderColor: "rgba(92,46,11,0.2)", minHeight: "48px", backgroundColor: "#ffffff" }}
+              placeholder="Escribe tu consulta legal…"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={2}
+            />
+
+            <button
+              className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+              style={{ background: "#5C2E0B" }}
+              title="Dictado por voz"
+            >
+              <FaMicrophone size={18} />
+            </button>
+
+            <button
+              className={`flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform ${
+                !input.trim() || cargando ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              style={{ background: "#5C2E0B" }}
+              disabled={!input.trim() || cargando}
+              onClick={enviarMensaje}
+              title="Enviar"
+            >
+              <FaPaperPlane size={18} />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -453,38 +567,25 @@ function ChatWindow({
         borderColor: "rgba(92,46,11,0.3)",
         backgroundColor: "#ffffff",
         color: "#5C2E0B",
-        bottom: "96px", // deja espacio sobre botón Noticias
+        bottom: "96px",
         right: "24px",
         width: "460px",
         maxHeight: "80vh",
       }}
     >
-      {/* Header marrón */}
-      <div
-        className="flex items-center justify-between px-4 py-3"
-        style={{ background: headerBg, color: headerColor }}
-      >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: headerBg, color: headerColor }}>
         <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
           <div
             className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
-            style={{
-              color: "#5C2E0B",
-              fontWeight: "bold",
-              fontSize: "11px",
-            }}
+            style={{ color: "#5C2E0B", fontWeight: "bold", fontSize: "11px" }}
           >
-            <img
-              src={litisLogo}
-              alt="LitisBot"
-              className="w-full h-full object-contain"
-            />
+            <img src={litisLogo} alt="LitisBot" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col leading-tight">
             <span>LitisBot</span>
             <span className="text-[11px] font-normal opacity-80">
-              {pro
-                ? "Acceso Pro • Estrategia legal avanzada"
-                : "Asistencia básica"}
+              {pro ? "Acceso Pro • Estrategia legal avanzada" : "Asistencia básica"}
             </span>
           </div>
         </div>
@@ -499,34 +600,24 @@ function ChatWindow({
         </button>
       </div>
 
-      {/* Lista de mensajes */}
-      <div
-        ref={feedRef}
-        className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-4 py-4"
-        style={{ backgroundColor: "#ffffff" }}
-      >
+      {/* Feed */}
+      <div ref={feedRef} className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-4 py-4" style={{ backgroundColor: "#ffffff" }}>
         <div className="flex flex-col gap-4">
           {mensajes.map((m, idx) =>
             m.role === "assistant" ? (
-              <div
-                key={idx}
-                className="flex w-full justify-start text-[#5C2E0B]"
-              >
+              <div key={idx} className="flex w-full justify-start text-[#5C2E0B]">
                 <MensajeBotBubble
                   msg={m}
-                  onCopy={(textoLimpio) => {
-                    console.log("copiado:", textoLimpio);
-                  }}
-                  onEdit={(nuevo) => {
+                  ttsPrefs={ttsPrefs}
+                  onCopy={() => {}}
+                  onEdit={(nuevo) =>
                     setMensajes((prev) => {
                       const cl = [...prev];
                       cl[idx] = { ...cl[idx], content: nuevo };
                       return cl;
-                    });
-                  }}
-                  onFeedback={(tipo) => {
-                    console.log("feedback burbuja", tipo);
-                  }}
+                    })
+                  }
+                  onFeedback={(tipo) => console.log("feedback:", tipo)}
                 />
               </div>
             ) : (
@@ -551,68 +642,73 @@ function ChatWindow({
         </div>
       </div>
 
-      {/* Footer de redacción */}
-      <div
-        className="flex items-end gap-3 px-4 py-3 border-t"
-        style={{
-          borderColor: "rgba(92,46,11,0.2)",
-          backgroundColor: "#ffffff",
-          flexShrink: 0,
-        }}
-      >
-        {/* Adjuntar */}
+      {/* Acciones sobre el feed */}
+      <div className="px-4 pb-2">
         <button
-          className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+          className="text-white px-3 py-2 rounded-md"
           style={{ background: "#5C2E0B" }}
-          title="Adjuntar archivo"
-        >
-          <FaPaperclip size={18} />
-        </button>
-
-        {/* Textarea amplia y cómoda */}
-        <textarea
-          className="
-            flex-1 bg-transparent outline-none border rounded-lg
-            text-[15px] leading-relaxed text-[#5C2E0B]
-            max-h-[160px] overflow-y-auto px-3 py-2
-          "
-          style={{
-            borderColor: "rgba(92,46,11,0.2)",
-            minHeight: "48px",
-            backgroundColor: "#ffffff",
+          onClick={async () => {
+            const texto = obtenerUltimoMensaje(mensajes);
+            if (!texto) return;
+            const div = document.createElement("div");
+            div.innerHTML = texto;
+            const plain = div.textContent || div.innerText || texto;
+            await reproducirVozServidor(plain, ttsPrefs);
           }}
-          placeholder={
-            pro
-              ? "Formula tu consulta jurídica avanzada…"
-              : "Escribe tu consulta legal…"
-          }
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={2}
-        />
-
-        {/* Mic (placeholder) */}
-        <button
-          className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
-          style={{ background: "#5C2E0B" }}
-          title="Dictado por voz"
+          title="Leer el último mensaje del hilo"
         >
-          <FaMicrophone size={18} />
+          🔊 Leer último
         </button>
+      </div>
 
-        {/* Enviar */}
-        <button
-          className={`flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform ${
-            !input.trim() || cargando ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-          style={{ background: "#5C2E0B" }}
-          disabled={!input.trim() || cargando}
-          onClick={enviarMensaje}
-          title="Enviar"
-        >
-          <FaPaperPlane size={18} />
-        </button>
+      {/* Footer */}
+      <div
+        className="flex flex-col gap-2 px-4 py-3 border-t"
+        style={{ borderColor: "rgba(92,46,11,0.2)", backgroundColor: "#ffffff", flexShrink: 0 }}
+      >
+        {/* Panel TTS */}
+        <div className="flex items-center gap-2">{PanelTTS}</div>
+
+        {/* Barra de redacción */}
+        <div className="flex items-end gap-3">
+          <button
+            className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+            style={{ background: "#5C2E0B" }}
+            title="Adjuntar archivo"
+          >
+            <FaPaperclip size={18} />
+          </button>
+
+          <textarea
+            className="flex-1 bg-transparent outline-none border rounded-lg text-[15px] leading-relaxed text-[#5C2E0B] max-h-[160px] overflow-y-auto px-3 py-2"
+            style={{ borderColor: "rgba(92,46,11,0.2)", minHeight: "48px", backgroundColor: "#ffffff" }}
+            placeholder={pro ? "Formula tu consulta jurídica avanzada…" : "Escribe tu consulta legal…"}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={2}
+          />
+
+          <button
+            className="flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
+            style={{ background: "#5C2E0B" }}
+            title="Dictado por voz"
+          >
+            <FaMicrophone size={18} />
+          </button>
+
+          <button
+            className={`flex items-center justify-center rounded-full w-10 h-10 text-white active:scale-95 transition-transform ${
+              !input.trim() || cargando ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+            style={{ background: "#5C2E0B" }}
+            disabled={!input.trim() || cargando}
+            onClick={enviarMensaje}
+            title="Enviar"
+          >
+            <FaPaperPlane size={18} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -624,34 +720,28 @@ function ChatWindow({
 export default function LitisBotBubbleChat({ usuarioId, pro }) {
   const isMobile = useIsMobile();
 
-  // abrir / cerrar ventana de chat
   const [isOpen, setIsOpen] = useState(false);
-
-  // input del usuario
   const [input, setInput] = useState("");
-
-  // flag de request en curso
   const [cargando, setCargando] = useState(false);
 
-  // historial mínimo
+  // TTS prefs con persistencia
+  const [showTtsCfg, setShowTtsCfg] = useState(false);
+  const [ttsPrefs, setTtsPrefs] = useState(
+    () => loadTtsPrefs() || { voiceId: "es-ES-AlvaroNeural", rate: 1.0, pitch: 0 }
+  );
+  useEffect(() => saveTtsPrefs(ttsPrefs), [ttsPrefs]);
+
   const [mensajes, setMensajes] = useState([
-    {
-      role: "assistant",
-      content:
-        "Hola, soy LitisBot. ¿En qué puedo ayudarte hoy? 👋",
-    },
+    { role: "assistant", content: "Hola, soy LitisBot. ¿En qué puedo ayudarte hoy? 👋" },
   ]);
 
-  // autoscroll al final cuando llegan mensajes nuevos
   const feedRef = useRef(null);
   useEffect(() => {
-    if (feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
-    }
+    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [mensajes, isOpen]);
 
-  /* ---------------- Drag del botón flotante (solo desktop) ---------------- */
-  const [pos, setPos] = useState({ x: null, y: null }); // posición manual
+  // Drag del botón (desktop)
+  const [pos, setPos] = useState({ x: null, y: null });
   const dragRef = useRef(null);
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -662,10 +752,7 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
       dragging.current = true;
       const rect = dragRef.current?.getBoundingClientRect();
       if (!rect) return;
-      dragOffset.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
+      dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       e.preventDefault();
     },
     [isMobile]
@@ -695,14 +782,13 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     };
   }, [isMobile, onMouseMove, onMouseUp]);
 
-  /* ---------------- Enviar mensaje al backend ---------------- */
+  // Enviar mensaje
   async function enviarMensaje() {
     if (!input.trim() || cargando) return;
     const pregunta = input.trim();
     setInput("");
     setCargando(true);
 
-    // pinta usuario + placeholder del bot
     setMensajes((prev) => [
       ...prev,
       { role: "user", content: pregunta },
@@ -719,7 +805,6 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
         expedienteId: "burbuja",
         idioma: "es-PE",
         pais: "Perú",
-        // si pro === true podrías pasar { modo: "pro" } para lógica premium
       };
 
       const resp = await fetch(`${API_BASE}/ia/chat`, {
@@ -730,44 +815,25 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
 
       const data = await resp.json();
 
-      // reemplazar "Espera un momento…" por la respuesta final
       setMensajes((prev) => {
-        const temp = [...prev];
-        if (
-          temp.length > 0 &&
-          temp[temp.length - 1].role === "assistant" &&
-          temp[temp.length - 1].content === "Espera un momento…"
-        ) {
-          temp.pop();
-        }
-
-        temp.push({
+        const tmp = [...prev];
+        if (tmp.at(-1)?.role === "assistant" && tmp.at(-1)?.content === "Espera un momento…") tmp.pop();
+        tmp.push({
           role: "assistant",
-          content:
-            data?.respuesta ||
-            "No pude generar respuesta. ¿Quieres intentar de nuevo?",
+          content: data?.respuesta || "No pude generar respuesta. ¿Quieres intentar de nuevo?",
         });
-
-        return temp;
+        return tmp;
       });
     } catch (err) {
       console.error("❌ Error burbuja:", err);
-
       setMensajes((prev) => {
-        const temp = [...prev];
-        if (
-          temp.length > 0 &&
-          temp[temp.length - 1].role === "assistant" &&
-          temp[temp.length - 1].content === "Espera un momento…"
-        ) {
-          temp.pop();
-        }
-        temp.push({
+        const tmp = [...prev];
+        if (tmp.at(-1)?.role === "assistant" && tmp.at(-1)?.content === "Espera un momento…") tmp.pop();
+        tmp.push({
           role: "assistant",
-          content:
-            "Hubo un problema procesando tu consulta. Intenta nuevamente en un momento.",
+          content: "Hubo un problema procesando tu consulta. Intenta nuevamente en un momento.",
         });
-        return temp;
+        return tmp;
       });
     } finally {
       setCargando(false);
@@ -781,20 +847,12 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     }
   }
 
-  /* ---------------- FAB flotante (botón redondo con logo) ---------------- */
   const bubbleStyleDesktop =
-    pos.x !== null && pos.y !== null
-      ? { left: pos.x, top: pos.y }
-      : { bottom: "24px", right: "24px" };
-
-  const bubbleStyleMobile = {
-    bottom: "96px", // levantado para no chocar con "Noticias"
-    right: "16px",
-  };
+    pos.x !== null && pos.y !== null ? { left: pos.x, top: pos.y } : { bottom: "24px", right: "24px" };
+  const bubbleStyleMobile = { bottom: "96px", right: "16px" };
 
   return (
     <>
-      {/* Ventana del chat (card desktop / fullscreen móvil) */}
       <ChatWindow
         isOpen={isOpen}
         isMobile={isMobile}
@@ -808,35 +866,21 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
         enviarMensaje={enviarMensaje}
         setMensajes={setMensajes}
         setIsOpen={setIsOpen}
+        ttsPrefs={ttsPrefs}
+        showTtsCfg={showTtsCfg}
+        setShowTtsCfg={setShowTtsCfg}
+        setTtsPrefs={setTtsPrefs}
       />
 
-      {/* Botón flotante circular */}
+      {/* FAB */}
       <div
         ref={dragRef}
-        className={`
-          fixed z-[9999] flex items-center justify-center
-          rounded-full shadow-xl border bg-white
-          cursor-pointer select-none
-          active:scale-95 transition-transform
-          animate-[pulse_2s_ease-in-out_infinite]
-        `}
-        style={{
-          borderColor: "rgba(92,46,11,0.3)",
-          width: "60px",
-          height: "60px",
-          ...(isMobile ? bubbleStyleMobile : bubbleStyleDesktop),
-        }}
+        className="fixed z-[9999] flex items-center justify-center rounded-full shadow-xl border bg-white cursor-pointer select-none active:scale-95 transition-transform animate-[pulse_2s_ease-in-out_infinite]"
+        style={{ borderColor: "rgba(92,46,11,0.3)", width: "60px", height: "60px", ...(isMobile ? bubbleStyleMobile : bubbleStyleDesktop) }}
         onMouseDown={onMouseDownBubble}
-        onClick={() => {
-          setIsOpen(true);
-        }}
+        onClick={() => setIsOpen(true)}
       >
-        <img
-          src={litisLogo}
-          alt="LitisBot"
-          className="w-11 h-11 object-contain"
-          draggable={false}
-        />
+        <img src={litisLogo} alt="LitisBot" className="w-11 h-11 object-contain" draggable={false} />
       </div>
     </>
   );

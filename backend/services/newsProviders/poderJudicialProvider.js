@@ -1,7 +1,7 @@
-import puppeteer from "puppeteer-extra";
+﻿import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { Noticia } from "../../models/Noticia.js";
-import { normalizeNoticia } from "./normalizer.js"; // ← usar tu normalizer unificado
+import { normalizeNoticia } from "./normalizer.js"; // â† usar tu normalizer unificado
 
 puppeteer.use(StealthPlugin());
 
@@ -26,7 +26,7 @@ async function autoScroll(page) {
 export async function fetchPoderJudicial({ max = 10 } = {}) {
   let browser;
   try {
-    console.log("⚖️ Iniciando scraping Poder Judicial...");
+    console.log("âš–ï¸ Iniciando scraping Poder Judicial...");
 
     browser = await puppeteer.launch({
       headless: "new",
@@ -67,7 +67,7 @@ export async function fetchPoderJudicial({ max = 10 } = {}) {
       })
     );
 
-    console.log(`📊 Noticias PJ capturadas: ${noticias.length}`);
+    console.log(`ðŸ“Š Noticias PJ capturadas: ${noticias.length}`);
 
     let guardadas = 0;
     for (const n of noticias.slice(0, max)) {
@@ -79,19 +79,19 @@ export async function fetchPoderJudicial({ max = 10 } = {}) {
         );
         guardadas++;
       } catch (err) {
-        console.error(`⚠️ Error guardando noticia PJ: ${n.titulo}`, err.message);
+        console.error(`âš ï¸ Error guardando noticia PJ: ${n.titulo}`, err.message);
       }
     }
 
-    console.log(`📥 Noticias PJ guardadas en MongoDB: ${guardadas}`);
+    console.log(`ðŸ“¥ Noticias PJ guardadas en MongoDB: ${guardadas}`);
     return noticias.slice(0, max);
   } catch (err) {
-    console.error("❌ Error fetchPoderJudicial:", err.message);
+    console.error("âŒ Error fetchPoderJudicial:", err.message);
     return [];
   } finally {
     if (browser) await browser.close();
   }
 }
 
-// ✅ Alias para coincidir con importaciones antiguas y nuevas
+// âœ… Alias para coincidir con importaciones antiguas y nuevas
 export { fetchPoderJudicial as fetchNoticiasPJ, fetchPoderJudicial as fetchPJ };

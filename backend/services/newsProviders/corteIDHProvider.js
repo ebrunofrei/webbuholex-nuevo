@@ -1,4 +1,4 @@
-import { fetchHTML, absUrl } from "./_helpers.js";
+﻿import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
 import * as cheerio from "cheerio";
 import { normalizeNoticia } from "./normalizer.js";
 
@@ -17,7 +17,7 @@ export async function fetchCorteIDH({ max = 10 } = {}) {
       if (titulo && enlace) {
         noticias.push(normalizeNoticia({
           titulo,
-          resumen: "Documento jurídico / fallo reciente",
+          resumen: "Documento jurÃ­dico / fallo reciente",
           url: enlace,
           fuente: "Corte IDH",
           tipo: "juridica",
@@ -26,10 +26,10 @@ export async function fetchCorteIDH({ max = 10 } = {}) {
       }
     });
 
-    console.log(`⚖️ Corte IDH: ${noticias.length} documentos detectados`);
+    console.log(`âš–ï¸ Corte IDH: ${noticias.length} documentos detectados`);
     return noticias;
   } catch (err) {
-    console.error("❌ Error fetchCorteIDH:", err.message);
+    console.error("âŒ Error fetchCorteIDH:", err.message);
     return [];
   }
 }

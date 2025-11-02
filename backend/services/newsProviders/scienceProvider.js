@@ -1,4 +1,4 @@
-import { fetchRSS } from "./_helpers.js";
+﻿import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
 import { normalizeNoticia } from "./normalizer.js";
 
 export async function fetchScienceNews({ max = 10 } = {}) {

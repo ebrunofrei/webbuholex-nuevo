@@ -1,4 +1,4 @@
-import { fetchRSS } from "./_helpers.js";
+﻿import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
 import { normalizeNoticia } from "./normalizer.js";
 
 export async function fetchOnuNoticias({ max = 10 } = {}) {
@@ -12,7 +12,7 @@ export async function fetchOnuNoticias({ max = 10 } = {}) {
       especialidad: "internacional",
     }));
   } catch (err) {
-    console.error("❌ Error fetchOnuNoticias:", err.message);
+    console.error("âŒ Error fetchOnuNoticias:", err.message);
     return [];
   }
 }

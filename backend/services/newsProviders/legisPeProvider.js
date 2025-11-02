@@ -1,8 +1,8 @@
-import axios from "axios";
+﻿import axios from "axios";
 import * as cheerio from "cheerio";
 
 /**
- * Clasificador de especialidad según keywords
+ * Clasificador de especialidad segÃºn keywords
  */
 function detectEspecialidad(texto = "") {
   const lower = texto.toLowerCase();
@@ -13,9 +13,9 @@ function detectEspecialidad(texto = "") {
   if (lower.includes("constitucional")) return "constitucional";
   if (lower.includes("familiar")) return "familiar";
   if (lower.includes("administrativo")) return "administrativo";
-  if (lower.includes("filosofía") || lower.includes("filosofia")) return "filosofia";
-  if (lower.includes("sociología") || lower.includes("sociologia")) return "sociologia";
-  if (lower.includes("política") || lower.includes("politica")) return "politica";
+  if (lower.includes("filosofÃ­a") || lower.includes("filosofia")) return "filosofia";
+  if (lower.includes("sociologÃ­a") || lower.includes("sociologia")) return "sociologia";
+  if (lower.includes("polÃ­tica") || lower.includes("politica")) return "politica";
 
   return "general";
 }
@@ -23,7 +23,7 @@ function detectEspecialidad(texto = "") {
 /**
  * Scraping de noticias desde Legis.pe
  * @param {Object} opts
- * @param {number} opts.max - máximo de noticias
+ * @param {number} opts.max - mÃ¡ximo de noticias
  */
 export async function fetchLegisPe({ max = 20 } = {}) {
   const url = "https://legis.pe/categorias/noticias/";
@@ -55,7 +55,7 @@ export async function fetchLegisPe({ max = 20 } = {}) {
       });
     });
   } catch (err) {
-    console.error("❌ Error en fetchLegisPe:", err.message);
+    console.error("âŒ Error en fetchLegisPe:", err.message);
   }
 
   return results;

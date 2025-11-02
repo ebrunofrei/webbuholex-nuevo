@@ -1,221 +1,275 @@
-// ============================================================
-// 🦉 BÚHOLEX | Noticias Jurídicas Inteligentes
-// ============================================================
-// UI/UX original (el que te mostraba cards) + mejoras puntuales:
-//  - Normalizador universal (soporta {ok,items}, {data}, array puro)
-//  - Fetch con AbortController y compatibilidad de params
-//  - Manejo de especialidad "todas" (no manda el query si es "todas")
-//  - Fallback de imágenes y modal lector
-// ============================================================
-
+/* ============================================================
+   🦉 BÚHOLEX | Noticias Jurídicas Inteligentes (Oficina Virtual)
+   - Sidebar de chips en desktop; carrusel en móvil/tablet
+   - Filtros robustos (alias) y degradación si el backend no etiqueta
+   - Paginación real; diagnóstico rápido en consola
+   - Lector unificado (ReaderModal) con contenido completo
+   ============================================================ */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNoticiasGuardadas } from "@/oficinaVirtual/hooks/useNoticiasGuardadas";
-import { asAbsoluteUrl } from "@/utils/apiUrl";
+import ReaderModal from "@/components/ui/ReaderModal";
+import {
+  API_BASE,
+  getNoticiasRobust,
+  getEspecialidades,
+  proxifyMedia,
+  clearNoticiasCache,
+} from "@/services/noticiasClientService"; // lista/alias/utils
+// (El ReaderModal gestiona la extracción completa con getContenidoNoticia)
 
-// === CONFIG API ===
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ||
-  "https://buholex-news-proxy-production.up.railway.app/api";
-
+/* ----------------------- Config ----------------------- */
 const PAGE_SIZE = 12;
-
-// === ESPECIALIDADES ===
-const AREAS = [
-  "todas",
-  "penal",
-  "civil",
-  "laboral",
-  "constitucional",
-  "familiar",
-  "administrativo",
-];
-const AREAS_LABEL = {
-  todas: "Todas",
-  penal: "Penal",
-  civil: "Civil",
-  laboral: "Laboral",
-  constitucional: "Constitucional",
-  familiar: "Familiar",
-  administrativo: "Administrativo",
-};
-const OTRAS = [
-  "comercial",
-  "tributario",
-  "procesal",
-  "registral",
-  "ambiental",
-  "notarial",
-  "penitenciario",
-  "consumidor",
-  "seguridad social",
-];
-const AFINES = [
-  "jurisprudencia",
-  "doctrina",
-  "procesal",
-  "reformas",
-  "precedente",
-  "casación",
-  "tribunal constitucional",
-];
-
-// === MEDIOS ===
 const FALLBACK_IMG = "/assets/default-news.jpg";
 
-// --- Normalizador universal (para backend unificado y APIs antiguas) ---
-const normalize = (data) => {
-  if (!data) return [];
-  const arr = Array.isArray(data)
-    ? data
-    : Array.isArray(data.items)
-    ? data.items
-    : Array.isArray(data.result)
-    ? data.result
-    : [];
+/* Chips base */
+const CHIPS_JURIDICAS_FALLBACK = [
+  "todas","penal","civil","laboral","constitucional","familiar","administrativo",
+  "comercial","tributario","procesal","registral","ambiental","notarial",
+  "penitenciario","consumidor","seguridad social",
+];
+const CHIPS_GENERALES_FALLBACK = [
+  "todas","política","economía","sociedad","ciencia","tecnología","corrupción","internacional",
+];
+const OTRAS = ["comercial","tributario","procesal","registral","ambiental","notarial","penitenciario","consumidor","seguridad social"];
+const AFINES = ["jurisprudencia","doctrina","procesal","reformas","precedente","casación","tribunal constitucional"];
 
-  return arr.map((n, i) => ({
-    id: n._id || n.id || i,
-    titulo: n.titulo || n.title || "Sin título",
-    resumen: n.resumen || n.description || n.extracto || "Sin resumen disponible.",
-    contenido: n.contenido || n.content || n.texto || n.body || "",
-    imagen: n.imagen || n.image || n.imageUrl || FALLBACK_IMG,
-    enlace: n.enlace || n.url || "",
-    fuente: n.fuente || n.source || "Fuente desconocida",
-    fecha: n.fecha || n.date || n.publishedAt || n.createdAt || null,
-    especialidad: n.especialidad || n.area || "general",
-    tipo: n.tipo || "general",
-  }));
+/* ----------------------- Utils ----------------------- */
+const norm = (s) => (s ?? "").toString().normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
+const ALIAS = {
+  tc: "constitucional",
+  "tribunal constitucional": "constitucional",
+  tribunalconst: "constitucional",
+  proceso: "procesal",
+  procedimiento: "procesal",
+  regístral: "registral",
+  seguridadsocial: "seguridad social",
+  "derechos humanos": "constitucional", 
+  internacional: "constitucional",
+};
+const mapAlias = (s) => ALIAS[norm(s)] || norm(s);
+
+const CHIP_PRIORITY = [
+  "todas","penal","civil","laboral","constitucional","familiar","administrativo",
+  "comercial","tributario","procesal","registral","ambiental","notarial",
+  "penitenciario","consumidor","seguridad social",
+];
+const sortChips = (arr) => {
+  const idx = (v) => CHIP_PRIORITY.indexOf(v);
+  return [...arr].filter(Boolean).sort((a,b)=>{
+    const ia=idx(a), ib=idx(b);
+    if (ia!==-1 || ib!==-1) return (ia===-1?999:ia)-(ib===-1?999:ib);
+    return a.localeCompare(b,"es");
+  });
+};
+const pretty = (s) => {
+  const m = String(s||"").toLowerCase();
+  if (m==="tc") return "TC";
+  if (m==="seguridad social") return "Seguridad social";
+  return m.charAt(0).toUpperCase()+m.slice(1);
+};
+const chipClass = (active) =>
+  `px-3 py-1.5 rounded-full border text-sm font-semibold shrink-0 transition
+   ${active
+     ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow-[0_2px_10px_rgba(176,58,26,.25)]"
+     : "text-[#4a2e23] border-[#e7d4c8] bg-white hover:bg-[#fff2ea]"}`;
+
+const matchEspecialidad = (needle, valorTexto) => {
+  if (!needle || needle==="todas") return true;
+  const n = (needle||"").toLowerCase();
+  const v = (valorTexto||"").toLowerCase();
+  const mapa = {
+    procesal: ["proceso","procesal","procedimiento"],
+    "seguridad social": ["seguridad social","previsional"],
+    constitucional: ["constitucional","tc","tribunal constitucional"],
+    notarial: ["notarial","notario"],
+    registral: ["registral","sunarp","registro"],
+    penal: ["penal","delito","fiscal","juzgado penal","mp"],
+    civil: ["civil","contrato","propiedad","obligaciones"],
+    laboral: ["laboral","trabajador","sindicato","mintra"],
+    administrativo: ["administrativo","resolución","expediente","procedimiento adm."],
+  };
+  return (mapa[n]||[]).some(k=>v.includes(k));
 };
 
-export default function NoticiasOficina() {
-  const { guardadas /*, guardarNoticia, quitarNoticia*/ } = useNoticiasGuardadas();
+const mediaSrc = (url) => {
+  if (!url) return FALLBACK_IMG;
+  if (/^\/(assets|uploads)\//i.test(url)) return url;     // locales
+  if (/^https?:\/\//i.test(url)) return proxifyMedia(url); // absolutas → proxy anti-403
+  return FALLBACK_IMG;
+};
 
-  // === Filtros ===
-  const [tipo, setTipo] = useState("juridica");
+/* ======================= Componente ======================= */
+export default function NoticiasOficina() {
+  /* filtros */
+  const [tipo, setTipo] = useState("juridica");  // "juridica" | "general"
   const [especialidad, setEspecialidad] = useState("todas");
-  const [tema, setTema] = useState("");
+  const [tema, setTema] = useState("");          // chips “afines”
   const [mostrarOtras, setMostrarOtras] = useState(false);
   const [q, setQ] = useState("");
 
-  // === Datos ===
+  /* chips */
+  const [chips, setChips] = useState(CHIPS_JURIDICAS_FALLBACK);
+
+  /* datos */
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const abortRef = useRef(null);
-
-  // === Modal lector ===
+  /* lector */
   const [open, setOpen] = useState(false);
   const [sel, setSel] = useState(null);
-  const shellRef = useRef(null);
 
-  // --- Fetch con compatibilidad total ---
+  /* diagnóstico */
+  const [lastUrl, setLastUrl] = useState("");
+  const [lastErr, setLastErr] = useState("");
+
+  const abortRef = useRef(null);
+
+  /* ---- Carga chips por tipo ---- */
+  useEffect(() => {
+    setEspecialidad("todas");
+    setTema("");
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
+
+    if (tipo === "general") {
+      setChips(CHIPS_GENERALES_FALLBACK);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getEspecialidades({ tipo: "juridica", providers: "all" });
+        const fromApi = Array.isArray(list)
+          ? list
+              .map(x => String(x?.key || x).trim().toLowerCase())
+              .filter(k => k && k!=="todas" && k!=="general")
+          : [];
+        const merged = Array.from(new Set(["todas", ...CHIP_PRIORITY.filter(k=>"todas"!==k), ...fromApi]));
+        if (!cancelled) setChips(merged);
+      } catch {
+        if (!cancelled) setChips(CHIPS_JURIDICAS_FALLBACK);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tipo]);
+
+  /* ---- Fetch noticias ---- */
   async function fetchNoticias(reset = false) {
+    if (loading) return;
+    setLoading(true);
+    setLastErr("");
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      if (loading) return;
-      setLoading(true);
+      const nextPage = reset ? 1 : page;
 
-      if (abortRef.current) abortRef.current.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
+      const params = {
+        tipo,
+        page: nextPage,
+        limit: PAGE_SIZE,
+        // En jurídicas, filtramos por especialidad (salvo "todas")
+        especialidad: tipo === "juridica" && especialidad !== "todas" ? especialidad : undefined,
+        // Tema (chips afines) via q para ambos tipos; si está vacío, no lo enviamos
+        q: tema || undefined,
+        signal: controller.signal,
+      };
 
-      const next = reset ? 1 : page;
+      // Diagnóstico URL (sin undefined/false/vacíos)
+      const qs = new URLSearchParams(
+        Object.entries(params).reduce((acc,[k,v])=>{
+          if (v !== undefined && v !== null && v !== "" && v !== false) acc[k] = String(v);
+          return acc;
+        }, {})
+      ).toString();
+      setLastUrl(`${API_BASE}/noticias?${qs}`);
 
-      // Solo añadimos parámetros que realmente tienen valor
-      const params = new URLSearchParams();
-      if (tipo) params.set("tipo", tipo);
-      if (especialidad && especialidad !== "todas") params.set("especialidad", especialidad);
-      if (tema) params.set("tema", tema);
-      params.set("page", String(next));
-      params.set("limit", String(PAGE_SIZE));
+      const { items: nuevos, pagination } = await getNoticiasRobust(params);
+      const base = Array.isArray(nuevos) ? nuevos : [];
 
-      const url = `${API_BASE}/noticias?${params.toString()}`;
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Filtro de degradación si el backend no etiqueta
+      const esc = mapAlias(especialidad);
+      const filtrados =
+        tipo === "general" || esc === "todas"
+          ? base
+          : base.filter((n) => {
+              const bag = new Set(
+                []
+                  .concat(n?.especialidades || [], n?.etiquetas || [], n?.tags || [])
+                  .map(mapAlias)
+              );
+              if (bag.has(esc)) return true;
+              const texto = `${n?.titulo||""} ${n?.resumen||""} ${n?.fuente||""}`;
+              return matchEspecialidad(esc, texto);
+            });
 
-      const json = await res.json();
-      if (import.meta.env.MODE !== "production") {
-        console.log("🧠 Datos API:", json);
+      setItems((prev) => (reset ? filtrados : [...prev, ...filtrados]));
+      setPage(nextPage + 1);
+
+      if (pagination && typeof pagination.nextPage !== "undefined") {
+        setHasMore(Boolean(pagination.nextPage));
+      } else {
+        setHasMore(base.length >= PAGE_SIZE);
       }
 
-      // Compatibilidad asegurada
-      const data = json?.items || json?.data || json || [];
-      const nuevos = normalize(data);
-
-      setItems((prev) => (reset ? nuevos : [...prev, ...nuevos]));
-      setPage(next + 1);
-      setHasMore(nuevos.length === PAGE_SIZE);
+      if (reset) {
+        console.log("[Noticias OV] tipo=", tipo,
+          "| especialidad=", especialidad,
+          "| tema(q)=", tema,
+          "| page=", nextPage,
+          "| recibidas=", base.length,
+          "| mostradas=", filtrados.length);
+      }
     } catch (e) {
-      if (e.name !== "AbortError") console.error("❌ Error noticias:", e);
+      if (e?.name !== "AbortError") {
+        console.error("❌ Error noticias OV:", e?.message || e);
+        setLastErr(e?.message || String(e));
+      }
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
   }
 
-  // === Reload al cambiar filtros ===
+  /* ---- Recargas por filtro ---- */
   useEffect(() => {
-    setItems([]);
-    setPage(1);
-    setHasMore(true);
-    fetchNoticias(true);
+    // limpiar cache suave ante cambios fuertes
+    clearNoticiasCache?.();
+    setItems([]); setPage(1); setHasMore(true);
+    abortRef.current?.abort();
+    const t = setTimeout(() => fetchNoticias(true), 80);
+    return () => { clearTimeout(t); abortRef.current?.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, especialidad, tema]);
 
-  // === Filtro local (buscador) ===
+  /* ---- Buscador local ---- */
   const filtradas = useMemo(() => {
-    const text = q.trim().toLowerCase();
+    const text = (q || "").trim().toLowerCase();
     if (!text) return items;
-    return items.filter(
-      (n) =>
-        n.titulo.toLowerCase().includes(text) ||
-        (n.resumen || "").toLowerCase().includes(text) ||
-        (n.fuente || "").toLowerCase().includes(text)
-    );
+    return items.filter((n) => {
+      const t = (n?.titulo || "").toLowerCase();
+      const r = (n?.resumen || "").toLowerCase();
+      const f = (n?.fuente || "").toLowerCase();
+      return t.includes(text) || r.includes(text) || f.includes(text);
+    });
   }, [items, q]);
 
-  const savedSet = useMemo(
-    () => new Set((guardadas || []).map((x) => x?._id || x?.id).filter(Boolean)),
-    [guardadas]
-  );
+  /* ---- Lector ---- */
+  const openReader = (n) => { setSel(n); setOpen(true); };
+  const closeReader = () => { setOpen(false); setSel(null); };
 
-  // === Helpers ===
-  const mediaSrc = (url) => {
-    if (!url) return FALLBACK_IMG;
-    // Si ya es local, úsala
-    if (/^\/(assets|uploads)\//.test(url)) return url;
-    // HTTP directo; si 403, cae al onError
-    if (/^https?:\/\//i.test(url)) return url;
-    return FALLBACK_IMG;
-  };
-
-  // === Modal ===
-  const openReader = (n) => {
-    setSel(n);
-    setOpen(true);
-    shellRef.current?.classList.add("overflow-hidden");
-  };
-  const closeReader = () => {
-    setOpen(false);
-    setSel(null);
-    shellRef.current?.classList.remove("overflow-hidden");
-  };
-
-  // === RENDER ===
+  /* ======================= UI ======================= */
   return (
-    <div
-      ref={shellRef}
-      className="relative h-[calc(100vh-80px)] bg-[#fffaf6] rounded-2xl border border-[#f1e5dc] shadow-[0_6px_32px_-10px_rgba(176,58,26,0.08)] overflow-hidden"
-    >
-      <div className="grid grid-rows-[auto,1fr] h-full">
-        {/* HEADER */}
-        <header className="sticky top-0 z-10 bg-[#fff6ef]/95 backdrop-blur px-4 sm:px-6 pt-6 pb-3 border-b border-[#f1e5dc]">
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-center text-[#b03a1a]">
-            Noticias Jurídicas Inteligentes
-          </h2>
-
-          {/* Tipo de noticias */}
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
+    <div className="relative h-[calc(100vh-80px)] bg-[#fffaf6] rounded-2xl border border-[#f1e5dc] shadow-[0_6px_32px_-10px_rgba(176,58,26,0.08)]">
+      <div className="h-full grid md:grid-cols-[240px,1fr]">
+        {/* Sidebar desktop */}
+        <aside className="hidden md:block border-r border-[#f1e5dc] p-4 overflow-y-auto">
+          <div className="flex gap-2 mb-3">
             {[
               { key: "juridica", label: "Jurídicas" },
               { key: "general", label: "Generales" },
@@ -223,75 +277,59 @@ export default function NoticiasOficina() {
               <button
                 key={t.key}
                 onClick={() => setTipo(t.key)}
-                className={`px-4 py-2 rounded-full font-semibold transition ${
-                  tipo === t.key
-                    ? "bg-[#b03a1a] text-white"
-                    : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
+                className={`px-3 py-1.5 rounded-full font-semibold transition ${
+                  tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
                 }`}
               >
                 {t.label}
               </button>
             ))}
-            <button
-              onClick={() => setMostrarOtras((v) => !v)}
-              className="px-4 py-2 rounded-full font-semibold bg-white text-[#b03a1a] border border-[#e7d4c8]"
-            >
-              {mostrarOtras ? "Ocultar especialidades" : "Otras especialidades"}
-            </button>
           </div>
 
-          {/* Especialidades principales */}
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {AREAS.map((a) => (
+          <h4 className="text-xs font-bold text-[#4a2e23] mb-2">Especialidades</h4>
+          <div className="flex flex-col gap-2">
+            {sortChips(chips).map((a) => (
               <button
                 key={a}
                 onClick={() => setEspecialidad(a)}
-                className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition ${
-                  especialidad === a
-                    ? "bg-[#b03a1a] text-white"
-                    : "text-[#4a2e23] border-[#e7d4c8] bg-white"
-                }`}
+                className={chipClass(especialidad === a)}
               >
-                {AREAS_LABEL[a]}
+                {pretty(a)}
               </button>
             ))}
           </div>
 
-          {/* Otras especialidades */}
-          {mostrarOtras && (
-            <div className="mt-2 flex flex-wrap justify-center gap-2">
-              {OTRAS.map((o) => (
-                <button
-                  key={o}
-                  onClick={() => setEspecialidad(o)}
-                  className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition ${
-                    especialidad === o
-                      ? "bg-[#b03a1a] text-white"
-                      : "text-[#4a2e23] border-[#e7d4c8] bg-white"
-                  }`}
-                >
-                  {o[0].toUpperCase() + o.slice(1)}
-                </button>
-              ))}
-            </div>
+          {tipo === "juridica" && (
+            <>
+              <div className="h-px bg-[#f1e5dc] my-3" />
+              <button
+                onClick={() => setMostrarOtras((v) => !v)}
+                className="px-3 py-1.5 rounded-full font-semibold bg-white text-[#b03a1a] border border-[#e7d4c8] w-full"
+              >
+                {mostrarOtras ? "Ocultar otras" : "Otras especialidades"}
+              </button>
+              {mostrarOtras && (
+                <div className="mt-2 flex flex-col gap-2">
+                  {sortChips(OTRAS).map((o) => (
+                    <button
+                      key={o}
+                      onClick={() => setEspecialidad(o)}
+                      className={chipClass(especialidad === o)}
+                    >
+                      {pretty(o)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
-          {/* Temas afines */}
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            <span className="text-sm font-semibold text-[#4a2e23] mr-1">
-              Temas afines:
-            </span>
+          <div className="h-px bg-[#f1e5dc] my-3" />
+          <h4 className="text-xs font-bold text-[#4a2e23] mb-2">Temas afines</h4>
+          <div className="flex flex-wrap gap-2">
             {AFINES.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTema(t)}
-                className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition ${
-                  tema === t
-                    ? "bg-[#b03a1a] text-white"
-                    : "text-[#4a2e23] border-[#e7d4c8] bg-white"
-                }`}
-              >
-                {t[0].toUpperCase() + t.slice(1)}
+              <button key={t} onClick={() => setTema(t)} className={chipClass(tema === t)}>
+                {pretty(t)}
               </button>
             ))}
             {tema && (
@@ -304,168 +342,152 @@ export default function NoticiasOficina() {
             )}
           </div>
 
-          {/* Buscador */}
-          <div className="mt-4 max-w-2xl mx-auto">
+          {/* Diagnóstico rápido */}
+          <details className="mt-4">
+            <summary className="text-xs text-[#8a6e60] cursor-pointer">Diagnóstico</summary>
+            <div className="mt-1 text-[11px] text-[#6b4d3e] break-words">
+              <div><b>API_BASE:</b> {API_BASE}</div>
+              <div><b>URL:</b> {lastUrl || "—"}</div>
+              {lastErr && <div className="text-red-600"><b>Error:</b> {lastErr}</div>}
+            </div>
+          </details>
+        </aside>
+
+        {/* Contenido */}
+        <main className="overflow-y-auto">
+          {/* Header móvil */}
+          <header className="md:hidden sticky top-0 z-10 bg-[#fff6ef]/95 backdrop-blur px-3 pt-3 pb-2 border-b border-[#f1e5dc]">
+            <div className="flex gap-2 mb-2">
+              {[
+                { key: "juridica", label: "Jurídicas" },
+                { key: "general", label: "Generales" },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTipo(t.key)}
+                  className={`px-3 py-1.5 rounded-full font-semibold transition ${
+                    tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div id="chips-scroll" className="flex gap-2 overflow-x-auto no-scrollbar">
+              {sortChips(chips).map((a) => (
+                <button
+                  key={a}
+                  onClick={() => setEspecialidad(a)}
+                  className={chipClass(especialidad === a)}
+                >
+                  {pretty(a)}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <span className="text-xs font-semibold text-[#4a2e23] shrink-0">Afines:</span>
+              {AFINES.map((t) => (
+                <button key={t} onClick={() => setTema(t)} className={chipClass(tema === t)}>
+                  {pretty(t)}
+                </button>
+              ))}
+              {tema && (
+                <button
+                  onClick={() => setTema("")}
+                  className="px-3 py-1.5 rounded-full text-sm font-semibold text-[#b03a1a] bg-white border border-[#e7d4c8] shrink-0"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+
+            <div className="mt-2">
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar en los resultados…"
+                className="w-full px-3 py-2 rounded-xl border border-[#e7d4c8] outline-none bg-white"
+              />
+            </div>
+          </header>
+
+          {/* Barra de búsqueda desktop */}
+          <div className="hidden md:block px-5 pt-5">
             <input
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar en los resultados..."
-              className="w-full px-4 py-2 rounded-xl border border-[#e7d4c8] outline-none bg-white"
+              placeholder="Buscar en los resultados…"
+              className="w-full max-w-3xl px-4 py-2 rounded-xl border border-[#e7d4c8] outline-none bg-white"
             />
           </div>
-        </header>
 
-        {/* LISTADO */}
-        <section className="overflow-y-auto px-4 sm:px-6 py-6 no-scrollbar">
-          {loading && items.length === 0 ? (
-            <p className="text-center text-gray-500">Cargando noticias…</p>
-          ) : filtradas.length === 0 ? (
-            <p className="text-center text-[#b03a1a] font-semibold">
-              No hay noticias en esta especialidad.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filtradas.map((n) => (
-                <article
-                  key={n.id}
-                  className="rounded-xl bg-white border border-[#f1e5dc] shadow-sm hover:shadow-md overflow-hidden cursor-pointer transition-all"
-                  onClick={() => openReader(n)}
-                >
-                  {/* Imagen */}
-                  <div className="relative aspect-[16/9] bg-[#f6f2ee]">
-                    <img
-                      src={mediaSrc(n.imagen)}
-                      alt={n.titulo}
-                      className="w-full h-full object-cover"
-                      onError={(e) => (e.currentTarget.src = FALLBACK_IMG)}
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white px-3 py-2 text-sm line-clamp-2">
-                      {n.titulo}
+          {/* Lista */}
+          <section className="px-3 sm:px-5 py-5">
+            {loading && items.length === 0 ? (
+              <p className="text-center text-gray-500">Cargando noticias…</p>
+            ) : filtradas.length === 0 ? (
+              <p className="text-center text-[#b03a1a] font-semibold">
+                No hay noticias en esta especialidad.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                {filtradas.map((n, i) => (
+                  <article
+                    key={n.id || n._id || n.enlace || `${n.titulo}#${i}`}
+                    className="rounded-xl bg-white border border-[#f1e5dc] shadow-sm hover:shadow-md overflow-hidden cursor-pointer transition"
+                    onClick={() => openReader(n)}
+                    title="Abrir lector"
+                  >
+                    <div className="relative aspect-[16/9] bg-[#f6f2ee]">
+                      <img
+                        src={mediaSrc(n.imagen)}
+                        alt={n.titulo || "Noticia"}
+                        className="w-full h-full object-cover"
+                        onError={(e) => (e.currentTarget.src = FALLBACK_IMG)}
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white px-3 py-2 text-sm line-clamp-2">
+                        {n.titulo || "(Sin título)"}
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Contenido */}
-                  <div className="p-3">
-                    <p className="text-sm text-[#6b4d3e] line-clamp-5">
-                      {n.resumen}
-                    </p>
-                    <div className="mt-3 flex justify-between text-xs text-[#8a6e60]">
-                      <span>{n.fuente}</span>
-                      {n.fecha && (
-                        <time>{new Date(n.fecha).toLocaleDateString()}</time>
+                    <div className="p-3">
+                      {(n.resumen || n.description) && (
+                        <p className="text-sm text-[#6b4d3e] line-clamp-5">
+                          {n.resumen || n.description}
+                        </p>
                       )}
+                      <div className="mt-3 flex justify-between text-xs text-[#8a6e60]">
+                        <span className="truncate">{n.fuente || n.source || "—"}</span>
+                        {n.fecha && <time>{new Date(n.fecha).toLocaleDateString("es-PE")}</time>}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+                  </article>
+                ))}
+              </div>
+            )}
 
-          {/* Cargar más */}
-          {hasMore && (
-            <div className="mt-8 flex justify-center">
-              <button
-                disabled={loading}
-                onClick={() => fetchNoticias(false)}
-                className="px-5 py-2 rounded-lg bg-[#b03a1a] text-white font-semibold disabled:opacity-60 hover:bg-[#a87247]"
-              >
-                {loading ? "Cargando…" : "Cargar más"}
-              </button>
-            </div>
-          )}
-        </section>
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  disabled={loading}
+                  onClick={() => fetchNoticias(false)}
+                  className="px-5 py-2 rounded-lg bg-[#b03a1a] text-white font-semibold disabled:opacity-60 hover:bg-[#a63a1e]"
+                >
+                  {loading ? "Cargando…" : "Cargar más"}
+                </button>
+              </div>
+            )}
+          </section>
+        </main>
       </div>
 
-      {/* MODAL LECTOR */}
-      {open && sel && (
-        <div
-          className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-3"
-          role="dialog"
-          aria-modal="true"
-          onClick={closeReader}
-        >
-          <div
-            className="w-full max-w-5xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header modal */}
-            <div className="sticky top-0 bg-[#b03a1a] text-white px-4 sm:px-6 py-3 flex items-start gap-3">
-              <h3 className="text-base sm:text-lg font-bold leading-snug">
-                {sel.titulo}
-              </h3>
-              <button
-                onClick={closeReader}
-                className="ml-auto text-white text-xl font-bold leading-none"
-                aria-label="Cerrar"
-              >
-                ×
-              </button>
-            </div>
+      {/* Lector unificado */}
+      <ReaderModal open={open} item={sel} onClose={closeReader} />
 
-            {/* Body con scroll */}
-            <div className="overflow-y-auto max-h-[calc(90vh-56px)]">
-              {sel.imagen && (
-                <img
-                  src={mediaSrc(sel.imagen)}
-                  alt={sel.titulo}
-                  className="w-full object-contain max-h-[60vh] bg-[#f6f2ee]"
-                  onError={(e) => (e.currentTarget.src = FALLBACK_IMG)}
-                />
-              )}
-
-              <div className="px-4 sm:px-6 py-4">
-                <div className="text-sm text-[#6b4d3e] flex flex-wrap gap-3 mb-4">
-                  {sel.fuente && (
-                    <span>
-                      Fuente:{" "}
-                      <span className="font-semibold">{sel.fuente}</span>
-                    </span>
-                  )}
-                  {sel.fecha && (
-                    <span>{new Date(sel.fecha).toLocaleString()}</span>
-                  )}
-                </div>
-
-                <div className="prose max-w-none text-[#3a2a24]">
-                  {sel.contenido ? (
-                    <div dangerouslySetInnerHTML={{ __html: sel.contenido }} />
-                  ) : (
-                    <p className="whitespace-pre-line">{sel.resumen}</p>
-                  )}
-                </div>
-
-                <div className="mt-6 flex gap-3">
-                  {sel.enlace && /^https?:\/\//.test(sel.enlace) && (
-                    <a
-                      href={sel.enlace}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-[#b03a1a] text-white px-4 py-2 rounded-lg font-semibold hover:bg-[#a87247]"
-                    >
-                      Ver en fuente
-                    </a>
-                  )}
-                  <button
-                    onClick={closeReader}
-                    className="px-4 py-2 rounded-lg border font-semibold text-[#8a6e60]"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-
-                <p className="mt-4 text-xs text-[#8a6e60]">
-                  Publicado y adaptado por el equipo jurídico de{" "}
-                  <strong>BúhoLex</strong>.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* util: oculta/estiliza scrollbar (opcional) */}
       <style>{`
         .no-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
         .no-scrollbar::-webkit-scrollbar-thumb { background: #e6d9cf; border-radius: 8px; }

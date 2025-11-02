@@ -1,15 +1,15 @@
-// ============================================================
-// 🦉 BÚHOLEX | Normalizador universal de noticias (versión PRO)
+﻿// ============================================================
+// ðŸ¦‰ BÃšHOLEX | Normalizador universal de noticias (versiÃ³n PRO)
 // ============================================================
 // Convierte las distintas estructuras de scraping en un formato
 // unificado compatible con MongoDB y el frontend.
 // - Genera siempre resumen y contenido legibles
-// - Clasifica automáticamente la especialidad y el tipo
-// - Limpia HTML, espacios, y normaliza mayúsculas
+// - Clasifica automÃ¡ticamente la especialidad y el tipo
+// - Limpia HTML, espacios, y normaliza mayÃºsculas
 // ============================================================
 
 /**
- * 🧹 Limpieza básica de texto HTML y espacios
+ * ðŸ§¹ Limpieza bÃ¡sica de texto HTML y espacios
  */
 function limpiarTexto(txt = "") {
   if (!txt) return "";
@@ -20,7 +20,7 @@ function limpiarTexto(txt = "") {
 }
 
 /**
- * 🔍 Clasifica especialidad según palabras clave del texto
+ * ðŸ” Clasifica especialidad segÃºn palabras clave del texto
  */
 export function detectEspecialidad(texto = "") {
   const lower = limpiarTexto(texto).toLowerCase();
@@ -41,7 +41,7 @@ export function detectEspecialidad(texto = "") {
     return "familiar";
   if (
     lower.includes("administrativo") ||
-    lower.includes("resolución") ||
+    lower.includes("resoluciÃ³n") ||
     lower.includes("expediente administrativo")
   )
     return "administrativo";
@@ -54,11 +54,11 @@ export function detectEspecialidad(texto = "") {
   if (lower.includes("tributario") || lower.includes("impuesto"))
     return "tributario";
   if (
-    lower.includes("tecnología") ||
+    lower.includes("tecnologÃ­a") ||
     lower.includes("digital") ||
     lower.includes("ciber") ||
     lower.includes("internet") ||
-    lower.includes("innovación")
+    lower.includes("innovaciÃ³n")
   )
     return "tecnologia";
 
@@ -66,8 +66,8 @@ export function detectEspecialidad(texto = "") {
 }
 
 /**
- * 🔹 Normaliza una sola noticia
- * Aplica formato, limpieza y detección inteligente de campos.
+ * ðŸ”¹ Normaliza una sola noticia
+ * Aplica formato, limpieza y detecciÃ³n inteligente de campos.
  */
 export function normalizeNoticia({
   id,
@@ -81,12 +81,12 @@ export function normalizeNoticia({
   tipo = "",
   especialidad = "",
 } = {}) {
-  // 🧼 Limpieza y seguridad básica
-  titulo = limpiarTexto(titulo) || "Sin título";
+  // ðŸ§¼ Limpieza y seguridad bÃ¡sica
+  titulo = limpiarTexto(titulo) || "Sin tÃ­tulo";
   resumen = limpiarTexto(resumen);
   contenido = limpiarTexto(contenido);
 
-  // 🧩 Fallbacks inteligentes
+  // ðŸ§© Fallbacks inteligentes
   if (!resumen || resumen.length < 25) {
     resumen = contenido ? contenido.slice(0, 280) + "..." : "Sin resumen disponible.";
   }
@@ -94,12 +94,12 @@ export function normalizeNoticia({
     contenido = resumen || "Sin contenido disponible.";
   }
 
-  // 🖼️ Imagen fallback
+  // ðŸ–¼ï¸ Imagen fallback
   if (!imagen || typeof imagen !== "string" || imagen.length < 5) {
     imagen = "/assets/default-news.jpg";
   }
 
-  // 🏛️ Clasificación automática del tipo (jurídica o general)
+  // ðŸ›ï¸ ClasificaciÃ³n automÃ¡tica del tipo (jurÃ­dica o general)
   const lowerFuente = (fuente || "").toLowerCase().trim();
 
   const fuentesJuridicas = [
@@ -107,9 +107,9 @@ export function normalizeNoticia({
     "tribunal constitucional",
     "sunarp",
     "jnj",
-    "gaceta jurídica",
+    "gaceta jurÃ­dica",
     "legis.pe",
-    "ministerio público",
+    "ministerio pÃºblico",
     "corte suprema",
     "corte idh",
     "cij",
@@ -122,7 +122,7 @@ export function normalizeNoticia({
   const fuentesGenerales = [
     "bbc",
     "cnn",
-    "el país",
+    "el paÃ­s",
     "reuters",
     "science news",
     "cybersecurity",
@@ -134,19 +134,19 @@ export function normalizeNoticia({
     "guardian",
   ];
 
-  // Clasificación principal por fuente
+  // ClasificaciÃ³n principal por fuente
   if (fuentesJuridicas.some((f) => lowerFuente.includes(f))) {
     tipo = "juridica";
   } else if (fuentesGenerales.some((f) => lowerFuente.includes(f))) {
     tipo = "general";
   } else if (!tipo) {
-    // Clasificación secundaria por palabras clave del contenido
+    // ClasificaciÃ³n secundaria por palabras clave del contenido
     const lowerContenido = `${titulo} ${resumen} ${contenido}`.toLowerCase();
     if (
       lowerContenido.includes("sentencia") ||
       lowerContenido.includes("jurisprudencia") ||
-      lowerContenido.includes("resolución") ||
-      lowerContenido.includes("fiscalía") ||
+      lowerContenido.includes("resoluciÃ³n") ||
+      lowerContenido.includes("fiscalÃ­a") ||
       lowerContenido.includes("magistrado")
     ) {
       tipo = "juridica";
@@ -155,7 +155,7 @@ export function normalizeNoticia({
     }
   }
 
-  // ⚖️ Especialidad automática (si no viene asignada)
+  // âš–ï¸ Especialidad automÃ¡tica (si no viene asignada)
   const especialidadDetectada =
     especialidad && especialidad !== "general"
       ? especialidad
@@ -176,7 +176,7 @@ export function normalizeNoticia({
 }
 
 /**
- * 🔹 Normaliza un array completo de noticias
+ * ðŸ”¹ Normaliza un array completo de noticias
  */
 export function normalizeNoticias(lista = []) {
   return lista

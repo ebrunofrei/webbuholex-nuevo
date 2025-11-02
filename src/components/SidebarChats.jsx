@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+// src/components/SidebarChats.jsx
+
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   FaHome,
   FaPlus,
@@ -10,14 +17,19 @@ import {
   FaTimes,
 } from "react-icons/fa";
 
-// Utils para ID único
+/* -------------------------------------------------
+   Util: ID único cortito
+------------------------------------------------- */
 function uuid() {
-  return "_" + Math.random().toString(36).substr(2, 9);
+  return "_" + Math.random().toString(36).slice(2, 11);
 }
 
-// Modal genérico reutilizable
+/* -------------------------------------------------
+   Modal genérico reutilizable
+------------------------------------------------- */
 function Modal({ open, onClose, children }) {
   if (!open) return null;
+
   return (
     <div
       className="fixed inset-0 z-[400] flex items-center justify-center bg-black/40"
@@ -42,28 +54,93 @@ function Modal({ open, onClose, children }) {
   );
 }
 
+/* -------------------------------------------------
+   Helpers de storage con protección SSR
+------------------------------------------------- */
+function safeGetItem(key, fallback = null) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeSetItem(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* swallow */
+  }
+}
+
 /**
- * SidebarChats
- *
- * - En DESKTOP (lg+): sidebar fijo de 300px siempre visible
- * - En MÓVIL (<lg): se muestra como UNA PANTALLA COMPLETA modal (tipo hoja)
- *   que cubre todo, con su propio header "Mis casos" + botón "X".
- *
- * Props importantes:
- *   isOpen (bool)        -> solo relevante en móvil
- *   onCloseSidebar()     -> cerrar en móvil
+ * Carga array JSON del storage. Si está corrupto => []
  */
+function loadJsonArray(key) {
+  const raw = safeGetItem(key, "[]");
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Migra claves legacy a las nuevas con namespace de usuario,
+ * SOLO si las nuevas aún no existen.
+ */
+function migrateLegacyStorage({ CASOS_KEY, ACTIVO_KEY }) {
+  const oldCasosKey = "litisbot_casos";
+  const oldActivoKey = "litisbot_caso_activo";
+
+  const yaTieneNuevos =
+    safeGetItem(CASOS_KEY) !== null ||
+    safeGetItem(ACTIVO_KEY) !== null;
+
+  if (yaTieneNuevos) return;
+
+  const legacyCasos = safeGetItem(oldCasosKey);
+  const legacyActivo = safeGetItem(oldActivoKey);
+
+  if (legacyCasos) {
+    safeSetItem(CASOS_KEY, legacyCasos);
+    // borramos legacy
+    safeSetItem(oldCasosKey, "");
+    window.localStorage.removeItem(oldCasosKey);
+  }
+
+  if (legacyActivo) {
+    safeSetItem(ACTIVO_KEY, legacyActivo);
+    safeSetItem(oldActivoKey, "");
+    window.localStorage.removeItem(oldActivoKey);
+  }
+}
+
+/* -------------------------------------------------
+   SidebarChats
+   - Desktop (lg+): fijo a la izquierda
+   - Mobile (<lg): pantalla completa tipo drawer
+------------------------------------------------- */
 export default function SidebarChats({
   user = { nombre: "Invitado", pro: false, uid: "" },
+
+  // setters que le contamos al padre
   setCasos: setCasosProp,
   setCasoActivo: setCasoActivoProp,
+
+  // abre el modal de herramientas globales
   onOpenHerramientas,
-  isOpen = true, // quién controla si el sheet móvil está visible
-  onCloseSidebar, // cerrar en móvil
+
+  // visibilidad en mobile
+  isOpen = true,
+  onCloseSidebar,
 }) {
-  /* ============================================================
-     Claves de almacenamiento (aisladas por usuario)
-  ============================================================ */
+  /* -------------------------------------------------
+     Namespacing por usuario para localStorage
+  ------------------------------------------------- */
   const ns = useMemo(
     () => (user?.uid ? `litisbot:${user.uid}` : "litisbot:anon"),
     [user?.uid]
@@ -71,142 +148,191 @@ export default function SidebarChats({
   const CASOS_KEY = `${ns}:casos`;
   const ACTIVO_KEY = `${ns}:caso_activo`;
 
-  // Estado inicial seguro (evita localStorage en SSR)
+  /* -------------------------------------------------
+     Estado principal
+  ------------------------------------------------- */
   const [casos, setCasos] = useState([]);
   const [casoActivo, setCasoActivo] = useState("");
 
-  // Estados internos de UI
-  const [modalNuevo, setModalNuevo] = useState(false);
-  const [nombreNuevo, setNombreNuevo] = useState("");
+  // UI state interno
+  const [modalCrearCaso, setModalCrearCaso] = useState(false);
+  const [nombreNuevoCaso, setNombreNuevoCaso] = useState("");
+
   const [editId, setEditId] = useState("");
   const [editNombre, setEditNombre] = useState("");
+
   const [deleteId, setDeleteId] = useState("");
-  const [deleteFinal, setDeleteFinal] = useState(false);
+  const [deleteDefinitivo, setDeleteDefinitivo] = useState(false);
 
-  /* ============================================================
-     Carga inicial + migración de storage (solo cliente)
-  ============================================================ */
+  /* -------------------------------------------------
+     Carga inicial en cliente + migración
+  ------------------------------------------------- */
   useEffect(() => {
-    try {
-      const guardados = JSON.parse(localStorage.getItem(CASOS_KEY) || "[]");
-      setCasos(guardados);
-    } catch {
-      setCasos([]);
-    }
+    // migración legacy -> nuevas keys
+    migrateLegacyStorage({ CASOS_KEY, ACTIVO_KEY });
 
-    const activo = localStorage.getItem(ACTIVO_KEY);
-    if (activo) setCasoActivo(activo);
+    // cargar casos guardados
+    const guardados = loadJsonArray(CASOS_KEY);
+    setCasos(guardados);
 
-    // Migración de claves antiguas
-    const oldCasos = localStorage.getItem("litisbot_casos");
-    const oldActivo = localStorage.getItem("litisbot_caso_activo");
-    if (oldCasos && !localStorage.getItem(CASOS_KEY)) {
-      localStorage.setItem(CASOS_KEY, oldCasos);
-      localStorage.removeItem("litisbot_casos");
-    }
-    if (oldActivo && !localStorage.getItem(ACTIVO_KEY)) {
-      localStorage.setItem(ACTIVO_KEY, oldActivo);
-      localStorage.removeItem("litisbot_caso_activo");
+    // cargar caso activo
+    const activoGuardado = safeGetItem(ACTIVO_KEY, "");
+    if (activoGuardado) {
+      setCasoActivo(activoGuardado);
     }
   }, [CASOS_KEY, ACTIVO_KEY]);
 
-  /* ============================================================
-     Persistencia reactiva + sync hacia el padre
-  ============================================================ */
+  /* -------------------------------------------------
+     Persistencia reactiva hacia localStorage
+     + sincronizar hacia el padre
+  ------------------------------------------------- */
   useEffect(() => {
-    if (casos.length) {
-      localStorage.setItem(CASOS_KEY, JSON.stringify(casos));
-      setCasosProp?.(casos);
-    }
+    // persistimos cambios de la lista de casos
+    safeSetItem(CASOS_KEY, JSON.stringify(casos));
+    // avisamos al padre
+    setCasosProp?.(casos);
   }, [casos, CASOS_KEY, setCasosProp]);
 
   useEffect(() => {
-    if (casoActivo) {
-      localStorage.setItem(ACTIVO_KEY, casoActivo);
-      setCasoActivoProp?.(casoActivo);
-    }
+    // persistimos el ID del caso activo
+    safeSetItem(ACTIVO_KEY, casoActivo);
+    // avisamos al padre
+    setCasoActivoProp?.(casoActivo);
   }, [casoActivo, ACTIVO_KEY, setCasoActivoProp]);
 
-  // Asegura caso activo válido
+  /* -------------------------------------------------
+     Garantizar que el casoActivo siempre apunte a uno válido.
+     - si borro uno, o lo mando a papelera, el activo debe moverse
+  ------------------------------------------------- */
   useEffect(() => {
+    // no hay casos en absoluto
     if (!casos.length) {
       if (casoActivo) setCasoActivo("");
       return;
     }
-    const existe = casos.some((c) => c.id === casoActivo && !c.papelera);
-    if (!existe) {
-      const primero = casos.find((c) => !c.papelera);
-      if (primero) setCasoActivo(primero.id);
+
+    // si el activo actual no existe o está en papelera => elegir otro
+    const sigueSiendoValido = casos.some(
+      (c) => c.id === casoActivo && !c.papelera
+    );
+
+    if (!sigueSiendoValido) {
+      const firstDisponible = casos.find((c) => !c.papelera);
+      if (firstDisponible) {
+        setCasoActivo(firstDisponible.id);
+      } else {
+        setCasoActivo("");
+      }
     }
   }, [casos, casoActivo]);
 
-  /* ============================================================
-     Acciones sobre casos
-  ============================================================ */
-  function handleNuevoChat(e) {
-    e.preventDefault();
-    const nuevo = {
-      id: uuid(),
-      nombre: (nombreNuevo || "").trim() || "Nuevo caso",
-      papelera: false,
-      creadoEn: Date.now(),
-    };
-    setCasos((prev) => [nuevo, ...prev]);
-    setCasoActivo(nuevo.id);
-    setNombreNuevo("");
-    setModalNuevo(false);
-    onCloseSidebar?.(); // en móvil cerramos "pantalla"
-  }
+  /* -------------------------------------------------
+     Acciones de negocio
+  ------------------------------------------------- */
 
-  function handleRenombrar(id, nuevoNombre) {
-    const name = (nuevoNombre || "").trim();
-    if (!name) return;
-    setCasos((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, nombre: name } : c))
-    );
-    setEditId("");
-    setEditNombre("");
-  }
+  // Crea un NUEVO CASO persistente
+  const handleCrearCaso = useCallback(
+    (e) => {
+      e?.preventDefault?.();
 
-  function handleEliminar(id, permanente = false) {
-    if (permanente) {
-      setCasos((prev) => prev.filter((c) => c.id !== id));
-    } else {
-      setCasos((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, papelera: true } : c))
-      );
-    }
-    setDeleteId("");
-    if (casoActivo === id) setCasoActivo("");
-  }
+      const nombre = (nombreNuevoCaso || "").trim() || "Nuevo caso";
 
-  function handleRestaurar(id) {
-    setCasos((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, papelera: false } : c))
-    );
-  }
+      const nuevoCaso = {
+        id: uuid(),
+        nombre,
+        papelera: false,
+        creadoEn: Date.now(),
+      };
 
-  const seleccionarCaso = useCallback(
+      setCasos((prev) => [nuevoCaso, ...prev]);
+      setCasoActivo(nuevoCaso.id);
+
+      // limpiar estado modal
+      setNombreNuevoCaso("");
+      setModalCrearCaso(false);
+
+      // en mobile cierro el drawer
+      onCloseSidebar?.();
+    },
+    [nombreNuevoCaso, onCloseSidebar]
+  );
+
+  // (futuro) chat rápido temporal SIN persistirlo en lista de casos
+  // podría seteársele un casoActivo "tmp-<timestamp>" y NO lo guardamos en `casos`.
+  const handleCrearChatRapido = useCallback(() => {
+    const chatId = `tmp-${Date.now()}`;
+    setCasoActivo(chatId);
+    onCloseSidebar?.();
+  }, [onCloseSidebar]);
+
+  const handleSeleccionarCaso = useCallback(
     (id) => {
       setCasoActivo(id);
-      onCloseSidebar?.(); // cerrar pantalla en móvil
+      onCloseSidebar?.();
     },
     [onCloseSidebar]
   );
 
-  /* ============================================================
-     Render helpers
-  ============================================================ */
-  const chatsVisibles = casos.filter((c) => !c.papelera);
-  const chatsPapelera = casos.filter((c) => c.papelera);
+  const handleRenombrar = useCallback((id, nuevoNombre) => {
+    const limpio = (nuevoNombre || "").trim();
+    if (!limpio) return;
 
-  // --- Bloque lista de casos + acciones (sin wrapper responsive)
-  const ListaContenido = (
+    setCasos((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, nombre: limpio } : c))
+    );
+
+    setEditId("");
+    setEditNombre("");
+  }, []);
+
+  const handleEliminar = useCallback((id, permanente = false) => {
+    if (permanente) {
+      // eliminar definitivo
+      setCasos((prev) => prev.filter((c) => c.id !== id));
+    } else {
+      // mandar a papelera
+      setCasos((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, papelera: true } : c))
+      );
+    }
+
+    setDeleteId("");
+    if (casoActivo === id) setCasoActivo("");
+  }, [casoActivo]);
+
+  const handleRestaurar = useCallback((id) => {
+    setCasos((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, papelera: false } : c))
+    );
+  }, []);
+
+  /* -------------------------------------------------
+     Derivados
+  ------------------------------------------------- */
+  const casosActivos = useMemo(
+    () => casos.filter((c) => !c.papelera),
+    [casos]
+  );
+
+  const casosEnPapelera = useMemo(
+    () => casos.filter((c) => c.papelera),
+    [casos]
+  );
+
+  /* -------------------------------------------------
+     Render chunk principal de la lista (botones + casos)
+     Lo definimos como función para no tener una mega variable JSX
+  ------------------------------------------------- */
+  const renderContenidoLista = () => (
     <>
-      {/* Botones de navegación / acciones principales */}
+      {/* Atajos de navegación / acciones principales */}
       <button
         className="flex items-center gap-2 font-bold text-brown-900 py-3 px-4 hover:bg-yellow-100 transition text-base border-b border-yellow-200"
-        onClick={() => (window.location.href = "/")}
+        onClick={() => {
+          if (typeof window !== "undefined") {
+            window.location.href = "/";
+          }
+        }}
       >
         <FaHome size={20} /> Home
       </button>
@@ -218,12 +344,24 @@ export default function SidebarChats({
         <FaCog size={18} /> Herramientas
       </button>
 
+      {/* 🔥 Aquí en el futuro podrías mostrar dos botones:
+         - "Nuevo chat" (temporal)
+         - "Nuevo caso" (persistente)
+         Por ahora dejamos sólo "Nuevo caso" para no romper tu UX.
+      */}
       <button
         className="flex items-center gap-2 font-bold text-brown-900 py-3 px-4 hover:bg-yellow-100 transition text-base border-b border-yellow-200"
-        onClick={() => setModalNuevo(true)}
+        onClick={() => setModalCrearCaso(true)}
       >
         <FaPlus size={18} /> Nuevo caso
       </button>
+
+      {/* <button
+        className="flex items-center gap-2 font-bold text-brown-900 py-3 px-4 hover:bg-yellow-100 transition text-base border-b border-yellow-200"
+        onClick={handleCrearChatRapido}
+      >
+        <FaPlus size={18} /> Nuevo chat
+      </button> */}
 
       {/* Casos recientes */}
       <div className="px-4 pt-3 pb-1 text-[15px] font-semibold text-brown-900">
@@ -231,105 +369,112 @@ export default function SidebarChats({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 min-h-0">
-        {chatsVisibles.length === 0 && (
+        {casosActivos.length === 0 && (
           <div className="text-sm text-brown-400 px-1">
             Aún no has creado ningún caso.
           </div>
         )}
 
-        {chatsVisibles.map((c) => (
-          <div
-            key={c.id}
-            className={`flex items-center px-2 py-2 mb-1 rounded-lg cursor-pointer transition
-              ${
-                casoActivo === c.id
-                  ? "bg-yellow-200 font-bold"
-                  : "hover:bg-yellow-100"
-              }`}
-            style={{ fontSize: 16 }}
-            onClick={() => seleccionarCaso(c.id)}
-            title={c.nombre}
-          >
-            <span className="mr-2">💬</span>
+        {casosActivos.map((c) => {
+          const activo = casoActivo === c.id;
 
-            {editId === c.id ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleRenombrar(c.id, editNombre);
-                }}
-                className="flex-1 flex items-center"
-              >
-                <input
-                  className="border-b border-yellow-600 bg-transparent px-1 text-brown-900 w-full"
-                  value={editNombre}
-                  autoFocus
-                  onChange={(e) => setEditNombre(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setEditId("");
-                      setEditNombre("");
-                    }
-                  }}
-                  maxLength={36}
-                />
-                <button
-                  type="submit"
-                  className="ml-1 text-green-700"
-                  aria-label="Guardar nombre"
-                >
-                  <FaEdit />
-                </button>
-              </form>
-            ) : (
-              <>
-                <span
-                  className="flex-1 truncate"
-                  onDoubleClick={() => {
-                    setEditId(c.id);
-                    setEditNombre(c.nombre);
-                  }}
-                >
-                  {c.nombre}
-                </span>
+          return (
+            <div
+              key={c.id}
+              className={`flex items-center px-2 py-2 mb-1 rounded-lg cursor-pointer transition
+                ${
+                  activo
+                    ? "bg-yellow-200 font-bold"
+                    : "hover:bg-yellow-100"
+                }`}
+              style={{ fontSize: 16 }}
+              title={c.nombre}
+              onClick={() => handleSeleccionarCaso(c.id)}
+            >
+              <span className="mr-2">💬</span>
 
-                <button
-                  className="ml-2 text-yellow-900 hover:text-yellow-700"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditId(c.id);
-                    setEditNombre(c.nombre);
+              {/* modo edición nombre */}
+              {editId === c.id ? (
+                <form
+                  className="flex-1 flex items-center"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleRenombrar(c.id, editNombre);
                   }}
-                  aria-label="Renombrar"
-                  title="Renombrar"
                 >
-                  <FaEdit size={16} />
-                </button>
+                  <input
+                    className="border-b border-yellow-600 bg-transparent px-1 text-brown-900 w-full"
+                    value={editNombre}
+                    autoFocus
+                    maxLength={36}
+                    onChange={(e) => setEditNombre(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setEditId("");
+                        setEditNombre("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    className="ml-1 text-green-700"
+                    aria-label="Guardar nombre"
+                    title="Guardar nombre"
+                  >
+                    <FaEdit />
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <span
+                    className="flex-1 truncate"
+                    onDoubleClick={() => {
+                      setEditId(c.id);
+                      setEditNombre(c.nombre);
+                    }}
+                  >
+                    {c.nombre}
+                  </span>
 
-                <button
-                  className="ml-1 text-red-700 hover:text-red-900"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteId(c.id);
-                    setDeleteFinal(false);
-                  }}
-                  aria-label="Enviar a papelera"
-                  title="Eliminar"
-                >
-                  <FaTrash size={16} />
-                </button>
-              </>
-            )}
-          </div>
-        ))}
+                  <button
+                    className="ml-2 text-yellow-900 hover:text-yellow-700"
+                    aria-label="Renombrar"
+                    title="Renombrar"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditId(c.id);
+                      setEditNombre(c.nombre);
+                    }}
+                  >
+                    <FaEdit size={16} />
+                  </button>
+
+                  <button
+                    className="ml-1 text-red-700 hover:text-red-900"
+                    aria-label="Enviar a papelera"
+                    title="Eliminar"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteId(c.id);
+                      setDeleteDefinitivo(false);
+                    }}
+                  >
+                    <FaTrash size={16} />
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
 
         {/* Papelera */}
-        {chatsPapelera.length > 0 && (
+        {casosEnPapelera.length > 0 && (
           <>
             <div className="px-1 pt-4 pb-1 text-yellow-700 font-semibold flex items-center gap-1">
               <FaRecycle /> Papelera
             </div>
-            {chatsPapelera.map((c) => (
+
+            {casosEnPapelera.map((c) => (
               <div
                 key={c.id}
                 className="flex items-center px-2 py-2 mb-1 rounded-lg bg-yellow-100 text-yellow-800"
@@ -340,21 +485,21 @@ export default function SidebarChats({
 
                 <button
                   className="ml-1 text-green-800 hover:text-green-900"
-                  onClick={() => handleRestaurar(c.id)}
                   aria-label="Restaurar"
                   title="Restaurar"
+                  onClick={() => handleRestaurar(c.id)}
                 >
                   <FaRecycle size={16} />
                 </button>
 
                 <button
                   className="ml-1 text-red-700 hover:text-red-900"
-                  onClick={() => {
-                    setDeleteId(c.id);
-                    setDeleteFinal(true);
-                  }}
                   aria-label="Eliminar definitivamente"
                   title="Eliminar definitivamente"
+                  onClick={() => {
+                    setDeleteId(c.id);
+                    setDeleteDefinitivo(true);
+                  }}
                 >
                   <FaTrash size={16} />
                 </button>
@@ -381,12 +526,9 @@ export default function SidebarChats({
     </>
   );
 
-  /* ============================================================
-     RENDER RESPONSIVE
-     - Desktop: sidebar fijo (siempre renderizado)
-     - Móvil: pantalla completa modal SOLO si isOpen === true
-  ============================================================ */
-
+  /* -------------------------------------------------
+     Render responsive final
+  ------------------------------------------------- */
   return (
     <>
       {/* DESKTOP (>=lg): sidebar fijo */}
@@ -397,14 +539,15 @@ export default function SidebarChats({
           lg:h-[100dvh]
           lg:border-r lg:border-yellow-200
           lg:bg-white lg:text-[#5C2E0B]
-          lg:shadow-none
         "
       >
-        {/* En desktop no hay header propio, el contenido arranca directo */}
-        <div className="flex flex-col min-h-0 flex-1">{ListaContenido}</div>
+        {/* en desktop arranca directo sin header */}
+        <div className="flex flex-col min-h-0 flex-1">
+          {renderContenidoLista()}
+        </div>
       </aside>
 
-      {/* MÓVIL (<lg): hoja a pantalla completa */}
+      {/* MOBILE (<lg): drawer pantalla completa */}
       {isOpen && (
         <div
           className="
@@ -413,7 +556,7 @@ export default function SidebarChats({
             shadow-2xl
           "
         >
-          {/* Header móvil fijo */}
+          {/* header móvil */}
           <div
             className="
               flex items-center justify-between
@@ -433,58 +576,97 @@ export default function SidebarChats({
             </button>
           </div>
 
-          {/* Contenido scrollable debajo del header */}
+          {/* contenido scrolleable */}
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-            {ListaContenido}
+            {renderContenidoLista()}
           </div>
         </div>
       )}
 
-      {/* MODALES (para ambos modos) */}
-      <Modal open={modalNuevo} onClose={() => setModalNuevo(false)}>
-        <form onSubmit={handleNuevoChat}>
+      {/* MODAL: crear caso */}
+      <Modal
+        open={modalCrearCaso}
+        onClose={() => setModalCrearCaso(false)}
+      >
+        <form onSubmit={handleCrearCaso}>
           <div className="font-bold text-lg text-yellow-900 mb-3">
             ¿Nuevo Caso?
           </div>
           <div className="text-brown-800 mb-2 text-sm">
             Cada caso conserva su chat y archivos asociados.
           </div>
+
           <input
             className="border rounded px-2 py-1 w-full mb-3"
             placeholder="Nombre del caso"
-            value={nombreNuevo}
+            value={nombreNuevoCaso}
             maxLength={40}
             autoFocus
-            onChange={(e) => setNombreNuevo(e.target.value)}
+            onChange={(e) => setNombreNuevoCaso(e.target.value)}
           />
+
           <button
             type="submit"
-            className="w-full py-2 bg-yellow-700 text-white font-bold rounded shadow hover:bg-yellow-800 transition"
-            disabled={!nombreNuevo.trim()}
+            className="
+              w-full py-2 bg-yellow-700 text-white font-bold rounded shadow
+              hover:bg-yellow-800 transition
+            "
+            disabled={!nombreNuevoCaso.trim()}
           >
             Crear caso
           </button>
+
+          {/* en el futuro:
+          <button
+            type="button"
+            className="
+              w-full mt-2 py-2 bg-yellow-100 text-yellow-900 font-bold rounded
+              border border-yellow-600
+            "
+            onClick={() => {
+              handleCrearChatRapido();
+              setModalCrearCaso(false);
+            }}
+          >
+            Chat rápido (sin guardar)
+          </button>
+          */}
         </form>
       </Modal>
 
-      <Modal open={!!deleteId} onClose={() => setDeleteId("")}>
+      {/* MODAL: confirmar eliminación */}
+      <Modal
+        open={!!deleteId}
+        onClose={() => setDeleteId("")}
+      >
         <div className="font-bold text-lg text-yellow-900 mb-3">
-          {deleteFinal ? "Eliminar definitivamente" : "Eliminar caso"}
+          {deleteDefinitivo
+            ? "Eliminar definitivamente"
+            : "Eliminar caso"}
         </div>
+
         <div className="mb-4 text-brown-800 text-sm">
-          {deleteFinal
+          {deleteDefinitivo
             ? "¿Seguro que deseas eliminar este caso de forma permanente? Esta acción no se puede deshacer."
             : "¿Seguro que deseas eliminar este caso? Podrás restaurarlo desde la papelera."}
         </div>
+
         <div className="flex gap-2">
           <button
-            className="flex-1 py-2 bg-yellow-700 text-white rounded font-bold hover:bg-yellow-900"
-            onClick={() => handleEliminar(deleteId, deleteFinal)}
+            className="
+              flex-1 py-2 bg-yellow-700 text-white rounded font-bold
+              hover:bg-yellow-900
+            "
+            onClick={() => handleEliminar(deleteId, deleteDefinitivo)}
           >
             Sí, eliminar
           </button>
+
           <button
-            className="flex-1 py-2 bg-gray-200 rounded font-bold hover:bg-gray-300"
+            className="
+              flex-1 py-2 bg-gray-200 rounded font-bold
+              hover:bg-gray-300
+            "
             onClick={() => setDeleteId("")}
           >
             Cancelar
