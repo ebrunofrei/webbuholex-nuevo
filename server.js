@@ -27,11 +27,10 @@ import noticiasGuardadasRoutes from "./backend/routes/noticiasGuardadas.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 import vozRoutes from "./backend/routes/voz.js";
 import newsLiveRouter from "./backend/routes/news-live.js";
-import mediaMetaRoute from "./backend/routes/media.js";
 import mediaRoutes from "./backend/routes/media.js";
 
 // ============================================================
-// ⚙️ Carga temprana del entorno (.env)
+// Carga temprana del entorno (.env)
 // ============================================================
 
 const __filename = fileURLToPath(import.meta.url);
@@ -55,7 +54,7 @@ if (fs.existsSync(envPath)) {
 }
 
 // ============================================================
-// 🔧 Variables base del servidor
+// Variables base del servidor
 // ============================================================
 
 const NODE_ENV = process.env.NODE_ENV || "production";
@@ -70,21 +69,19 @@ console.log(
 );
 
 // ============================================================
-// 🚀 Inicialización de Express
+// Inicialización de Express
 // ============================================================
 
 const app = express();
 app.set("trust proxy", 1);
-
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 
-// Alive rápido
 app.get("/alive", (_req, res) => res.type("text/plain").send("ok"));
 
 // ============================================================
-// 🔒 CORS (antes de montar rutas)
+// CORS (con listas y patrones)
 // ============================================================
 
 const localOrigins = [
@@ -97,6 +94,11 @@ const envOrigins = (process.env.FRONTEND_ORIGIN || "")
   .map((o) => o.trim())
   .filter(Boolean);
 
+const originRegex = [
+  /\.vercel\.app$/i,
+  /\.railway\.app$/i,
+];
+
 const defaultProdOrigins = [
   "https://buholex.com",
   "https://www.buholex.com",
@@ -105,9 +107,14 @@ const defaultProdOrigins = [
 
 const allowedOrigins = Array.from(new Set([...localOrigins, ...envOrigins, ...defaultProdOrigins]));
 
+function isAllowedOrigin(origin) {
+  if (allowedOrigins.includes(origin)) return true;
+  return originRegex.some((re) => re.test(origin));
+}
+
 const corsDelegate = (origin, cb) => {
   if (!origin) return cb(null, true);
-  if (allowedOrigins.includes(origin)) return cb(null, true);
+  if (isAllowedOrigin(origin)) return cb(null, true);
   console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
   return cb(new Error(`CORS no permitido: ${origin}`));
 };
@@ -117,7 +124,7 @@ app.use(
     origin: corsDelegate,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
+    credentials: false,
     optionsSuccessStatus: 204,
   })
 );
@@ -132,7 +139,10 @@ app.use("/api", (req, res, next) => {
   next();
 });
 
-// Salud
+// ============================================================
+// Health
+// ============================================================
+
 app.get("/api/health", (_req, res) => {
   const openaiStatus = process.env.OPENAI_API_KEY
     ? "✅ OpenAI API Key cargada correctamente"
@@ -154,12 +164,17 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Aliases de health por área
+app.get("/api/news/health", (_req, res) => res.status(200).json({ ok: true, area: "news", ts: Date.now() }));
+app.get("/api/noticias/health", (_req, res) => res.status(200).json({ ok: true, area: "noticias", ts: Date.now() }));
+app.get("/health", (_req, res) => res.status(200).json({ ok: true, ts: Date.now() }));
+
 // ============================================================
-// 🧩 Rutas API principales (orden específico)
+// Rutas API principales (orden específico)
 // ============================================================
 
-app.use("/api/noticias/contenido", noticiasContenidoRoutes); // específico primero
-app.use("/api/news", newsLiveRouter);                         // live primero
+app.use("/api/noticias/contenido", noticiasContenidoRoutes);
+app.use("/api/news", newsLiveRouter);
 app.use("/api/noticias", noticiasRoutes);
 app.use("/api/noticias-guardadas", noticiasGuardadasRoutes);
 app.use("/api/news", newsRoutes);
@@ -175,7 +190,7 @@ app.use("/api/media", mediaRoutes);
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));
 
 // ============================================================
-// 🕒 Cargas opcionales SOLO en desarrollo/local
+// Cargas opcionales SOLO en desarrollo/local
 // ============================================================
 
 async function cargarTareasOpcionales() {
@@ -205,7 +220,7 @@ async function cargarTareasOpcionales() {
 }
 
 // ============================================================
-// 🚀 Arranque del servidor (una sola conexión a Mongo)
+// Arranque del servidor
 // ============================================================
 
 export { app };
@@ -215,7 +230,7 @@ if (process.env.NODE_ENV !== "test") {
     try {
       console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
       const uri = process.env.MONGODB_URI || getMongoUri();
-      await dbConnect(uri);                       // ✅ usar dbConnect (nombre real)
+      await dbConnect(uri);
       console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
 
       await cargarTareasOpcionales();
@@ -226,7 +241,6 @@ if (process.env.NODE_ENV !== "test") {
         allowedOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
       });
 
-      // timeouts que NO rompen streaming (chat/SSE si lo activas luego)
       server.keepAliveTimeout = 75_000;
       server.headersTimeout = 80_000;
     } catch (err) {
