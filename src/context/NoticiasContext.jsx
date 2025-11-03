@@ -31,6 +31,7 @@ export const API_BASE = import.meta.env.PROD
   ? (ENV_BASE && !isLocal(ENV_BASE) ? ENV_BASE : "/api")
   : "/api";
 
+// Helpers de URL
 const build = (path = "", qsObj) => {
   const p = path.startsWith("/") ? path : `/${path}`;
   const url = `${API_BASE}${p}`;
@@ -38,6 +39,10 @@ const build = (path = "", qsObj) => {
   const qs = new URLSearchParams(qsObj);
   return `${url}?${qs.toString()}`;
 };
+
+// Endpoints preferidos/alternativos
+const NEWS_PATH_PRIMARY = "/noticias";
+const NEWS_PATH_FALLBACK = "/news";
 
 /* ============== Normalización de payload ============== */
 const SHAPES = ["items", "articles", "results", "noticias", "docs"];
@@ -123,10 +128,20 @@ export function NoticiasProvider({ children }) {
     );
 
     try {
-      const res = await fetch(build("/noticias", qs), {
+      // 1) Intento principal: /api/noticias
+      let res = await fetch(build(NEWS_PATH_PRIMARY, qs), {
         signal: ctrl.signal,
         headers: { Accept: "application/json" },
       });
+
+      // 2) Si el proxy externo usa /api/news, haz fallback transparente
+      if (res.status === 404) {
+        res = await fetch(build(NEWS_PATH_FALLBACK, qs), {
+          signal: ctrl.signal,
+          headers: { Accept: "application/json" },
+        });
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.json();
 

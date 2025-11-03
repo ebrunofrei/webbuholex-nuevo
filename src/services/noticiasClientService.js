@@ -1,16 +1,19 @@
 /* ============================================================
  * 🦉 BúhoLex | Servicio de Noticias (frontend robusto)
- * - BASE: env → localhost:3000/api (sin /api duplicado)
- * - fetch resiliente con backoff (ECONNRESET/ECONNREFUSED/timeout/5xx)
+ * - BASE segura (sin localhost en prod): env → "/api"
+ * - Health específico de noticias: /api/news/health (rewrite a proxy)
+ * - fetch resiliente con backoff (timeout/5xx/network)
  * - PRIMERO prueba /api/news (live) para "general", luego /api/noticias
+ * - Fallback 404: /api/noticias → /api/news con mismos filtros
  * - Fallback progresivo (con filtros → sin providers → sin q/lang → sin page)
  * - Normalización amplia ({items}|articles|results|noticias|docs|data.*)
  * - Cache TTL + bypass (noCache)
- * - Health-wait: espera /api/health cuando el backend reinicia
+ * - Media proxy helper
  * ============================================================ */
 
 const isBrowser = typeof window !== "undefined";
 const DEBUG = !!import.meta?.env?.VITE_DEBUG_NEWS;
+
 export const PAGE_SIZE = 12;
 const FETCH_TIMEOUT_MS = 12000;
 const CB_KEY = "__news_circuit_breaker__";
@@ -31,23 +34,24 @@ function isLocalUrl(u = "") {
 const RAW_ENV = import.meta?.env?.VITE_NEWS_API_BASE_URL || "";
 const ENV_BASE = normalizeApiBase(RAW_ENV);
 
-// Reglas:
-// - PROD: usa ENV si está y NO es localhost; si no, SIEMPRE relativo "/api" (para rewrites de Vercel).
-// - DEV: usa SIEMPRE "/api" (proxy de Vite). Evita hornear puertos.
+// PROD: ENV si NO es localhost; si no, relativo "/api". DEV: siempre "/api".
 export const API_BASE = import.meta.env.PROD
   ? (ENV_BASE && !isLocalUrl(ENV_BASE) ? ENV_BASE : "/api")
   : "/api";
 
-export const HEALTH_URL = `${API_BASE.replace(/\/+$/, "")}/health`;
+// ⚠️ HEALTH de noticias (no mezclar con chat):
+// En vercel.json añade: { "source": "/api/news/health", "destination": "<proxy>/api/health" }
+export const NEWS_HEALTH_URL = `${API_BASE.replace(/\/+$/, "")}/news/health`;
 
-/* --- Espera a que el backend esté listo (evita ECONNRESET al arrancar) --- */
-export async function waitForApiReady(base = API_BASE, { retries = 15, delayMs = 300, signal } = {}) {
-  const url = `${String(base || "").replace(/\/+$/, "")}/health`;
+/* --- Espera a que un ENDPOINT específico esté listo (no por base) --- */
+export async function waitForEndpointReady(url, { retries = 15, delayMs = 300, signal } = {}) {
+  const target = String(url || "").trim();
+  if (!target) return false;
   for (let i = 0; i < retries; i++) {
     try {
       const ctrl = new AbortController();
       const id = setTimeout(() => ctrl.abort(new DOMException("timeout", "AbortError")), 3500);
-      const res = await fetch(url, { signal: signal || ctrl.signal, headers: { accept: "application/json" } });
+      const res = await fetch(target, { signal: signal || ctrl.signal, headers: { accept: "application/json" } });
       clearTimeout(id);
       if (res.ok) return true;
     } catch {}
@@ -268,11 +272,7 @@ async function fetchNewsLive(params, { signal } = {}) {
   return { items, pagination, filtros, raw: data };
 }
 
-/* ----------------------- API pública: LIVE directo -----------------------
- * Export que faltaba: getNewsLive()
- * Evita el error "does not provide an export named 'getNewsLive'".
- * Usa /api/news con cache y normalización, sin tocar la arquitectura.
- ------------------------------------------------------------------------- */
+/* ----------------------- API pública: LIVE directo ----------------------- */
 export async function getNewsLive({
   page = 1,
   limit = PAGE_SIZE,
@@ -284,7 +284,8 @@ export async function getNewsLive({
   noCache = false,
   cacheTtlMs = 5 * 60 * 1000,
 } = {}) {
-  await waitForApiReady(API_BASE, { signal });
+  // health opcional: no bloquear UI si falla
+  waitForEndpointReady(NEWS_HEALTH_URL, { signal }).catch(() => {});
 
   const qParam = q ?? tema;
   const providersCsv = Array.isArray(providers)
@@ -323,7 +324,6 @@ export async function getNewsLive({
     }
     return payload;
   } catch (e) {
-    // devolvemos estructura vacía coherente
     DEBUG && console.warn("[Noticias] getNewsLive falló:", e?.message || e);
     return {
       items: [],
@@ -358,7 +358,8 @@ export async function getNoticiasRobust({
     };
   }
 
-  await waitForApiReady(API_BASE, { signal });
+  // health opcional: no bloquear UI si falla
+  waitForEndpointReady(NEWS_HEALTH_URL, { signal }).catch(() => {});
 
   const qParam = q ?? tema;
   const providersCsv = Array.isArray(providers)
@@ -389,22 +390,17 @@ export async function getNoticiasRobust({
   if (tipo === "general") {
     try {
       const live = await fetchNewsLive(paramsBase, { signal });
-      if (!noCache || (live.items && live.items.length)) {
-        safeSessionSet(cacheKey, {
-          items: live.items,
-          pagination: live.pagination,
-          filtros: live.filtros,
-          page: live.pagination.page || Number(page) || 1,
-          raw: live.raw,
-        });
-      }
-      return {
+      const payload = {
         items: live.items,
         pagination: live.pagination,
         filtros: live.filtros,
         page: live.pagination.page || Number(page) || 1,
         raw: live.raw,
       };
+      if (!noCache || (live.items && live.items.length)) {
+        safeSessionSet(cacheKey, payload);
+      }
+      return payload;
     } catch (e) {
       DEBUG && console.warn("[Noticias] live falló, uso Mongo:", e?.message || e);
       // seguimos con /api/noticias
@@ -455,12 +451,37 @@ export async function getNoticiasRobust({
       }
       return payload;
     } catch (e) {
-      lastErr = e;
-      if (isRetryable(e)) {
-        await sleep(200 + i * 150); // backoff: 200/350/500/650ms
-        continue;
+      // Fallback 404 → /api/news
+      if (e?.status === 404) {
+        const url2 = `${API_BASE}/news${toQuery(params)}`;
+        try {
+          DEBUG && console.debug(`[Noticias] Fallback 404 → /news:`, url2);
+          const data2 = await fetchJSON(url2, { signal });
+          const items2 = normalizeList(pickItems(data2), tipo);
+          const pagination2 = pickPagination(data2);
+          const filtros2 = pickFiltros(data2);
+          const payload2 = {
+            items: items2,
+            pagination: pagination2,
+            filtros: filtros2,
+            page: pagination2.page || Number(page) || 1,
+            raw: data2,
+          };
+          if (!noCache || (Array.isArray(items2) && items2.length > 0)) {
+            safeSessionSet(cacheKey, payload2);
+          }
+          return payload2;
+        } catch (e2) {
+          lastErr = e2;
+        }
+      } else {
+        lastErr = e;
+        if (isRetryable(e)) {
+          await sleep(200 + i * 150); // backoff: 200/350/500/650ms
+          continue;
+        }
+        break;
       }
-      break;
     }
   }
 
@@ -503,7 +524,7 @@ export function proxifyMedia(url) {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) {
     const base = String(API_BASE || "").replace(/\/+$/, "");
-    // tu backend expone /api/media/proxy?url=..., no /media “plano”
+    // si tu backend expone /api/media/proxy?url=...
     return `${base}/media/proxy?url=${encodeURIComponent(url)}`;
   }
   return url;
@@ -512,7 +533,8 @@ export function proxifyMedia(url) {
 /* Reexport del extractor de contenidos */
 export { getContenidoNoticia } from "./noticiasContenido.js";
 
-// ---- Compatibilidad con imports antiguos ----
+/* ----------------------- Exports de compatibilidad ----------------------- */
 export { getNoticiasRobust as getNoticias };
 export { getNoticiasRobust as fetchNoticias };
-export { getNoticiasRobust as getNoticiasLive };
+// No sobrescribas getNewsLive; si alguien dependía del alias antiguo:
+export { getNewsLive as getNoticiasLiveShim };
