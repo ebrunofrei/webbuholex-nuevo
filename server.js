@@ -99,35 +99,41 @@ const originRegex = [
   /\.railway\.app$/i,
 ];
 
-const defaultProdOrigins = [
+const allowedExact = new Set([
   "https://buholex.com",
   "https://www.buholex.com",
   "https://webbuholex-nuevo.vercel.app",
-];
+  ...(process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean),
+]);
 
-const allowedOrigins = Array.from(new Set([...localOrigins, ...envOrigins, ...defaultProdOrigins]));
-
-function isAllowedOrigin(origin) {
-  if (allowedOrigins.includes(origin)) return true;
-  return originRegex.some((re) => re.test(origin));
-}
+const allowedByPattern = (origin) => {
+  try {
+    const u = new URL(origin);
+    const host = u.hostname;
+    // permite cualquier preview de Vercel de tu proyecto y subdominios de railway
+    if (host.endsWith(".vercel.app")) return true;
+    if (host.endsWith(".railway.app")) return true;
+    return false;
+  } catch { return false; }
+};
 
 const corsDelegate = (origin, cb) => {
-  if (!origin) return cb(null, true);
-  if (isAllowedOrigin(origin)) return cb(null, true);
+  if (!origin) return cb(null, true); // navegadores sin Origin
+  if (allowedExact.has(origin) || allowedByPattern(origin)) return cb(null, true);
   console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
   return cb(new Error(`CORS no permitido: ${origin}`));
 };
 
-app.use(
-  cors({
-    origin: corsDelegate,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: false,
-    optionsSuccessStatus: 204,
-  })
-);
+app.use(cors({
+  origin: corsDelegate,
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"],
+  credentials: true,
+  optionsSuccessStatus: 204,
+}));
 
 // Forzar charset UTF-8 en JSON bajo /api
 app.use("/api", (req, res, next) => {

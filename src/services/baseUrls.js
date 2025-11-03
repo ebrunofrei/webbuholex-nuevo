@@ -49,13 +49,13 @@ export const CHAT_BASE = import.meta.env.PROD
  * ============================================================ */
 
 // Noticias
-export const NOTICIAS_URL     = `${NEWS_API_BASE}/noticias`;   // lista principal
-export const NOTICIAS_FALLBACK_URL = `${NEWS_API_BASE}/news`;  // si el proxy usa /news
-export const NEWS_HEALTH      = `${NEWS_API_BASE}/news/health`;
+export const NOTICIAS_URL        = `${NEWS_API_BASE}/noticias`;   // lista principal
+export const NOTICIAS_FALLBACK_URL = `${NEWS_API_BASE}/news`;     // si el proxy usa /news
+export const NEWS_HEALTH         = `${NEWS_API_BASE}/news/health`;
 
 // Chat
-export const CHAT_HEALTH      = `${CHAT_BASE}/health`;
+export const CHAT_HEALTH         = `${CHAT_BASE}/health`;
 
-// Voz (sirve en el mismo backend del chat → ruteamos por /chat-api para evitar el proxy de news)
-export const VOZ_BASE         = `${CHAT_BASE}/voz`;
-export const VOZ_HEALTH       = `${VOZ_BASE}/health`;
+// Voz (usa el mismo backend del chat → ruteamos por /chat-api)
+export const VOZ_BASE            = `${CHAT_BASE}/voz`;
+export const VOZ_HEALTH          = `${VOZ_BASE}/health`;
