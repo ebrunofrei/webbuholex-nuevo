@@ -16,7 +16,7 @@ const FETCH_TIMEOUT_MS = 12000;
 const CB_KEY = "__news_circuit_breaker__";
 const CB_WINDOW_MS = 9000; // 9s
 
-/* ----------------------- BASE URL ----------------------- */
+/* ----------------------- BASE URL (NOTICIAS) ----------------------- */
 function normalizeApiBase(input) {
   const raw = (input || "").trim().replace(/\/+$/, "");
   if (!raw) return "";
@@ -27,14 +27,16 @@ function normalizeApiBase(input) {
 function toLocalApi() {
   return normalizeApiBase("http://localhost:3000");
 }
+
 export const API_BASE = (() => {
-  const env = normalizeApiBase(import.meta?.env?.VITE_API_BASE_URL || "");
+  // 👇 ahora priorizamos VITE_NEWS_API_BASE_URL
+  const env = normalizeApiBase(import.meta?.env?.VITE_NEWS_API_BASE_URL || "");
   if (env) return env;
   return toLocalApi();
 })();
 
 /* --- Espera a que el backend esté listo (evita ECONNRESET al arrancar) --- */
-async function waitForApiReady(base, { retries = 15, delayMs = 300, signal } = {}) {
+export async function waitForApiReady(base, { retries = 15, delayMs = 300, signal } = {}) {
   const url = `${String(base || "").replace(/\/+$/, "")}/health`;
   for (let i = 0; i < retries; i++) {
     try {

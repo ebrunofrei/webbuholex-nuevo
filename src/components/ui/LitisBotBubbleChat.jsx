@@ -11,6 +11,8 @@ import {
   FaRegThumbsDown,
 } from "react-icons/fa";
 import litisLogo from "@/assets/litisbot-logo.png";
+import { enviarMensajeIA } from "@/services/chatClient.js";
+
 
 /* ============================================================
    ⚙️ Preferencias TTS (voz, velocidad, tono) + storage
@@ -784,61 +786,59 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
 
   // Enviar mensaje
   async function enviarMensaje() {
-    if (!input.trim() || cargando) return;
-    const pregunta = input.trim();
-    setInput("");
-    setCargando(true);
+  if (!input?.trim() || cargando) return;
 
-    setMensajes((prev) => [
-      ...prev,
-      { role: "user", content: pregunta },
-      { role: "assistant", content: "Espera un momento…" },
-    ]);
+  const pregunta = input.trim();
+  setInput("");
+  setCargando(true);
 
-    try {
-      const API_BASE =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+  // pinta usuario + placeholder de "pensando"
+  setMensajes((prev) => [
+    ...prev,
+    { role: "user", content: pregunta },
+    { role: "assistant", content: "Espera un momento…" },
+  ]);
 
-      const body = {
-        prompt: pregunta,
-        usuarioId: usuarioId || "invitado-burbuja",
-        expedienteId: "burbuja",
-        idioma: "es-PE",
-        pais: "Perú",
-      };
+  try {
+    // usa el cliente unificado (respeta /chat-api y VITE_CHAT_API_BASE_URL)
+    const data = await enviarMensajeIA({
+      prompt: pregunta,
+      usuario: usuarioId || "invitado-burbuja",
+      expedienteId: "burbuja",
+      idioma: "es-PE",
+      pais: "Perú",
+    });
 
-      const resp = await fetch(`${API_BASE}/ia/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+    setMensajes((prev) => {
+      const next = [...prev];
+      // quita el placeholder si sigue presente
+      if (next.at(-1)?.role === "assistant" && next.at(-1)?.content === "Espera un momento…") {
+        next.pop();
+      }
+      next.push({
+        role: "assistant",
+        content: data?.respuesta || data?.text || "No pude generar respuesta. ¿Intentamos de nuevo?",
       });
-
-      const data = await resp.json();
-
-      setMensajes((prev) => {
-        const tmp = [...prev];
-        if (tmp.at(-1)?.role === "assistant" && tmp.at(-1)?.content === "Espera un momento…") tmp.pop();
-        tmp.push({
-          role: "assistant",
-          content: data?.respuesta || "No pude generar respuesta. ¿Quieres intentar de nuevo?",
-        });
-        return tmp;
+      return next;
+    });
+  } catch (err) {
+    console.error("❌ Error burbuja:", err);
+    setMensajes((prev) => {
+      const next = [...prev];
+      if (next.at(-1)?.role === "assistant" && next.at(-1)?.content === "Espera un momento…") {
+        next.pop();
+      }
+      next.push({
+        role: "assistant",
+        content:
+          "Hubo un problema procesando tu consulta. Verifica tu conexión y vuelve a intentarlo.",
       });
-    } catch (err) {
-      console.error("❌ Error burbuja:", err);
-      setMensajes((prev) => {
-        const tmp = [...prev];
-        if (tmp.at(-1)?.role === "assistant" && tmp.at(-1)?.content === "Espera un momento…") tmp.pop();
-        tmp.push({
-          role: "assistant",
-          content: "Hubo un problema procesando tu consulta. Intenta nuevamente en un momento.",
-        });
-        return tmp;
-      });
-    } finally {
-      setCargando(false);
-    }
+      return next;
+    });
+  } finally {
+    setCargando(false);
   }
+}
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
