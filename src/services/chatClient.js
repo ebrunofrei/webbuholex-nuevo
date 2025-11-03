@@ -1,15 +1,23 @@
+// src/services/chatClient.js
 // ============================================================
 // 🦉 BúhoLex | Cliente del Chat (frontend)
 // - Usa /chat-api (proxy en dev y rewrite en prod)
-// - Opcional: VITE_CHAT_API_BASE_URL si quieres forzar un absoluto
+// - Si VITE_CHAT_API_BASE_URL está en PROD y NO es localhost, se respeta
 // - Normaliza payload: string | {mensaje} | {prompt}
 // ============================================================
 
-const DEFAULT_CHAT_BASE = "/chat-api";
-
 const normalize = (u = "") => String(u).trim().replace(/\/+$/, "");
-export const CHAT_BASE =
-  normalize(import.meta?.env?.VITE_CHAT_API_BASE_URL || DEFAULT_CHAT_BASE);
+const isLocal = (u = "") =>
+  /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?/i.test(String(u));
+
+const RAW_CHAT = import.meta?.env?.VITE_CHAT_API_BASE_URL || "";
+const ENV_CHAT = normalize(RAW_CHAT);
+
+// PROD: ENV si NO es localhost; si no, "/chat-api"
+// DEV: siempre "/chat-api" (proxy de Vite)
+export const CHAT_BASE = import.meta.env.PROD
+  ? (ENV_CHAT && !isLocal(ENV_CHAT) ? ENV_CHAT : "/chat-api")
+  : "/chat-api";
 
 export const buildChatUrl = (p = "") =>
   `${CHAT_BASE}/${String(p).replace(/^\/+/, "")}`;
@@ -32,27 +40,21 @@ async function ping({ signal } = {}) {
 
 // --- normaliza formas de entrada a { prompt, ...rest }
 function normalizeChatPayload(input) {
-  // string → { prompt }
   if (typeof input === "string") {
     const prompt = input.trim();
     if (!prompt) throw new Error("prompt vacío");
     return { prompt };
   }
-
   const obj = input || {};
   const raw = obj.prompt ?? obj.mensaje ?? "";
   const prompt = String(raw || "").trim();
   if (!prompt) throw new Error("prompt vacío");
-
-  // preserva el resto (usuario, canal, meta, etc.)
   const { mensaje, ...rest } = obj;
   return { prompt, ...rest };
 }
 
 export async function enviarMensajeIA(payload, signal) {
-  // ping rápido para evitar ECONNRESET al arrancar backend
   await ping({ signal }).catch(() => {});
-
   const body = JSON.stringify(normalizeChatPayload(payload));
 
   const r = await fetch(buildChatUrl("/ia/chat"), {
