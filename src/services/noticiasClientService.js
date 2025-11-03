@@ -17,31 +17,36 @@ const CB_KEY = "__news_circuit_breaker__";
 const CB_WINDOW_MS = 9000; // 9s
 
 /* ----------------------- BASE URL (NOTICIAS) ----------------------- */
-function normalizeApiBase(input) {
-  const raw = (input || "").trim().replace(/\/+$/, "");
+function normalizeApiBase(input = "") {
+  const raw = String(input).trim().replace(/\/+$/, "");
   if (!raw) return "";
   let base = raw;
   if (!/\/api$/i.test(base)) base += "/api";
-  return base.replace(/\/api(?:\/api)+$/i, "/api");
+  return base.replace(/\/api(?:\/api)+$/i, "/api"); // evita /api/api
 }
-function toLocalApi() {
-  return normalizeApiBase("http://localhost:3000");
+function isLocalUrl(u = "") {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?/i.test(u);
 }
 
-export const API_BASE = (() => {
-  // 👇 ahora priorizamos VITE_NEWS_API_BASE_URL
-  const env = normalizeApiBase(import.meta?.env?.VITE_NEWS_API_BASE_URL || "");
-  if (env) return env;
-  return toLocalApi();
-})();
+const RAW_ENV = import.meta?.env?.VITE_NEWS_API_BASE_URL || "";
+const ENV_BASE = normalizeApiBase(RAW_ENV);
+
+// Reglas:
+// - PROD: usa ENV si está y NO es localhost; si no, SIEMPRE relativo "/api" (para rewrites de Vercel).
+// - DEV: usa SIEMPRE "/api" (proxy de Vite). Evita hornear puertos.
+export const API_BASE = import.meta.env.PROD
+  ? (ENV_BASE && !isLocalUrl(ENV_BASE) ? ENV_BASE : "/api")
+  : "/api";
+
+export const HEALTH_URL = `${API_BASE.replace(/\/+$/, "")}/health`;
 
 /* --- Espera a que el backend esté listo (evita ECONNRESET al arrancar) --- */
-export async function waitForApiReady(base, { retries = 15, delayMs = 300, signal } = {}) {
+export async function waitForApiReady(base = API_BASE, { retries = 15, delayMs = 300, signal } = {}) {
   const url = `${String(base || "").replace(/\/+$/, "")}/health`;
   for (let i = 0; i < retries; i++) {
     try {
       const ctrl = new AbortController();
-      const id = setTimeout(() => ctrl.abort(new Error("timeout")), 3500);
+      const id = setTimeout(() => ctrl.abort(new DOMException("timeout", "AbortError")), 3500);
       const res = await fetch(url, { signal: signal || ctrl.signal, headers: { accept: "application/json" } });
       clearTimeout(id);
       if (res.ok) return true;
