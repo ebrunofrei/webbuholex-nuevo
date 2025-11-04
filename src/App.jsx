@@ -6,7 +6,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
-
+import './app-layout.css';
 // Páginas varias
 import SeedBrandingPage from "@/pages/SeedBrandingPage";
 import Blog from "./pages/Blog";

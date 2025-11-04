@@ -7,24 +7,38 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 
 export default defineConfig({
-  base: "/",
   plugins: [react()],
+
+  build: {
+    minify: false,     // para que el error apunte al source real
+    sourcemap: true,   // mapa para ver línea exacta
+    target: "es2022",
+  },
 
   // ============================================================
   // ⚙️ Servidor local (Vite + Proxy Backend)
   // ============================================================
   server: {
-    host: "0.0.0.0",         // Permite acceso desde cualquier IP (necesario para Vite + proxy)
-    port: 5173,              // Puerto del frontend
-    open: true,              // Abre navegador automáticamente
-
+    host: "0.0.0.0",   // Permite acceso desde cualquier IP
+    port: 5173,        // Puerto del frontend
+    open: true,        // Abre navegador automáticamente
     proxy: {
+      // Noticias (backend local)
       "/api": {
-        target: "http://localhost:3000", // Backend local (Express)
+        target: "http://localhost:3000",
         changeOrigin: true,
-        secure: false,                   // Permite HTTP sin SSL (local)
-        ws: true,                        // Soporte WebSocket (si lo usas)
-        rewrite: (path) => path.replace(/^\/api/, "/api"), // Mantiene el prefijo
+        secure: false,
+        ws: true,
+        // sin rewrite: mantenemos /api → /api
+      },
+      // Chat (ruta separada en el frontend)
+      "/chat-api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        secure: false,
+        ws: true,
+        // En el backend el chat vive bajo /api, así que mapeamos /chat-api → /api
+        rewrite: (p) => p.replace(/^\/chat-api/, "/api"),
       },
     },
   },
@@ -45,7 +59,7 @@ export default defineConfig({
       "@components": path.resolve(__dirname, "src/components"),
       "@pages": path.resolve(__dirname, "src/pages"),
       "@services": path.resolve(__dirname, "src/services"),
-      '@styles': path.resolve(__dirname, 'src/styles'),
+      "@styles": path.resolve(__dirname, "src/styles"),
       "@utils": path.resolve(__dirname, "src/utils"),
       "@store": path.resolve(__dirname, "src/store"),
       "@context": path.resolve(__dirname, "src/context"),
@@ -58,8 +72,10 @@ export default defineConfig({
 
   // ============================================================
   // 🚀 Optimización de dependencias
+  // (un solo bloque con target + include/exclude)
   // ============================================================
   optimizeDeps: {
+    esbuildOptions: { target: "es2022" },
     include: [
       "firebase/app",
       "firebase/auth",

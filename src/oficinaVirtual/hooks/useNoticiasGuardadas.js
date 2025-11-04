@@ -4,8 +4,6 @@ import { useAuth } from "@/context/AuthContext";
 // Guardamos SOLO IDs en localStorage para no mezclar tipos
 const LOCAL_KEY = "noticiasGuardadas_buholex_ids";
 
-// El backend unificado (ajusta si usas otro puerto/var env)
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
 
 // Normaliza cualquier forma de entrada (string id, {_id}, {id})
 function toId(x) {

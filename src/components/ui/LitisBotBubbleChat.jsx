@@ -11,6 +11,9 @@ import {
   FaRegThumbsDown,
 } from "react-icons/fa";
 import litisLogo from "@/assets/litisbot-logo.png";
+import { enviarMensajeIA } from "@/services/chatClient.js";
+import { VOZ_BASE } from "@/services/baseUrls.js"; // /api/voz seguro (prod/dev)
+
 
 /* ============================================================
    ⚙️ Preferencias TTS (voz, velocidad, tono) + storage
@@ -41,58 +44,78 @@ function saveTtsPrefs(prefs) {
 }
 
 /* ============================================================
-   🔊 Texto → voz (POST /api/voz) con preferencias
+   🔊 Texto → voz (POST /api/voz) con preferencias (seguro)
+   - Usa VOZ_BASE (nunca localhost en prod)
+   - Timeout + AbortController
+   - Limpieza de ObjectURL al terminar o fallar
 ============================================================ */
 async function reproducirVozServidor(textoPlano, opts) {
   try {
-    const API_BASE =
-      import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
-
-    const clean = (textoPlano || "").trim();
+    const clean = String(textoPlano || "").trim();
     if (!clean) return;
 
-    // Mezcla de preferencias guardadas + overrides recibidos
-    const persisted =
-      loadTtsPrefs() || { voiceId: "es-ES-AlvaroNeural", rate: 1.0, pitch: 0 };
+    // Mezcla de preferencias guardadas + overrides
+    const persisted = loadTtsPrefs?.() || {
+      voiceId: "es-ES-AlvaroNeural",
+      rate: 1.0,
+      pitch: 0,
+    };
     const prefs = { ...persisted, ...(opts || {}) };
 
-    // Back acepta: texto, voz, rate, pitch
-    const resp = await fetch(`${API_BASE}/voz`, {
+    // Normaliza rate/pitch a números razonables
+    const rate =
+      Number.isFinite(+prefs.rate) && +prefs.rate > 0 ? +prefs.rate : 1.0;
+    const pitch = Number.isFinite(+prefs.pitch) ? +prefs.pitch : 0;
+
+    // Timeout + abort (10s)
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(new DOMException("timeout", "AbortError")), 10000);
+
+    const resp = await fetch(VOZ_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: ctrl.signal,
       body: JSON.stringify({
         texto: clean,
         voz: prefs.voiceId,
-        rate: prefs.rate, // 1.0=100%, 1.15=115% (el back lo normaliza a %)
-        pitch: prefs.pitch, // semitonos (-6..+6)
+        rate,            // 1.0=100%, el backend lo normaliza si usa %
+        pitch,           // semitonos (-6..+6), el backend valida rango
       }),
     });
 
+    clearTimeout(t);
+
     if (!resp.ok) {
-      console.warn("⚠️ No se pudo generar voz:", resp.status);
-      // Si el backend devolvió JSON de error, para debugging:
-      try {
-        const j = await resp.json();
-        console.warn("Detalle TTS:", j);
-      } catch {}
+      // Log ampliado para depurar
+      let detalle = "";
+      try { detalle = await resp.text(); } catch {}
+      console.warn("⚠️ TTS falló:", resp.status, detalle || resp.statusText);
       return;
     }
 
+    // Reproducir blob
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
 
-    audio.onended = () => URL.revokeObjectURL(url);
-    audio.onerror = () => URL.revokeObjectURL(url);
+    const cleanup = () => {
+      try { URL.revokeObjectURL(url); } catch {}
+      audio.onended = null;
+      audio.onerror = null;
+    };
 
-    await audio.play().catch((e) => {
-      // Autoplay bloqueado: el usuario debe interactuar antes
-      console.error("🎧 Error al hacer play():", e);
-      URL.revokeObjectURL(url);
-      alert(
-        "Tu navegador bloqueó la reproducción automática. Haz clic nuevamente para escuchar."
-      );
-    });
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+
+    try {
+      await audio.play();
+    } catch (e) {
+      // Autoplay bloqueado (mobile/desktop sin interacción)
+      console.error("🎧 play() bloqueado por el navegador:", e?.message || e);
+      cleanup();
+      // Si prefieres no mostrar alert, comenta la línea siguiente
+      alert("Tu navegador bloqueó la reproducción automática. Haz clic nuevamente para escuchar.");
+    }
   } catch (err) {
     console.error("❌ Error en TTS:", err);
   }
@@ -784,61 +807,59 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
 
   // Enviar mensaje
   async function enviarMensaje() {
-    if (!input.trim() || cargando) return;
-    const pregunta = input.trim();
-    setInput("");
-    setCargando(true);
+  if (!input?.trim() || cargando) return;
 
-    setMensajes((prev) => [
-      ...prev,
-      { role: "user", content: pregunta },
-      { role: "assistant", content: "Espera un momento…" },
-    ]);
+  const pregunta = input.trim();
+  setInput("");
+  setCargando(true);
 
-    try {
-      const API_BASE =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+  // pinta usuario + placeholder de "pensando"
+  setMensajes((prev) => [
+    ...prev,
+    { role: "user", content: pregunta },
+    { role: "assistant", content: "Espera un momento…" },
+  ]);
 
-      const body = {
-        prompt: pregunta,
-        usuarioId: usuarioId || "invitado-burbuja",
-        expedienteId: "burbuja",
-        idioma: "es-PE",
-        pais: "Perú",
-      };
+  try {
+    // usa el cliente unificado (respeta /chat-api y VITE_CHAT_API_BASE_URL)
+    const data = await enviarMensajeIA({
+      prompt: pregunta,
+      usuario: usuarioId || "invitado-burbuja",
+      expedienteId: "burbuja",
+      idioma: "es-PE",
+      pais: "Perú",
+    });
 
-      const resp = await fetch(`${API_BASE}/ia/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+    setMensajes((prev) => {
+      const next = [...prev];
+      // quita el placeholder si sigue presente
+      if (next.at(-1)?.role === "assistant" && next.at(-1)?.content === "Espera un momento…") {
+        next.pop();
+      }
+      next.push({
+        role: "assistant",
+        content: data?.respuesta || data?.text || "No pude generar respuesta. ¿Intentamos de nuevo?",
       });
-
-      const data = await resp.json();
-
-      setMensajes((prev) => {
-        const tmp = [...prev];
-        if (tmp.at(-1)?.role === "assistant" && tmp.at(-1)?.content === "Espera un momento…") tmp.pop();
-        tmp.push({
-          role: "assistant",
-          content: data?.respuesta || "No pude generar respuesta. ¿Quieres intentar de nuevo?",
-        });
-        return tmp;
+      return next;
+    });
+  } catch (err) {
+    console.error("❌ Error burbuja:", err);
+    setMensajes((prev) => {
+      const next = [...prev];
+      if (next.at(-1)?.role === "assistant" && next.at(-1)?.content === "Espera un momento…") {
+        next.pop();
+      }
+      next.push({
+        role: "assistant",
+        content:
+          "Hubo un problema procesando tu consulta. Verifica tu conexión y vuelve a intentarlo.",
       });
-    } catch (err) {
-      console.error("❌ Error burbuja:", err);
-      setMensajes((prev) => {
-        const tmp = [...prev];
-        if (tmp.at(-1)?.role === "assistant" && tmp.at(-1)?.content === "Espera un momento…") tmp.pop();
-        tmp.push({
-          role: "assistant",
-          content: "Hubo un problema procesando tu consulta. Intenta nuevamente en un momento.",
-        });
-        return tmp;
-      });
-    } finally {
-      setCargando(false);
-    }
+      return next;
+    });
+  } finally {
+    setCargando(false);
   }
+}
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {

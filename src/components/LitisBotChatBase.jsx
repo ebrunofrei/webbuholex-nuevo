@@ -14,6 +14,7 @@ import { MdSend } from "react-icons/md";
 
 // IA / backend
 import { reproducirVozVaronil } from "@/services/vozService.js";
+import { enviarMensajeIA } from "@/services/chatClient.js";
 
 // Herramientas
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
@@ -46,19 +47,6 @@ const INIT_MSG = {
 };
 
 /* ============================================================
-   🧠 Helper: construir URL base al backend Express
-   (prod usa VITE_API_BASE_URL, dev fallback a localhost:3000/api)
-============================================================ */
-function getApiBaseUrl() {
-  const raw = import.meta.env?.VITE_API_BASE_URL?.trim();
-  if (!raw || raw === "") return "http://localhost:3000/api";
-  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
-}
-function buildUrl(path = "/ia/chat") {
-  return `${getApiBaseUrl()}${path}`;
-}
-
-/* ============================================================
    🎙️ Control global de audio (evitar voces superpuestas)
 ============================================================ */
 let currentAudio = null;
@@ -75,110 +63,10 @@ function stopCurrentAudio() {
 }
 
 /* ============================================================
-   🔁 enviarALitisbot
+   🔁 enviarALitisbot (soporta SSE y JSON plano)
 ============================================================ */
-export async function enviarALitisbot(payload, onStreamChunk) {
-  try {
-    const IA_URL = buildUrl("/ia/chat");
-
-    const resp = await fetch(IA_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const ctype = resp.headers.get("content-type") || "";
-
-       /* ============================================================
-       Caso 1: respuesta tipo streaming (text/event-stream)
-    ============================================================ */
-    if (resp.body && /event-stream/i.test(ctype)) {
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-
-      let textoAcumulado = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        // decodificamos el fragmento actual
-        const chunk = decoder.decode(value, { stream: true });
-        textoAcumulado += chunk;
-
-        // permitimos streaming en UI (onStreamChunk viene de procesarConsulta)
-        if (onStreamChunk) {
-          onStreamChunk(chunk, textoAcumulado);
-        }
-      }
-
-      const finalLimpio = (textoAcumulado || "").trim();
-
-      // 👇 importante: NO llamamos reproducirVozVaronil(finalLimpio)
-
-      return {
-        ok: true,
-        respuesta: finalLimpio || "⚠️ (sin texto recibido)",
-        sugerencias: [],
-      };
-    }
-
-    /* ============================================================
-       Caso 2: respuesta JSON normal
-      ============================================================ */
-    let data = {};
-    try {
-      data = await resp.json();
-    } catch {
-      // si no se pudo parsear JSON, dejamos data = {}
-      data = {};
-    }
-
-    // si el backend respondió con error HTTP (4xx / 5xx)
-    if (!resp.ok) {
-      const mensajeError =
-        data?.error ||
-        data?.message ||
-        `❌ Error HTTP ${resp.status} tratando de procesar tu consulta.`;
-
-      return {
-        ok: false,
-        respuesta: mensajeError,
-        sugerencias: [],
-      };
-    }
-
-    // respuesta "buena"
-    const textoFinal =
-      data.respuesta ||
-      data.text ||
-      "⚠️ No se recibió respuesta válida del servidor.";
-
-    const sugerenciasDelBot = Array.isArray(data.sugerencias)
-      ? data.sugerencias
-      : [];
-
-    const limpio = (textoFinal || "").trim();
-
-    // 👇 otra vez: NO reproducimos voz automáticamente aquí.
-    
-    return {
-      ok: true,
-      respuesta: limpio,
-      sugerencias: sugerenciasDelBot,
-    };
-
-  } catch (err) {
-    console.error("❌ Error al enviar mensaje a LitisBot:", err);
-    return {
-      ok: false,
-      respuesta:
-        "❌ Error al procesar la consulta. Verifica tu conexión o inténtalo nuevamente.",
-      sugerencias: [],
-    };
-  }
+export async function enviarALitisbot(payload, onStreamChunk, signal) {
 }
-
 /* ============================================================
    🧽 util formateo para copiar limpio
 ============================================================ */
@@ -1013,130 +901,104 @@ const [mensajes, setMensajes] = useState(() => {
       }));
   }
 
-  // ====== PROCESADOR GENÉRICO DE CONSULTA ======
-  async function procesarConsulta(pregunta, fnIA) {
-    const texto = (pregunta || "").trim();
-    if (!texto) {
-      setError("⚠️ Escribe una consulta antes de enviar.");
-      return;
-    }
-
-    setCargando(true);
-    setIsSending(true);
-    setError("");
-
-    // placeholder de asistente
-    setMensajes((prev) => [
-      ...prev,
-      { role: "assistant", content: "💬 Analizando tu consulta..." },
-    ]);
-
-    let respuestaAcumulada = "";
-
-    try {
-      const { respuesta } = await fnIA((chunk) => {
-        if (!chunk) return;
-        respuestaAcumulada = chunk;
-        setMensajes((prev) => {
-          const copia = [...prev];
-          copia[copia.length - 1] = {
-            role: "assistant",
-            content: chunk,
-          };
-          return copia;
-        });
-      });
-
-      const finalText = (
-        respuesta ||
-        respuestaAcumulada ||
-        "⚠️ No se recibió respuesta válida del servidor."
-      ).trim();
-
-      const msgFinal = { role: "assistant", content: finalText };
-      saveMessage(casoActivo, msgFinal);
-
-      setMensajes((prev) => {
-        const copia = [...prev];
-        copia[copia.length - 1] = msgFinal;
-        return copia;
-      });
-    } catch (err) {
-      console.error("❌ Error en procesarConsulta:", err);
-      let msgError =
-        "❌ Ocurrió un error inesperado al procesar tu consulta.";
-      if (err.message?.includes("Falta el prompt"))
-        msgError = "⚠️ La consulta no puede enviarse vacía.";
-      else if (err.message?.includes("429"))
-        msgError = "🚫 Límite de consultas por minuto alcanzado.";
-      else if (err.message?.includes("500"))
-        msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
-      else if (err.message?.includes("Failed to fetch"))
-        msgError = "🌐 No se pudo conectar al servidor.";
-
-      setMensajes((prev) => {
-        const copia = [...prev];
-        copia[copia.length - 1] = { role: "assistant", content: msgError };
-        return copia;
-      });
-    } finally {
-      setCargando(false);
-      setIsSending(false);
-      setInput("");
-    }
+  // ====== PROCESADOR GENÉRICO DE CONSULTA (versión unificada con chatClient) ======
+async function procesarConsulta(pregunta, construirPayload) {
+  const texto = (pregunta || "").trim();
+  if (!texto) {
+    setError("⚠️ Escribe una consulta antes de enviar.");
+    return;
   }
 
-  // ====== INTENTOS IA SEGÚN CONTEXTO ======
-  async function handleConsultaGeneral(pregunta) {
-    await procesarConsulta(pregunta, async (onStreamChunk) =>
-      enviarALitisbot(
-        {
-          prompt: pregunta.trim(),
-          historial: obtenerHistorial(),
-          usuarioId: user?.uid || "invitado",
-          userEmail: user?.email || "",
-          modo: "general",
-          materia: "general",
-          idioma: "es",
-        },
-        onStreamChunk
-      )
-    );
-  }
+  setCargando(true);
+  setIsSending(true);
+  setError("");
 
-  async function handleConsultaLegal({ mensaje, materia = "general" }) {
-    await procesarConsulta(mensaje, async (onStreamChunk) =>
-      enviarALitisbot(
-        {
-          prompt: mensaje.trim(),
-          historial: obtenerHistorial(),
-          usuarioId: user?.uid || "invitado",
-          userEmail: user?.email || "",
-          modo: "juridico",
-          materia,
-          idioma: "es",
-        },
-        onStreamChunk
-      )
-    );
-  }
+  // placeholder de asistente
+  setMensajes((prev) => [
+    ...prev,
+    { role: "assistant", content: "💬 Analizando tu consulta..." },
+  ]);
 
-  async function handleConsultaInvestigacion(pregunta) {
-    await procesarConsulta(pregunta, async (onStreamChunk) =>
-      enviarALitisbot(
-        {
-          prompt: pregunta.trim(),
-          historial: obtenerHistorial(),
-          usuarioId: user?.uid || "invitado",
-          userEmail: user?.email || "",
-          modo: "investigacion",
-          materia: "investigacion",
-          idioma: "es",
-        },
-        onStreamChunk
-      )
-    );
+  const controller = new AbortController();
+
+  try {
+    const payload = construirPayload(texto);
+    // usamos SIEMPRE el cliente unificado
+    const resp = await enviarMensajeIA(payload, controller.signal);
+
+    const finalText =
+      (resp?.respuesta || resp?.text || resp?.message || "").trim() ||
+      "⚠️ No se recibió respuesta válida del servidor.";
+
+    const msgFinal = { role: "assistant", content: finalText };
+    saveMessage(casoActivo, msgFinal);
+
+    setMensajes((prev) => {
+      const copia = [...prev];
+      copia[copia.length - 1] = msgFinal;
+      return copia;
+    });
+  } catch (err) {
+    console.error("❌ Error en procesarConsulta:", err);
+    let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
+    if (err?.name === "AbortError") msgError = "⏹️ Consulta cancelada.";
+    else if (err.message?.includes("Falta el prompt"))
+      msgError = "⚠️ La consulta no puede enviarse vacía.";
+    else if (err.message?.includes("429"))
+      msgError = "🚫 Límite de consultas por minuto alcanzado.";
+    else if (err.message?.includes("500"))
+      msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
+    else if (err.message?.includes("Failed to fetch"))
+      msgError = "🌐 No se pudo conectar al servidor.";
+
+    setMensajes((prev) => {
+      const copia = [...prev];
+      copia[copia.length - 1] = { role: "assistant", content: msgError };
+      return copia;
+    });
+  } finally {
+    setCargando(false);
+    setIsSending(false);
+    setInput("");
   }
+}
+
+  // ====== INTENTOS IA SEGÚN CONTEXTO (unificados) ======
+async function handleConsultaGeneral(pregunta) {
+  await procesarConsulta(pregunta, (texto) => ({
+    prompt: texto,
+    historial: obtenerHistorial(),
+    usuarioId: user?.uid || "invitado",
+    userEmail: user?.email || "",
+    modo: "general",
+    materia: "general",
+    idioma: "es",
+  }));
+}
+
+async function handleConsultaLegal({ mensaje, materia = "general" }) {
+  await procesarConsulta(mensaje, (texto) => ({
+    prompt: texto,
+    historial: obtenerHistorial(),
+    usuarioId: user?.uid || "invitado",
+    userEmail: user?.email || "",
+    modo: "juridico",
+    materia,
+    idioma: "es",
+  }));
+}
+
+async function handleConsultaInvestigacion(pregunta) {
+  await procesarConsulta(pregunta, (texto) => ({
+    prompt: texto,
+    historial: obtenerHistorial(),
+    usuarioId: user?.uid || "invitado",
+    userEmail: user?.email || "",
+    modo: "investigacion",
+    materia: "investigacion",
+    idioma: "es",
+  }));
+}
 
   // ====== ENVÍO MENSAJE DEL USUARIO ======
   async function handleSend(e) {
