@@ -1,4 +1,5 @@
 // src/components/LitisBotBubbleChat.jsx
+import { API_BASE } from "@/services/apiBase";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   FaPaperclip,
