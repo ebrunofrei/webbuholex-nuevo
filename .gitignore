@@ -1,4 +1,4 @@
-# --- Node/React/Vite ---
+﻿# --- Node/React/Vite ---
 node_modules/
 dist/
 .tmp/
@@ -18,3 +18,7 @@ coverage/
 # --- Puppeteer / tmp ---
 tmp-puppeteer/
 puppeteer/.local-chromium/
+
+# --- Credenciales / claves ---
+backend/firebase-service-account.json
+backend/keys/*.json
