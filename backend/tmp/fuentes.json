@@ -1,0 +1,31 @@
+{
+  "fuentes": [
+    "El Comercio",
+    "GNews",
+    "Poder Judicial",
+    "TC",
+    "Tribunal Constitucional"
+  ],
+  "top": [
+    {
+      "_id": "poder judicial",
+      "count": 26
+    },
+    {
+      "_id": "gnews",
+      "count": 1
+    },
+    {
+      "_id": "tribunal constitucional",
+      "count": 1
+    },
+    {
+      "_id": "el comercio",
+      "count": 1
+    },
+    {
+      "_id": "tc",
+      "count": 1
+    }
+  ]
+}

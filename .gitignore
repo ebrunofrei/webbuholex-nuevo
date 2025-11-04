@@ -1,165 +1,20 @@
-# ============================
-# LOGS
-# ============================
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# ============================
-# DEPENDENCIAS
-# ============================
+# --- Node/React/Vite ---
 node_modules/
-.pnp/
-.pnp.js
-
-# ============================
-# BUILD OUTPUTS
-# ============================
 dist/
-dist-ssr/
-build/
-out/
-coverage/
-.next/
-.vercel/output/
-
-# ============================
-# SISTEMA / BACKUPS
-# ============================
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-*.bak
-*.tmp
-__backups__/
-
-# ============================
-# CONFIGURACIONES DE EDITOR
-# ============================
-.vscode/
-.idea/
-*.code-workspace
-
-# ============================
-# ARCHIVOS DE ENTORNO Y CLAVES SENSIBLES
-# ============================
-.env
-.env.local
-.env.production
-.env.development
-*.key
-*.pem
-*.crt
-*.p12
-*.secret
-*.enc
-*.credentials
-secrets.*
-firebase-service-account.json
-
-# ============================
-# ARCHIVOS DE CONFIG PERSONAL
-# ============================
-*.local
-*.history
-_legacy/**
-
-# ============================
-# FIREBASE CONFIG FILES (solo Admin o privados)
-# ============================
-src/config/*.js
-src/config/**/firebase*.js
-backend/keys/*.json
-importar_normas/firebase-service-account.json
-
-# ✅ Mantener config pública (Frontend SDK) si se requiere en Vercel
-!src/firebase.js
-!public/firebase-messaging-sw.js
-!public/favicon.ico
-!public/manifest.json
-
-# ============================
-# TEST / HERRAMIENTAS
-# ============================
-*.test.*
-*.spec.*
-*.coverage.*
-.eslintcache
-jest.config.js
-
-# ============================
-# CACHE / DEPURACIÓN
-# ============================
+.tmp/
 .cache/
-.yarn/
-.pnpm-debug.log
-index-*.js
-index-*.css
+coverage/
+*.log
 
-# ============================
-# TEMPORALES
-# ============================
-tmp/
-temp/
-*.tmp
-*.bak
+# --- Entornos ---
+.env
+.env.*
+!.env.example
 
-# ============================
-# STORYBOOK
-# ============================
-.storybook-out/
+# --- SO / IDE ---
+.vscode/
+.DS_Store
 
-# ============================
-# CYPRESS
-# ============================
-cypress/videos/
-cypress/screenshots/
-
-# ============================
-# DOCKER
-# ============================
-docker-compose.override.yml
-
-# ============================
-# VERCEL PROJECT FILES
-# ============================
-.vercel/
-# ⚠️ Mantener config de proyecto
-!vercel.json
-
-# ============================
-# FRONTEND BUILD / PUBLIC
-# ============================
-src/assets/index-*.js
-public/*.map
-public/*.tmp
-public/*.bak
-
-# ============================
-# SCRIPTS DE MANTENIMIENTO
-# ============================
-scripts/*.tmp
-scripts/*.bak
-scripts/*.log
-# ✅ Mantener scripts útiles
-!scripts/test-fcm.js
-!scripts/send-fcm.js
-
-# === Carpetas internas y de pruebas ===
-importar_normas/
+# --- Puppeteer / tmp ---
 tmp-puppeteer/
-scripts/
-screenshots/
-logs/
-tests/
-
-# Audios generados por TTS/chat (no versionar)
-*.mp3
+puppeteer/.local-chromium/
