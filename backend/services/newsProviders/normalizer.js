@@ -1,185 +1,228 @@
 ﻿// ============================================================
-// ðŸ¦‰ BÃšHOLEX | Normalizador universal de noticias (versiÃ³n PRO)
-// ============================================================
-// Convierte las distintas estructuras de scraping en un formato
-// unificado compatible con MongoDB y el frontend.
-// - Genera siempre resumen y contenido legibles
-// - Clasifica automÃ¡ticamente la especialidad y el tipo
-// - Limpia HTML, espacios, y normaliza mayÃºsculas
+// 🦉 BúhoLex | Normalizador universal de noticias (versión PRO)
+// - Coherente con _helpers.js y tus providers
+// - Salida lista para MongoDB + Frontend
 // ============================================================
 
-/**
- * ðŸ§¹ Limpieza bÃ¡sica de texto HTML y espacios
- */
-function limpiarTexto(txt = "") {
-  if (!txt) return "";
-  return txt
-    .replace(/<[^>]+>/g, "") // eliminar etiquetas HTML
-    .replace(/\s+/g, " ") // colapsar espacios
+import {
+  stripHtml,
+  normalizeText,
+  absUrl,
+  proxifyMedia,
+  smartDate,
+  guessLang,
+} from "./_helpers.js";
+
+/* =========================
+ * Util: quitar tildes y normalizar
+ * ========================= */
+function norm(s = "") {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
     .trim();
 }
 
-/**
- * ðŸ” Clasifica especialidad segÃºn palabras clave del texto
- */
+/* =========================
+ * Limpieza de texto
+ * ========================= */
+function limpiarTexto(txt = "") {
+  if (!txt) return "";
+  const sinHtml = stripHtml(String(txt));
+  return normalizeText(sinHtml);
+}
+
+/* =========================
+ * Clasificador de especialidad (ampliado)
+ * ========================= */
 export function detectEspecialidad(texto = "") {
-  const lower = limpiarTexto(texto).toLowerCase();
+  const t = norm(limpiarTexto(texto));
 
-  if (lower.includes("penal") || lower.includes("delito") || lower.includes("fiscal"))
-    return "penal";
-  if (lower.includes("civil") || lower.includes("contrato") || lower.includes("propiedad"))
-    return "civil";
-  if (lower.includes("laboral") || lower.includes("trabajador") || lower.includes("sindicato"))
-    return "laboral";
-  if (
-    lower.includes("constitucional") ||
-    lower.includes("tribunal constitucional") ||
-    lower.includes("amparo")
-  )
-    return "constitucional";
-  if (lower.includes("familiar") || lower.includes("matrimonio") || lower.includes("hijo"))
-    return "familiar";
-  if (
-    lower.includes("administrativo") ||
-    lower.includes("resoluciÃ³n") ||
-    lower.includes("expediente administrativo")
-  )
-    return "administrativo";
-  if (lower.includes("ambiental") || lower.includes("medio ambiente"))
-    return "ambiental";
-  if (lower.includes("registral") || lower.includes("sunarp"))
-    return "registral";
-  if (lower.includes("notarial"))
-    return "notarial";
-  if (lower.includes("tributario") || lower.includes("impuesto"))
-    return "tributario";
-  if (
-    lower.includes("tecnologÃ­a") ||
-    lower.includes("digital") ||
-    lower.includes("ciber") ||
-    lower.includes("internet") ||
-    lower.includes("innovaciÃ³n")
-  )
-    return "tecnologia";
+  const tests = [
+    ["penal", /(penal|delito|fiscal(ia)?|acusaci[oó]n|condena|sentencia penal|mp|ministerio publico)/],
+    ["civil", /(civil|contrato|propiedad|obligaci[oó]n|posesi[oó]n|arrendamiento|sucesi[oó]n)/],
+    ["laboral", /(laboral|trabajador|empleador|despido|sindicato|remuneraci[oó]n|sunafil|planilla)/],
+    ["constitucional", /(constitucional|tribunal constitucional|tc|amparo|derechos fundamentales|habeas corpus)/],
+    ["familiar", /(familia|alimentos|tenencia|violencia familiar|matrimonio|divorcio)/],
+    ["administrativo", /(administrativo|resoluci[oó]n administrativa|procedimiento administrativo|tupa|osce|municipalidad)/],
+    ["tributario", /(tributario|impuesto|sunat|igv|renta|arbitrios)/],
+    ["comercial", /(comercial|mercantil|societario|accionista|empresa|factoring)/],
+    ["procesal", /(procesal|proceso|procedimiento|cautelar|apelaci[oó]n|casaci[oó]n)/],
+    ["registral", /(registral|sunarp|registro|partida|registrador)/],
+    ["ambiental", /(ambiental|oeefa|eia|impacto ambiental)/],
+    ["notarial", /(notarial|notario)/],
+    ["penitenciario", /(penitenciario|inpe|prisi[oó]n|c[áa]rcel)/],
+    ["consumidor", /(consumidor|indecopi|protecci[oó]n al consumidor)/],
+    ["seguridad social", /(seguridad social|previsional|pensi[oó]n|pensiones)/],
+    ["derechos humanos", /(derechos humanos|corte idh|cidh|oea|onu derechos|convencion americana)/],
+    ["internacional", /(internacional|onu|oea|cij|tjue|corte internacional)/],
+    ["informatico", /(inform[aá]tico|ciberseguridad|habeas data|protecci[oó]n de datos|delitos inform[aá]ticos)/],
+  ];
 
+  for (const [key, rx] of tests) if (rx.test(t)) return key;
   return "general";
 }
 
-/**
- * ðŸ”¹ Normaliza una sola noticia
- * Aplica formato, limpieza y detecciÃ³n inteligente de campos.
- */
-export function normalizeNoticia({
-  id,
-  titulo = "",
-  resumen = "",
-  contenido = "",
-  fuente = "",
-  url = "#",
-  imagen = null,
-  fecha = null,
-  tipo = "",
-  especialidad = "",
-} = {}) {
-  // ðŸ§¼ Limpieza y seguridad bÃ¡sica
-  titulo = limpiarTexto(titulo) || "Sin tÃ­tulo";
+/* =========================
+ * Normalización de fuente
+ * ========================= */
+function fuenteToNorm(f = "") {
+  let s = norm(f);
+  // intenta además extraer host si viene una URL
+  try {
+    const h = new URL(f).hostname.replace(/^www\./i, "");
+    if (h) s = norm(h);
+  } catch { /* no-op */ }
+
+  // Simplificaciones frecuentes
+  s = s
+    .replace(/^diario oficial\s+/, "")
+    .replace(/\.pe$|\.com$|\.org$|\.net$|\.es$/g, "")
+    .replace(/legispe$/, "legis")
+    .replace(/^pj$/, "poder judicial")
+    .replace(/^tc$/, "tribunal constitucional")
+    .replace(/^elpais$/, "el pais");
+
+  return s;
+}
+
+/* =========================
+ * Clasificador de tipo (jurídica/general)
+ * ========================= */
+function detectarTipoPorFuente(fuente = "") {
+  const f = fuenteToNorm(fuente);
+
+  const juridicas = [
+    "poder judicial", "tribunal constitucional", "sunarp", "jnj",
+    "gaceta juridica", "legis", "ministerio publico", "corte suprema",
+    "corte idh", "cij", "tjue", "oea", "onu noticias", "el peruano",
+  ];
+
+  const generales = [
+    "bbc", "cnn", "el pais", "reuters", "guardian",
+    "gnews", "newsapi", "nature", "nasa", "rpp", "andina",
+  ];
+
+  if (juridicas.some(k => f.includes(k))) return "juridica";
+  if (generales.some(k => f.includes(k))) return "general";
+  return ""; // desconocido
+}
+
+/* =========================
+ * Normalizador principal
+ * ========================= */
+export function normalizeNoticia(input = {}) {
+  // ---- Entrada tolerante ----
+  let {
+    id,
+    titulo = "",
+    resumen = "",
+    contenido = "",
+    fuente = "",
+    url,
+    enlace,               // alias frecuente
+    imagen,
+    fecha,
+    tipo = "",
+    especialidad = "",
+    lang,
+  } = input || {};
+
+  // ---- Limpieza de textos ----
+  titulo = limpiarTexto(titulo) || "Sin título";
   resumen = limpiarTexto(resumen);
   contenido = limpiarTexto(contenido);
 
-  // ðŸ§© Fallbacks inteligentes
+  // Fallbacks de texto (defensas)
   if (!resumen || resumen.length < 25) {
-    resumen = contenido ? contenido.slice(0, 280) + "..." : "Sin resumen disponible.";
+    resumen = contenido ? `${contenido.slice(0, 280)}…` : "Sin resumen disponible.";
   }
   if (!contenido || contenido.length < 50) {
     contenido = resumen || "Sin contenido disponible.";
   }
 
-  // ðŸ–¼ï¸ Imagen fallback
-  if (!imagen || typeof imagen !== "string" || imagen.length < 5) {
-    imagen = "/assets/default-news.jpg";
+  // ---- URL / Imagen ----
+  const urlFinal = absUrl(url || enlace || "#");
+  const imagenAbs = imagen ? absUrl(imagen, urlFinal) : "";
+  const imagenResuelta = imagenAbs ? proxifyMedia(imagenAbs) : "";
+  const imagenFinal = imagenResuelta || "/assets/default-news.jpg";
+
+  // ---- Fuente y normalización ----
+  let fuenteFinal = fuente?.trim();
+  if (!fuenteFinal) {
+    try {
+      const host = new URL(urlFinal).hostname.replace(/^www\./i, "");
+      fuenteFinal = host || "Fuente desconocida";
+    } catch {
+      fuenteFinal = "Fuente desconocida";
+    }
   }
+  const fuenteNorm = fuenteToNorm(fuenteFinal);
 
-  // ðŸ›ï¸ ClasificaciÃ³n automÃ¡tica del tipo (jurÃ­dica o general)
-  const lowerFuente = (fuente || "").toLowerCase().trim();
+  // ---- Fecha → Date para Mongo ----
+  const iso = smartDate(fecha);
+  const fechaDate = new Date(iso);
 
-  const fuentesJuridicas = [
-    "poder judicial",
-    "tribunal constitucional",
-    "sunarp",
-    "jnj",
-    "gaceta jurÃ­dica",
-    "legis.pe",
-    "ministerio pÃºblico",
-    "corte suprema",
-    "corte idh",
-    "cij",
-    "tjue",
-    "oea",
-    "onu noticias",
-    "diario oficial el peruano",
-  ];
+  // ---- Idioma ----
+  const langOut = (lang || guessLang(`${titulo} ${resumen}`)).toLowerCase();
 
-  const fuentesGenerales = [
-    "bbc",
-    "cnn",
-    "el paÃ­s",
-    "reuters",
-    "science news",
-    "cybersecurity",
-    "techcrunch",
-    "gnews",
-    "newsapi",
-    "nature",
-    "nasa",
-    "guardian",
-  ];
-
-  // ClasificaciÃ³n principal por fuente
-  if (fuentesJuridicas.some((f) => lowerFuente.includes(f))) {
-    tipo = "juridica";
-  } else if (fuentesGenerales.some((f) => lowerFuente.includes(f))) {
-    tipo = "general";
-  } else if (!tipo) {
-    // ClasificaciÃ³n secundaria por palabras clave del contenido
-    const lowerContenido = `${titulo} ${resumen} ${contenido}`.toLowerCase();
+  // ---- Tipo (jurídica/general) ----
+  let tipoOut = tipo || detectarTipoPorFuente(fuenteFinal);
+  if (!tipoOut) {
+    // fallback por contenido si la fuente no decide
+    const blob = norm(`${titulo} ${resumen} ${contenido}`);
     if (
-      lowerContenido.includes("sentencia") ||
-      lowerContenido.includes("jurisprudencia") ||
-      lowerContenido.includes("resoluciÃ³n") ||
-      lowerContenido.includes("fiscalÃ­a") ||
-      lowerContenido.includes("magistrado")
+      /(sentencia|jurisprudencia|resoluci[oó]n|magistrad|fiscal[ií]a|juzgado|sala suprema|casaci[oó]n)/.test(blob)
     ) {
-      tipo = "juridica";
+      tipoOut = "juridica";
     } else {
-      tipo = "general";
+      tipoOut = "general";
     }
   }
 
-  // âš–ï¸ Especialidad automÃ¡tica (si no viene asignada)
-  const especialidadDetectada =
-    especialidad && especialidad !== "general"
-      ? especialidad
+  // ---- Especialidad ----
+  const especialidadOut =
+    especialidad && norm(especialidad) !== "general"
+      ? norm(especialidad)
       : detectEspecialidad(`${titulo} ${resumen} ${contenido}`);
 
+  // ---- ID estable ----
+  const idOut =
+    id ||
+    urlFinal ||
+    `${fuenteNorm}-${titulo}`.slice(0, 96);
+
+  // ---- Topes anti-bomba ----
+  const cap = (s, n) => (s && s.length > n ? `${s.slice(0, n)}…` : s);
+  titulo = cap(titulo, 500);
+  resumen = cap(resumen, 2000);
+  contenido = cap(contenido, 20000);
+
+  // ---- Salida final (Mongo + Front) ----
   return {
-    id: id || url,
+    id: idOut,
     titulo,
     resumen,
     contenido,
-    fuente: fuente.trim() || "Fuente desconocida",
-    url,
-    imagen,
-    fecha: fecha ? new Date(fecha) : new Date(),
-    tipo,
-    especialidad: especialidadDetectada,
+    fuente: fuenteFinal,
+    fuenteNorm,                 // 🔹 clave útil para filtros exactos
+    url: urlFinal,              // 🔹 backend: usamos "url"
+    enlace: urlFinal,           // 🔹 frontend legacy: "enlace"
+    imagen: imagenAbs || "",    // sin proxy (por si lo quieres persistir tal cual)
+    imagenResuelta: imagenFinal,// con proxy/local (directo para cards)
+    fecha: fechaDate,           // 🔹 Date listo para Mongo
+    tipo: tipoOut,              // "juridica" | "general"
+    especialidad: especialidadOut || "general",
+    lang: langOut || "es",
   };
 }
 
-/**
- * ðŸ”¹ Normaliza un array completo de noticias
- */
+/* =========================
+ * Normalizar un array
+ * ========================= */
 export function normalizeNoticias(lista = []) {
-  return lista
-    .filter((n) => n && (n.titulo || n.url))
+  return (Array.isArray(lista) ? lista : [])
+    .filter((n) => n && (n.titulo || n.url || n.enlace))
     .map((n) => normalizeNoticia(n));
 }

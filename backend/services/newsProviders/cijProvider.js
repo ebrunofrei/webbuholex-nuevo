@@ -1,82 +1,141 @@
-Ôªø// backend/services/newsProviders/cijProvider.js
+// ============================================================
+// ?? B˙hoLex | Provider CIJ (Corte Internacional de Justicia)
+// - Rutas candidatas: /news, /press-releases, /home
+// - Soporta: q, limit, since, lang, especialidad, page (ignorado)
+// - Devuelve array de Ìtems normalizados (para aggregator)
+// ============================================================
 import * as cheerio from "cheerio";
 import {
-  fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia, normalizeItem
+  fetchHTML,
+  absUrl,
+  normalizeText,
+  toISODate,
+  proxifyMedia,
+  normalizeItem,
 } from "./_helpers.js";
 
-/**
- * CIJ (Corte Internacional de Justicia) ‚Äì provider
- * Scrapea listados /news | /press-releases con tolerancia a cambios de layout.
- */
-export async function fetchCIJ({ max = 10 } = {}) {
-  const base = "https://www.icj-cij.org";
-  const candidates = [`${base}/news`, `${base}/press-releases`, `${base}/home`];
+const BASE = "https://www.icj-cij.org";
+const CANDIDATES = [`${BASE}/news`, `${BASE}/press-releases`, `${BASE}/home`];
 
+function mediaScore(n) {
+  return n?.video ? 2 : n?.imagen ? 1 : 0;
+}
+
+async function fetchNoticias({
+  q = "",
+  limit = 12,
+  since = null,         // Date o ISO; el aggregator ya lo manda si aplica
+  lang = "all",
+  especialidad = "internacional",
+  // page se ignora: el listado de CIJ es est·tico (paginaciÛn JS)
+} = {}) {
   try {
-    const html = await fetchHTML(candidates);
+    const html = await fetchHTML(CANDIDATES, { timeout: 15000 });
     if (!html) return [];
+
     const $ = cheerio.load(html);
     const out = [];
 
-    const $cards = $("article, .views-row, .news-item, .news__item, .press__item");
+    // tarjetas flexibles
+    const $cards = $("article, .views-row, .news-item, .news__item, .press__item, .node");
 
-    $cards.slice(0, max).each((_, el) => {
+    $cards.each((_, el) => {
       const $el = $(el);
 
-      // t√≠tulo y enlace (evita href="#")
-      const $a =
-        $el.find("h3 a, h2 a, .node__title a, .title a, a[href]").filter((i, a) => {
+      // TÌtulo + enlace (evitar href "#")
+      const $a = $el
+        .find("h3 a, h2 a, .node__title a, .title a, a[href]")
+        .filter((i, a) => {
           const h = $(a).attr("href") || "";
           return h && h !== "#";
-        }).first();
+        })
+        .first();
 
       const rawTitle = normalizeText($a.text() || "");
       const href = $a.attr("href") || "";
-      const enlace = absUrl(href, base);
+      const enlace = absUrl(href, BASE);
 
-      // resumen
+      if (!rawTitle || !enlace) return;
+
+      // Resumen
       const rawResumen =
         $el.find(".field--name-body p, .teaser__text p, .summary p, p").first().text() ||
         $el.find(".field--name-body, .teaser__text, .summary").first().text() ||
         "";
       const resumen = normalizeText(rawResumen);
 
-      // imagen (ignorar bullet.gif)
-      const imgSrc =
-        $el.find("img").attr("data-src") || $el.find("img").attr("src") || "";
-      const imagenAbs = /bullet\.gif$/i.test(imgSrc) ? "" : absUrl(imgSrc, base);
+      // Imagen (filtra bullet.gif)
+      const imgSrc = $el.find("img").attr("data-src") || $el.find("img").attr("src") || "";
+      const imagenAbs = /bullet\.gif$/i.test(imgSrc) ? "" : absUrl(imgSrc, BASE);
       const imagen = imagenAbs ? proxifyMedia(imagenAbs) : "";
 
-      // fecha
-      const rawFecha = $el.find("time").attr("datetime") || $el.find("time, .date").first().text() || "";
+      // Fecha (time[datetime] o texto)
+      const rawFecha =
+        $el.find("time").attr("datetime") ||
+        $el.find("time, .date, .news__date, .press__date").first().text() ||
+        "";
       const fecha = toISODate(rawFecha);
 
-      if (rawTitle && enlace) {
-        const item = normalizeItem({
-          titulo: rawTitle,
-          resumen,
-          enlace,            // nuestro modelo
-          imagen,
-          fecha,
-          fuente: "CIJ",
-          tipo: "juridica",
-          especialidad: "internacional",
-          // lang opcional (normalizeItem infiere si no lo env√≠as)
-        });
+      const item = normalizeItem({
+        titulo: rawTitle,
+        resumen,
+        enlace,
+        imagen,
+        fecha,
+        fuente: "CIJ",
+        tipo: "juridica",
+        especialidad: "internacional",
+        lang, // el helper infiere si no coincide, pero no molesta
+      });
 
-        // si normalizeItem dej√≥ url vac√≠o, fuerza enlace
-        if (!item.url) item.url = enlace;
+      // GarantÌas mÌnimas
+      if (!item.url) item.url = enlace;
+      if (!item.id) item.id = enlace;
+      if (!item.fuenteNorm) item.fuenteNorm = "cij";
 
-        // id estable si viniera vac√≠o
-        if (!item.id) item.id = enlace;
-
-        out.push(item);
-      }
+      out.push(item);
     });
 
-    return out;
+    // Filtro temporal (por si el aggregator no lo aplicÛ)
+    let items = out;
+    if (since) {
+      const d = new Date(since);
+      if (!Number.isNaN(+d)) {
+        items = items.filter((n) => {
+          const nf = new Date(n.fecha || 0);
+          return !Number.isNaN(+nf) && nf >= d;
+        });
+      }
+    }
+
+    // Filtro por q (tÛpicos simples, coma separada)
+    if (q && q.trim()) {
+      const toks = q
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (toks.length) {
+        items = items.filter((n) => {
+          const hay = `${n.titulo || ""} ${n.resumen || ""}`.toLowerCase();
+          return toks.every((t) => hay.includes(t));
+        });
+      }
+    }
+
+    // Orden: fecha desc ? media
+    items.sort((a, b) => {
+      const da = new Date(a.fecha || 0).getTime();
+      const db = new Date(b.fecha || 0).getTime();
+      if (db !== da) return db - da;
+      return mediaScore(b) - mediaScore(a);
+    });
+
+    // Limit final
+    return items.slice(0, Math.max(1, Math.min(50, Number(limit) || 12)));
   } catch (e) {
-    console.error("‚ùå CIJ:", e?.message || e);
+    console.error("? CIJ provider:", e?.message || e);
     return [];
   }
 }
+
+export default fetchNoticias;

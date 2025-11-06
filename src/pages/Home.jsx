@@ -1,16 +1,13 @@
 // src/pages/Home.jsx
 import React from "react";
 import { motion } from "framer-motion";
-import logoBuho from "../assets/buho-institucional.png";
 import { Link } from "react-router-dom";
-import { useNoticias } from "../context/NoticiasContext";
+import logoBuho from "../assets/buho-institucional.png";
 
-// 👉 Nuevo modal (autoconsulta tipo="general")
-import NoticiasGeneralesModal from "@/components/ui/NoticiasGeneralesModal";
+// ✅ Usa solo el panel unificado (incluye FAB + lector + lógica completa)
+import NoticiasPanel from "@/features/noticias/NoticiasPanel";
 
 export default function Home() {
-  const { showNoticias, setShowNoticias } = useNoticias();
-
   const handleOficina = () => {
     if (window.location.pathname === "/oficina") return;
     window.location.href = "/oficina";
@@ -39,7 +36,6 @@ export default function Home() {
             className="w-44 sm:w-60 max-w-xs rounded-2xl shadow-2xl bg-white/90 border-4 border-[#4b2e19] mb-6"
             draggable={false}
           />
-
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#b03a1a] text-center mb-2 leading-tight drop-shadow">
             BúhoLex: justicia sin privilegios.
           </h2>
@@ -68,12 +64,8 @@ export default function Home() {
         </div>
       </motion.div>
 
-      {/* Modal de Noticias (Generales) */}
-      <NoticiasGeneralesModal
-        open={showNoticias}
-        onClose={() => setShowNoticias(false)}
-        initialLang="all"
-      />
+      {/* ✅ Panel unificado de noticias (incluye botón flotante) */}
+      <NoticiasPanel />
     </div>
   );
 }

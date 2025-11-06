@@ -18,7 +18,7 @@ import { dbConnect, getMongoUri } from "./backend/services/db.js";
 // Rutas
 import noticiasRoutes from "./backend/routes/noticias.js";
 import noticiasContenidoRoutes from "./backend/routes/noticiasContenido.js";
-import newsRoutes from "./backend/routes/news.js";
+import newsTopics from "./backend/routes/news-topics.js";
 import iaRoutes from "./backend/routes/ia.js";
 import usuariosRoutes from "./backend/routes/usuarios.js";
 import culqiRoutes from "./backend/routes/culqi.js";
@@ -162,7 +162,7 @@ app.use("/api/noticias/contenido", noticiasContenidoRoutes); // específico prim
 app.use("/api/news", newsLiveRouter);                         // live primero
 app.use("/api/noticias", noticiasRoutes);
 app.use("/api/noticias-guardadas", noticiasGuardadasRoutes);
-app.use("/api/news", newsRoutes);
+app.use("/api/news", newsTopics);
 app.use("/api/ia", iaRoutes);
 app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/culqi", culqiRoutes);

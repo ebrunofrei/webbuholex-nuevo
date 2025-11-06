@@ -163,3 +163,8 @@ tests/
 
 # Audios generados por TTS/chat (no versionar)
 *.mp3
+
+# samples & backups
+./backup-scripts/
+./vite.config_sample.js
+

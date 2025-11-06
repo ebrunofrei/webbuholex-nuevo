@@ -6,8 +6,9 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
-import './app-layout.css';
-// Páginas varias
+import "./app-layout.css";
+
+/* Páginas públicas */
 import SeedBrandingPage from "@/pages/SeedBrandingPage";
 import Blog from "./pages/Blog";
 import Home from "./pages/Home";
@@ -44,23 +45,21 @@ import RecuperarPassword from "./components/RecuperarPassword";
 import PersonalizacionView from "./views/PersonalizacionView";
 import PruebaNoticias from "@/pages/PruebaNoticias";
 
-// Contextos globales
+/* Contextos */
 import { LitisBotChatProvider } from "./context/LitisBotChatContext";
-import { NoticiasProvider } from "./context/NoticiasContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LitisBotProvider } from "./context/LitisBotContext";
 import { ToastProvider } from "@/components/ui/use-toast";
 import { GoogleAuthRootProvider } from "@/context/GoogleAuthContext";
 
-// Componentes generales
+/* Componentes generales */
 import Navbar from "./components/ui/Navbar";
 import Footer from "./components/Footer";
 import RutaPrivada from "./components/RutaPrivada";
 import NoticiasSlider from "./components/NoticiasSlider";
-import NoticiasBotonFlotante from "./components/ui/NoticiasBotonFlotante";
 import ModalLogin from "./components/ModalLogin";
 
-// Oficina virtual
+/* Oficina virtual */
 import Sidebar from "./components/Sidebar";
 import Oficina from "@/oficinaVirtual/pages/Oficina";
 import CasillaExpedientes from "./oficinaVirtual/pages/CasillaExpedientes";
@@ -77,33 +76,29 @@ import NoticiasOficina from "./oficinaVirtual/pages/Noticias";
 import HazteConocido from "./oficinaVirtual/pages/HazteConocido";
 import FirmarEscrito from "./oficinaVirtual/pages/escritorio/FirmarEscrito";
 import CalculadoraLaboral from "@/oficinaVirtual/pages/CalculadoraLaboral";
-import ConfigurarAlertas from "@/oficinaVirtual/components/ConfigurarAlertas"; // <- si todavía lo usas dentro
+import ConfigurarAlertas from "@/oficinaVirtual/components/ConfigurarAlertas";
 
-// Chat IA pantalla completa
+/* Chat IA pantalla completa */
 import SidebarChats from "@/components/SidebarChats";
 import LitisBotChatBase from "@/components/LitisBotChatBase";
 
-// Burbuja flotante IA global
+/* Burbuja flotante IA global */
 import LitisBotBubbleChat from "@/components/ui/LitisBotBubbleChat";
 
-// hook FCM
+/* FCM hook */
 import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
 
-// icono botón mobile para abrir sidebar de casos
+/* Icono botón mobile */
 import { FolderKanban } from "lucide-react";
 
-/* ────────────────────────────────────────────────
-   Helper: render only on client (evita hydration mismatch)
-──────────────────────────────────────────────── */
+/* ── Helper: render only on client ─────────────────────────────── */
 function ClientOnly({ children }) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   return ready ? <>{children}</> : null;
 }
 
-/* ────────────────────────────────────────────────
-   Layout OficinaVirtual: sidebar fijo escritorio
-──────────────────────────────────────────────── */
+/* ── Layout OficinaVirtual: sidebar fijo escritorio ─────────────── */
 function OficinaVirtualLayout({ children }) {
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -113,51 +108,31 @@ function OficinaVirtualLayout({ children }) {
   );
 }
 
-/* ────────────────────────────────────────────────
-   Pantalla /litisbot (chat grande con sidebar de casos)
-   Objetivos:
-   - 100dvh => ocupa alto real del móvil
-   - botón flotante 📂 con z-index alto y bottom seguro
-   - drawer lateral en móvil con scroll propio
-   - bloquear scroll del <body> mientras drawer está abierto
-──────────────────────────────────────────────── */
+/* ── Pantalla /litisbot: chat grande con sidebar de casos ───────── */
 function LitisBotPageIntegrada() {
   const [casos, setCasos] = React.useState([]);
   const [casoActivo, setCasoActivo] = React.useState(null);
   const [showModalHerramientas, setShowModalHerramientas] = React.useState(false);
-
-  // control de drawer móvil
   const [sidebarOpenMobile, setSidebarOpenMobile] = React.useState(false);
 
-  // info del usuario
   const { user } = useAuth() || {};
   const userInfo = user || { nombre: "Invitado", pro: false };
 
-  // bloquear scroll body cuando drawer abierto
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = sidebarOpenMobile ? "hidden" : prev || "";
-    return () => {
-      document.body.style.overflow = prev || "";
-    };
+    return () => { document.body.style.overflow = prev || ""; };
   }, [sidebarOpenMobile]);
 
   return (
     <section
       className="flex w-full bg-white text-[#5C2E0B]"
-      style={{
-        minHeight: "100dvh",
-        maxHeight: "100dvh",
-        overflow: "hidden", // evita doble scroll
-      }}
+      style={{ minHeight: "100dvh", maxHeight: "100dvh", overflow: "hidden" }}
     >
-      {/* SIDEBAR ESCRITORIO (lg+) */}
+      {/* Sidebar escritorio */}
       <aside
         className="hidden lg:flex flex-col flex-shrink-0 border-r border-[#f4e6c7] bg-white"
-        style={{
-          width: "300px",
-          height: "100dvh",
-        }}
+        style={{ width: "300px", height: "100dvh" }}
       >
         <SidebarChats
           casos={casos}
@@ -169,22 +144,12 @@ function LitisBotPageIntegrada() {
         />
       </aside>
 
-      {/* BOTÓN FLOTANTE (MÓVIL) PARA ABRIR CASOS */}
+      {/* Botón flotante móvil para abrir casos */}
       {!sidebarOpenMobile && (
         <button
-          className="
-            lg:hidden
-            fixed
-            left-4
-            z-[300]
-            rounded-full
-            shadow-xl
-            active:scale-95
-            flex items-center justify-center
-            text-white
-          "
+          className="lg:hidden fixed left-4 z-[300] rounded-full shadow-xl active:scale-95 flex items-center justify-center text-white"
           style={{
-            bottom: "calc(env(safe-area-inset-bottom,0px) + 88px)", // por encima de la barra de input
+            bottom: "calc(env(safe-area-inset-bottom,0px) + 88px)",
             width: "48px",
             height: "48px",
             background: "#5C2E0B",
@@ -197,59 +162,36 @@ function LitisBotPageIntegrada() {
         </button>
       )}
 
-      {/* DRAWER MÓVIL */}
+      {/* Drawer móvil */}
       {sidebarOpenMobile && (
-  <>
-    {/* capa oscura que cubre el fondo y cierra al tocar */}
-    <div
-      className="
-        fixed inset-0
-        bg-black/40
-        z-[200]
-        lg:hidden
-      "
-      style={{ pointerEvents: "auto" }}
-      onClick={() => setSidebarOpenMobile(false)}
-    />
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-[200] lg:hidden"
+            style={{ pointerEvents: "auto" }}
+            onClick={() => setSidebarOpenMobile(false)}
+          />
+          <aside
+            className="fixed right-0 top-0 lg:hidden flex flex-col w-[80vw] max-w-[320px] h-[100dvh] bg-white shadow-2xl border-l border-[#f4e6c7] z-[210]"
+            style={{ pointerEvents: "auto", WebkitOverflowScrolling: "touch", overflowY: "auto" }}
+          >
+            <SidebarChats
+              casos={casos}
+              setCasos={setCasos}
+              casoActivo={casoActivo}
+              setCasoActivo={setCasoActivo}
+              user={userInfo}
+              onOpenHerramientas={() => {
+                setShowModalHerramientas(true);
+                setSidebarOpenMobile(false);
+              }}
+              isOpen={sidebarOpenMobile}
+              onCloseSidebar={() => setSidebarOpenMobile(false)}
+            />
+          </aside>
+        </>
+      )}
 
-    {/* panel lateral encima del overlay */}
-    <aside
-      className="
-        fixed right-0 top-0
-        lg:hidden
-        flex flex-col
-        w-[80vw] max-w-[320px]
-        h-[100dvh]
-        bg-white
-        shadow-2xl
-        border-l border-[#f4e6c7]
-        z-[210]
-      "
-      style={{
-        pointerEvents: "auto",
-        WebkitOverflowScrolling: "touch",
-        overflowY: "auto",
-      }}
-    >
-      <SidebarChats
-        casos={casos}
-        setCasos={setCasos}
-        casoActivo={casoActivo}
-        setCasoActivo={setCasoActivo}
-        user={userInfo}
-        onOpenHerramientas={() => {
-          setShowModalHerramientas(true);
-          // opcional: cerramos el drawer cuando entra a Herramientas
-          setSidebarOpenMobile(false);
-        }}
-        isOpen={sidebarOpenMobile}
-        onCloseSidebar={() => setSidebarOpenMobile(false)}
-      />
-    </aside>
-  </>
-)}
-
-      {/* ÁREA PRINCIPAL DEL CHAT */}
+      {/* Área principal del chat */}
       <main
         className="flex-1 flex flex-col items-stretch bg-white text-[#5C2E0B]"
         style={{
@@ -274,26 +216,16 @@ function LitisBotPageIntegrada() {
     </section>
   );
 }
-        function LegacyOficinaRedirect() {
-        const loc = useLocation();
-  // conserva el resto del path, query y hash
-        const rest = loc.pathname.replace(/^\/oficina/, "");
-         return (
-          <Navigate
-         to={`/oficinaVirtual${rest}${loc.search}${loc.hash}`}
-        replace
-    />
-  );
+
+/* Redirección legacy /oficina → /oficinaVirtual */
+function LegacyOficinaRedirect() {
+  const loc = useLocation();
+  const rest = loc.pathname.replace(/^\/oficina/, "");
+  return <Navigate to={`/oficinaVirtual${rest}${loc.search}${loc.hash}`} replace />;
 }
 
-/* ────────────────────────────────────────────────
-   AppContent
-   - Maneja rutas públicas y oficina virtual
-   - Controla navbar / noticias / footer
-   - Inyecta la burbuja flotante global (ver más abajo)
-──────────────────────────────────────────────── */
+/* ── AppContent: rutas + navbar/footer + sliders ─────────────────── */
 function AppContent() {
-  // notificaciones push
   useFirebaseMessaging((payload) => {
     console.log("📩 Notificación vía FCM:", payload);
   });
@@ -301,33 +233,20 @@ function AppContent() {
   const { user, loading, abrirLogin } = useAuth() || {};
   const location = useLocation();
 
-  // Ruta actual
   const enOficinaVirtual = /^\/oficinaVirtual(\/|$)/.test(location.pathname);
   const enLitisBotFull = location.pathname === "/litisbot";
-  const mostrarBotonNoticias = location.pathname === "/";
 
-  // bloque de biblioteca protegida
   function BibliotecaProtegida() {
-    if (loading) {
-      return <div className="text-center mt-16">Verificando acceso...</div>;
-    }
+    if (loading) return <div className="text-center mt-16">Verificando acceso...</div>;
     if (!user) {
       return (
         <div className="text-center p-10">
           <p>Inicia sesión para acceder a la Biblioteca Jurídica.</p>
-
-          <button
-            onClick={abrirLogin}
-            className="bg-[#a52e00] text-white px-4 py-2 rounded shadow"
-          >
+          <button onClick={abrirLogin} className="bg-[#a52e00] text-white px-4 py-2 rounded shadow">
             Iniciar sesión
           </button>
-
           <div className="mt-2 text-sm text-center">
-            <button
-              onClick={() => abrirLogin("recuperar")}
-              className="text-blue-700 underline"
-            >
+            <button onClick={() => abrirLogin("recuperar")} className="text-blue-700 underline">
               ¿Olvidaste tu contraseña?
             </button>
           </div>
@@ -338,30 +257,22 @@ function AppContent() {
   }
 
   return (
-    <div
-      className="relative min-h-screen w-full text-[#5C2E0B]"
-      style={{ backgroundColor: "#fff" }}
-    >
-      {/* BLOQUE PÚBLICO (NO oficina virtual) */}
+    <div className="relative min-h-screen w-full text-[#5C2E0B]" style={{ backgroundColor: "#fff" }}>
+      {/* BLOQUE PÚBLICO */}
       {!enOficinaVirtual && (
         <>
-          {/* Navbar global: se oculta SOLO en /litisbot (porque ahí vamos fullscreen) */}
+          {/* Navbar global (oculto en /litisbot) */}
           {!enLitisBotFull && <Navbar />}
 
           <div className={`flex ${!enLitisBotFull ? "pt-20" : ""}`}>
-            {/* CONTENIDO PRINCIPAL */}
-            <main
-              className={`flex-1 w-full min-w-0 ${
-                !enLitisBotFull ? "lg:pr-80" : ""
-              }`}
-            >
+            {/* Contenido principal */}
+            <main className={`flex-1 w-full min-w-0 ${!enLitisBotFull ? "lg:pr-80" : ""}`}>
               <Routes>
                 <Route path="/" element={<Home />} />
 
-                {/* redirecciones legacy /oficina → /oficinaVirtual */}
+                {/* Redirecciones legacy */}
                 <Route path="/oficina" element={<Navigate to="/oficinaVirtual" replace />} />
                 <Route path="/oficina/*" element={<LegacyOficinaRedirect />} />
-
 
                 <Route path="/servicios" element={<Servicios />} />
                 <Route path="/contacto" element={<Contacto />} />
@@ -374,107 +285,38 @@ function AppContent() {
                 <Route path="/blog/:id" element={<ArticuloBlog />} />
 
                 <Route path="/jurisprudencia" element={<Jurisprudencia />} />
-                <Route
-                  path="/jurisprudencia/visor/:id"
-                  element={<JurisprudenciaVisorModal />}
-                />
+                <Route path="/jurisprudencia/visor/:id" element={<JurisprudenciaVisorModal />} />
 
                 <Route path="/codigos" element={<Codigos />} />
                 <Route path="/codigos/:id" element={<CodigoDetalle />} />
 
                 <Route path="/noticias" element={<NoticiasHome />} />
 
-                {/* Chat IA pantalla completa */}
+                {/* Chat IA fullscreen */}
                 <Route path="/litisbot" element={<LitisBotPageIntegrada />} />
 
                 <Route path="/nosotros" element={<Nosotros />} />
                 <Route path="/login" element={<Login />} />
 
-                <Route
-                  path="/historial-archivos"
-                  element={<HistorialArchivos />}
-                />
-
-                <Route
-                  path="/perfil"
-                  element={
-                    <RutaPrivada>
-                      <Perfil />
-                    </RutaPrivada>
-                  }
-                />
-
-                <Route
-                  path="/mi-cuenta"
-                  element={
-                    <RutaPrivada>
-                      <MiCuenta />
-                    </RutaPrivada>
-                  }
-                />
+                <Route path="/historial-archivos" element={<HistorialArchivos />} />
+                <Route path="/perfil" element={<RutaPrivada><Perfil /></RutaPrivada>} />
+                <Route path="/mi-cuenta" element={<RutaPrivada><MiCuenta /></RutaPrivada>} />
 
                 {/* Admin */}
                 <Route path="/admin/login" element={<LoginAdmin />} />
-                <Route
-                  path="/admin"
-                  element={
-                    <RutaPrivada redir="/admin/login">
-                      <DashboardAdmin />
-                    </RutaPrivada>
-                  }
-                />
-                <Route
-                  path="/admin/libros"
-                  element={
-                    <RutaPrivada>
-                      <SubirLibro />
-                    </RutaPrivada>
-                  }
-                />
-                <Route
-                  path="/admin/consultas"
-                  element={
-                    <RutaPrivada>
-                      <ConsultasAdmin />
-                    </RutaPrivada>
-                  }
-                />
-                <Route
-                  path="/admin/publicar-articulo"
-                  element={
-                    <RutaPrivada>
-                      <PublicarArticulo />
-                    </RutaPrivada>
-                  }
-                />
-                <Route
-                  path="/admin/servicios"
-                  element={
-                    <RutaPrivada>
-                      <ServiciosAdmin />
-                    </RutaPrivada>
-                  }
-                />
+                <Route path="/admin" element={<RutaPrivada redir="/admin/login"><DashboardAdmin /></RutaPrivada>} />
+                <Route path="/admin/libros" element={<RutaPrivada><SubirLibro /></RutaPrivada>} />
+                <Route path="/admin/consultas" element={<RutaPrivada><ConsultasAdmin /></RutaPrivada>} />
+                <Route path="/admin/publicar-articulo" element={<RutaPrivada><PublicarArticulo /></RutaPrivada>} />
+                <Route path="/admin/servicios" element={<RutaPrivada><ServiciosAdmin /></RutaPrivada>} />
 
-                {/* OficinaVirtual config personalización pública/directa */}
-                <Route
-                  path="/oficinaVirtual/personalizacion"
-                  element={<PersonalizacionView />}
-                />
+                {/* OficinaVirtual config pública */}
+                <Route path="/oficinaVirtual/personalizacion" element={<PersonalizacionView />} />
 
                 {/* Legal */}
-                <Route
-                  path="/legal/politica-de-privacidad"
-                  element={<PoliticaPrivacidad />}
-                />
-                <Route
-                  path="/legal/terminos-y-condiciones"
-                  element={<TerminosCondiciones />}
-                />
-                <Route
-                  path="/legal/aviso-cookies"
-                  element={<AvisoCookies />}
-                />
+                <Route path="/legal/politica-de-privacidad" element={<PoliticaPrivacidad />} />
+                <Route path="/legal/terminos-y-condiciones" element={<TerminosCondiciones />} />
+                <Route path="/legal/aviso-cookies" element={<AvisoCookies />} />
 
                 {/* Planes / landing */}
                 <Route path="/planes" element={<PricingPage />} />
@@ -482,44 +324,27 @@ function AppContent() {
 
                 {/* Otros */}
                 <Route path="/chat-test" element={<ChatTest />} />
-                <Route
-                  path="/servicios/:slug"
-                  element={<ServicioDetalle />}
-                />
-
+                <Route path="/servicios/:slug" element={<ServicioDetalle />} />
                 <Route path="/seed-branding" element={<SeedBrandingPage />} />
                 <Route path="/prueba-noticias" element={<PruebaNoticias />} />
 
-                {/* 404 fallback */}
+                {/* 404 */}
                 <Route path="*" element={<Error404 />} />
               </Routes>
             </main>
 
-            {/* COLUMNA DE NOTICIAS EN ESCRITORIO (oculta en /litisbot) */}
+            {/* Columna de noticias en escritorio (oculta en /litisbot) */}
             {!enLitisBotFull && (
-              <>
-                <div className="hidden lg:flex flex-col w-80 h-[calc(100vh-80px)] fixed top-20 right-0 z-40 overflow-y-auto bg-white/0">
-                  <ClientOnly>
-                    <NoticiasSlider />
-                  </ClientOnly>
-                </div>
-
-                {/* Botón flotante de noticias SOLO en home "/" */}
-                {mostrarBotonNoticias && (
-                  <ClientOnly>
-                    <NoticiasBotonFlotante
-                      endpoint="general"
-                      titulo="Noticias"
-                    />
-                  </ClientOnly>
-                )}
-              </>
+              <div className="hidden lg:flex flex-col w-80 h-[calc(100vh-80px)] fixed top-20 right-0 z-40 overflow-y-auto bg-white/0">
+                <ClientOnly>
+                  <NoticiasSlider />
+                </ClientOnly>
+              </div>
             )}
           </div>
 
-          {/* FOOTER + MODALES GLOBALES (se ocultan en /litisbot para no romper el fullscreen) */}
+          {/* Footer + modales globales (ocultos en /litisbot) */}
           {!enLitisBotFull && <Footer />}
-
           <ClientOnly>
             <CookiesBanner />
             <ModalLogin />
@@ -532,56 +357,20 @@ function AppContent() {
         <OficinaVirtualLayout>
           <Routes>
             <Route path="/oficinaVirtual" element={<Oficina />} />
-            <Route
-              path="/oficinaVirtual/casilla-expedientes"
-              element={<CasillaExpedientes />}
-            />
-            <Route
-              path="/oficinaVirtual/expediente-jud/:id"
-              element={<ExpedienteJudicialDetalle />}
-            />
-            <Route
-              path="/oficinaVirtual/expediente-adm/:id"
-              element={<ExpedienteAdministrativoDetalle />}
-            />
-            <Route
-              path="/oficinaVirtual/expedientes/:expedienteId"
-              element={<ExpedienteDetalle />}
-            />
-            <Route
-              path="/oficinaVirtual/biblioteca"
-              element={<Biblioteca />}
-            />
+            <Route path="/oficinaVirtual/casilla-expedientes" element={<CasillaExpedientes />} />
+            <Route path="/oficinaVirtual/expediente-jud/:id" element={<ExpedienteJudicialDetalle />} />
+            <Route path="/oficinaVirtual/expediente-adm/:id" element={<ExpedienteAdministrativoDetalle />} />
+            <Route path="/oficinaVirtual/expedientes/:expedienteId" element={<ExpedienteDetalle />} />
+            <Route path="/oficinaVirtual/biblioteca" element={<Biblioteca />} />
             <Route path="/oficinaVirtual/agenda" element={<Agenda />} />
-            <Route
-              path="/oficinaVirtual/litisbot"
-              element={<LitisBotAudienciaPage />}
-            />
-            <Route
-              path="/oficinaVirtual/firmar-escrito"
-              element={<FirmarEscrito />}
-            />
-            <Route
-              path="/oficinaVirtual/notificaciones"
-              element={<Notificaciones />}
-            />
-            <Route
-              path="/oficinaVirtual/noticias"
-              element={<NoticiasOficina />}
-            />
+            <Route path="/oficinaVirtual/litisbot" element={<LitisBotAudienciaPage />} />
+            <Route path="/oficinaVirtual/firmar-escrito" element={<FirmarEscrito />} />
+            <Route path="/oficinaVirtual/notificaciones" element={<Notificaciones />} />
+            <Route path="/oficinaVirtual/noticias" element={<NoticiasOficina />} />
             <Route path="/oficinaVirtual/perfil" element={<Perfil />} />
-            <Route
-              path="/oficinaVirtual/hazte-conocido"
-              element={<HazteConocido />}
-            />
-            <Route
-              path="/oficinaVirtual/calculadora-laboral"
-              element={<CalculadoraLaboral />}
-            />
-            <Route
-              path="/oficinaVirtual/*"
-              element={<OficinaVirtualRoutes />}
-            />
+            <Route path="/oficinaVirtual/hazte-conocido" element={<HazteConocido />} />
+            <Route path="/oficinaVirtual/calculadora-laboral" element={<CalculadoraLaboral />} />
+            <Route path="/oficinaVirtual/*" element={<OficinaVirtualRoutes />} />
             <Route path="*" element={<Oficina />} />
           </Routes>
         </OficinaVirtualLayout>
@@ -590,43 +379,28 @@ function AppContent() {
   );
 }
 
-/* ────────────────────────────────────────────────
-   Burbuja flotante global LitisBotBubbleChat
-   - Se oculta en /litisbot (pantalla completa ya abierta)
-   - Se oculta en /oficinaVirtual/litisbot (sala de audiencia)
-──────────────────────────────────────────────── */
+/* ── Burbuja flotante global de LitisBot ─────────────────────────── */
 function BubbleWithUser() {
   const { user } = useAuth() || {};
   const location = useLocation();
-
-  const ocultarBurbujas =
+  const ocultar =
     /^\/litisbot(\/|$)/.test(location.pathname) ||
     /^\/oficinaVirtual\/litisbot(\/|$)/.test(location.pathname);
-
-  if (ocultarBurbujas) return null;
-
-  return (
-    <LitisBotBubbleChat
-      usuarioId={user?.uid || "invitado"}
-      pro={!!user?.pro}
-    />
-  );
+  if (ocultar) return null;
+  return <LitisBotBubbleChat usuarioId={user?.uid || "invitado"} pro={!!user?.pro} />;
 }
 
-/* ────────────────────────────────────────────────
-   App root con todos los Providers y el Router
-──────────────────────────────────────────────── */
+/* ── App root con providers y router ─────────────────────────────── */
 export default function App() {
   return (
     <GoogleAuthRootProvider>
       <LitisBotChatProvider>
-        <NoticiasProvider>
           <AuthProvider>
             <LitisBotProvider>
               <ToastProvider>
                 <Router>
                   <AppContent />
-                  {/* Burbuja IA flotante en todas partes salvo donde ya hay chat grande */}
+                  {/* Burbujas IA globales (no en /litisbot) */}
                   <ClientOnly>
                     <BubbleWithUser />
                   </ClientOnly>
@@ -634,7 +408,6 @@ export default function App() {
               </ToastProvider>
             </LitisBotProvider>
           </AuthProvider>
-        </NoticiasProvider>
       </LitisBotChatProvider>
     </GoogleAuthRootProvider>
   );

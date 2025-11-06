@@ -1,88 +1,143 @@
 // ============================================================
-// 🦉 BÚHOLEX | Configuración Vite (Frontend con proxy IA)
+// 🦉 BÚHOLEX | Configuración Vite (Frontend con proxy a API)
+// - ESM seguro (sin __dirname): fileURLToPath
+// - Proxy dev: /api → backend, /chat-api → /api (alias)
+// - Build/Dev pulido y estable en Windows
 // ============================================================
 
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-export default defineConfig({
-  plugins: [react()],
+// __dirname seguro en ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  build: {
-    minify: false,     // para que el error apunte al source real
-    sourcemap: true,   // mapa para ver línea exacta
-    target: "es2022",
-  },
+export default defineConfig(({ mode }) => {
+  // Carga de .env.* por si hace falta (prefijo VITE_)
+  const env = loadEnv(mode, process.cwd(), "VITE_");
 
-  // ============================================================
-  // ⚙️ Servidor local (Vite + Proxy Backend)
-  // ============================================================
-  server: {
-    host: "0.0.0.0",   // Permite acceso desde cualquier IP
-    port: 5173,        // Puerto del frontend
-    open: true,        // Abre navegador automáticamente
-    proxy: {
-      // Noticias (backend local)
-      "/api": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        secure: false,
-        ws: true,
-        // sin rewrite: mantenemos /api → /api
-      },
-      // Chat (ruta separada en el frontend)
-      "/chat-api": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        secure: false,
-        ws: true,
-        // En el backend el chat vive bajo /api, así que mapeamos /chat-api → /api
-        rewrite: (p) => p.replace(/^\/chat-api/, "/api"),
-      },
-    },
-  },
+  const isProd = mode === "production";
 
-  // ============================================================
-  // ⚡ Polyfill mínimo (solo donde es necesario)
-  // ============================================================
-  define: {
-    global: "window",
-  },
-
-  // ============================================================
-  // 📁 Alias de rutas absolutas
-  // ============================================================
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
-      "@components": path.resolve(__dirname, "src/components"),
-      "@pages": path.resolve(__dirname, "src/pages"),
-      "@services": path.resolve(__dirname, "src/services"),
-      "@styles": path.resolve(__dirname, "src/styles"),
-      "@utils": path.resolve(__dirname, "src/utils"),
-      "@store": path.resolve(__dirname, "src/store"),
-      "@context": path.resolve(__dirname, "src/context"),
-      "@oficinaPages": path.resolve(__dirname, "src/oficinaVirtual/pages"),
-      "@oficinaComponents": path.resolve(__dirname, "src/oficinaVirtual/components"),
-      "@oficinaRoutes": path.resolve(__dirname, "src/oficinaVirtual/routes"),
-      "@assets": path.resolve(__dirname, "src/assets"),
-    },
-  },
-
-  // ============================================================
-  // 🚀 Optimización de dependencias
-  // (un solo bloque con target + include/exclude)
-  // ============================================================
-  optimizeDeps: {
-    esbuildOptions: { target: "es2022" },
-    include: [
-      "firebase/app",
-      "firebase/auth",
-      "firebase/firestore",
-      "firebase/storage",
-      "firebase/messaging",
+  return {
+    plugins: [
+      react({
+        // desactiva transformaciones innecesarias en prod si quieres depurar
+        jsxRuntime: "automatic",
+      }),
     ],
-    exclude: ["rss-parser"],
-  },
+
+    // ============================================================
+    // 🔧 Build
+    // ============================================================
+    build: {
+      minify: isProd,
+      sourcemap: !isProd,
+      target: "es2022",
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 900, // sube el umbral para evitar falsos positivos
+      rollupOptions: {
+        output: {
+          // Split básico para librerías gordas
+          manualChunks: {
+            react: ["react", "react-dom"],
+            firebase: ["firebase/app", "firebase/auth", "firebase/firestore", "firebase/storage", "firebase/messaging"],
+          },
+        },
+      },
+    },
+
+    // ============================================================
+    // ⚙️ Servidor local (Vite + Proxy Backend)
+    // ============================================================
+    server: {
+      host: "0.0.0.0",   // Permite acceso desde cualquier IP (útil en LAN)
+      port: 5173,
+      open: true,
+      cors: true,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      },
+      proxy: {
+        // Backend principal (API)
+        "/api": {
+          target: "http://localhost:3000",
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          // sin rewrite: mantenemos /api → /api
+        },
+
+        // Alias de chat SOLO en dev: mapea /chat-api → /api
+        "/chat-api": {
+          target: "http://localhost:3000",
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          rewrite: (p) => p.replace(/^\/chat-api/, "/api"),
+        },
+      },
+    },
+
+    preview: {
+      port: 4173,
+      cors: true,
+    },
+
+    // ============================================================
+    // ⚡ Polyfills/defines mínimos
+    // ============================================================
+    define: {
+      // Evita hacks globales; si alguna lib pide process.env, dale un objeto vacío
+      "process.env": {},
+      // Si una lib antigua usa global, puedes mapearlo a globalThis:
+      // global: "globalThis",
+    },
+
+    // ============================================================
+    // 📁 Alias de rutas absolutas
+    // ============================================================
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "src"),
+        "@components": path.resolve(__dirname, "src/components"),
+        "@pages": path.resolve(__dirname, "src/pages"),
+        "@services": path.resolve(__dirname, "src/services"),
+        "@styles": path.resolve(__dirname, "src/styles"),
+        "@utils": path.resolve(__dirname, "src/utils"),
+        "@store": path.resolve(__dirname, "src/store"),
+        "@context": path.resolve(__dirname, "src/context"),
+        "@oficinaPages": path.resolve(__dirname, "src/oficinaVirtual/pages"),
+        "@oficinaComponents": path.resolve(__dirname, "src/oficinaVirtual/components"),
+        "@oficinaRoutes": path.resolve(__dirname, "src/oficinaVirtual/routes"),
+        "@assets": path.resolve(__dirname, "src/assets"),
+      },
+    },
+
+    // ============================================================
+    // 🚀 Optimización de dependencias
+    // ============================================================
+    optimizeDeps: {
+      esbuildOptions: { target: "es2022" },
+      include: [
+        "react",
+        "react-dom",
+        "firebase/app",
+        "firebase/auth",
+        "firebase/firestore",
+        "firebase/storage",
+        "firebase/messaging",
+      ],
+      exclude: ["rss-parser"],
+    },
+
+    // Suele ser útil en debugging CSS de dev
+    css: {
+      devSourcemap: !isProd,
+    },
+
+    // Garantiza que solo variables con prefijo VITE_ entren al cliente
+    envPrefix: "VITE_",
+  };
 });

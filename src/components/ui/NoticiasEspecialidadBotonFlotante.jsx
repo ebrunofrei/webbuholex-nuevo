@@ -1,18 +1,76 @@
-// src/components/ui/NoticiasEspecialidadBotonFlotante.jsx
-/* ============================================================
- * 🦉 BúhoLex | Botón flotante — Noticias JURÍDICAS por especialidad
- * - Forzado a tipo="juridica"
- * - Filtra SOLO por "especialidad" (NO sirve para generales)
- * - Scroll infinito dentro del panel
- * - Cache ligera via getNoticiasRobust (sessionStorage)
- * ============================================================ */
+// ============================================================
+// 🦉 BúhoLex | Botón flotante — Noticias JURÍDICAS por especialidad (refactor PRO)
+// - Forzado a tipo="juridica"
+// - Filtra SOLO por "especialidad" (NO sirve para generales)
+// - Estrategia por intentos:
+//   1) providers (legis/tc/pj) + sinceDays=2
+//   2) providers (legis/tc/pj) + sinceDays=7
+//   3) solo providers
+//   4) solo especialidad (sin providers)
+//   5) fallback q por especialidad
+//   6) feed jurídico amplio → filtrado local por especialidad
+// - Deduplicación por id/enlace/url/título
+// - Scroll infinito dentro del panel
+// - Cache ligera via getNoticiasRobust (sessionStorage)
+// ============================================================
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Scale, X } from "lucide-react";
-import { getNoticiasRobust, clearNoticiasCache, API_BASE } from "@services/noticiasClientService";
+import {
+  getNoticiasRobust,
+  clearNoticiasCache,
+  API_BASE,
+} from "@/services/noticiasClientService.js";
 
+// ================== Config ==================
 const PAGE_SIZE = 8;
+const PROVIDERS_PRIOR = ["legis.pe", "poder judicial", "tribunal constitucional", "tc"];
 
+// keywords por especialidad (fallback cliente para filtrar/mejorar recall)
+const ES_KEYWORDS = {
+  penal: ["penal","delito","fiscal","juzgado penal","acusación","imputado","pena","mp","ministerio público"],
+  civil: ["civil","propiedad","contrato","obligaciones","daños y perjuicios","posesión","prescripción adquisitiva"],
+  laboral: ["laboral","trabajador","sunafil","sindicato","cts","remuneración","hostigamiento"],
+  constitucional: ["constitucional","tribunal constitucional","tc","derechos humanos","amparo","hábeas corpus"],
+  familiar: ["familia","alimentos","tenencia","filiación","violencia familiar","régimen de visitas"],
+  administrativo: ["administrativo","procedimiento administrativo","sancionador","tupa","resolución"],
+  comercial: ["comercial","societario","empresa","indecopi","quiebra","concurso"],
+  tributario: ["tributario","sunat","igv","renta","reclamación tributaria","fiscalización"],
+  procesal: ["procesal","proceso","procedimiento","tutela","cautelar","apelación","casación"],
+  registral: ["registral","sunarp","partida registral","inmatriculación","título"],
+  ambiental: ["ambiental","oefa","mina","impacto ambiental","eia"],
+  notarial: ["notarial","notario","escritura pública","legalización de firmas","acta notarial"],
+  penitenciario: ["penitenciario","inpe","prisión","beneficios penitenciarios","redención de pena"],
+  consumidor: ["consumidor","indecopi","protección al consumidor","cláusulas abusivas"],
+  "seguridad social": ["seguridad social","essalud","onp","afp","pensión","jubilación"],
+};
+
+const norm = (s) =>
+  (s ?? "").toString().normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+
+const mapAlias = (s) => {
+  const t = norm(s);
+  const alias = {
+    tc: "constitucional",
+    "tribunal constitucional": "constitucional",
+    procedimiento: "procesal",
+    proceso: "procesal",
+    registrales: "registral",
+    registral: "registral",
+    "seguridadsocial": "seguridad social",
+  };
+  return alias[t] || t;
+};
+
+const keyOf = (n, i) =>
+  n._id ||
+  n.id ||
+  n.enlace ||
+  n.url ||
+  n.link ||
+  `${n.titulo || n.title || "item"}#${n.fecha || n.publishedAt || ""}#${i}`;
+
+// ================== Componente ==================
 export default function NoticiasEspecialidadBotonFlotante({
   especialidad = "civil",   // penal | civil | laboral | ...
   lang = "all",             // es | en | all
@@ -29,51 +87,159 @@ export default function NoticiasEspecialidadBotonFlotante({
   // indicador de nuevas
   const [hayNuevas, setHayNuevas] = useState(false);
 
+  // diagnóstico
+  const [lastErr, setLastErr] = useState("");
+  const [lastUrl, setLastUrl] = useState("");
+  const [profile, setProfile] = useState("");
+
   const boxRef = useRef(null);
 
+  const esc = useMemo(() => mapAlias(especialidad || "todas"), [especialidad]);
+  const kw = useMemo(() => (ES_KEYWORDS[esc] || []).join(" "), [esc]);
+
+  // ---------- Loader con intentos escalonados ----------
   async function fetchNoticias(nextPage = 1) {
     if (loading) return;
     setLoading(true);
-    try {
-      const { items: data, pagination } = await getNoticiasRobust({
-        // 🚫 No cambiar: este componente es SOLO JURÍDICAS
-        tipo: "juridica",
-        especialidad,            // ← filtro clave aquí
-        lang,                    // "all" no filtra
-        page: nextPage,
-        limit: PAGE_SIZE,
-      });
+    setLastErr("");
+    setProfile("");
 
-      // Merge sin duplicados por enlace|titulo
-      const prev = nextPage === 1 ? [] : items;
-      const map = new Map(prev.map((n) => [n.enlace || n.url || n.titulo, n]));
-      (Array.isArray(data) ? data : []).forEach((n) => {
-        map.set(n.enlace || n.url || n.titulo, n);
-      });
+    const baseParams = {
+      tipo: "juridica",
+      page: nextPage,
+      limit: PAGE_SIZE,
+      lang: lang && lang !== "all" ? lang : undefined,
+      especialidad: esc && esc !== "todas" ? esc : undefined,
+    };
 
-      const list = Array.from(map.values());
-      setItems(list);
-      setPage(pagination?.page || nextPage);
-      setHasMore(Boolean(pagination?.nextPage));
-    } catch (err) {
-      console.error("❌ Error cargando jurídicas:", err);
-      
-      setHasMore(false);
-    } finally {
-      setLoading(false);
+    // Intentos (más estricto → laxo)
+    const attempts = [];
+
+    // providers priorizados (legis / PJ / TC)
+    const providersCsv = PROVIDERS_PRIOR.join(",");
+    attempts.push({
+      note: "providers+sinceDays=2",
+      params: { ...baseParams, providers: providersCsv, sinceDays: 2 },
+    });
+    attempts.push({
+      note: "providers+sinceDays=7",
+      params: { ...baseParams, providers: providersCsv, sinceDays: 7 },
+    });
+    attempts.push({
+      note: "solo providers",
+      params: { ...baseParams, providers: providersCsv },
+    });
+
+    // solo especialidad
+    attempts.push({
+      note: "solo especialidad (sin providers)",
+      params: { ...baseParams, providers: undefined },
+    });
+
+    // fallback con q ~ especialidad (si hubiese)
+    if (kw) {
+      attempts.push({
+        note: "fallback q por especialidad",
+        params: { ...baseParams, providers: providersCsv, q: kw, useQ: 1 },
+      });
+      attempts.push({
+        note: "fallback q sin providers",
+        params: { ...baseParams, providers: undefined, q: kw, useQ: 1 },
+      });
     }
+
+    // último recurso: feed jurídico amplio y filtrar en cliente
+    attempts.push({
+      note: "juridicas amplias → filtro local",
+      params: { tipo: "juridica", page: nextPage, limit: PAGE_SIZE },
+      filterLocal: true,
+    });
+
+    const dedupe = new Map();
+    let chosen = "";
+    let effectiveUrl = "";
+
+    for (const a of attempts) {
+      try {
+        const qs = new URLSearchParams(
+          Object.entries(a.params).reduce((acc, [k, v]) => {
+            if (v !== undefined && v !== null && v !== "") acc[k] = String(v);
+            return acc;
+          }, {})
+        ).toString();
+        effectiveUrl = `${API_BASE}/noticias?${qs}`;
+        setLastUrl(effectiveUrl);
+
+        const { items: nuevos = [], pagination = {} } = await getNoticiasRobust(a.params);
+
+        let arr = Array.isArray(nuevos) ? nuevos : [];
+
+        // Filtro local por especialidad si corresponde
+        if (a.filterLocal && esc && esc !== "todas") {
+          const tagMatch = (n) => {
+            const bag = new Set([
+              ...(n?.especialidades || []),
+              n?.categoria || "",
+              n?.area || "",
+            ].map(mapAlias));
+            return bag.has(esc);
+          };
+          const textoMatch = (n) => {
+            const t = `${n?.titulo || ""} ${n?.resumen || ""} ${n?.fuente || ""}`.toLowerCase();
+            const kws = ES_KEYWORDS[esc] || [];
+            return kws.some((k) => t.includes(k.toLowerCase()));
+          };
+          arr = arr.filter((n) => tagMatch(n) || textoMatch(n));
+        }
+
+        for (let i = 0; i < arr.length; i++) {
+          const k = keyOf(arr[i], i);
+          if (!dedupe.has(k)) dedupe.set(k, arr[i]);
+        }
+
+        if (arr.length > 0) {
+          chosen = a.note;
+          // merge & paginación
+          const prevList = nextPage === 1 ? [] : items;
+          const prevKeys = new Set(prevList.map((n, i) => keyOf(n, i)));
+          const merged = [...prevList];
+          Array.from(dedupe.values()).forEach((n, i) => {
+            const k = keyOf(n, i);
+            if (!prevKeys.has(k)) merged.push(n);
+          });
+
+        // setear estados finales
+          setItems(merged);
+          setPage(pagination?.page || nextPage);
+          setHasMore(Boolean(pagination?.nextPage) || arr.length >= PAGE_SIZE);
+          setProfile(chosen);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        // siguiente intento
+        chosen = `${a.note} (error)`;
+        setProfile(chosen);
+        setLastErr((prev) => prev || err?.message || String(err));
+      }
+    }
+
+    // si llegamos aquí, no hubo resultados en ningún intento
+    setHasMore(false);
+    setProfile(chosen || "sin resultados");
+    setLoading(false);
   }
 
   // primera carga + cuando cambian filtros
   useEffect(() => {
-    // reset paginación al cambiar props
     setItems([]);
     setPage(1);
     setHasMore(true);
+    clearNoticiasCache?.();
     fetchNoticias(1);
     setHayNuevas(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [especialidad, lang]);
+  }, [esc, lang]);
 
   // scroll infinito dentro del panel
   useEffect(() => {
@@ -147,11 +313,13 @@ export default function NoticiasEspecialidadBotonFlotante({
               style={{ scrollbarWidth: "thin", scrollbarColor: "#6d4a28 #f7e4d5" }}
             >
               {items.length === 0 && !loading && (
-                <div className="text-center text-gray-500 py-6">Sin noticias.</div>
+                <div className="text-center text-gray-500 py-6">
+                  {lastErr ? "No se pudo cargar. Revisa más tarde." : "Sin noticias."}
+                </div>
               )}
 
               {items.map((n, idx) => (
-                <article key={n.enlace || n.url || idx} className="mb-3">
+                <article key={keyOf(n, idx)} className="mb-3">
                   <div className="bg-[#faf9f6] rounded-xl p-3 shadow-md border border-[#e0d6c8] hover:shadow-lg transition">
                     <div className="flex items-center mb-2">
                       <span className="text-xs bg-[#6d4a28]/80 text-white px-2 py-0.5 rounded-full font-medium mr-2">
@@ -169,12 +337,12 @@ export default function NoticiasEspecialidadBotonFlotante({
                       className="block font-bold text-[#6d4a28] text-[15px] leading-snug hover:underline hover:text-[#52351e] transition"
                       style={{ wordBreak: "break-word" }}
                     >
-                      {n.titulo}
+                      {n.titulo || n.title || "(Sin título)"}
                     </a>
 
-                    {n.resumen && (
+                    {(n.resumen || n.description) && (
                       <p className="mt-1 text-sm text-[#3a2a20] opacity-85 line-clamp-3">
-                        {n.resumen}
+                        {n.resumen || n.description}
                       </p>
                     )}
                   </div>
@@ -186,6 +354,13 @@ export default function NoticiasEspecialidadBotonFlotante({
               {!hasMore && items.length > 0 && (
                 <div className="text-center text-xs text-[#bbb] py-2">No hay más noticias.</div>
               )}
+            </div>
+
+            {/* Diagnóstico opcional */}
+            <div className="px-3 py-2 border-t bg-[#faf7f4] text-[11px] text-[#7b5c47]">
+              <div className="truncate">
+                <b>API_BASE:</b> {API_BASE} &nbsp;|&nbsp; <b>URL:</b> {lastUrl || "—"} &nbsp;|&nbsp; <b>perfil:</b> {profile || "—"}
+              </div>
             </div>
           </aside>
         </div>
@@ -201,7 +376,6 @@ export default function NoticiasEspecialidadBotonFlotante({
           45% { transform: rotate(-10deg); }
           60% { transform: rotate(10deg); }
           75% { transform: rotate(-5deg); }
-          85% { transform: rotate(5deg); }
         }
       `}</style>
     </>

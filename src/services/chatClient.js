@@ -1,34 +1,13 @@
+// src/services/chatClient.js
 // ============================================================
 // 🦉 BúhoLex | Cliente del Chat (frontend)
-// - Usa /chat-api (proxy en dev y rewrite en prod)
-// - Opcional: VITE_CHAT_API_BASE_URL si quieres forzar un absoluto
+// - URLs unificadas con joinApi("/ia/...")
+// - Ping rápido a /ia/test para “despertar” el backend
 // - Normaliza payload: string | {mensaje} | {prompt}
+// - Manejo de errores claro (JSON/Text)
 // ============================================================
 
-const DEFAULT_CHAT_BASE = "/chat-api";
-
-const normalize = (u = "") => String(u).trim().replace(/\/+$/, "");
-export const CHAT_BASE =
-  normalize(import.meta?.env?.VITE_CHAT_API_BASE_URL || DEFAULT_CHAT_BASE);
-
-export const buildChatUrl = (p = "") =>
-  `${CHAT_BASE}/${String(p).replace(/^\/+/, "")}`;
-
-// --- ping rápido para evitar ECONNRESET al arrancar backend
-async function ping({ signal } = {}) {
-  try {
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), 2000);
-    const r = await fetch(buildChatUrl("/health"), {
-      signal: signal || ctrl.signal,
-      credentials: "include",
-    });
-    clearTimeout(id);
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
+import { joinApi } from "@/services/apiBase";
 
 // --- normaliza formas de entrada a { prompt, ...rest }
 function normalizeChatPayload(input) {
@@ -44,41 +23,74 @@ function normalizeChatPayload(input) {
   const prompt = String(raw || "").trim();
   if (!prompt) throw new Error("prompt vacío");
 
-  // preserva el resto (usuario, canal, meta, etc.)
+  // preserva el resto (usuarioId, userEmail, modo, materia, idioma, pais, historial, etc.)
   const { mensaje, ...rest } = obj;
   return { prompt, ...rest };
 }
 
+// --- ping rápido para evitar ECONNRESET al arrancar el backend
+async function ping({ signal } = {}) {
+  const url = joinApi("/ia/test");
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 2000);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      signal: signal || ctrl.signal,
+      credentials: "include",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * enviarMensajeIA(payload, signal?)
+ * payload puede ser:
+ *  - "texto"
+ *  - { mensaje: "texto", ... }
+ *  - { prompt: "texto", usuarioId, expedienteId, modo, materia, idioma, pais, historial, userEmail }
+ */
 export async function enviarMensajeIA(payload, signal) {
-  // ping rápido para evitar ECONNRESET al arrancar backend
+  // “despierta” el backend si está frío
   await ping({ signal }).catch(() => {});
 
   const body = JSON.stringify(normalizeChatPayload(payload));
 
-  const r = await fetch(buildChatUrl("/ia/chat"), {
+  const res = await fetch(joinApi("/ia/chat"), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body,
     signal,
     credentials: "include",
   });
 
-  const ctype = r.headers.get("content-type") || "";
+  const ctype = res.headers.get("content-type") || "";
   const isJson = ctype.includes("application/json");
 
-  if (!r.ok) {
+  if (!res.ok) {
     try {
       if (isJson) {
-        const j = await r.json();
-        throw new Error(j?.error?.message || j?.message || `Chat HTTP ${r.status}`);
+        const j = await res.json();
+        const msg =
+          j?.error?.message ||
+          j?.error ||
+          j?.message ||
+          `Chat HTTP ${res.status}`;
+        throw new Error(msg);
       } else {
-        const t = await r.text();
-        throw new Error(t || `Chat HTTP ${r.status}`);
+        const t = await res.text();
+        throw new Error(t || `Chat HTTP ${res.status}`);
       }
-    } catch {
-      throw new Error(`Chat HTTP ${r.status}`);
+    } catch (e) {
+      // si el parse falla, devolvemos un error genérico con el status
+      throw new Error(`Chat HTTP ${res.status}`);
     }
   }
 
-  return isJson ? await r.json() : { ok: true, text: await r.text() };
+  // Backend devuelve { ok:true, respuesta, intencion, materiaDetectada, ... }
+  return isJson ? await res.json() : { ok: true, text: await res.text() };
 }
