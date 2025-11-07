@@ -2,9 +2,10 @@
 /* ============================================================
  * 🦉 BÚHOLEX | Noticias Jurídicas Inteligentes (Oficina Virtual)
  * - Jurídicas: providers oficiales + fallback progresivo + keywords por especialidad
- * - Generales: por tema (chips)
+ * - Generales: por tema (chips) con softFilter y anti-ads (prudente deportes/farándula)
  * - Imagen robusta con proxy + OG + favicon + fallback
  * - Responsive móvil/tablet/desktop
+ * - CERO publicidad: bloqueo por patrones y dominios
  * ============================================================ */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReaderModal from "@/components/ui/ReaderModal";
@@ -16,13 +17,24 @@ import {
   clearNoticiasCache,
 } from "@/services/noticiasClientService.js";
 
+// 🔒 Filtros de contenido (anti-ads, softFilter, dedupe, helpers)
+import {
+  softFilter as _softFilterMaybe, // puede no existir; abajo hago fallback
+  dedupeByKey,
+  textOf,
+  isAdOrSportsPromo,
+  isBlockedByDomain,
+  norm,
+} from "@/utils/noticiasFilter.js";
+
 /* ----------------------- Constantes ----------------------- */
 const PAGE_SIZE = 12;
+const EXTENDED_LIMIT = 50; // lote para "Ver más"
 const FALLBACK_IMG = "/assets/img/noticia_fallback.png";
-const MAX_AGE_DAYS = 2; // objetivo inicial
+const MAX_AGE_DAYS = 2;
 
-// Flag de depuración
-const DEBUG_NEWS = (import.meta?.env?.VITE_DEBUG_NEWS ?? "true").toString() !== "false";
+const DEBUG_NEWS =
+  (import.meta?.env?.VITE_DEBUG_NEWS ?? "true").toString() !== "false";
 
 // ⛔ Chips a ocultar siempre (por ahora)
 const PERMA_HIDE = new Set([
@@ -46,7 +58,7 @@ const ULTIMATE_SVG =
     </svg>`
   );
 
-/* ----------------------- Helpers fecha ----------------------- */
+/* ----------------------- Fecha ----------------------- */
 const isFresh = (dateLike) => {
   if (!dateLike) return false;
   const d = new Date(dateLike);
@@ -59,19 +71,47 @@ const sortByDateDesc = (a, b) =>
 
 /* ----------------------- Chips/UX ----------------------- */
 const CHIPS_JURIDICAS_FALLBACK = [
-  "todas", "penal", "civil", "laboral", "constitucional", "familiar",
-  "administrativo", "comercial", "tributario", "procesal", "registral",
-  "ambiental", "notarial", "penitenciario", "consumidor", "seguridad social",
+  "todas",
+  "penal",
+  "civil",
+  "laboral",
+  "constitucional",
+  "familiar",
+  "administrativo",
+  "comercial",
+  "tributario",
+  "procesal",
+  "registral",
+  "ambiental",
+  "notarial",
+  "penitenciario",
+  "consumidor",
+  "seguridad social",
 ];
 const CHIPS_GENERALES_FALLBACK = [
-  "todas", "política", "economía", "sociedad", "ciencia", "tecnología",
-  "corrupción", "internacional",
+  "todas",
+  "política",
+  "economía",
+  "sociedad",
+  "ciencia",
+  "tecnología",
+  "corrupción",
+  "internacional",
 ];
-const OTRAS = ["comercial","tributario","procesal","registral","ambiental","notarial","penitenciario","consumidor","seguridad social"];
 
-const norm = (s) => (s ?? "").toString().normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
+const OTRAS = [
+  "comercial",
+  "tributario",
+  "procesal",
+  "registral",
+  "ambiental",
+  "notarial",
+  "penitenciario",
+  "consumidor",
+  "seguridad social",
+];
 
-/* Alias robusto (incluye femeninos/plurales comunes en data) */
+/* Alias robusto */
 const ALIAS = {
   tc: "constitucional",
   "tribunal constitucional": "constitucional",
@@ -81,7 +121,7 @@ const ALIAS = {
   regstral: "registral",
   registrales: "registral",
   registral: "registral",
-  "seguridadsocial": "seguridad social",
+  seguridadsocial: "seguridad social",
   "derechos humanos": "constitucional",
   internacional: "constitucional",
   administrativa: "administrativo",
@@ -98,38 +138,55 @@ const ALIAS = {
 const mapAlias = (s) => ALIAS[norm(s)] || norm(s);
 
 const CHIP_PRIORITY = [
-  "todas","penal","civil","laboral","constitucional","familiar","administrativo",
-  "comercial","tributario","procesal","registral","ambiental","notarial",
-  "penitenciario","consumidor","seguridad social",
+  "todas",
+  "penal",
+  "civil",
+  "laboral",
+  "constitucional",
+  "familiar",
+  "administrativo",
+  "comercial",
+  "tributario",
+  "procesal",
+  "registral",
+  "ambiental",
+  "notarial",
+  "penitenciario",
+  "consumidor",
+  "seguridad social",
 ];
 const sortChips = (arr) => {
   const idx = (v) => CHIP_PRIORITY.indexOf(v);
-  return [...arr].filter(Boolean).sort((a,b)=>{
-    const ia=idx(a), ib=idx(b);
-    if (ia!==-1 || ib!==-1) return (ia===-1?999:ia)-(ib===-1?999:ib);
-    return a.localeCompare(b,"es");
+  return [...arr].filter(Boolean).sort((a, b) => {
+    const ia = idx(a),
+      ib = idx(b);
+    if (ia !== -1 || ib !== -1)
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    return a.localeCompare(b, "es");
   });
 };
 const pretty = (s) => {
-  const m = String(s||"").toLowerCase();
-  if (m==="tc") return "TC";
-  if (m==="seguridad social") return "Seguridad social";
-  return m.charAt(0).toUpperCase()+m.slice(1);
+  const m = String(s || "").toLowerCase();
+  if (m === "tc") return "TC";
+  if (m === "seguridad social") return "Seguridad social";
+  return m.charAt(0).toUpperCase() + m.slice(1);
 };
 const chipClass = (active) =>
   `px-3 py-1.5 rounded-full border text-sm font-semibold shrink-0 transition
-   ${active
-     ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow-[0_2px_10px_rgba(176,58,26,.25)]"
-     : "text-[#4a2e23] border-[#e7d4c8] bg-white hover:bg-[#fff2ea]"}`;
+   ${
+     active
+       ? "bg-[#b03a1a] text-white border-[#b03a1a] shadow-[0_2px_10px_rgba(176,58,26,.25)]"
+       : "text-[#4a2e23] border-[#e7d4c8] bg-white hover:bg-[#fff2ea]"
+   }`;
 
 /* ----------------------- Imagen / Proxy ----------------------- */
 const PROVIDER_LOGOS = {
   "legis.pe": "/assets/providers/legispe.png",
   "poder judicial": "/assets/providers/poder-judicial.png",
   "tribunal constitucional": "/assets/providers/tc.png",
-  "tc": "/assets/providers/tc.png",
+  tc: "/assets/providers/tc.png",
   "el país": "/assets/providers/elpais.png",
-  "rpp": "/assets/providers/rpp.png",
+  rpp: "/assets/providers/rpp.png",
 };
 const isExternal = (u) => /^https?:\/\//i.test(u);
 const slug = (s) => (s || "").toString().trim().toLowerCase();
@@ -146,7 +203,9 @@ function absolutize(u, enlace) {
     }
     if (enlace && /^https?:\/\//i.test(enlace)) return new URL(raw, enlace).href;
     return raw;
-  } catch { return raw; }
+  } catch {
+    return raw;
+  }
 }
 function normalizeUrl(u) {
   const s = (u ?? "").toString().trim();
@@ -156,7 +215,10 @@ function normalizeUrl(u) {
 function proxyUrl(absUrl) {
   const url = normalizeUrl(absUrl);
   if (!url) return "";
-  if (isExternal(url)) return `${API_BASE.replace(/\/+$/, "")}/media/proxy?url=${encodeURIComponent(url)}`;
+  if (isExternal(url))
+    return `${API_BASE.replace(/\/+$/, "")}/media/proxy?url=${encodeURIComponent(
+      url
+    )}`;
   return url;
 }
 function resolveCardImage(n = {}) {
@@ -170,8 +232,14 @@ function resolveCardImage(n = {}) {
   if (fuente && PROVIDER_LOGOS[fuente]) return { src: PROVIDER_LOGOS[fuente], raw: "" };
 
   const mediaCandidates = [
-    n.imagen, n.image, n.imageUrl, n.urlToImage, n.thumbnail, n.thumbnailUrl,
-    n?.enclosure?.url, n?.enclosure?.link,
+    n.imagen,
+    n.image,
+    n.imageUrl,
+    n.urlToImage,
+    n.thumbnail,
+    n.thumbnailUrl,
+    n?.enclosure?.url,
+    n?.enclosure?.link,
     Array.isArray(n.multimedia) && n.multimedia[0]?.url,
     Array.isArray(n.media) && (n.media[0]?.url || n.media[0]?.src),
     Array.isArray(n.images) && n.images[0]?.url,
@@ -186,15 +254,14 @@ function resolveCardImage(n = {}) {
   }
 
   if (enlace) {
-    const ogEndpoint = `${API_BASE.replace(/\/+$/,"")}/media/og?url=${encodeURIComponent(enlace)}`;
+    const ogEndpoint = `${API_BASE.replace(/\/+$/, "")}/media/og?url=${encodeURIComponent(
+      enlace
+    )}`;
     return { src: ogEndpoint, raw: "" };
-  } else if (enlace) { // <- corrección: este branch ya no se ejecutaba sin else
-    const fav = `${API_BASE.replace(/\/+$/,"")}/media/favicon?url=${encodeURIComponent(enlace)}`;
-    return { src: fav, raw: "" };
   }
   return { src: FALLBACK_IMG, raw: "" };
 }
-const prioritizeLegis = (list=[]) => {
+const prioritizeLegis = (list = []) => {
   const isLegis = (n) => /legis\.pe/i.test(n?.fuente || n?.source || "");
   const a = [], b = [];
   for (const it of list) (isLegis(it) ? a : b).push(it);
@@ -220,6 +287,137 @@ const ES_KEYWORDS = {
   "seguridad social": ["seguridad social","essalud","onp","afp","pensión","jubilación","cálculo de pensión","devengo","resolución de pensiones"],
 };
 
+/* ----------------------- Clasificación por tema (Generales) ----------------------- */
+const TOPIC_KEYWORDS = {
+  actualidad: [],
+  política: ["congreso","presidente","ministro","partido","gobierno","elecciones","voto","parlamento","decreto","ley"],
+  economía: ["economía","inflación","bcr","pbi","mercado","subsidio","remuneración","dólar","exportación","importación"],
+  sociedad: ["colegios","universidad","seguridad ciudadana","comunidad","transporte público","vecinos","municipalidad"],
+  ciencia: ["ciencia","investigación","universidad","experimento","descubrimiento","astronomía","biotecnología","neurociencia","publicación científica"],
+  tecnología: ["tecnología","software","hardware","intel","nvidia","microsoft","google","meta","openai","ciberseguridad","inteligencia artificial","ia","robot","chip"],
+  corrupción: ["corrupción","cohecho","soborno","colusión","lavado de activos","contraloría","investigación fiscal"],
+  internacional: ["onu","unión europea","guerra","conflicto","embajada","diplomático","frontera","israel","ucrania","estados unidos"],
+};
+
+// Canon: slug sin acentos -> etiqueta con acentos
+const THEMES_CANON = {
+  politica: "política",
+  economia: "economía",
+  tecnologia: "tecnología",
+  corrupcion: "corrupción",
+  sociedad: "sociedad",
+  internacional: "internacional",
+  ciencia: "ciencia",          // ✅ agregado
+  actualidad: "actualidad",
+};
+function resolveTemaKeys(t) {
+  const raw = String(t || "actualidad").trim().toLowerCase();
+  const key = norm(raw);
+  const canon = THEMES_CANON[key] || "actualidad";
+  return { key, canon };
+}
+
+/* ----------------------- Anti-ruido prudente ----------------------- */
+function isFarandulaOrSports(text = "") {
+  const s = text.toLowerCase();
+
+  // Farándula / Influencers
+  const celeb = ["farándula","farandula","reality","tiktok","instagramer","youtuber","miss universo","miss world","certamen de belleza"];
+  if (celeb.some((k) => s.includes(k))) return true;
+
+  // Deportes (evitar "partido" político como falso positivo)
+  const sports = [
+    "champions","mundial","gol","tenis","nba","liga 1","premier league","bundesliga",
+    "copa libertadores","copa sudamericana","selección peruana","seleccion peruana","fútbol","futbol"
+  ];
+  if (sports.some((k) => s.includes(k))) return true;
+
+  // Transmisiones solo si claramente deportivas
+  if ((s.includes("en vivo") || s.includes("transmisión") || s.includes("vivo vía")) &&
+      (s.includes("fútbol") || s.includes("futbol") || s.includes("partido de") || s.includes("tenis") || s.includes("nba"))) {
+    return true;
+  }
+  return false;
+}
+
+// Extra: bloqueo por dominios de ads/trackers típicos
+const BLOCKED_DOMAINS_EXTRA = [
+  "taboola.com","outbrain.com","adnxs.com","doubleclick.net","adservice.google.com",
+  "clk","trk.","sponsor","/ads","/advert","clickbait"
+];
+function isProbablyAdDomain(u = "") {
+  const host = (() => { try { return new URL(u).host.toLowerCase(); } catch { return ""; } })();
+  return BLOCKED_DOMAINS_EXTRA.some((frag) => host.includes(frag));
+}
+
+/* ----------------------- Scoring por tema ----------------------- */
+function topicScore(n, tema) {
+  const { canon } = resolveTemaKeys(tema);
+  const t = textOf(n);
+  if (!t) return 0;
+
+  const keys = TOPIC_KEYWORDS[canon] || [];
+  let s = 0;
+  for (const k of keys) if (t.includes(norm(k))) s += 1;
+
+  const f = norm(n.fuente || n.source || "");
+  if (canon === "tecnología" && /(tech|tecnol|wired|engadget|xataka|genbeta)/.test(f)) s += 1;
+  if (canon === "ciencia" && /(nature|science|pnas|cell|sciencedaily)/.test(f)) s += 1;
+  return s;
+}
+
+// Fallback si el util no trae softFilter → siempre usando CANON
+const softFilterLocal =
+  typeof _softFilterMaybe === "function"
+    ? (items, temaSlug) => _softFilterMaybe(items, resolveTemaKeys(temaSlug).canon)
+    : (items = [], temaSlug = "actualidad") => {
+        if (!items.length) return [];
+        const { canon } = resolveTemaKeys(temaSlug);
+
+        if (canon === "actualidad") return [...items].sort(sortByDateDesc);
+
+        const scored = items
+          .map((n) => ({ n, s: topicScore(n, canon) }))
+          .sort((a, b) => b.s - a.s || sortByDateDesc(a.n, b.n))
+          .map((x) => x.n);
+
+        const strong = scored.filter((n) => topicScore(n, canon) > 0);
+        if (strong.length >= 3) return strong;
+
+        return scored.slice(0, PAGE_SIZE);
+      };
+
+// Filtro por tema (Generales)
+function filterByTema(list = [], temaSlug = "actualidad") {
+  const arr = Array.isArray(list) ? list : [];
+  // Limpieza dura
+  let clean = arr.filter((n) => {
+    const txt = textOf(n);
+    const url = n.enlace || n.url || n.link || "";
+    if (isAdOrSportsPromo(txt) || isBlockedByDomain(n) || isFarandulaOrSports(txt) || isProbablyAdDomain(url)) return false;
+    return true;
+  });
+
+  const { canon } = resolveTemaKeys(temaSlug);
+
+  // Actualidad/Todas -> ordenar y listo
+  if (!canon || canon === "actualidad" || canon === "todas") {
+    return softFilterLocal(dedupeByKey(clean), "actualidad");
+  }
+
+  // Scoring por tema
+  const withScore = clean
+    .map((n) => ({ n, s: topicScore(n, canon) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s || sortByDateDesc(a.n, b.n))
+    .map((x) => x.n);
+
+  if (withScore.length >= 3) return dedupeByKey(withScore);
+
+  // Fallback: sigue sesgado al TEMA (usar CANON)
+  return softFilterLocal(dedupeByKey(clean), canon);
+}
+
 /* ======================= Componente ======================= */
 export default function NoticiasOficina() {
   const [tipo, setTipo] = useState("juridica");
@@ -241,9 +439,7 @@ export default function NoticiasOficina() {
   const [lastUrl, setLastUrl] = useState("");
   const [lastErr, setLastErr] = useState("");
 
-  // Especialidades que dieron 0 → ocultarlas temporalmente
   const [emptyEsps, setEmptyEsps] = useState(new Set());
-  // Perfil del intento que rindió
   const [profile, setProfile] = useState(null);
 
   const abortRef = useRef(null);
@@ -252,7 +448,9 @@ export default function NoticiasOficina() {
   useEffect(() => {
     setEspecialidad("todas");
     setTema("");
-    setItems([]); setPage(1); setHasMore(true);
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
     setEmptyEsps(new Set());
     setProfile(null);
 
@@ -261,48 +459,75 @@ export default function NoticiasOficina() {
       try {
         if (tipo === "general") {
           const list = await getTemas({ lang: "es" });
-          const keys = Array.isArray(list) ? list.map(x => String(x?.key || x).toLowerCase().trim()).filter(Boolean) : [];
-          const merged = Array.from(new Set(["todas", ...keys]));
+          const keys = Array.isArray(list)
+            ? list
+                .map((x) => String(x?.key || x).toLowerCase().trim())
+                .filter(Boolean)
+            : [];
+          const canonKeys = keys.map((k) => resolveTemaKeys(k).canon);
+          const merged = Array.from(new Set(["todas", ...canonKeys]));
           if (!cancelled) setChips(merged.length ? merged : CHIPS_GENERALES_FALLBACK);
           return;
         }
         const list = await getEspecialidades({ tipo: "juridica" });
         const fromApi = Array.isArray(list)
-          ? list.map(x => String(x?.key || x).trim().toLowerCase()).filter(k => k && k!=="todas" && k!=="general")
+          ? list
+              .map((x) => String(x?.key || x).trim().toLowerCase())
+              .filter((k) => k && k !== "todas" && k !== "general")
           : [];
-        const merged = Array.from(new Set(["todas", ...CHIP_PRIORITY.filter(k=>"todas"!==k), ...fromApi]));
+        const merged = Array.from(
+          new Set(["todas", ...CHIP_PRIORITY.filter((k) => "todas" !== k), ...fromApi])
+        );
         if (!cancelled) setChips(merged);
       } catch {
-        if (!cancelled) setChips(tipo === "general" ? CHIPS_GENERALES_FALLBACK : CHIPS_JURIDICAS_FALLBACK);
+        if (!cancelled)
+          setChips(tipo === "general" ? CHIPS_GENERALES_FALLBACK : CHIPS_JURIDICAS_FALLBACK);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [tipo]);
 
   /* ---- Core loader con fallback progresivo (JURÍDICAS) ---- */
-  async function fetchJuridicasProgresivo(nextPage, signal) {
+  async function fetchJuridicasProgresivo(nextPage, signal, limit = PAGE_SIZE) {
     const esc = mapAlias(especialidad);
-    const baseParams = {
-      tipo: "juridica",
-      page: nextPage,
-      limit: PAGE_SIZE,
-      lang: "es",
-    };
+    const baseParams = { tipo: "juridica", page: nextPage, limit, lang: "es" };
     const providersCsv = "legis.pe,poder judicial,tribunal constitucional,tc";
 
-    // Intentos del más estricto al más laxo (2 → 7 → sin since → sin providers)
     const attempts = [
-      { note: "providers+sinceDays=2",
-        params: { ...baseParams, especialidad: esc !== "todas" ? esc : undefined, providers: providersCsv, sinceDays: 2 } },
-      { note: "providers+sinceDays=7",
-        params: { ...baseParams, especialidad: esc !== "todas" ? esc : undefined, providers: providersCsv, sinceDays: 7 } },
-      { note: "providers sin sinceDays",
-        params: { ...baseParams, especialidad: esc !== "todas" ? esc : undefined, providers: providersCsv } },
-      { note: "sin providers (solo especialidad)",
-        params: { ...baseParams, especialidad: esc !== "todas" ? esc : undefined } },
+      {
+        note: "providers+sinceDays=2",
+        params: {
+          ...baseParams,
+          especialidad: esc !== "todas" ? esc : undefined,
+          providers: providersCsv,
+          sinceDays: 2,
+        },
+      },
+      {
+        note: "providers+sinceDays=7",
+        params: {
+          ...baseParams,
+          especialidad: esc !== "todas" ? esc : undefined,
+          providers: providersCsv,
+          sinceDays: 7,
+        },
+      },
+      {
+        note: "providers sin sinceDays",
+        params: {
+          ...baseParams,
+          especialidad: esc !== "todas" ? esc : undefined,
+          providers: providersCsv,
+        },
+      },
+      {
+        note: "sin providers (solo especialidad)",
+        params: { ...baseParams, especialidad: esc !== "todas" ? esc : undefined },
+      },
     ];
 
-    // Fallback con keywords (benigno)
     if (esc && esc !== "todas") {
       const kws = ES_KEYWORDS[esc] || [];
       if (kws.length) {
@@ -316,8 +541,7 @@ export default function NoticiasOficina() {
         });
       }
     }
-
-    // Último recurso: traer jurídicas generales y filtrar en cliente
+    // Último: traer jurídicas y filtrar local
     attempts.push({
       note: "juridicas generales para filtrado local",
       params: { ...baseParams },
@@ -330,7 +554,10 @@ export default function NoticiasOficina() {
     for (let i = 0; i < attempts.length; i++) {
       const a = attempts[i];
       const qs = new URLSearchParams(
-        Object.entries(a.params).reduce((acc,[k,v])=>{ if (v!=null && v!=="") acc[k]=String(v); return acc; },{})
+        Object.entries(a.params).reduce((acc, [k, v]) => {
+          if (v != null && v !== "") acc[k] = String(v);
+          return acc;
+        }, {})
       ).toString();
       const url = `${API_BASE}/noticias?${qs}`;
       setLastUrl(url);
@@ -338,26 +565,31 @@ export default function NoticiasOficina() {
 
       try {
         const { items: nuevos } = await getNoticiasRobust({ ...a.params, signal });
-        const arr = Array.isArray(nuevos) ? nuevos : [];
-        if (DEBUG_NEWS) {
-          console.log(`[OV/JUR] intento="${a.note}" | esc="${esc}" | page=${nextPage} | recibidas=${arr.length}`);
-        }
+        let arr = Array.isArray(nuevos) ? nuevos : [];
+        if (DEBUG_NEWS)
+          console.log(
+            `[OV/JUR] intento="${a.note}" | esc="${esc}" | page=${nextPage} | limit=${limit} | recibidas=${arr.length}`
+          );
+
+        // Limpieza
+        arr = arr.filter((n) => {
+          const t = textOf(n);
+          const url = n.enlace || n.url || n.link || "";
+          return !(isAdOrSportsPromo(t) || isBlockedByDomain(n) || isFarandulaOrSports(t) || isProbablyAdDomain(url));
+        });
+
         if (arr.length === 0) continue;
 
         if (a.filterLocal && esc && esc !== "todas") {
-          const kws = ES_KEYWORDS[esc] || [];
-          const textoMatch = (n) => {
-            const texto = `${n?.titulo||""} ${n?.resumen||""} ${n?.fuente||""}`.toLowerCase();
-            return kws.some(k => texto.includes(k.toLowerCase()));
-          };
-          const bagMatch = (n) => {
-            const bag = new Set([...(n?.especialidades||[]),(n?.categoria||""),(n?.area||"")].map(mapAlias));
+          const kws2 = ES_KEYWORDS[esc] || [];
+          const textoMatch = (nn) => kws2.some((k) => textOf(nn).includes(norm(k)));
+          const bagMatch = (nn) => {
+            const bag = new Set(
+              [...(nn?.especialidades || []), nn?.categoria || "", nn?.area || ""].map(mapAlias)
+            );
             return bag.has(esc);
           };
-          const filtered = arr.filter(n => bagMatch(n) || textoMatch(n));
-          if (DEBUG_NEWS) {
-            console.log(`[OV/JUR] filtroLocal | esc="${esc}" => filtradas=${filtered.length}`);
-          }
+          const filtered = arr.filter((nn) => bagMatch(nn) || textoMatch(nn));
           if (filtered.length > 0) {
             chosen = { note: a.note, arr: filtered };
             break;
@@ -372,14 +604,13 @@ export default function NoticiasOficina() {
       }
     }
 
-    const result = (chosen?.arr || []).sort(sortByDateDesc);
+    const base = dedupeByKey(chosen?.arr || []).sort(sortByDateDesc);
     setProfile(chosen?.note || lastTried || null);
 
-    if ((result.length === 0) && esc && esc !== "todas") {
+    if (base.length === 0 && esc && esc !== "todas") {
       setEmptyEsps((prev) => new Set(prev).add(esc));
     }
-
-    return prioritizeLegis(result);
+    return prioritizeLegis(base);
   }
 
   /* ---- Fetch noticias (ambos tipos) ---- */
@@ -397,71 +628,76 @@ export default function NoticiasOficina() {
 
       let payloadItems = [];
       if (tipo === "juridica") {
-        payloadItems = await fetchJuridicasProgresivo(nextPage, controller.signal);
+        payloadItems = await fetchJuridicasProgresivo(nextPage, controller.signal, PAGE_SIZE);
+        // Purga general (anti farándula/ads) sin tocar especialidad
+        payloadItems = filterByTema(dedupeByKey(payloadItems), "actualidad");
       } else {
-        // GENERALES normal
+        // GENERALES
+        const temaSlug = (tema || "actualidad").toLowerCase();
+        const { canon } = resolveTemaKeys(temaSlug);
+
         const params = {
           tipo: "general",
           page: nextPage,
           limit: PAGE_SIZE,
           lang: "es",
-          tema: tema || undefined,
+          tema: canon, // enviar canon al servidor
           signal: controller.signal,
         };
-        const qs = new URLSearchParams(Object.entries(params).reduce((a,[k,v])=>{ if (v!=null && v!=="") a[k]=String(v); return a; },{})).toString();
+        const qs = new URLSearchParams(
+          Object.entries(params).reduce((a, [k, v]) => {
+            if (v != null && v !== "") a[k] = String(v);
+            return a;
+          }, {})
+        ).toString();
         setLastUrl(`${API_BASE}/noticias?${qs}`);
+
         const { items: nuevos } = await getNoticiasRobust(params);
-        payloadItems = (Array.isArray(nuevos) ? nuevos : []).sort(sortByDateDesc);
+        const base = (Array.isArray(nuevos) ? nuevos : []).sort(sortByDateDesc);
+
+        // Clasificador por TEMA del chip activo (canon)
+        payloadItems = filterByTema(dedupeByKey(base), canon);
       }
 
-      // Filtrado cliente suave para jurídicas por especialidad
+      // Post-proceso Jurídicas: afinar por especialidad
       let mostradas = payloadItems;
       if (tipo === "juridica" && especialidad !== "todas") {
         const esc = mapAlias(especialidad);
         const textMatch = (needle, n) => {
-          const texto = `${n?.titulo||""} ${n?.resumen||""} ${n?.fuente||""}`.toLowerCase();
+          const texto = `${n?.titulo || ""} ${n?.resumen || ""} ${n?.fuente || ""}`.toLowerCase();
           const mapa = {
-            procesal: ["proceso","procesal","procedimiento"],
-            "seguridad social": ["seguridad social","previsional","essalud","onp","afp"],
-            constitucional: ["constitucional","tc","tribunal constitucional","derechos humanos"],
-            notarial: ["notarial","notario"],
-            registral: ["registral","sunarp","registro"],
-            penal: ["penal","delito","fiscal","juzgado penal","mp"],
-            civil: ["civil","contrato","propiedad","obligaciones"],
-            laboral: ["laboral","trabajador","sunafil","sindicato","mintra"],
-            administrativo: ["administrativo","resolución","expediente","procedimiento"],
-            comercial: ["comercial","societario","empresa"],
-            tributario: ["tributario","sunat","impuesto","igv","renta"],
-            ambiental: ["ambiental","oefa","mina"],
-            penitenciario: ["penitenciario","inpe","prisión"],
-            consumidor: ["consumidor","indecopi"],
+            procesal: ["proceso", "procesal", "procedimiento"],
+            "seguridad social": ["seguridad social", "previsional", "essalud", "onp", "afp"],
+            constitucional: ["constitucional", "tc", "tribunal constitucional", "derechos humanos"],
+            notarial: ["notarial", "notario"],
+            registral: ["registral", "sunarp", "registro"],
+            penal: ["penal", "delito", "fiscal", "juzgado penal", "mp"],
+            civil: ["civil", "contrato", "propiedad", "obligaciones"],
+            laboral: ["laboral", "trabajador", "sunafil", "sindicato", "mintra"],
+            administrativo: ["administrativo", "resolución", "expediente", "procedimiento"],
+            comercial: ["comercial", "societario", "empresa"],
+            tributario: ["tributario", "sunat", "impuesto", "igv", "renta"],
+            ambiental: ["ambiental", "oefa", "mina"],
+            penitenciario: ["penitenciario", "inpe", "prisión"],
+            consumidor: ["consumidor", "indecopi"],
           };
-          const bag = new Set([...(n?.especialidades||[]),(n?.categoria||""),(n?.area||"")].map(mapAlias));
+          const bag = new Set(
+            [...(n?.especialidades || []), n?.categoria || "", n?.area || ""].map(mapAlias)
+          );
           if (bag.has(needle)) return true;
-          return (mapa[needle]||[]).some(k=>texto.includes(k));
+          return (mapa[needle] || []).some((k) => texto.includes(k));
         };
-        mostradas = payloadItems.filter(n => textMatch(esc,n));
+        mostradas = payloadItems.filter((n) => textMatch(esc, n));
 
         if (mostradas.length === 0) {
           setEmptyEsps((prev) => new Set(prev).add(esc));
         }
       }
 
+      // Commit
       setItems((prev) => (reset ? mostradas : [...prev, ...mostradas]));
       setPage(nextPage + 1);
       setHasMore(mostradas.length >= PAGE_SIZE);
-
-      if (reset && DEBUG_NEWS) {
-        console.log(
-          "[Noticias OV]",
-          "| tipo=", tipo,
-          "| especialidad=", especialidad,
-          "| tema=", tema,
-          "| page=", nextPage,
-          "| mostradas=", mostradas.length,
-          "| profile=", profile || "—"
-        );
-      }
     } catch (e) {
       if (e?.name !== "AbortError") {
         console.error("❌ Error noticias OV:", e?.message || e);
@@ -473,52 +709,118 @@ export default function NoticiasOficina() {
     }
   }
 
+  /* ---- “Ver más noticias” (misma vista) ---- */
+  async function verMasChip() {
+    if (loading) return;
+    setLoading(true);
+    setLastErr("");
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      if (tipo === "juridica") {
+        const extendidas = await fetchJuridicasProgresivo(1, controller.signal, EXTENDED_LIMIT);
+        const puras = filterByTema(dedupeByKey(extendidas), "actualidad");
+        const esc = mapAlias(especialidad);
+        const filtradas =
+          esc === "todas"
+            ? puras
+            : puras.filter((n) => {
+                const bag = new Set(
+                  [...(n?.especialidades || []), n?.categoria || "", n?.area || ""].map(mapAlias)
+                );
+                const t = `${n?.titulo || ""} ${n?.resumen || ""}`.toLowerCase();
+                const extra = (ES_KEYWORDS[esc] || []).some((k) => t.includes(norm(k)));
+                return bag.has(esc) || extra;
+              });
+        setItems(dedupeByKey(filtradas).sort(sortByDateDesc));
+        setHasMore(false);
+        setPage(2);
+        return;
+      }
+
+      // GENERALES
+      const temaSlug = (tema || "actualidad").toLowerCase();
+      const { canon } = resolveTemaKeys(temaSlug);
+
+      const { items: nuevos } = await getNoticiasRobust({
+        tipo: "general",
+        page: 1,
+        limit: EXTENDED_LIMIT,
+        lang: "es",
+        tema: canon, // ✅ enviar canon al backend
+        signal: controller.signal,
+      });
+      const base = (Array.isArray(nuevos) ? nuevos : []).sort(sortByDateDesc);
+      const filtradas = filterByTema(dedupeByKey(base), canon);
+      setItems(filtradas);
+      setHasMore(false);
+      setPage(2);
+    } catch (e) {
+      if (e?.name !== "AbortError") {
+        console.error("❌ Ver más:", e?.message || e);
+        setLastErr(e?.message || String(e));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   /* ---- Recargas por filtro ---- */
   useEffect(() => {
     clearNoticiasCache?.();
-    setItems([]); setPage(1); setHasMore(true);
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
     abortRef.current?.abort();
     const t = setTimeout(() => fetchNoticias(true), 80);
-    return () => { clearTimeout(t); abortRef.current?.abort(); };
+    return () => {
+      clearTimeout(t);
+      abortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, especialidad, tema]);
 
   /* ---- Buscador local ---- */
   const filtradas = useMemo(() => {
-    const text = (q || "").trim().toLowerCase();
-    if (!text) return items;
-    return items.filter((n) => {
-      const t = (n?.titulo || "").toLowerCase();
-      const r = (n?.resumen || "").toLowerCase();
-      const f = (n?.fuente || "").toLowerCase();
-      return t.includes(text) || r.includes(text) || f.includes(text);
-    });
+    const query = norm(q || "");
+    if (!query) return items;
+    return items.filter((n) => textOf(n).includes(query));
   }, [items, q]);
 
-  const openReader = (n) => { setSel(n); setOpen(true); };
-  const closeReader = () => { setOpen(false); setSel(null); };
+  const openReader = (n) => {
+    setSel(n);
+    setOpen(true);
+  };
+  const closeReader = () => {
+    setOpen(false);
+    setSel(null);
+  };
 
   /* ======================= UI ======================= */
-  const activeChip = tipo === "juridica" ? especialidad : (tema || "todas");
+  const activeChip = tipo === "juridica" ? especialidad : tema || "todas";
 
-  const renderChipList = (arr) => (
+  const renderChipList = (arr) =>
     sortChips(arr)
       .filter((a) => {
         const key = mapAlias(a);
-        if (PERMA_HIDE.has(key)) return false;     // ⟵ ocultación permanente
-        if (tipo === "juridica" && emptyEsps.has(key)) return false; // ⟵ ocultación dinámica
+        if (PERMA_HIDE.has(key)) return false;
+        if (tipo === "juridica" && emptyEsps.has(key)) return false;
         return true;
       })
       .map((a) => (
         <button
           key={a}
-          onClick={() => (tipo === "juridica" ? setEspecialidad(a) : setTema(a === "todas" ? "" : a))}
+          onClick={() =>
+            tipo === "juridica" ? setEspecialidad(a) : setTema(a === "todas" ? "" : a)
+          }
           className={chipClass(activeChip === a)}
         >
           {pretty(a)}
         </button>
-      ))
-  );
+      ));
 
   return (
     <div className="relative h-[calc(100vh-80px)] bg-[#fffaf6] rounded-2xl border border-[#f1e5dc] shadow-[0_6px_32px_-10px_rgba(176,58,26,0.08)]">
@@ -526,12 +828,18 @@ export default function NoticiasOficina() {
         {/* Sidebar desktop */}
         <aside className="hidden md:block border-r border-[#f1e5dc] p-4 overflow-y-auto">
           <div className="flex gap-2 mb-3">
-            {[{ key: "juridica", label: "Jurídicas" }, { key: "general", label: "Generales" }].map((t) => (
+            {[
+              { key: "juridica", label: "Jurídicas" },
+              { key: "general", label: "Generales" },
+            ].map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTipo(t.key)}
                 className={`px-3 py-1.5 rounded-full font-semibold transition ${
-                  tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"}`}
+                  tipo === t.key
+                    ? "bg-[#b03a1a] text-white"
+                    : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
+                }`}
               >
                 {t.label}
               </button>
@@ -541,9 +849,7 @@ export default function NoticiasOficina() {
           <h4 className="text-xs font-bold text-[#4a2e23] mb-2">
             {tipo === "juridica" ? "Especialidades" : "Temas"}
           </h4>
-          <div className="flex flex-col gap-2">
-            {renderChipList(chips)}
-          </div>
+          <div className="flex flex-col gap-2">{renderChipList(chips)}</div>
 
           {tipo === "juridica" && (
             <>
@@ -555,9 +861,7 @@ export default function NoticiasOficina() {
                 {mostrarOtras ? "Ocultar otras" : "Otras especialidades"}
               </button>
               {mostrarOtras && (
-                <div className="mt-2 flex flex-col gap-2">
-                  {renderChipList(OTRAS)}
-                </div>
+                <div className="mt-2 flex flex-col gap-2">{renderChipList(OTRAS)}</div>
               )}
             </>
           )}
@@ -566,10 +870,22 @@ export default function NoticiasOficina() {
           <details className="mt-1">
             <summary className="text-xs text-[#8a6e60] cursor-pointer">Diagnóstico</summary>
             <div className="mt-1 text-[11px] text-[#6b4d3e] break-words">
-              <div><b>API_BASE:</b> {API_BASE}</div>
-              <div><b>URL:</b> {lastUrl || "—"}</div>
-              {profile && <div><b>Perfil:</b> {profile}</div>}
-              {lastErr && <div className="text-red-600"><b>Error:</b> {lastErr}</div>}
+              <div>
+                <b>API_BASE:</b> {API_BASE}
+              </div>
+              <div>
+                <b>URL:</b> {lastUrl || "—"}
+              </div>
+              {profile && (
+                <div>
+                  <b>Perfil:</b> {profile}
+                </div>
+              )}
+              {lastErr && (
+                <div className="text-red-600">
+                  <b>Error:</b> {lastErr}
+                </div>
+              )}
             </div>
           </details>
         </aside>
@@ -579,12 +895,18 @@ export default function NoticiasOficina() {
           {/* Header móvil */}
           <header className="md:hidden sticky top-0 z-10 bg-[#fff6ef]/95 backdrop-blur px-3 pt-3 pb-2 border-b border-[#f1e5dc]">
             <div className="flex gap-2 mb-2">
-              {[{ key: "juridica", label: "Jurídicas" }, { key: "general", label: "Generales" }].map((t) => (
+              {[
+                { key: "juridica", label: "Jurídicas" },
+                { key: "general", label: "Generales" },
+              ].map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTipo(t.key)}
                   className={`px-3 py-1.5 rounded-full font-semibold transition ${
-                    tipo === t.key ? "bg-[#b03a1a] text-white" : "bg-white text-[#b03a1a] border border-[#e7d4c8]"}`}
+                    tipo === t.key
+                      ? "bg-[#b03a1a] text-white"
+                      : "bg-white text-[#b03a1a] border border-[#e7d4c8]"
+                  }`}
                 >
                   {t.label}
                 </button>
@@ -663,20 +985,15 @@ export default function NoticiasOficina() {
 
                             if (raw && !triedRaw && el.src !== raw) {
                               el.setAttribute("data-tried-raw", "1");
-                              console.warn("[IMG] Proxy falló, intento RAW:", raw);
                               el.src = raw;
                               return;
                             }
                             if (!triedFallback && el.src !== FALLBACK_IMG) {
                               el.setAttribute("data-tried-fallback", "1");
-                              console.warn("[IMG] RAW falló, Fallback:", FALLBACK_IMG);
                               el.src = FALLBACK_IMG;
                               return;
                             }
-                            if (el.src !== ULTIMATE_SVG) {
-                              console.error("[IMG] Fallback ausente. Usando SVG.");
-                              el.src = ULTIMATE_SVG;
-                            }
+                            if (el.src !== ULTIMATE_SVG) el.src = ULTIMATE_SVG;
                           }}
                         />
                         <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white px-3 py-2 text-sm line-clamp-3 md:line-clamp-2">
@@ -712,6 +1029,20 @@ export default function NoticiasOficina() {
                   className="px-5 py-2 rounded-lg bg-[#b03a1a] text-white font-semibold disabled:opacity-60 hover:bg-[#a63a1e]"
                 >
                   {loading ? "Cargando…" : "Cargar más"}
+                </button>
+              </div>
+            )}
+
+            {/* CTA final por chip activo */}
+            {(tipo === "juridica" ? especialidad !== "todas" : (tema || "") !== "") && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  disabled={loading}
+                  onClick={verMasChip}
+                  className="px-5 py-2 rounded-lg border border-[#e7d4c8] text-[#b03a1a] bg-white font-semibold hover:bg-[#fff2ea] disabled:opacity-60"
+                  title={`Ver más noticias de ${pretty(tipo === "juridica" ? especialidad : tema)}`}
+                >
+                  Ver más noticias de {pretty(tipo === "juridica" ? especialidad : tema)}
                 </button>
               </div>
             )}
