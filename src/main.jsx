@@ -19,6 +19,14 @@ if (ENABLE_FCM) {
   initPushClient({ swUrl: "/firebase-messaging-sw.js", enablePushParam: import.meta.env.VITE_ENABLE_PUSH || "false" });
 }
 
+const ENABLE_PUSH = String(import.meta.env.VITE_ENABLE_PUSH || "").toLowerCase() === "true";
+
+if (ENABLE_PUSH) {
+  initPushClient({
+    swUrl: "/firebase-messaging-sw.js",
+    enablePushParam: "true",
+  });
+}
 /* ===================================================================
  * 🧼 Util: desregistrar cualquier SW previo de Firebase Messaging
  * =================================================================== */
