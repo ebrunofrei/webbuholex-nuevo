@@ -50,6 +50,43 @@ function hitsAny(t, arr) {
 export function isAdOrSportsPromo(t) { return ADS_BLOCK_PATTERNS.some((re) => re.test(t)); }
 export function isEntertainment(t)   { return hitsAny(t, GLOBAL_ENTERTAINMENT); }
 
+export function isProbablyAdDomain(u = "") {
+  try {
+    const h = new URL(u, location.origin).hostname.toLowerCase();
+    const bad = [
+      "doubleclick", "adservice", "taboola", "outbrain",
+      "t.co", "bit.ly", "goo.gl", "tinyurl",
+      "l.facebook.com", "lnkd.in", "wa.me"
+    ];
+    return bad.some(k => h.includes(k));
+  } catch { return false; }
+}
+
+// --- Promos de producto / lifestyle (cosméticos, “dónde comprar”, reviews, etc.)
+const PRODUCT_PROMO_WORDS = [
+  "protector solar",
+  "crema", "cosmético", "cosmetico",
+  "maquillaje", "skin care", "skincare",
+  "dónde comprar", "donde comprar",
+  "cómo comprar", "como comprar",
+  "en amazon", "oferta", "descuento",
+  "review", "reseña",
+  "mejores productos", "guía de compra", "guia de compra",
+];
+
+export function isProductPromo(text = "", fuente = "") {
+  const t = (text || "").toLowerCase();
+  const f = (fuente || "").toLowerCase();
+
+  // Si el texto parece guía de compra / promo, bloquear
+  if (PRODUCT_PROMO_WORDS.some(k => t.includes(k))) return true;
+
+  // Fuentes/labs de lifestyle (si quieres ser más estricto, añade aquí dominios/secciones)
+  if (/(glamour|vogue|hola)\b/.test(f)) return true;
+
+  return false;
+}
+
 // ------------------------ Dedupe --------------------------------
 export function keyOf(n = {}, i = 0) {
   return n.enlace || n.url || n.link || n.id || n._id || `${n.titulo || n.title || "item"}#${i}`;

@@ -26,23 +26,76 @@ import {
 const PAGE_SIZE = 8;
 const PROVIDERS_PRIOR = ["legis.pe", "poder judicial", "tribunal constitucional", "tc"];
 
-// keywords por especialidad (fallback cliente para filtrar/mejorar recall)
+// 🔎 Keywords por especialidad (para filtrado local y heurísticas)
 const ES_KEYWORDS = {
-  penal: ["penal","delito","fiscal","juzgado penal","acusación","imputado","pena","mp","ministerio público"],
-  civil: ["civil","propiedad","contrato","obligaciones","daños y perjuicios","posesión","prescripción adquisitiva"],
-  laboral: ["laboral","trabajador","sunafil","sindicato","cts","remuneración","hostigamiento"],
-  constitucional: ["constitucional","tribunal constitucional","tc","derechos humanos","amparo","hábeas corpus"],
-  familiar: ["familia","alimentos","tenencia","filiación","violencia familiar","régimen de visitas"],
-  administrativo: ["administrativo","procedimiento administrativo","sancionador","tupa","resolución"],
-  comercial: ["comercial","societario","empresa","indecopi","quiebra","concurso"],
-  tributario: ["tributario","sunat","igv","renta","reclamación tributaria","fiscalización"],
-  procesal: ["procesal","proceso","procedimiento","tutela","cautelar","apelación","casación"],
-  registral: ["registral","sunarp","partida registral","inmatriculación","título"],
-  ambiental: ["ambiental","oefa","mina","impacto ambiental","eia"],
-  notarial: ["notarial","notario","escritura pública","legalización de firmas","acta notarial"],
-  penitenciario: ["penitenciario","inpe","prisión","beneficios penitenciarios","redención de pena"],
-  consumidor: ["consumidor","indecopi","protección al consumidor","cláusulas abusivas"],
-  "seguridad social": ["seguridad social","essalud","onp","afp","pensión","jubilación"],
+  penal: [
+    "penal","delito","presunto","acusado","imputado","denuncia","fiscal","ministerio público","mp",
+    "juzgado penal","pena","prisión","prision","prisión preventiva","sentencia penal","condena",
+    "homicidio","robo","hurto","lesiones","violación","estafa","lavado de activos"
+  ],
+  civil: [
+    "civil","propiedad","dominio","posesión","posesion","prescripción adquisitiva","contrato","obligaciones",
+    "daños y perjuicios","indemnización","arrendamiento","inquilino","copropiedad","servidumbre"
+  ],
+  laboral: [
+    "laboral","trabajador","empleador","remuneración","cts","gratificación","hostigamiento","acoso laboral",
+    "desnaturalización","despido","reposición","sindicato","sunafil","jornada","horas extras","descanso"
+  ],
+  constitucional: [
+    "constitucional","tribunal constitucional","tc","amparo","hábeas corpus","habeas corpus","hábeas data","habeas data",
+    "control difuso","inconstitucionalidad","derechos fundamentales","derechos humanos"
+  ],
+  familiar: [
+    "familia","alimentos","tenencia","patria potestad","régimen de visitas","regimen de visitas",
+    "filiación","divorcio","separación","violencia familiar","pensión de alimentos"
+  ],
+  administrativo: [
+    "administrativo","procedimiento administrativo","tupa","plazo perentorio","acto administrativo",
+    "sancionador","expediente","recurso de apelación","nulidad de oficio","silencio administrativo"
+  ],
+  comercial: [
+    "comercial","societario","empresa","constitución de empresa","sociedad anónima","sac",
+    "quiebra","concurso","reestructuración","indecopi","título valor","factoring"
+  ],
+  tributario: [
+    "tributario","sunat","impuesto","igv","impuesto a la renta","renta","detracciones","percepciones",
+    "fiscalización","fiscalizacion","reclamación","apelación","tribunal fiscal"
+  ],
+  procesal: [
+    "procesal","proceso","procedimiento","tutela","medida cautelar","apelación","casación","competencia",
+    "cosa juzgada","inimpugnabilidad","nulidad procesal","actuación probatoria"
+  ],
+  registral: [
+    "registral","sunarp","registro","partida registral","asiento registral","inmatriculación","rectificación de partida",
+    "publicidad registral","título inscribible","observación registral"
+  ],
+  ambiental: [
+    "ambiental","oefa","mina","minería","impacto ambiental","eia","licencia ambiental","pasivos ambientales",
+    "deforestación","contaminación","evaluación ambiental"
+  ],
+  notarial: [
+    "notarial","notario","notaría","escritura pública","legalización de firmas","acta notarial",
+    "protesto","minuta","transferencia de propiedad","sucesión intestada"
+  ],
+  penitenciario: [
+    "penitenciario","inpe","cárcel","carcel","penitenciaría","prisión","penal","beneficios penitenciarios",
+    "semilibertad","liberación condicional","redención de pena","tratamiento penitenciario"
+  ],
+  consumidor: [
+    "consumidor","indecopi","protección al consumidor","cláusulas abusivas","idoneidad","garantía","libro de reclamaciones",
+    "publicidad engañosa","defensa del consumidor","información veraz"
+  ],
+  "seguridad social": [
+    "seguridad social","essalud","onp","afp","pensión","jubilación","devengo","cálculo de pensión","retiro afp",
+    "aportaciones","régimen pensionario","spp","snps"
+  ],
+  // Ocasionales (si tienes chips extra):
+  "derechos humanos": [
+    "derechos humanos","cidh","onu","corte idh","convención americana","convencion americana","derecho internacional de los derechos humanos"
+  ],
+  internacional: [
+    "internacional","extradición","extradicion","cooperación judicial","cancillería","embajada","tratado","jurisdicción universal"
+  ],
 };
 
 const norm = (s) =>
@@ -132,8 +185,8 @@ export default function NoticiasEspecialidadBotonFlotante({
 
     // solo especialidad
     attempts.push({
-      note: "solo especialidad (sin providers)",
-      params: { ...baseParams, providers: undefined },
+      note: "solo especialidad (7d)",
+      params: { ...baseParams, especialidad: esc !== "todas" ? toApiSlug(esc) : undefined, sinceDays: 7 }
     });
 
     // fallback con q ~ especialidad (si hubiese)
