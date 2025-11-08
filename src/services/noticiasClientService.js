@@ -1,64 +1,72 @@
-/* ============================================================
- * 🦉 BúhoLex | Servicio de Noticias (frontend robusto · PROD)
- * - BASE: env → localhost:3000/api (sin /api duplicado)
- * - fetch con timeout + backoff + circuit breaker
- * - General: adaptador único getGeneralNews (news → fallback /noticias)
- * - Jurídica: /api/noticias
- * - Chips: /api/noticias/especialidades · /api/noticias/temas
- * - Normalización: prioridad imagenResuelta + fecha robusta
- * - Cache TTL + bypass (noCache)
- * - Health-wait: /api/health al iniciar
- * ============================================================ */
+// src/services/noticiasClientService.js
+// ============================================================
+// 🦉 BúhoLex | Servicio de Noticias (frontend robusto · PROD)
+// - BASE vía apiBase.js: sin localhost hardcodeado
+// - fetch con timeout + backoff + circuit breaker (storage o memoria)
+// - General: adaptador único getGeneralNews (live /news → fallback /noticias)
+// - Jurídica: /api/noticias
+// - Chips: /api/noticias/especialidades · /api/noticias/temas
+// - Normalización: imagenResuelta + fecha smart + dedupe
+// - Cache TTL + bypass (noCache)
+// - Health-wait: /api/health al iniciar
+// ============================================================
 
-const isBrowser = typeof window !== "undefined";
+import { API_BASE, joinApi, apiFetch } from "./apiBase";
+
+const IS_BROWSER = typeof window !== "undefined";
 export const PAGE_SIZE = 12;
+
 const FETCH_TIMEOUT_MS = 12000;
+const DEBUG = (import.meta?.env?.VITE_DEBUG_NEWS ?? "false").toString().toLowerCase() === "true";
+
+/* ----------------------- Circuit breaker ----------------------- */
 const CB_KEY = "__news_circuit_breaker__";
 const CB_WINDOW_MS = 9000;
-const DEBUG = !!import.meta?.env?.VITE_DEBUG_NEWS;
+let memCB = 0; // fallback en SSR/privado
 
-/* ----------------------- BASE URL ----------------------- */
-function normalizeApiBase(input) {
-  const raw = (input || "").trim().replace(/\/+$/, "");
-  if (!raw) return "";
-  let base = raw;
-  if (!/\/api$/i.test(base)) base += "/api";
-  return base.replace(/\/api(?:\/api)+$/i, "/api");
-}
-function toLocalApi() {
-  return normalizeApiBase("http://localhost:3000");
-}
-export const API_BASE = (() => {
-  const env = normalizeApiBase(import.meta?.env?.VITE_NEWS_API_BASE_URL || "");
-  return env || toLocalApi();
-})();
+function now() { return Date.now(); }
 
-/* ---- Health wait ---- */
-export async function waitForApiReady(base, { retries = 15, delayMs = 300, signal } = {}) {
+function cbOpen() {
+  try {
+    if (IS_BROWSER && window.sessionStorage) {
+      const ts = Number(sessionStorage.getItem(CB_KEY) || 0);
+      return ts && now() - ts < CB_WINDOW_MS;
+    }
+  } catch {}
+  return memCB && now() - memCB < CB_WINDOW_MS;
+}
+function cbTrip() {
+  try {
+    if (IS_BROWSER && window.sessionStorage) {
+      sessionStorage.setItem(CB_KEY, String(now()));
+    } else {
+      memCB = now();
+    }
+  } catch { memCB = now(); }
+}
+
+/* ----------------------- Health wait ----------------------- */
+export async function waitForApiReady(base = API_BASE, { retries = 12, delayMs = 300, signal } = {}) {
   const url = `${String(base || "").replace(/\/+$/, "")}/health`;
   for (let i = 0; i < retries; i++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(new Error("timeout")), 3500);
     try {
-      const ctrl = new AbortController();
-      const id = setTimeout(() => ctrl.abort(new Error("timeout")), 3500);
-      const res = await fetch(url, { signal: signal || ctrl.signal, headers: { accept: "application/json" } });
-      clearTimeout(id);
-      if (res.ok) return true;
+      const r = await apiFetch(url, {
+        signal: signal || ctrl.signal,
+        headers: { accept: "application/json" },
+      });
+      if (r.ok) { clearTimeout(timer); return true; }
     } catch {}
-    await new Promise((r) => setTimeout(r, delayMs + i * 80));
+    clearTimeout(timer);
+    await sleep(delayMs + i * 80);
   }
   return false;
 }
 
 /* ----------------------- Utils ----------------------- */
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const now = () => Date.now();
-function circuitOpen() {
-  try {
-    const ts = Number(sessionStorage.getItem(CB_KEY) || 0);
-    return ts && now() - ts < CB_WINDOW_MS;
-  } catch { return false; }
-}
-function circuitTrip() { try { sessionStorage.setItem(CB_KEY, String(now())); } catch {} }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 function toQuery(params = {}) {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -71,48 +79,83 @@ function toQuery(params = {}) {
   const s = q.toString();
   return s ? `?${s}` : "";
 }
-function safeSessionSet(key, val) { try { sessionStorage.setItem(key, JSON.stringify({ ts: now(), val })); } catch {} }
-function safeSessionGet(key, ttl) {
+
+// Cache en sessionStorage con TTL; si no hay storage, usa memoria
+const memCache = new Map();
+function safeSet(key, val) {
   try {
-    const raw = sessionStorage.getItem(key);
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj.ts !== "number") return null;
-    if (ttl && now() - obj.ts > ttl) return null;
-    return obj.val ?? null;
-  } catch { return null; }
+    if (IS_BROWSER && window.sessionStorage) {
+      sessionStorage.setItem(key, JSON.stringify({ ts: now(), val }));
+      return;
+    }
+  } catch {}
+  memCache.set(key, { ts: now(), val });
+}
+function safeGet(key, ttl) {
+  try {
+    if (IS_BROWSER && window.sessionStorage) {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj.ts !== "number") return null;
+      if (ttl && now() - obj.ts > ttl) return null;
+      return obj.val ?? null;
+    }
+  } catch {}
+  const o = memCache.get(key);
+  if (!o) return null;
+  if (ttl && now() - o.ts > ttl) return null;
+  return o.val ?? null;
+}
+
+function isRetryable(err) {
+  const msg = (err?.message || "").toLowerCase();
+  return (
+    /timeout/.test(msg) || /fetch failed/.test(msg) || /network/.test(msg) ||
+    /ec[^ ]*refused/.test(msg) || /ec[^ ]*reset/.test(msg) ||
+    (err?.status && err.status >= 500)
+  );
+}
+
+async function fetchJSON(url, { signal, timeout = FETCH_TIMEOUT_MS } = {}) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(new Error("timeout")), timeout);
+  try {
+    const res = await apiFetch(url, {
+      signal: signal || ctrl.signal,
+      headers: { accept: "application/json" },
+    });
+    if (res.status === 204) return {};
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      const err = new Error(`HTTP ${res.status} ${res.statusText}`);
+      err.status = res.status; err.body = txt;
+      throw err;
+    }
+    try { return await res.json(); } catch { return {}; }
+  } finally { clearTimeout(id); }
 }
 
 /* ---------------- Providers: normalización ---------------- */
 function normalizeProviderName(s = "") {
   let x = String(s).trim().toLowerCase();
   if (!x) return "";
-  // quitar protocolo, www y TLD comunes
   x = x.replace(/^https?:\/\/(www\.)?/, "");
   x = x.replace(/\.(com|org|net|pe|es|co|ar|mx|br|uk|us)(\/.*)?$/i, "");
   x = x.replace(/\./g, "");
-  // sinónimos y alias
   x = x.replace(/theguardian/, "guardian");
   x = x.replace(/nytimes/, "nyt");
   x = x.replace(/^elpais$/, "el pais");
-  x = x.replace(/^pjudicial$/, "poder judicial");
-  x = x.replace(/^pj$/, "poder judicial");
+  x = x.replace(/^pjudicial$|^pj$/, "poder judicial");
   x = x.replace(/^tribunalconst(itucional)?$/, "tribunal constitucional");
-  // multimedia alias
   x = x.replace(/^associatedpress$|^apnews$|^apvideo$/, "ap");
   x = x.replace(/^reutersvideo$/, "reuters");
   return x;
 }
 function normalizeProviders(input) {
   if (!input) return [];
-  const arr = Array.isArray(input)
-    ? input
-    : String(input).split(",");
-  return Array.from(
-    new Set(
-      arr.map((p) => normalizeProviderName(p)).filter(Boolean)
-    )
-  );
+  const arr = Array.isArray(input) ? input : String(input).split(",");
+  return Array.from(new Set(arr.map((p) => normalizeProviderName(p)).filter(Boolean)));
 }
 
 /* ----------------------- Fecha robusta ----------------------- */
@@ -123,13 +166,10 @@ function parseFechaSmart(input) {
 
   const s = String(input).trim();
 
-  // ISO / yyyy-mm-dd / timestamp → Date nativo
   if (/^\d{4}[-/]\d{2}[-/]\d{2}/.test(s) || /^\d+$/.test(s)) {
     const d = new Date(s);
     return isNaN(+d) ? null : d;
   }
-
-  // dd/mm/yyyy o dd-mm-yyyy (opcional hora)
   const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if (m) {
     const dd = parseInt(m[1], 10);
@@ -143,7 +183,6 @@ function parseFechaSmart(input) {
       return isNaN(+d) ? null : d;
     }
   }
-
   const d = new Date(s);
   return isNaN(+d) ? null : d;
 }
@@ -169,6 +208,7 @@ function coalesceImage(raw) {
     (typeof raw.media === "string" && /^https?:\/\//i.test(raw.media) ? raw.media : "");
   return img || "";
 }
+
 function stableId(n = {}) {
   const id = n._id || n.id || "";
   if (id) return id;
@@ -176,11 +216,12 @@ function stableId(n = {}) {
     n.fuenteNorm || n.fuente || n.source?.name || "",
     n.link || n.enlace || n.url || "",
     n.titulo || n.title || "",
-    n.fecha || n.publishedAt || ""
+    n.fecha || n.publishedAt || "",
   ].join("|");
   let h = 0; for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
   return `n_${h}`;
 }
+
 function normalizeGeneralItem(raw = {}) {
   const enlace = raw.enlace || raw.url || raw.link || "";
   const titulo = raw.titulo || raw.title || raw.headline || "(Sin título)";
@@ -208,6 +249,16 @@ function normalizeList(items = [], tipo = "general") {
   return (Array.isArray(items) ? items : []).map(norm);
 }
 const sortByDateDesc = (a, b) => (b?.fecha ? +new Date(b.fecha) : 0) - (a?.fecha ? +new Date(a.fecha) : 0);
+
+function dedupeByKey(items = []) {
+  const map = new Map();
+  for (const n of items) {
+    const k = n.enlace || n.url || n.link || n.id || "";
+    if (!k) continue;
+    if (!map.has(k)) map.set(k, n);
+  }
+  return Array.from(map.values());
+}
 
 /* ------------------- Normalización payload ------------------- */
 function pickItems(payload) {
@@ -266,32 +317,6 @@ function pickFiltros(payload) {
   return payload?.filtros || payload?.data?.filtros || {};
 }
 
-/* ----------------------- Core fetch ----------------------- */
-async function fetchJSON(url, { signal, timeout = FETCH_TIMEOUT_MS } = {}) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(new Error("timeout")), timeout);
-  try {
-    const res = await fetch(url, { signal: signal || ctrl.signal, headers: { accept: "application/json" } });
-    if (res.status === 204) return {};
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      const err = new Error(`HTTP ${res.status} ${res.statusText}`);
-      err.status = res.status; err.body = txt;
-      throw err;
-    }
-    try { return await res.json(); }
-    catch { return {}; }
-  } finally { clearTimeout(id); }
-}
-function isRetryable(err) {
-  const msg = (err?.message || "").toLowerCase();
-  return (
-    /timeout/.test(msg) || /fetch failed/.test(msg) || /network/.test(msg) ||
-    /ec[^ ]*refused/.test(msg) || /ec[^ ]*reset/.test(msg) ||
-    (err?.status && err.status >= 500)
-  );
-}
-
 /* =============== /api/news (solo general) =============== */
 async function fetchNewsLive(params, { signal } = {}) {
   const qp = {
@@ -302,7 +327,7 @@ async function fetchNewsLive(params, { signal } = {}) {
     page: params.page,
     limit: params.limit,
   };
-  const url = `${API_BASE}/news${toQuery(qp)}`;
+  const url = joinApi(`/news${toQuery(qp)}`);
   DEBUG && console.debug(`[Noticias] GET live:`, url);
   const data = await fetchJSON(url, { signal });
   const items = normalizeList(pickItems(data), "general");
@@ -322,7 +347,7 @@ export async function getNewsLive({
   const qParam = q ?? tema;
   const cacheKey = `newslive:${page}:${limit}:${qParam || ""}:${lang || "all"}:${providersCsv || "-"}`;
   if (!noCache) {
-    const cached = safeSessionGet(cacheKey, cacheTtlMs);
+    const cached = safeGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
   }
 
@@ -343,15 +368,20 @@ export async function getNewsLive({
       page: live.pagination.page || Number(page) || 1,
       raw: live.raw,
     };
-    if (!noCache || (payload.items && payload.items.length)) safeSessionSet(cacheKey, payload);
+    if (!noCache || (payload.items && payload.items.length)) safeSet(cacheKey, payload);
     return payload;
   } catch (e) {
     DEBUG && console.warn("[Noticias] getNewsLive falló:", e?.message || e);
-    return { items: [], pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false }, filtros: {}, raw: null };
+    return {
+      items: [],
+      pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false },
+      filtros: {},
+      raw: null,
+    };
   }
 }
 
-/* -------- Adaptador ÚNICO para GENERALES (nuevo) -------- */
+/* -------- Adaptador ÚNICO para GENERALES (live → mongo) -------- */
 export async function getGeneralNews({
   page = 1, limit = PAGE_SIZE, q, tema, lang, providers, signal,
   noCache = false, cacheTtlMs = 5 * 60 * 1000,
@@ -360,16 +390,15 @@ export async function getGeneralNews({
   const providersCsv = providersArr.join(",");
   const cacheKey = `general:adapt:${page}:${limit}:${q || ""}:${tema || ""}:${lang || "all"}:${providersCsv || "-"}`;
   if (!noCache) {
-    const cached = safeSessionGet(cacheKey, cacheTtlMs);
+    const cached = safeGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
   }
 
   // 1) Intento live (/news)
   const live = await getNewsLive({ page, limit, q, tema, lang, providers: providersArr, signal, noCache, cacheTtlMs });
 
-  // Si trajo resultados suficientes, devolvemos
   if (Array.isArray(live.items) && live.items.length) {
-    safeSessionSet(cacheKey, live);
+    safeSet(cacheKey, live);
     return live;
   }
 
@@ -387,22 +416,19 @@ export async function getGeneralNews({
     cacheTtlMs,
   });
 
-  // 3) Merge (por si en algún entorno quisieras combinar)
-  const map = new Map();
-  [...(live.items || []), ...(mongo.items || [])].forEach((n, i) => {
-    const key = n.enlace || n.url || n.link || n.id || `k#${i}`;
-    map.set(key, n);
-  });
-  const items = Array.from(map.values()).sort(sortByDateDesc);
+  // 3) Merge
+  const items = dedupeByKey([...(live.items || []), ...(mongo.items || [])]).sort(sortByDateDesc);
 
   const payload = {
     items,
-    pagination: mongo.pagination || live.pagination || { page, limit, total: items.length, pages: Math.ceil(items.length / limit), nextPage: null, hasMore: false },
+    pagination: mongo.pagination || live.pagination || {
+      page, limit, total: items.length, pages: Math.ceil(items.length / limit), nextPage: null, hasMore: false,
+    },
     filtros: mongo.filtros || live.filtros || {},
     page: (mongo.pagination?.page || live.pagination?.page || page),
     raw: { live, mongo },
   };
-  if (!noCache || items.length) safeSessionSet(cacheKey, payload);
+  if (!noCache || items.length) safeSet(cacheKey, payload);
   return payload;
 }
 
@@ -413,7 +439,7 @@ export async function getNoticiasRobust({
   q, tema, lang, especialidad, providers, signal,
   noCache = false, cacheTtlMs = 5 * 60 * 1000,
 } = {}) {
-  if (circuitOpen()) {
+  if (cbOpen()) {
     DEBUG && console.warn("[Noticias] circuit breaker abierto; vacío temporal.");
     return { items: [], pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false }, filtros: {}, raw: null };
   }
@@ -426,7 +452,7 @@ export async function getNoticiasRobust({
 
   const cacheKey = `news:${tipo}:${page}:${limit}:${q || ""}:${tema || ""}:${lang || "all"}:${especialidad || "todas"}:${providersParam || "-"}`;
   if (!noCache) {
-    const cached = safeSessionGet(cacheKey, cacheTtlMs);
+    const cached = safeGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
   }
 
@@ -437,7 +463,7 @@ export async function getNoticiasRobust({
         { signal }
       );
       const payload = { items: live.items, pagination: live.pagination, filtros: live.filtros, page: live.pagination.page || Number(page) || 1, raw: live.raw };
-      if (!noCache || (payload.items && payload.items.length)) safeSessionSet(cacheKey, payload);
+      if (!noCache || (payload.items && payload.items.length)) safeSet(cacheKey, payload);
       return payload;
     } catch (e) { DEBUG && console.warn("[Noticias] live falló, uso Mongo:", e?.message || e); }
   }
@@ -461,38 +487,44 @@ export async function getNoticiasRobust({
   let lastErr = null;
   for (let i = 0; i < attempts.length; i++) {
     const { etiqueta, params } = attempts[i];
-    const url = `${API_BASE}/noticias${toQuery(params)}`;
+    const url = joinApi(`/noticias${toQuery(params)}`);
     try {
       DEBUG && console.debug(`[Noticias] GET ${etiqueta}:`, url);
       const data = await fetchJSON(url, { signal });
       const items = normalizeList(pickItems(data), tipo);
-      const payload = { items, pagination: pickPagination(data), filtros: pickFiltros(data), page: Number(pickPagination(data).page) || Number(page) || 1, raw: data };
-      if (!noCache || (Array.isArray(items) && items.length > 0)) safeSessionSet(cacheKey, payload);
+      const payload = {
+        items,
+        pagination: pickPagination(data),
+        filtros: pickFiltros(data),
+        page: Number(pickPagination(data).page) || Number(page) || 1,
+        raw: data,
+      };
+      if (!noCache || (Array.isArray(items) && items.length > 0)) safeSet(cacheKey, payload);
       return payload;
     } catch (e) {
       lastErr = e;
-      if (isRetryable(e)) { await sleep(200 + i * 150); continue; }
+      if (isRetryable(e)) { await sleep(200 * (i + 1)); continue; }
       break;
     }
   }
 
-  circuitTrip();
+  cbTrip();
   DEBUG && console.warn("⚠️ Noticias vacío/fallo:", lastErr?.message || lastErr);
   const empty = { items: [], pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false }, filtros: {}, raw: null };
-  if (!noCache) safeSessionSet(cacheKey, empty);
+  if (!noCache) safeSet(cacheKey, empty);
   return empty;
 }
 
 /* ----------------------- Chips ----------------------- */
 export async function getEspecialidades({ tipo = "juridica", lang, signal } = {}) {
-  const url = `${API_BASE}/noticias/especialidades${toQuery({ tipo, lang: lang && lang !== "all" ? lang : undefined })}`;
+  const url = joinApi(`/noticias/especialidades${toQuery({ tipo, lang: lang && lang !== "all" ? lang : undefined })}`);
   DEBUG && console.debug("[Noticias] GET", url);
   const data = await fetchJSON(url, { signal });
   const list = Array.isArray(data?.items) ? data.items : Array.isArray(data?.data?.items) ? data.data.items : [];
   return list;
 }
 export async function getTemas({ lang = "es", signal } = {}) {
-  const url = `${API_BASE}/noticias/temas${toQuery({ tipo: "general", lang })}`;
+  const url = joinApi(`/noticias/temas${toQuery({ tipo: "general", lang })}`);
   DEBUG && console.debug("[Noticias] GET", url);
   const data = await fetchJSON(url, { signal });
   const list = Array.isArray(data?.items) ? data.items : Array.isArray(data?.data?.items) ? data.data.items : [];
@@ -502,11 +534,15 @@ export async function getTemas({ lang = "es", signal } = {}) {
 /* ----------------------- Otros helpers ----------------------- */
 export function clearNoticiasCache() {
   try {
-    if (!isBrowser) return;
-    Object.keys(sessionStorage).forEach((k) => {
-      if (k.startsWith("news:") || k.startsWith("newslive:") || k.startsWith("general:adapt:")) sessionStorage.removeItem(k);
-    });
+    if (IS_BROWSER && window.sessionStorage) {
+      Object.keys(sessionStorage).forEach((k) => {
+        if (k.startsWith("news:") || k.startsWith("newslive:") || k.startsWith("general:adapt:")) {
+          sessionStorage.removeItem(k);
+        }
+      });
+    }
   } catch {}
+  memCache.clear();
 }
 export function proxifyMedia(url) {
   if (!url) return "";

@@ -15,15 +15,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig(({ mode }) => {
-  // Carga de .env.* por si hace falta (prefijo VITE_)
+  // Carga .env.* (solo variables con prefijo VITE_ quedarán disponibles en el cliente)
   const env = loadEnv(mode, process.cwd(), "VITE_");
-
   const isProd = mode === "production";
+
+  // Backend de desarrollo (no afecta a producción)
+  const DEV_BACKEND = env.VITE_DEV_BACKEND || "http://127.0.0.1:3000";
 
   return {
     plugins: [
       react({
-        // desactiva transformaciones innecesarias en prod si quieres depurar
         jsxRuntime: "automatic",
       }),
     ],
@@ -36,13 +37,18 @@ export default defineConfig(({ mode }) => {
       sourcemap: !isProd,
       target: "es2022",
       reportCompressedSize: false,
-      chunkSizeWarningLimit: 900, // sube el umbral para evitar falsos positivos
+      chunkSizeWarningLimit: 900,
       rollupOptions: {
         output: {
-          // Split básico para librerías gordas
           manualChunks: {
             react: ["react", "react-dom"],
-            firebase: ["firebase/app", "firebase/auth", "firebase/firestore", "firebase/storage", "firebase/messaging"],
+            firebase: [
+              "firebase/app",
+              "firebase/auth",
+              "firebase/firestore",
+              "firebase/storage",
+              "firebase/messaging",
+            ],
           },
         },
       },
@@ -52,8 +58,9 @@ export default defineConfig(({ mode }) => {
     // ⚙️ Servidor local (Vite + Proxy Backend)
     // ============================================================
     server: {
-      host: "0.0.0.0",   // Permite acceso desde cualquier IP (útil en LAN)
+      host: "0.0.0.0",
       port: 5173,
+      strictPort: false,
       open: true,
       cors: true,
       headers: {
@@ -62,7 +69,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // Backend principal (API)
         "/api": {
-          target: "http://localhost:3000",
+          target: DEV_BACKEND,   // ✅ sin strings con ${...}
           changeOrigin: true,
           secure: false,
           ws: true,
@@ -71,7 +78,7 @@ export default defineConfig(({ mode }) => {
 
         // Alias de chat SOLO en dev: mapea /chat-api → /api
         "/chat-api": {
-          target: "http://localhost:3000",
+          target: DEV_BACKEND,
           changeOrigin: true,
           secure: false,
           ws: true,
@@ -89,10 +96,8 @@ export default defineConfig(({ mode }) => {
     // ⚡ Polyfills/defines mínimos
     // ============================================================
     define: {
-      // Evita hacks globales; si alguna lib pide process.env, dale un objeto vacío
+      // Evita que libs legacy revienten si miran process.env en cliente
       "process.env": {},
-      // Si una lib antigua usa global, puedes mapearlo a globalThis:
-      // global: "globalThis",
     },
 
     // ============================================================
@@ -132,12 +137,11 @@ export default defineConfig(({ mode }) => {
       exclude: ["rss-parser"],
     },
 
-    // Suele ser útil en debugging CSS de dev
     css: {
       devSourcemap: !isProd,
     },
 
-    // Garantiza que solo variables con prefijo VITE_ entren al cliente
+    // Solo variables con prefijo VITE_ entran al bundle del cliente
     envPrefix: "VITE_",
   };
 });

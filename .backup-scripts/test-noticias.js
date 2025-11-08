@@ -1,7 +1,7 @@
 // scripts/test-noticias.js
 import fetch from "node-fetch";
 
-const BASE = "http://localhost:3000/api";
+const BASE = "http://127.0.0.1:3000/api";
 
 async function testNoticias(tipo = "general") {
   console.log(`\n=== 📰 Test noticias ${tipo} ===`);

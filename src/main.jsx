@@ -4,18 +4,20 @@ import "./process-shim";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { initPushClient } from "@/services/pushClient.js";
 import "./index.css";
 import "./styles/noticias.css";
 
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 /* ===================================================================
  * ⚙️ Configuración FCM (opcional por ENV)
  * - VITE_ENABLE_FCM=false   → no registra SW ni obtiene token (y limpia si hubiera)
  * - VITE_FCM_VAPID_KEY      → sólo requerido si ENABLE_FCM=true
  * =================================================================== */
 const ENABLE_FCM = String(import.meta.env.VITE_ENABLE_FCM || "").toLowerCase() === "true";
-// Si quieres bloquear FCM en localhost, descomenta:
-// const IS_LOCALHOST = /^localhost(:\d+)?$/.test(window.location.host);
-// const ENABLE_FCM = ENABLE_FCM && !IS_LOCALHOST;
+if (ENABLE_FCM) {
+  initPushClient({ swUrl: "/firebase-messaging-sw.js", enablePushParam: import.meta.env.VITE_ENABLE_PUSH || "false" });
+}
 
 /* ===================================================================
  * 🧼 Util: desregistrar cualquier SW previo de Firebase Messaging

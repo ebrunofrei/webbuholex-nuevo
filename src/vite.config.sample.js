@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       // Noticias (backend local)
       "/api": {
-        target: "http://localhost:3000",
+        target: "",
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => ({
       },
       // Chat (ruta separada en el frontend)
       "/chat-api": {
-        target: "http://localhost:3000",
+        target: "",
         changeOrigin: true,
         secure: false,
         ws: true,

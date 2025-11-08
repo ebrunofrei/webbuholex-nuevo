@@ -1,7 +1,7 @@
 // scripts/check-news-api.js
 import fetch from "node-fetch";
 
-const BASE_URL = process.env.API_BASE_URL || "http://localhost:3000/api";
+const BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:3000/api";
 
 async function checkNoticias(tipo = "general", limit = 5) {
   const url = `${BASE_URL}/noticias?tipo=${tipo}&limit=${limit}`;

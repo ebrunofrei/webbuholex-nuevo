@@ -26,7 +26,8 @@ const IS_SLOW = NET_TYPE === "slow-2g" || NET_TYPE === "2g";
 const DPR = typeof window !== "undefined" ? Math.max(1, Math.min(3, window.devicePixelRatio || 1)) : 1;
 
 const BASE_PAGE = IS_SLOW ? 9 : 12;
-const PAGE_SIZE = Math.max(BASE_PAGE, DPR >= 2 ? 15 : 12);
+const IS_MOBILE = matchMedia?.('(max-width: 768px)').matches;
+const PAGE_SIZE = IS_MOBILE ? 12 : 18;
 
 // Límite ampliado para “ver más”/fallbacks
 const EXTENDED_LIMIT = Math.max(PAGE_SIZE * 2, 24);
@@ -100,66 +101,80 @@ const chipClass = (active) =>
      : "text-[#4a2e23] border-[#e7d4c8] bg-white hover:bg-[#fff2ea]"}`;
 
 // Diccionario ampliado por especialidad (palabras clave más generosas)
-const ES_KEYWORDS = {
+export const ES_KEYWORDS = {
   penal: [
-    "penal","delito","delictivo","fiscal","ministerio público","mp","juzgado penal","prisión","prision","homicidio","robo",
-    "extorsión","extorsion","trata","lavado de activos","corrupción","corrupcion","acusación","acusacion","sentencia penal",
-    "inimputabilidad","prisión preventiva","prision preventiva","audiencia de prisión","habeas corpus"
+    'penal','delito','fiscal','fiscalía','ministerio público','mp','imputado','acusado','pena',
+    'prisión','prision','preventiva','prisión preventiva','prision preventiva','homicidio',
+    'robo','extorsión','extorsion','lavado de activos','crimen organizado','audiencia penal',
+    'juzgado penal','sala penal','carcel','inpe','beneficios penitenciarios'
   ],
   civil: [
-    "civil","contrato","obligaciones","propiedad","posesión","posesion","usucapión","usucapion","arrendamiento","indemnización",
-    "indemnizacion","responsabilidad civil","daños y perjuicios","dano moral","hipoteca","sucesiones","herencia"
+    'civil','contrato','obligaciones','responsabilidad civil','daño','daños y perjuicios',
+    'propiedad','posesión','posesion','usucapión','usucapion','servidumbre','arrendamiento',
+    'hipoteca','embargo','sucesiones','herencia','matrimonio civil','divorcio civil'
   ],
   laboral: [
-    "laboral","trabajador","empleador","remuneración","remuneracion","compensación","compensacion","sindicato","mintra",
-    "sunafil","cts","despido","reposición","reposicion","vacaciones","jornada","hostigamiento laboral"
+    'laboral','trabajo','trabajador','empleador','sindicato','negociación colectiva',
+    'sunafil','mintra','remuneración','remuneracion','cts','despido','reposición',
+    'seguro complementario','accidente de trabajo','hostigamiento','acoso laboral'
   ],
   constitucional: [
-    "constitucional","tc","tribunal constitucional","amparo","inconstitucionalidad","habeas corpus","hábeas corpus","derechos fundamentales",
-    "precedente vinculante","control difuso","control concentrado"
+    'constitucional','tc','tribunal constitucional','amparo','habeas corpus','hábeas corpus',
+    'hábeas data','habeas data','control difuso','control de convencionalidad','derechos fundamentales',
+    'precedente vinculante','estado de emergencia','acción popular','acción de cumplimiento'
   ],
   familiar: [
-    "familia","familiar","tenencia","alimentos","régimen de visitas","regimen de visitas","patria potestad","adopción","adopcion","violencia familiar"
+    'familia','familiar','alimentos','tenencia','régimen de visitas','regimen de visitas',
+    'violencia familiar','patria potestad','adopción','adopcion','conciliación','conciliacion'
   ],
   administrativo: [
-    "administrativo","resolución","resolucion","procedimiento administrativo","tupa","sancionador","infracción","infraccion","silencio administrativo",
-    "nulidad de oficio","acto administrativo"
+    'administrativo','procedimiento administrativo','tupa','silencio administrativo',
+    'resolución administrativa','resolucion administrativa','sancionador','multas',
+    'sunedu','osce','osiptel','osinergmin','sunarp','digemid','digesa'
   ],
   comercial: [
-    "comercial","societario","empresa","sociedad anónima","concurso","quiebra","título valor","titulo valor","letra de cambio","pagaré","pagare",
-    "factoring","fusiones","adquisiciones","junta de accionistas"
+    'comercial','societario','constitución de empresa','constitucion de empresa','junta de accionistas',
+    'fusiones','adquisiciones','m&a','insolvencia','quiebra','concurso','título valor','titulo valor'
   ],
   tributario: [
-    "tributario","sunat","igv","renta","impuesto","tributo","fiscalización","fiscalizacion","devolución","devolucion","infracción tributaria",
-    "infraccion tributaria","tribunal fiscal"
+    'tributario','impuestos','sunat','igv','renta','percepciones','retenciones',
+    'fiscalización','fiscalizacion','tasas','arancel','tribunal fiscal'
   ],
   procesal: [
-    "proceso","procesal","procedimiento","casación","casacion","apelación","apelacion","medida cautelar","cautelar","competencia",
-    "prueba","nulidad procesal","impugnación","impugnacion"
+    'proceso','procesal','procedimiento','casación','casacion','apelación','apelacion',
+    'cautelar','prueba','competencia','notificación','notificacion'
   ],
   registral: [
-    "registral","sunarp","registro","partida registral","asiento registral","inmatriculación","inmatriculacion","título","titulo","calificación registral"
+    'registral','registro','sunarp','partida registral','asiento registral','inmatriculación','inmatriculacion',
+    'título archivado','titulo archivado','publicidad registral'
   ],
   ambiental: [
-    "ambiental","oefa","mina","minería","mineria","eia","impacto ambiental","residuos","contaminación","contaminacion","áreas naturales",
+    'ambiental','oefa','eia','impacto ambiental','minería','mineria','bosques','agua',
+    'residuos sólidos','residuos solidos','emisiones','pasivos ambientales'
   ],
   notarial: [
-    "notarial","notario","escritura pública","escritura publica","legalización","legalizacion","protesto","transferencia de dominio"
+    'notarial','notario','escritura pública','escritura publica','legalización de firma','legalizacion de firma',
+    'protesto','acta notarial','minuta','traslado'
   ],
   penitenciario: [
-    "penitenciario","inpe","cárcel","carcel","beneficios penitenciarios","redención","redencion","semilibertad","libertad condicional"
+    'penitenciario','inpe','carcel','prisión','prision','redención de pena','redencion de pena',
+    'semilibertad','libertad condicional','beneficios penitenciarios'
   ],
   consumidor: [
-    "consumidor","indecopi","protección al consumidor","proteccion al consumidor","cláusulas abusivas","clausulas abusivas","garantía","garantia","idoneidad"
+    'consumidor','indecopi','protección al consumidor','proteccion al consumidor',
+    'cláusulas abusivas','clausulas abusivas','garantía','garantia','idoneidad',
+    'publicidad engañosa','servicio defectuoso'
   ],
-  "seguridad social": [
-    "seguridad social","previsional","pensión","pension","onp","afp","essalud","jubilación","jubilacion"
+  'seguridad social': [
+    'seguridad social','previsional','pensión','pension','onp','afp','essalud','eps',
+    'subsidio','aportaciones'
   ],
-  "derechos humanos": [
-    "derechos humanos","cidh","corte idh","onu","convención","convencion","tratos crueles"
+  'derechos humanos': [
+    'derechos humanos','cidh','corte idh','onu','debido proceso','no discriminación','no discriminacion'
   ],
   internacional: [
-    "internacional","cancillería","cancilleria","extradición","extradicion","cooperación judicial","cooperacion judicial","la haya","derecho internacional"
+    'derecho internacional','extradición','extradicion','cooperación judicial','cooperacion judicial',
+    'cancillería','cancilleria','tratado','convención','convencion'
   ],
 };
 
@@ -394,9 +409,9 @@ export default function NoticiasOficina() {
           const resp3 = await getNoticiasRobust({
             tipo: "juridica",
             page: 1,
-            limit: EXTENDED_LIMIT,
+            limit: Math.max(PAGE_SIZE, 24),
             lang: "es",
-            sinceDays: 7,
+            sinceDays: 14,
             signal: controller.signal,
           });
           base = Array.isArray(resp3?.items) ? resp3.items : [];
