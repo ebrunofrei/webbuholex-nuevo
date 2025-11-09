@@ -12,13 +12,10 @@ import cors from "cors";
 import morgan from "morgan";
 import mongoose from "mongoose";
 
-// DB helper (nombres reales)
-import { dbConnect, getMongoUri } from "./backend/services/db.js";
-
-// Rutas
+// Rutas y servicios principales
 import noticiasRoutes from "./backend/routes/noticias.js";
 import noticiasContenidoRoutes from "./backend/routes/noticiasContenido.js";
-import newsRoutes from "./backend/routes/news.js";
+import newsTopics from "./backend/routes/news-topics.js";
 import iaRoutes from "./backend/routes/ia.js";
 import usuariosRoutes from "./backend/routes/usuarios.js";
 import culqiRoutes from "./backend/routes/culqi.js";
@@ -27,7 +24,6 @@ import noticiasGuardadasRoutes from "./backend/routes/noticiasGuardadas.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 import vozRoutes from "./backend/routes/voz.js";
 import newsLiveRouter from "./backend/routes/news-live.js";
-import mediaMetaRoute from "./backend/routes/media.js";
 import mediaRoutes from "./backend/routes/media.js";
 
 // ============================================================
@@ -87,9 +83,12 @@ app.get("/alive", (_req, res) => res.type("text/plain").send("ok"));
 // 🔒 CORS (antes de montar rutas)
 // ============================================================
 
+const localPorts = Array.from({ length: 40 }, (_, i) => 5170 + i);
 const localOrigins = [
-  ...Array.from({ length: 30 }, (_, i) => `http://localhost:${5170 + i}`),
-  ...Array.from({ length: 30 }, (_, i) => `http://127.0.0.1:${5170 + i}`),
+  ...localPorts.map((p) => `http://localhost:${p}`),
+  ...localPorts.map((p) => `http://127.0.0.1:${p}`),
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
 ];
 
 const envOrigins = (process.env.FRONTEND_ORIGIN || "")
@@ -132,25 +131,24 @@ app.use("/api", (req, res, next) => {
   next();
 });
 
-// Salud
+// ============================================================
+// 🩺 Endpoint de salud mejorado
+// ============================================================
+
 app.get("/api/health", (_req, res) => {
-  const openaiStatus = process.env.OPENAI_API_KEY
-    ? "✅ OpenAI API Key cargada correctamente"
-    : "❌ Falta configurar OPENAI_API_KEY";
+  const mongoState = mongoose.connection?.readyState ?? 0;
+  const states = ["desconectado", "conectando", "conectado", "desconectando"];
+  const mongoStatus = mongoState === 1 ? "✅ Conectado a MongoDB Atlas" : `⚠️ ${states[mongoState]}`;
 
-  const mongoStatus =
-    mongoose.connection?.readyState === 1 ? "✅ Conectado a MongoDB Atlas" : "⚠️ MongoDB no conectado";
-
-  return res.status(200).json({
-    ok: true,
+  res.status(200).json({
+    ok: mongoState === 1,
     entorno: NODE_ENV,
-    timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || "1.0.0",
-    openai: openaiStatus,
     mongo: mongoStatus,
-    cors: allowedOrigins,
-    uptime: `${process.uptime().toFixed(0)}s`,
-    startedAt: START_TIME.toISOString(),
+    readyState: mongoState,
+    openai: process.env.OPENAI_API_KEY ? "✅" : "❌",
+    timestamp: new Date().toISOString(),
+    uptime: `${Math.floor(process.uptime())}s`,
   });
 });
 
@@ -158,11 +156,11 @@ app.get("/api/health", (_req, res) => {
 // 🧩 Rutas API principales (orden específico)
 // ============================================================
 
-app.use("/api/noticias/contenido", noticiasContenidoRoutes); // específico primero
-app.use("/api/news", newsLiveRouter);                         // live primero
+app.use("/api/noticias/contenido", noticiasContenidoRoutes);
+app.use("/api/news", newsLiveRouter);
 app.use("/api/noticias", noticiasRoutes);
 app.use("/api/noticias-guardadas", noticiasGuardadasRoutes);
-app.use("/api/news", newsRoutes);
+app.use("/api/news", newsTopics);
 app.use("/api/ia", iaRoutes);
 app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/culqi", culqiRoutes);
@@ -205,33 +203,51 @@ async function cargarTareasOpcionales() {
 }
 
 // ============================================================
-// 🚀 Arranque del servidor (una sola conexión a Mongo)
+// 🚀 Arranque del servidor (con conexión robusta a MongoDB)
 // ============================================================
 
 export { app };
 
 if (process.env.NODE_ENV !== "test") {
   (async () => {
-    try {
-      console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
-      const uri = process.env.MONGODB_URI || getMongoUri();
-      await dbConnect(uri);                       // ✅ usar dbConnect (nombre real)
-      console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
+    const uri = process.env.MONGODB_URI;
+    const MAX_TRIES = 6;
 
-      await cargarTareasOpcionales();
+    console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
 
-      const server = app.listen(PORT, "0.0.0.0", () => {
-        console.log(chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`));
-        console.log(chalk.cyanBright("🌍 Orígenes permitidos por CORS:"));
-        allowedOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
-      });
-
-      // timeouts que NO rompen streaming (chat/SSE si lo activas luego)
-      server.keepAliveTimeout = 75_000;
-      server.headersTimeout = 80_000;
-    } catch (err) {
-      console.error(chalk.red("❌ Error crítico al iniciar servidor:"), err.message);
-      process.exit(1);
+    let attempt = 0;
+    while (attempt < MAX_TRIES) {
+      try {
+        await mongoose.connect(uri, {
+          serverSelectionTimeoutMS: 5000,
+          connectTimeoutMS: 8000,
+          family: 4, // ✅ Fuerza IPv4
+        });
+        console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
+        break;
+      } catch (err) {
+        attempt++;
+        const delay = Math.min(2000 * 2 ** (attempt - 1), 10000);
+        console.warn(chalk.yellow(`⚠️ Fallo conexión Mongo (intento ${attempt}/${MAX_TRIES}): ${err.message}`));
+        if (attempt >= MAX_TRIES) {
+          console.error(chalk.red("❌ No se pudo conectar a MongoDB Atlas."));
+          process.exit(1);
+        }
+        console.log(chalk.gray(`↻ Reintentando en ${delay} ms...`));
+        await new Promise((r) => setTimeout(r, delay));
+      }
     }
+
+    await cargarTareasOpcionales();
+
+    const server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(chalk.greenBright(`\n🚀 Servidor BúhoLex corriendo en puerto ${PORT}`));
+      console.log(chalk.cyanBright("🌍 Orígenes permitidos por CORS:"));
+      allowedOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
+    });
+
+    // timeouts que NO rompen streaming (chat/SSE)
+    server.keepAliveTimeout = 75_000;
+    server.headersTimeout = 80_000;
   })();
 }

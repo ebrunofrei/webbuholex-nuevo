@@ -1,5 +1,12 @@
 // src/services/firebaseMessaging.js
-import { initMessaging, getFcmToken, registerFcmServiceWorker } from "@/firebase";
+// ============================================================
+// FCM Client (silencioso si VITE_ENABLE_FCM !== "true")
+// - Cache de soporte y token
+// - SW opcional: usa registerFcmServiceWorker() o ready()
+// - Sin warns innecesarios cuando está deshabilitado
+// ============================================================
+
+import { initMessaging, registerFcmServiceWorker } from "@/firebase";
 import {
   getToken,
   onMessage,
@@ -7,135 +14,142 @@ import {
   isSupported as _isSupported,
 } from "firebase/messaging";
 
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+const FCM_ENABLED = String(import.meta.env.VITE_ENABLE_FCM) === "true";
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
 
-// --- Cache ---
+// ---------- Cache ----------
+/** @type {Promise<boolean>|boolean|null} */
 let _supportCache = null;
+/** @type {string|null} */
 let _cachedToken = null;
+/** @type {null|(() => void)} */
+let _fgUnsubscribe = null;
 
+// ---------- Soporte ----------
 /** Comprueba si Firebase Messaging está soportado en este navegador */
 export async function isMessagingSupported() {
   if (_supportCache != null) return _supportCache;
   try {
-    _supportCache = await _isSupported();
+    // guardamos la PROMESA para evitar condiciones de carrera
+    _supportCache = _isSupported();
+    _supportCache = await _supportCache;
   } catch {
     _supportCache = false;
   }
   return _supportCache;
 }
 
-/** Pide permiso de notificaciones */
+// ---------- Permisos ----------
 async function ensureNotificationPermission() {
-  if (typeof Notification === "undefined") {
-    console.warn("⚠️ API Notification no disponible en este entorno.");
-    return false;
-  }
-  if (Notification.permission === "granted") return true;
-  if (Notification.permission === "denied") {
-    console.warn("⚠️ Permiso de notificaciones denegado por el usuario/navegador.");
-    return false;
-  }
-  const result = await Notification.requestPermission();
+  if (typeof Notification === "undefined") return false;
+  const { permission } = Notification;
+  if (permission === "granted") return true;
+  if (permission === "denied") return false;
+  const result = await Notification.requestPermission().catch(() => "denied");
   return result === "granted";
 }
 
+// ---------- Token ----------
 /**
- * Obtiene el token FCM y pide permisos si es necesario.
+ * Obtiene el token FCM (pide permiso si hace falta).
  * @param {{ forceRefresh?: boolean, vapidKey?: string }} [opts]
+ * @returns {Promise<string|null>}
  */
 export async function solicitarPermisoYToken(opts = {}) {
   try {
-    // Permite desactivar FCM en dev con variable de entorno
-    if (import.meta.env.VITE_ENABLE_FCM === "false") {
-      console.warn("⚠️ FCM deshabilitado por configuración (VITE_ENABLE_FCM=false).");
-      return null;
-    }
+    if (!FCM_ENABLED) return null;
 
-    // 1) Soporte
     const supported = await isMessagingSupported();
-    if (!supported) {
-      console.warn("⚠️ Firebase Messaging no soportado en este navegador.");
-      return null;
-    }
+    if (!supported) return null;
 
-    // 2) Inicializa messaging y SW
     const messaging = await initMessaging();
-    if (!messaging) {
-      console.error("❌ 'messaging' no está inicializado.");
-      return null;
-    }
+    if (!messaging) return null;
 
-    const swReg = await registerFcmServiceWorker();
+    // SW: usa el registrador propio si existe; si no, espera el SW por defecto.
+    let swReg = null;
+    try {
+      swReg = (await registerFcmServiceWorker()) || (await navigator.serviceWorker?.ready);
+    } catch {
+      swReg = await navigator.serviceWorker?.ready;
+    }
     if (!swReg) return null;
 
     const granted = await ensureNotificationPermission();
     if (!granted) return null;
 
-    // 3) Token (usa cache si no forceRefresh)
     if (!opts.forceRefresh && _cachedToken) return _cachedToken;
 
     const token = await getToken(messaging, {
       vapidKey: opts.vapidKey || VAPID_KEY,
       serviceWorkerRegistration: swReg,
-    });
+    }).catch(() => null);
 
-    if (!token) {
-      console.warn("⚠️ No se pudo obtener token FCM.");
-      return null;
-    }
-
-    _cachedToken = token;
-    console.log("✅ TOKEN FCM:", token);
-    return token;
-  } catch (err) {
-    console.error("❌ Error al obtener token FCM:", err);
+    _cachedToken = token || null;
+    return _cachedToken;
+  } catch {
     return null;
   }
 }
 
-/** Elimina token FCM actual */
+/** Elimina el token FCM actual (si existe). */
 export async function borrarTokenFcm() {
   try {
+    if (!FCM_ENABLED) return false;
     const messaging = await initMessaging();
     if (!messaging) return false;
 
-    const ok = await deleteToken(messaging);
-    if (ok) {
-      console.log("🗑️ Token FCM eliminado.");
-      _cachedToken = null;
-    }
+    const ok = await deleteToken(messaging).catch(() => false);
+    if (ok) _cachedToken = null;
     return ok;
-  } catch (err) {
-    console.error("❌ Error al eliminar token FCM:", err);
+  } catch {
     return false;
   }
 }
 
-/** Escucha mensajes en foreground */
+// ---------- Mensajes en foreground ----------
+/**
+ * Escucha mensajes en foreground. Devuelve una función para desuscribirse.
+ * @param {(payload:any)=>void} onMessageCallback
+ * @returns {() => void}
+ */
 export function listenToForegroundMessages(onMessageCallback) {
-  isMessagingSupported().then(async (supported) => {
-    if (!supported) {
-      console.warn("⚠️ Foreground listener no habilitado.");
-      return;
-    }
+  let disposed = false;
+
+  (async () => {
+    if (!FCM_ENABLED) return;
+    const supported = await isMessagingSupported();
+    if (!supported || disposed) return;
 
     const messaging = await initMessaging();
-    if (!messaging) return;
+    if (!messaging || disposed) return;
 
     try {
-      const unsubscribe = onMessage(messaging, (payload) => {
-        console.log("📩 Notificación en foreground:", payload);
-        onMessageCallback?.(payload);
+      // Limpia un listener previo si lo hubiera
+      if (typeof _fgUnsubscribe === "function") {
+        _fgUnsubscribe();
+        _fgUnsubscribe = null;
+      }
+      _fgUnsubscribe = onMessage(messaging, (payload) => {
+        try {
+          onMessageCallback?.(payload);
+        } catch {
+          /* no-op */
+        }
       });
-      listenToForegroundMessages.unsubscribe = unsubscribe;
-    } catch (err) {
-      console.error("❌ Error en listenToForegroundMessages:", err);
+    } catch {
+      /* no-op */
     }
-  });
+  })();
 
   return () => {
+    disposed = true;
     try {
-      listenToForegroundMessages.unsubscribe?.();
-    } catch {}
+      if (typeof _fgUnsubscribe === "function") {
+        _fgUnsubscribe();
+        _fgUnsubscribe = null;
+      }
+    } catch {
+      /* no-op */
+    }
   };
 }

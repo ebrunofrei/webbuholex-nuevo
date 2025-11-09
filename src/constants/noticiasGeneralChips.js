@@ -1,34 +1,65 @@
 // src/constants/noticiasGeneralChips.js
-/**
- * Mapeo de chips (generales) → providers y/o q.
- * - Si hay providers, tienen prioridad.
- * - Si no hay providers, se usa q (pipes = OR).
- * - Mantén claves en minúsculas para coincidir con los botones de UI.
- */
+// ============================================================
+// 🦉 BúhoLex | Chips para Noticias GENERALES (sin cruces)
+// - Cada chip define: q (multilingüe básico) + providers sugeridos
+// - Si providers=[], el panel usará proveedores multimedia por defecto
+// - No toques aquí lógica de carga; solo el mapa
+// ============================================================
+
 export const CHIP_MAP = {
-  actualidad: { providers: [], q: "" }, // feed amplio
-  "política": {
-    providers: ["bbcmundo", "dw", "elpais"],
-    q: "política|gobierno|congreso|elections|parlamento",
+  actualidad: {
+    label: "actualidad",
+    q: 'actualidad OR "última hora" OR breaking',
+    providers: [], // feed amplio + multimedia
   },
-  "economía": {
-    providers: ["elpais", "rpp", "elcomercio"],
-    q: "economía|inflación|PIB|mercado|dólar|deuda|employment",
+  politica: {
+    label: "política",
+    q:
+      '(política OR gobierno OR congreso OR decreto OR ley OR presidente) ' +
+      'OR (politics OR government OR parliament OR congress OR president)',
+    providers: ["elpais", "rpp", "bbc"], // generalistas serios
   },
-  "corrupción": {
-    providers: ["elpais", "bbcmundo"],
-    q: "corrupción|soborno|cohecho|integridad|transparencia",
+  economia: {
+    label: "economía",
+    q:
+      '(economía OR inflacion OR inflación OR dólar OR empleo OR mercado OR finanzas OR SUNAT OR PBI) ' +
+      'OR (economy OR inflation OR dollar OR employment OR market OR finance OR GDP)',
+    providers: ["rpp", "elpais", "reuters"],
   },
-  "ciencia": {
-    providers: ["sciencedaily", "bbcmundo", "dw"],
-    q: "ciencia|science|investigación|descubrimiento|estudio",
+  corrupcion: {
+    label: "corrupción",
+    q:
+      '(corrupción OR soborno OR coima OR "lavado de activos" OR colusión OR peculado) ' +
+      'OR (corruption OR bribery OR "money laundering" OR embezzlement)',
+    providers: ["elpais", "rpp", "reuters"],
   },
-  "tecnología": {
-    providers: ["dw", "bbcmundo"],
-    q: "tecnología|tech|IA|inteligencia artificial|software|ciberseguridad",
+  ciencia: {
+    label: "ciencia",
+    q:
+      '(ciencia OR investigación OR salud OR estudio OR descubrimiento OR universidad OR hospital) ' +
+      'OR (science OR research OR study OR discovery OR health)',
+    providers: ["bbc", "dw", "reuters", "ap"],
   },
-  "sociedad": {
-    providers: ["bbcmundo", "elpais", "rpp"],
-    q: "sociedad|comunidad|seguridad|educación|salud pública",
+  tecnologia: {
+    label: "tecnología",
+    q:
+      '(tecnología OR IA OR "inteligencia artificial" OR ciberseguridad OR software OR datos OR móvil OR robot OR chip) ' +
+      'OR (technology OR AI OR cybersecurity OR software OR data OR mobile OR robotics OR chip)',
+    providers: ["bbc", "dw", "reuters"],
+  },
+  sociedad: {
+    label: "sociedad",
+    q:
+      '(sociedad OR educación OR cultura OR familia OR comunidad OR social) ' +
+      'OR (society OR social OR community OR culture OR education)',
+    providers: ["elpais", "rpp"],
+  },
+  internacional: {
+    label: "internacional",
+    q: '(internacional OR mundo OR geopolitica) OR (world OR international OR global)',
+    providers: ["reuters", "ap", "bbc", "dw", "euronews"],
   },
 };
+
+// (Opcional Perú) añade o quita según tu preferencia:
+//  - "elcomercio", "rpp", "andina" (si lo integras en providers del backend)

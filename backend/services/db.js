@@ -6,10 +6,18 @@
 import mongoose from "mongoose";
 import chalk from "chalk";
 
+/* ------------------------ Settings de Mongoose ------------------------ */
+// Evita queries ambiguas y buffers colgados en serverless
+mongoose.set("strictQuery", true);
+if (process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT || process.env.SERVERLESS === "1") {
+  mongoose.set("bufferCommands", false);
+}
+
 /* ------------------------ Cache global ------------------------ */
 const GLOBAL_KEY = "__buholex_mongoose";
-const cached = global[GLOBAL_KEY] || { conn: null, promise: null, listeners: false };
-global[GLOBAL_KEY] = cached;
+const cached =
+  globalThis[GLOBAL_KEY] || { conn: null, promise: null, listeners: false };
+globalThis[GLOBAL_KEY] = cached;
 
 /* ------------------------ Helpers entorno --------------------- */
 export function getMongoUri() {
@@ -34,7 +42,9 @@ const isServerless =
 /* ------------------------ Util IPv4 --------------------------- */
 function ensureIPv4(uri = "") {
   if (!uri) return uri;
+  // si ya trae family, respeta
   if (/\bfamily=/.test(uri)) return uri;
+  // agrega family=4 manteniendo otros query params
   return uri + (uri.includes("?") ? "&" : "?") + "family=4";
 }
 
@@ -50,7 +60,7 @@ export async function waitMongoReady({ timeoutMs = 6000, intervalMs = 150 } = {}
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     if (mongoReady()) return true;
-    await new Promise(r => setTimeout(r, intervalMs));
+    await new Promise((r) => setTimeout(r, intervalMs));
   }
   return mongoReady();
 }
@@ -59,7 +69,9 @@ export async function waitMongoReady({ timeoutMs = 6000, intervalMs = 150 } = {}
 function hookListenersOnce() {
   if (cached.listeners) return;
   mongoose.connection.once("connected", () => {
-    console.log(chalk.green("✅ Mongo conectado."), chalk.gray(`(${getDbName()})`));
+    const host = mongoose.connection.host ?? "?";
+    const db = mongoose.connection.name ?? getDbName();
+    console.log(chalk.green(`✅ Mongo conectado.`), chalk.gray(`(${host}/${db})`));
   });
   mongoose.connection.on("error", (e) => {
     console.error(chalk.red("❌ Mongo error:"), e?.message || e);
@@ -73,13 +85,18 @@ function hookListenersOnce() {
 /* ------------------------ Conexión con reintentos ------------- */
 async function connectWithRetry(uri, dbName, { attempts = 5 } = {}) {
   const u = ensureIPv4(uri);
+
   const opts = {
     dbName,
     family: 4,
-    serverSelectionTimeoutMS: 10_000,
-    socketTimeoutMS: 20_000,
+    serverSelectionTimeoutMS: 12_000,
+    socketTimeoutMS: 45_000,
     minPoolSize: 1,
     maxPoolSize: 10,
+    // en prod evita rebuild constante de índices
+    autoIndex: process.env.NODE_ENV !== "production",
+    // lectura segura por defecto
+    readPreference: "primary",
   };
 
   let lastErr;
@@ -98,7 +115,7 @@ async function connectWithRetry(uri, dbName, { attempts = 5 } = {}) {
           `🔁 Intento ${i}/${attempts} falló: ${err?.message || err}. Reintento en ${wait}ms...`
         )
       );
-      await new Promise(r => setTimeout(r, wait));
+      await new Promise((r) => setTimeout(r, wait));
     }
   }
   throw lastErr;
@@ -120,15 +137,17 @@ export async function dbConnect() {
 
   if (!cached.promise) {
     console.log(chalk.yellow("⏳ Conectando a MongoDB..."), chalk.gray(`DB: ${dbName}`));
-    cached.promise = connectWithRetry(uri, dbName).then((c) => (cached.conn = c));
+    cached.promise = connectWithRetry(uri, dbName)
+      .then((c) => (cached.conn = c))
+      .catch((e) => {
+        // limpia la promesa cacheada si falla para permitir reintentos posteriores
+        cached.promise = null;
+        throw e;
+      });
   }
 
-  try {
-    cached.conn = await cached.promise;
-    return cached.conn;
-  } finally {
-    if (!mongoReady()) cached.promise = null; // limpia si falló
-  }
+  cached.conn = await cached.promise;
+  return cached.conn;
 }
 
 /** Conexión “suave”: NO lanza; retorna conexión o null */
@@ -143,29 +162,42 @@ export async function dbTryConnect() {
 
 /** Desconexión segura */
 export async function dbDisconnect() {
-  if (mongoose.connection.readyState !== 0) {
-    try {
+  try {
+    if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
-    } catch {}
+    }
+  } catch {
+    // noop
+  } finally {
+    cached.conn = null;
+    cached.promise = null;
   }
-  cached.conn = null;
-  cached.promise = null;
 }
 
 /* ------------------------ Cierre limpio ----------------------- */
 if (!isServerless) {
   for (const sig of ["SIGINT", "SIGTERM"]) {
     process.on(sig, async () => {
-      try { await dbDisconnect(); } finally { process.exit(0); }
+      try {
+        await dbDisconnect();
+      } finally {
+        process.exit(0);
+      }
     });
   }
 }
 
-/* ------------------------ Default (compat) -------------------- */
+/* ------------------------ Default + alias (compat) ------------ */
+// Alias para coincidir con otros import existentes en tu proyecto
+export const connectDB = dbConnect;
+export const disconnectDB = dbDisconnect;
+
 export default {
   dbConnect,
   dbTryConnect,
   dbDisconnect,
+  connectDB,
+  disconnectDB,
   mongoState,
   mongoReady,
   waitMongoReady,

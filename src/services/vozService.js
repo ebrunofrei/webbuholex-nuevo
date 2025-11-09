@@ -1,74 +1,57 @@
 // src/services/vozService.js
+// ============================================================
+// 🦉 BúhoLex | Servicio de Voz (frontend, Azure vía backend)
+// - Fuente única de API: @/services/apiBase (joinApi)
+// - GET (streaming) → POST (blob) como fallback
+// - Audio singleton + anti-solapes + repetición/bucle
+// - NO auto-lectura: solo por interacción del usuario
+// - Pausa al ocultar pestaña y reanuda al volver (si no se detuvo)
+// ============================================================
 
-/** =========================
- *  Utilidades base de API
- *  ========================= */
-function getApiBaseUrl() {
-  const raw = (import.meta.env?.VITE_API_BASE_URL || "").trim();
-  const base = raw !== "" ? raw : "http://localhost:3000/api";
-  return base.endsWith("/") ? base.slice(0, -1) : base;
-}
+import { joinApi } from "@/services/apiBase";
 
-function joinApi(path) {
-  const base = getApiBaseUrl();
-  return path.startsWith("/") ? base + path : `${base}/${path}`;
-}
+/* =========================
+ *  Estado global (módulo)
+ * ========================= */
+let _audio;                     // <audio> único
+let _muted = false;             // silencio global (on-demand)
+let _lastText = "";             // último texto reproducible
+let _lastOpts = null;           // últimas opciones normalizadas ({voz, rate, pitch})
+let _repeatRemaining = 0;       // repeticiones pendientes (x veces)
+let _loopEnabled = false;       // bucle infinito del último
+let _hiddenPaused = false;      // se pausó por visibilitychange
+let _isUserStopped = false;     // el usuario detuvo explícitamente
+let _playInFlight = false;      // guardrail para evitar triggers simultáneos
 
-/** =========================
- *  Audio (singleton)
- *  ========================= */
-let _audio;
-/** Devuelve un único <audio> para toda la app */
-function getAudio() {
-  if (!_audio) {
-    _audio = new Audio();
-    _audio.preload = "none";
-  }
-  return _audio;
-}
+/* =========================
+ *  Utilidades base
+ * ========================= */
+const IS_BROWSER = typeof window !== "undefined";
+const MAX_TTS_CHARS = 1200;
 
-/** Detener cualquier reproducción en curso */
-export function stopVoz() {
-  const audio = getAudio();
-  try {
-    audio.pause();
-    // reset src para liberar stream u objectURL si aplica
-    audio.src = "";
-    audio.removeAttribute("src");
-    // Safari a veces mantiene el stream si no se fuerza el load()
-    audio.load?.();
-  } catch {}
-}
-
-/** =========================
- *  Helpers de TTS
- *  ========================= */
-
-// Mapeo simple de alias → voces reales de Azure
-const VOICES = {
+const VOICE_ALIASES = {
   masculina_profesional: "es-ES-AlvaroNeural",
-  masculina_alvaro: "es-ES-AlvaroNeural",
-  // agrega aquí otros alias que uses
+  masculina_alvaro:      "es-ES-AlvaroNeural",
+  femenina_profesional:  "es-ES-ElviraNeural",
+  // agrega aquí más alias si los usas en la UI
 };
 
 function normalizarVoz(voz) {
-  const v = (voz || "").trim();
-  return VOICES[v] || v || "es-ES-AlvaroNeural";
+  const v = String(voz || "").trim();
+  return VOICE_ALIASES[v] || v || "es-ES-AlvaroNeural";
 }
 
-/** Límite de seguridad para el texto (SSML puede tener límites) */
-const MAX_TTS_CHARS = 1200;
+function clamp(n, min, max) {
+  const x = Number.isFinite(+n) ? +n : 0;
+  return Math.min(max, Math.max(min, x));
+}
 
-/** Retorna el mismo texto, pero saneado y truncado si excede el límite */
 function sanitizarTexto(texto) {
   let t = String(texto ?? "").replace(/\s+/g, " ").trim();
-  if (t.length > MAX_TTS_CHARS) {
-    t = t.slice(0, MAX_TTS_CHARS - 1) + "…";
-  }
+  if (t.length > MAX_TTS_CHARS) t = t.slice(0, MAX_TTS_CHARS - 1) + "…";
   return t;
 }
 
-/** Pequeño helper para timeout de promesas (fetch/play) */
 async function withTimeout(promise, ms, errMsg = "Timeout") {
   let timer;
   try {
@@ -81,95 +64,294 @@ async function withTimeout(promise, ms, errMsg = "Timeout") {
   }
 }
 
-/** Prueba rápida de salud del endpoint /api/voz/health */
-export async function ttsHealth() {
+async function fetchWithTimeout(url, opts = {}, ms = 10000) {
+  const ctrl = new AbortController();
+  const { signal, ...rest } = opts;
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...rest, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* =========================
+ *  Audio singleton + eventos
+ * ========================= */
+function getAudio() {
+  if (!_audio) {
+    _audio = new Audio();
+    _audio.preload = "none";
+    _audio.onended = handleEnded;
+    _audio.onerror = handleEnded;
+  }
+  return _audio;
+}
+
+/** Qué hacer al terminar/error de audio */
+async function handleEnded() {
+  // libera objectURL si fue POST (siendo prudentes)
+  try {
+    // nada que hacer aquí explícitamente; la release se maneja al hacer stop/replay
+  } catch {}
+
+  if (_isUserStopped) return; // usuario detuvo; no continuar
+  if (_muted) return;         // en silencio global; no continuar
+
+  // prioridad: repeticiones discretas
+  if (_repeatRemaining > 0 && _lastText) {
+    _repeatRemaining -= 1;
+    try {
+      await _play(_lastText, _lastOpts, /*interrupt=*/false);
+    } catch {
+      // silencioso
+    }
+    return;
+  }
+
+  // si no hay repeticiones, revisa bucle
+  if (_loopEnabled && _lastText) {
+    try {
+      await _play(_lastText, _lastOpts, /*interrupt=*/false);
+    } catch {
+      // silencioso
+    }
+  }
+}
+
+/* =========================
+ *  Visibility handling
+ * ========================= */
+if (IS_BROWSER && !globalThis.__buholex_voice_visibility_wired__) {
+  globalThis.__buholex_voice_visibility_wired__ = true;
+  document.addEventListener("visibilitychange", () => {
+    const a = getAudio();
+    if (document.hidden) {
+      if (!a.paused && !_isUserStopped) {
+        a.pause();
+        _hiddenPaused = true;
+      }
+    } else {
+      // reanuda solo si quedó pausado por ocultamiento y no está muteado
+      if (_hiddenPaused && !_muted && !_isUserStopped) {
+        a.play().catch(() => {});
+      }
+      _hiddenPaused = false;
+    }
+  });
+}
+
+/* =========================
+ *  API pública
+ * ========================= */
+
+/** Health del endpoint /api/voz/health */
+export async function ttsHealth({ signal } = {}) {
   const url = joinApi("/voz/health");
-  const resp = await withTimeout(fetch(url), 6000, "Timeout /voz/health");
+  const resp = await fetchWithTimeout(url, { method: "GET", signal }, 6000);
   if (!resp.ok) throw new Error(`TTS health ${resp.status}`);
   return resp.json().catch(() => ({}));
 }
 
-/** =========================
- *  Cliente TTS
- *  ========================= */
+/** Detiene todo: audio, repeticiones, bucles */
+export function stopVoz() {
+  const a = getAudio();
+  try {
+    _isUserStopped = true;       // marca que fue decisión del usuario
+    _repeatRemaining = 0;
+    _loopEnabled = false;
+    a.pause();
+    a.src = "";                  // libera stream / url
+    a.removeAttribute("src");
+    a.load?.();
+  } catch {}
+}
+
+/** Pausa (sin resetear estado). ResumeVoz puede continuar. */
+export function pauseVoz() {
+  const a = getAudio();
+  try {
+    a.pause();
+  } catch {}
+}
+
+/** Reanuda si hay algo cargado y no está muteado ni detenido por usuario */
+export async function resumeVoz() {
+  if (_muted || _isUserStopped) return;
+  const a = getAudio();
+  if (!a.src) return;
+  try {
+    await a.play();
+  } catch {}
+}
+
+/** Estado de reproducción actual */
+export function isSpeaking() {
+  const a = getAudio();
+  return !!(a.src && !a.paused && !a.ended);
+}
+
+/** Silencio global (true = mutea y detiene de inmediato) */
+export function setTTSMuted(on = true) {
+  _muted = !!on;
+  if (_muted) stopVoz();
+}
+
+/** Lee el flag de silencio global */
+export function getTTSMuted() {
+  return _muted;
+}
 
 /**
- * Reproduce TTS. Intenta primero GET (streaming). Si falla, cae a POST (blob).
- * @param {string} texto
- * @param {{ voz?: string, rate?: number|string, pitch?: number|string }} opts
+ * Reproduce texto con TTS. NO se dispara automáticamente nunca.
+ * - Normaliza voz/rate/pitch
+ * - Interrumpe reproducción actual para evitar “voces cruzadas”
+ * @returns {"GET"|"POST"|undefined}
  */
-export async function reproducirVozVaronil(
+export async function reproducirVoz(
   texto,
-  { voz = "masculina_profesional", rate = 0, pitch = 0 } = {}
+  { voz = "masculina_profesional", rate = 0, pitch = 0, signal } = {}
 ) {
+  if (_muted) return;
   const clean = sanitizarTexto(texto);
   if (!clean) return;
 
-  // detener cualquier reproducción activa antes de iniciar una nueva
-  stopVoz();
-
+  // Normaliza y guarda "último"
   const voice = normalizarVoz(voz);
-  const audio = getAudio();
+  const rateInt = clamp(parseInt(rate, 10) || 0, -50, 50);  // -50..+50
+  const pitchInt = clamp(parseInt(pitch, 10) || 0, -6, 6);  // -6..+6
 
-  // 1) Intento GET (streaming), recomendado
-  try {
-    const qs = new URLSearchParams({
-      say: clean,
-      voice,
-      rate: String(parseInt(rate, 10) || 0),
-      pitch: String(parseInt(pitch, 10) || 0),
-    });
+  _lastText = clean;
+  _lastOpts = { voz: voice, rate: rateInt, pitch: pitchInt };
 
-    audio.src = `${joinApi("/voz")}?${qs.toString()}`;
-    // Algunos navegadores requieren interacción de usuario previa para autoplay;
-    // si falla, caeremos al POST.
-    await withTimeout(audio.play(), 8000, "Timeout al reproducir (GET)");
-    return; // ✅ Listo con GET
-  } catch (errGet) {
-    // cae al POST
-    // console.warn("TTS GET falló, intentando POST…", errGet);
-  }
+  // Interrumpe actual y reproduce
+  return _play(_lastText, _lastOpts, /*interrupt=*/true, signal);
+}
 
-  // 2) Fallback POST (descarga blob y reproduce)
-  let objectURL;
-  try {
-    const body = {
-      texto: clean,
-      voz: voice,
-      rate: parseInt(rate, 10) || 0,
-      pitch: parseInt(pitch, 10) || 0,
-    };
+/**
+ * Reinicia lectura de un texto arbitrario N veces (times≥1).
+ * - stopCurrent=true detiene lo que esté sonando antes de reiniciar
+ */
+export async function replayText(
+  texto,
+  opts = {},
+  times = 1,
+  stopCurrent = true
+) {
+  if (_muted) return;
+  const clean = sanitizarTexto(texto);
+  if (!clean) return;
+  const voice = normalizarVoz(opts.voz);
+  const rateInt = clamp(parseInt(opts.rate, 10) || 0, -50, 50);
+  const pitchInt = clamp(parseInt(opts.pitch, 10) || 0, -6, 6);
 
-    const resp = await withTimeout(
-      fetch(joinApi("/voz"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-      10000,
-      "Timeout TTS (POST)"
-    );
+  _lastText = clean;
+  _lastOpts = { voz: voice, rate: rateInt, pitch: pitchInt };
+  _loopEnabled = false;
+  _repeatRemaining = Math.max(0, Math.floor(times) - 1);
 
-    if (!resp.ok) {
-      const msg = await resp.text().catch(() => "");
-      throw new Error(`TTS POST ${resp.status}: ${msg || "Error al generar audio"}`);
-    }
+  await _play(_lastText, _lastOpts, stopCurrent);
+}
 
-    const blob = await resp.blob();
-    objectURL = URL.createObjectURL(blob);
-    audio.src = objectURL;
-    await withTimeout(audio.play(), 8000, "Timeout al reproducir (POST)");
-  } catch (errPost) {
-    throw errPost;
-  } finally {
-    // Liberar objectURL cuando termine/error
-    const revoke = () => {
-      if (objectURL) URL.revokeObjectURL(objectURL);
-      objectURL = null;
-      audio.onended = null;
-      audio.onerror = null;
-    };
-    audio.onended = revoke;
-    audio.onerror = revoke;
+/** Reinicia la lectura del último mensaje (times≥1) */
+export async function replayLast(times = 1, stopCurrent = true) {
+  if (_muted || !_lastText) return;
+  _loopEnabled = false;
+  _repeatRemaining = Math.max(0, Math.floor(times) - 1);
+  await _play(_lastText, _lastOpts, stopCurrent);
+}
+
+/** Activa/Desactiva bucle infinito del último mensaje */
+export async function loopLast(enable = true) {
+  if (_muted) return;
+  _repeatRemaining = 0;
+  _loopEnabled = !!enable;
+
+  if (_loopEnabled && _lastText) {
+    // si no está sonando, arranca
+    if (!isSpeaking()) await _play(_lastText, _lastOpts, true);
   }
 }
+
+/* =========================
+ *  Internals de reproducción
+ * ========================= */
+async function _play(texto, opts, interrupt = true, signal) {
+  if (_playInFlight) return; // guarda simple vs doble click
+  _playInFlight = true;
+  try {
+    if (interrupt) {
+      // el usuario está ordenando (clic), entonces desbloquea futuras reanudaciones
+      _isUserStopped = false;
+      stopVoz();
+    }
+
+    const a = getAudio();
+
+    // 1) Intento GET (streaming)
+    try {
+      const qs = new URLSearchParams({
+        say: texto,
+        voice: opts.voz,
+        rate: String(opts.rate),
+        pitch: String(opts.pitch),
+      });
+      a.src = `${joinApi("/voz")}?${qs.toString()}`;
+      await withTimeout(a.play(), 8000, "Timeout al reproducir (GET)");
+      return "GET";
+    } catch {
+      // cae a POST
+    }
+
+    // 2) Fallback POST (blob)
+    let objectURL;
+    try {
+      const resp = await fetchWithTimeout(
+        joinApi("/voz"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            texto,
+            voz: opts.voz,
+            rate: opts.rate,
+            pitch: opts.pitch,
+          }),
+          signal,
+        },
+        10000
+      );
+      if (!resp.ok) {
+        const msg = await resp.text().catch(() => "");
+        throw new Error(`TTS POST ${resp.status}: ${msg || "Error al generar audio"}`);
+      }
+      const blob = await resp.blob();
+      objectURL = URL.createObjectURL(blob);
+      a.src = objectURL;
+
+      a.onended = () => {
+        try { if (objectURL) URL.revokeObjectURL(objectURL); } catch {}
+        objectURL = null;
+        handleEnded();
+      };
+      a.onerror = a.onended;
+
+      await withTimeout(a.play(), 8000, "Timeout al reproducir (POST)");
+      return "POST";
+    } finally {
+      // si falló play(), garantiza revoke
+      // (si llegó a reproducir, onended hará el revoke)
+    }
+  } finally {
+    _playInFlight = false;
+  }
+}
+
+/* =========================
+ *  Compat de nombres antiguos
+ * ========================= */
+export const reproducirVozVaronil = reproducirVoz;

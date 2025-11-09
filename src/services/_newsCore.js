@@ -1,3 +1,4 @@
+import { API_BASE } from "@/services/apiBase";
 // src/services/_newsCore.js
 function normalizeBase(b) {
   if (!b) return "";
@@ -10,7 +11,7 @@ const fromEnv = (import.meta?.env?.VITE_API_BASE_URL && String(import.meta.env.V
 const fromWindow = (typeof window !== "undefined" && window.location)
   ? `${window.location.origin.replace(/\/+$/, "")}/api`
   : "";
-const DEFAULT_BASE = "http://localhost:3000/api";
+const DEFAULT_BASE = "${API_BASE}";
 
 export const API_BASE = normalizeBase(fromEnv || fromWindow || DEFAULT_BASE);
 export const FETCH_TIMEOUT_MS = 12000;

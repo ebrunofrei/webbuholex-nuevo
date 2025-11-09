@@ -1,132 +1,188 @@
-import { useEffect, useState, useCallback } from "react";
+// src/oficinaVirtual/hooks/useNoticiasGuardadas.js
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { joinApi } from "@/services/apiBase";
 
 // Guardamos SOLO IDs en localStorage para no mezclar tipos
 const LOCAL_KEY = "noticiasGuardadas_buholex_ids";
 
-// El backend unificado (ajusta si usas otro puerto/var env)
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+const IS_BROWSER = typeof window !== "undefined" && !!window.localStorage;
 
-// Normaliza cualquier forma de entrada (string id, {_id}, {id})
+/* ----------------------------- Normalizadores ----------------------------- */
 function toId(x) {
   if (!x) return null;
   if (typeof x === "string") return x.trim();
   if (typeof x === "object") return x._id ?? x.id ?? null;
   return null;
 }
-// Normaliza arrays: mezcla, quita nulos/duplicados
+
 function normalizeIdArray(arr) {
-  return Array.from(
-    new Set((arr || []).map(toId).filter(Boolean))
-  );
+  return Array.from(new Set((arr || []).map(toId).filter(Boolean)));
 }
 
+function normalizeServerPayload(json) {
+  if (!json) return [];
+  if (Array.isArray(json)) return normalizeIdArray(json);
+  const candidates =
+    json.items ??
+    json.ids ??
+    json.data?.items ??
+    json.data?.ids ??
+    json.data ??
+    [];
+  return normalizeIdArray(candidates);
+}
+
+/* ------------------------------ LocalStorage ------------------------------ */
+function readLocal() {
+  if (!IS_BROWSER) return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
+    return normalizeIdArray(raw);
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal(ids) {
+  if (!IS_BROWSER) return;
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(normalizeIdArray(ids)));
+  } catch {}
+}
+
+/* ----------------------------- Fetch helpers ------------------------------ */
+async function fetchWithTimeout(url, opts = {}, ms = 10000) {
+  const ctrl = new AbortController();
+  const { signal, ...rest } = opts;
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...rest, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function postGuardadas(userId, guardadas, { signal } = {}) {
+  const resp = await fetchWithTimeout(
+    joinApi("/noticias-guardadas"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, guardadas: normalizeIdArray(guardadas) }),
+      signal,
+    },
+    10000
+  );
+  // No rompemos si el backend devuelve 204 o shape distinto
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => "");
+    throw new Error(`POST /noticias-guardadas ${resp.status} ${msg || ""}`.trim());
+  }
+  return resp
+    .json()
+    .then(normalizeServerPayload)
+    .catch(() => normalizeIdArray(guardadas));
+}
+
+/* --------------------------------- Hook ---------------------------------- */
 export function useNoticiasGuardadas() {
   const { user } = useAuth();
-  const [guardadas, setGuardadas] = useState([]); // siempre array de IDs (strings)
   const userId = user?.uid || null;
 
-  // Lee localStorage de forma segura
-  const readLocal = () => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
-      return normalizeIdArray(raw);
-    } catch {
-      return [];
-    }
-  };
-  const writeLocal = (ids) => {
-    try {
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(normalizeIdArray(ids)));
-    } catch {}
-  };
+  const [guardadas, setGuardadas] = useState(() => readLocal());
+  const abortRef = useRef(null);
 
-  // Sincroniza local + servidor al montar o cambiar user
+  // Sync inicial y cuando cambie el usuario
   useEffect(() => {
-    let cancelled = false;
+    // Cancelar operaciones previas
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
 
-    const fromLocal = readLocal();
+    const localIds = readLocal();
 
-    // Si no hay usuario, solo usa local
+    // Sin usuario: solo local
     if (!userId) {
-      if (!cancelled) setGuardadas(fromLocal);
-      return;
+      setGuardadas(localIds);
+      return () => ctrl.abort();
     }
 
-    // Si hay usuario: trae del servidor y mergea con local
+    // Con usuario: GET + merge + POST
     (async () => {
       try {
-        const res = await fetch(`${BASE_URL}/noticias-guardadas?userId=${encodeURIComponent(userId)}`);
-        const data = await res.json();
+        const res = await fetchWithTimeout(
+          `${joinApi("/noticias-guardadas")}?userId=${encodeURIComponent(userId)}`,
+          { method: "GET", signal: ctrl.signal },
+          10000
+        );
 
-        // data puede ser array de ids o de objetos → normalizamos a ids
-        const fromServer = normalizeIdArray(data);
+        if (!res.ok) throw new Error(`GET /noticias-guardadas ${res.status}`);
+        const json = await res.json().catch(() => []);
+        const serverIds = normalizeServerPayload(json);
 
-        // merge (local tiene preferencia pero realmente da igual porque son ids)
-        const merged = normalizeIdArray([...fromLocal, ...fromServer]);
+        // Merge local + server
+        const merged = normalizeIdArray([...localIds, ...serverIds]);
 
-        if (!cancelled) {
-          setGuardadas(merged);
-        }
-
-        // Persistimos en servidor y local
+        setGuardadas(merged);
         writeLocal(merged);
-        await fetch(`${BASE_URL}/noticias-guardadas`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, guardadas: merged }),
-        });
-      } catch (e) {
-        // Si el servidor falla, nos quedamos con local
-        if (!cancelled) setGuardadas(fromLocal);
+
+        // Persistir en backend la fusión (idempotente)
+        try {
+          await postGuardadas(userId, merged, { signal: ctrl.signal });
+        } catch {
+          // Si falla el POST, nos quedamos con el estado local/merge
+        }
+      } catch {
+        // Si falla el GET, mantenemos local (offline-first)
+        setGuardadas(localIds);
       }
     })();
 
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => ctrl.abort();
   }, [userId]);
 
-  // Guardar (id puede venir como string u objeto → lo normalizamos)
-  const guardarNoticia = useCallback(async (noticiaOrId) => {
-    const id = toId(noticiaOrId);
-    if (!id) return;
+  /* --------------------------- Operaciones públicas --------------------------- */
+  const guardarNoticia = useCallback(
+    async (noticiaOrId) => {
+      const id = toId(noticiaOrId);
+      if (!id) return;
 
-    setGuardadas((prev) => {
-      if (prev.includes(id)) return prev;
-      const updated = [...prev, id];
-      writeLocal(updated);
+      setGuardadas((prev) => {
+        if (prev.includes(id)) return prev;
+        const updated = normalizeIdArray([...prev, id]);
+        writeLocal(updated);
 
-      // Sincroniza con backend si hay usuario
-      if (userId) {
-        fetch(`${BASE_URL}/noticias-guardadas`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, guardadas: updated }),
-        }).catch(() => {});
-      }
-      return updated;
-    });
-  }, [userId]);
+        if (userId) {
+          postGuardadas(userId, updated).catch(() => {});
+        }
+        return updated;
+      });
+    },
+    [userId]
+  );
 
-  // Quitar
-  const quitarNoticia = useCallback(async (noticiaOrId) => {
-    const id = toId(noticiaOrId);
-    if (!id) return;
+  const quitarNoticia = useCallback(
+    async (noticiaOrId) => {
+      const id = toId(noticiaOrId);
+      if (!id) return;
 
-    setGuardadas((prev) => {
-      const updated = prev.filter((x) => x !== id);
-      writeLocal(updated);
+      setGuardadas((prev) => {
+        const updated = prev.filter((x) => x !== id);
+        writeLocal(updated);
 
-      if (userId) {
-        fetch(`${BASE_URL}/noticias-guardadas`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, guardadas: updated }),
-        }).catch(() => {});
-      }
-      return updated;
-    });
-  }, [userId]);
+        if (userId) {
+          postGuardadas(userId, updated).catch(() => {});
+        }
+        return updated;
+      });
+    },
+    [userId]
+  );
 
   return { guardadas, guardarNoticia, quitarNoticia };
 }

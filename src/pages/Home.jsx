@@ -1,16 +1,12 @@
-// src/pages/Home.jsx
 import React from "react";
 import { motion } from "framer-motion";
-import logoBuho from "../assets/buho-institucional.png";
 import { Link } from "react-router-dom";
-import { useNoticias } from "../context/NoticiasContext";
+import logoBuho from "../assets/buho-institucional.png";
 
-// 👉 Nuevo modal (autoconsulta tipo="general")
-import NoticiasGeneralesModal from "@/components/ui/NoticiasGeneralesModal";
+// ✅ Panel unificado de noticias (incluye FAB + lector)
+import NoticiasPanel from "@/features/noticias/NoticiasPanel";
 
 export default function Home() {
-  const { showNoticias, setShowNoticias } = useNoticias();
-
   const handleOficina = () => {
     if (window.location.pathname === "/oficina") return;
     window.location.href = "/oficina";
@@ -68,12 +64,8 @@ export default function Home() {
         </div>
       </motion.div>
 
-      {/* Modal de Noticias (Generales) */}
-      <NoticiasGeneralesModal
-        open={showNoticias}
-        onClose={() => setShowNoticias(false)}
-        initialLang="all"
-      />
+      {/* ✅ Noticias SOLO en Home (FAB + panel lateral) */}
+      <NoticiasPanel />
     </div>
   );
 }

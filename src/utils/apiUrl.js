@@ -1,18 +1,38 @@
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
+// src/utils/apiUrl.js
+// ============================================================
+// 🦉 BúhoLex | URL helpers
+// - Usa fuente única de API: API_BASE + joinApi()
+// - No duplica "/api", respeta URLs absolutas y especiales
+// ============================================================
+
+import { API_BASE, joinApi } from "@/services/apiBase";
 
 /**
- * Convierte un path relativo o URL absoluta en una URL absoluta segura
- * @param {string} pathOrUrl
- * @returns {string}
+ * Convierte un path relativo o URL absoluta en absoluta, segura para el backend.
+ * Reglas:
+ *  - http(s) → se respeta tal cual
+ *  - protocol-relative (//host) → se respeta tal cual
+ *  - data:, blob:, mailto:, tel: → se respetan
+ *  - paths relativos o que empiezan con / o /api → se componen con joinApi()
  */
 export function asAbsoluteUrl(pathOrUrl) {
   if (!pathOrUrl) return "";
 
-  // Si ya es http(s), se devuelve tal cual
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const s = String(pathOrUrl).trim();
 
-  // Normalizar slash inicial
-  const normalized = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
-  return `${API_BASE}${normalized.replace(/^\/api/, "")}`;
+  // URLs absolutas o especiales: devolver sin tocar
+  if (
+    /^https?:\/\//i.test(s) || // http/https
+    /^\/\//.test(s) ||         // protocol-relative
+    /^(data:|blob:|mailto:|tel:)/i.test(s)
+  ) {
+    return s;
+  }
+
+  // Cualquier otra cosa la tratamos como path hacia el backend
+  // joinApi evita duplicar "/api" y normaliza barras
+  return joinApi(s);
 }
+
+// Exporta también por conveniencia si algún consumidor necesita la base
+export { API_BASE };

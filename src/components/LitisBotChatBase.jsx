@@ -13,7 +13,7 @@ import {
 import { MdSend } from "react-icons/md";
 
 // IA / backend
-import { reproducirVozVaronil } from "@/services/vozService.js";
+import { reproducirVoz, stopVoz } from "@/services/vozService.js"; // ← voz centralizada (parar + reproducir)
 import { enviarMensajeIA } from "@/services/chatClient.js";
 
 // Herramientas
@@ -47,40 +47,82 @@ const INIT_MSG = {
 };
 
 /* ============================================================
-   🎙️ Control global de audio (evitar voces superpuestas)
+   🧽 util formateo / sanitización / portapapeles
 ============================================================ */
-let currentAudio = null;
-function stopCurrentAudio() {
+const IS_BROWSER = typeof window !== "undefined";
+
+function sanitizeHtml(html = "") {
+  if (!IS_BROWSER) {
+    return String(html)
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+      .trim();
+  }
   try {
-    if (currentAudio) {
-      currentAudio.pause?.();
-      currentAudio.src = "";
-      currentAudio = null;
-    }
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html || "";
+    tmp.querySelectorAll("script,style,noscript").forEach((el) => el.remove());
+    return tmp.innerHTML;
   } catch {
-    /* no-op */
+    return html || "";
   }
 }
 
-/* ============================================================
-   🔁 enviarALitisbot (soporta SSE y JSON plano)
-============================================================ */
-export async function enviarALitisbot(payload, onStreamChunk, signal) {
-}
-/* ============================================================
-   🧽 util formateo para copiar limpio
-============================================================ */
 function toPlain(html = "") {
+  if (!IS_BROWSER) return String(html || "");
   const tmp = document.createElement("div");
   tmp.innerHTML = html || "";
   return tmp.textContent || tmp.innerText || html || "";
 }
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    if (!IS_BROWSER) return false;
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
 function prepararTextoParaCopia(html) {
   const plano = toPlain(html);
-  return plano
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return plano.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/* ============================================================
+   🎙️ Reconocimiento de voz (Web Speech API)
+============================================================ */
+const SR =
+  typeof window !== "undefined"
+    ? window.SpeechRecognition || window.webkitSpeechRecognition
+    : null;
+
+function createRecognizer({
+  lang = "es-PE",
+  continuous = true,
+  interimResults = true,
+} = {}) {
+  if (!SR) return null;
+  const rec = new SR();
+  rec.lang = lang;
+  rec.continuous = continuous;
+  rec.interimResults = interimResults;
+  return rec;
 }
 
 /* ============================================================
@@ -92,14 +134,22 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
   const [leyendo, setLeyendo] = useState(false);
 
   const feedback = msg.feedback;
+  const likeActive = feedback === "up";
+  const dislikeActive = feedback === "down";
+
+  const baseBtnClass =
+    "transition-all duration-150 flex items-center justify-center";
 
   async function handleSpeak() {
     if (leyendo) return;
     setLeyendo(true);
     try {
       const plain = toPlain(msg.content || "");
-      // ✅ usar el servicio correcto:
-      await reproducirVozVaronil(plain, { voz: "masculina_profesional" });
+      await reproducirVoz(plain, {
+        voz: "es-ES-AlvaroNeural",
+        rate: 0,
+        pitch: 0,
+      });
     } catch (err) {
       console.error("Error TTS:", err);
     } finally {
@@ -107,25 +157,16 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
     }
   }
 
+  async function handleCopiar() {
+    const limpio = prepararTextoParaCopia(msg.content || "");
+    const ok = await copyToClipboard(limpio);
+    onCopy && onCopy(limpio, ok);
+  }
+
   function handleGuardar() {
     setEditando(false);
     onEdit && onEdit(editValue);
   }
-
-  function handleCopiar() {
-    const limpio = prepararTextoParaCopia(msg.content || "");
-    navigator.clipboard
-      .writeText(limpio)
-      .then(() => onCopy && onCopy(limpio))
-      .catch(() => {});
-  }
-
-  // estilos dinámicos para like/dislike
-  const likeActive = feedback === "up";
-  const dislikeActive = feedback === "down";
-
-  const baseBtnClass =
-    "transition-all duration-150 flex items-center justify-center";
 
   return (
     <div
@@ -141,7 +182,7 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
         <div
           className="leading-relaxed whitespace-pre-wrap break-words text-[16px]"
           style={{ textAlign: "justify", wordBreak: "break-word" }}
-          dangerouslySetInnerHTML={{ __html: msg.content }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.content) }}
         />
       ) : (
         <div className="flex flex-col gap-2 w-full">
@@ -176,7 +217,7 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
         </div>
       )}
 
-      {/* ACCIONES SOLO SI NO ESTAMOS EDITANDO */}
+      {/* ACCIONES */}
       {!editando && (
         <div className="flex flex-row flex-wrap items-center gap-4 mt-4 text-[18px]">
           {/* ▶ Voz */}
@@ -221,24 +262,20 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
           <button
             className={baseBtnClass}
             style={{
-              color: likeActive ? "#0f5132" : "#0f5132",
-              backgroundColor: likeActive
-                ? "rgba(15,81,50,0.08)"
-                : "transparent",
+              color: "#0f5132",
+              backgroundColor: likeActive ? "rgba(15,81,50,0.08)" : "transparent",
               border: likeActive ? "1px solid #0f5132" : "1px solid transparent",
               borderRadius: "9999px",
-              width: "36px",
-              height: "36px",
+              width: 36,
+              height: 36,
               opacity: dislikeActive ? 0.4 : 1,
               transform: likeActive ? "scale(1.1)" : "scale(1)",
             }}
             title={likeActive ? "Marcado como útil" : "Respuesta útil"}
             aria-label="Respuesta útil"
             onClick={() => {
-              if (dislikeActive) return; // si ya marcó 👎 no dejamos marcar 👍
-              if (!likeActive) {
-                onFeedback && onFeedback("up");
-              }
+              if (dislikeActive) return;
+              if (!likeActive) onFeedback && onFeedback("up");
             }}
           >
             <FaRegThumbsUp size={18} />
@@ -248,28 +285,20 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
           <button
             className={baseBtnClass}
             style={{
-              color: dislikeActive ? "#842029" : "#842029",
-              backgroundColor: dislikeActive
-                ? "rgba(132,32,41,0.08)"
-                : "transparent",
-              border: dislikeActive
-                ? "1px solid #842029"
-                : "1px solid transparent",
+              color: "#842029",
+              backgroundColor: dislikeActive ? "rgba(132,32,41,0.08)" : "transparent",
+              border: dislikeActive ? "1px solid #842029" : "1px solid transparent",
               borderRadius: "9999px",
-              width: "36px",
-              height: "36px",
+              width: 36,
+              height: 36,
               opacity: likeActive ? 0.4 : 1,
               transform: dislikeActive ? "scale(1.1)" : "scale(1)",
             }}
-            title={
-              dislikeActive ? "Marcado como no útil" : "Respuesta no útil"
-            }
+            title={dislikeActive ? "Marcado como no útil" : "Respuesta no útil"}
             aria-label="Respuesta no útil"
             onClick={() => {
-              if (likeActive) return; // si ya marcó 👍 no dejamos marcar 👎
-              if (!dislikeActive) {
-                onFeedback && onFeedback("down");
-              }
+              if (likeActive) return;
+              if (!dislikeActive) onFeedback && onFeedback("down");
             }}
           >
             <FaRegThumbsDown size={18} />
@@ -279,9 +308,9 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
     </div>
   );
 }
+
 /* ============================================================
    💬 UserBubblePremium
-   - burbuja marrón del usuario (igual que en el widget flotante)
 ============================================================ */
 function UserBubblePremium({ html }) {
   return (
@@ -293,15 +322,14 @@ function UserBubblePremium({ html }) {
           max-w-[88%]
         "
         style={{ background: "#5C2E0B" }}
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
       />
     </div>
   );
 }
 
 /* ============================================================
-   Herramientas (mock)
-   - dejamos tus implementaciones tal cual, no toco estética todavía
+   Herramientas (mock) – sin cambios funcionales relevantes
 ============================================================ */
 function HerramientaMultilingue() {
   const [texto, setTexto] = useState("");
@@ -610,7 +638,7 @@ function HerramientaTraducir() {
 }
 
 /* ============================================================
-   ModalHerramientas (queda igual visualmente por ahora)
+   ModalHerramientas
 ============================================================ */
 function ModalHerramientas({
   onClose,
@@ -621,54 +649,14 @@ function ModalHerramientas({
   setError,
 }) {
   const HERRAMIENTAS = [
-    {
-      label: "Multilingüe",
-      key: "multilingue",
-      pro: false,
-      desc: "Haz tus consultas legales en cualquier idioma.",
-    },
-    {
-      label: "Modo Audiencia",
-      key: "audiencia",
-      pro: true,
-      desc: "Guía de objeciones y alegatos en vivo (PRO).",
-    },
-    {
-      label: "Analizar Archivo",
-      key: "analizador",
-      pro: true,
-      desc: "Sube PDF, Word o audio para análisis legal (PRO).",
-    },
-    {
-      label: "Traducir",
-      key: "traducir",
-      pro: false,
-      desc: "Traduce textos o documentos legales.",
-    },
-    {
-      label: "Agenda",
-      key: "agenda",
-      pro: true,
-      desc: "Gestiona plazos y audiencias (PRO).",
-    },
-    {
-      label: "Recordatorios",
-      key: "recordatorios",
-      pro: true,
-      desc: "Configura alertas importantes (PRO).",
-    },
-    {
-      label: "Tercio de la Pena",
-      key: "tercio_pena",
-      pro: false,
-      desc: "Calcula tercios, mitades y cuartos de pena.",
-    },
-    {
-      label: "Liquidación Laboral",
-      key: "liquidacion_laboral",
-      pro: false,
-      desc: "CTS, vacaciones, gratificaciones y beneficios.",
-    },
+    { label: "Multilingüe", key: "multilingue", pro: false, desc: "Haz tus consultas legales en cualquier idioma." },
+    { label: "Modo Audiencia", key: "audiencia", pro: true, desc: "Guía de objeciones y alegatos en vivo (PRO)." },
+    { label: "Analizar Archivo", key: "analizador", pro: true, desc: "Sube PDF, Word o audio para análisis legal (PRO)." },
+    { label: "Traducir", key: "traducir", pro: false, desc: "Traduce textos o documentos legales." },
+    { label: "Agenda", key: "agenda", pro: true, desc: "Gestiona plazos y audiencias (PRO)." },
+    { label: "Recordatorios", key: "recordatorios", pro: true, desc: "Configura alertas importantes (PRO)." },
+    { label: "Tercio de la Pena", key: "tercio_pena", pro: false, desc: "Calcula tercios, mitades y cuartos de pena." },
+    { label: "Liquidación Laboral", key: "liquidacion_laboral", pro: false, desc: "CTS, vacaciones, gratificaciones y beneficios." },
   ];
 
   useEffect(() => {
@@ -792,21 +780,15 @@ export default function LitisBotChatBase({
   expedientes = [],
 }) {
   // ====== ESTADOS ======
-const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
+  const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
 
-const [mensajes, setMensajes] = useState(() => {
-  const prev = getMessages(casoActivo);
-  if (prev && prev.length) {
-    // caso/expediente ya tenía historial guardado
-    return prev;
-  }
-  // caso nuevo → aún no ponemos bienvenida aquí
-  // la bienvenida la sembramos en el useEffect de abajo
-  return [];
-});
+  const [mensajes, setMensajes] = useState(() => {
+    const prev = getMessages(casoActivo);
+    if (prev && prev.length) return prev;
+    return []; // bienvenida en effect
+  });
 
   const [input, setInput] = useState("");
-  const [grabando, setGrabando] = useState(false);
   const [herramienta, setHerramienta] = useState(null);
 
   const [alertaAdjuntos, setAlertaAdjuntos] = useState("");
@@ -815,6 +797,11 @@ const [mensajes, setMensajes] = useState(() => {
 
   // Anti spam doble enter
   const [isSending, setIsSending] = useState(false);
+
+  // Reconocimiento de voz
+  const recRef = useRef(null);
+  const [grabando, setGrabando] = useState(false);
+  const [interim, setInterim] = useState("");
 
   // Refs
   const chatEndRef = useRef(null);
@@ -826,30 +813,22 @@ const [mensajes, setMensajes] = useState(() => {
 
   // ====== EFECTOS ======
   useEffect(() => {
-  // cuando cambias de caso activo (expediente / chat separado)
-  const prev = getMessages(casoActivo);
+    // al cambiar de expediente
+    const prev = getMessages(casoActivo);
+    if (prev && prev.length) {
+      setMensajes(prev);
+    } else {
+      const bienvenida = pro ? INIT_MSG.pro : INIT_MSG.general;
+      setMensajes([bienvenida]);
+      saveMessage(casoActivo, bienvenida);
+    }
+    setAdjuntos(getFiles(casoActivo) || []);
+  }, [casoActivo, pro]);
 
-  if (prev && prev.length) {
-    // ya existe historial guardado para este caso
-    setMensajes(prev);
-  } else {
-    // no hay historial → sembramos mensaje humano inicial según plan pro / básico
-    const bienvenida = pro ? INIT_MSG.pro : INIT_MSG.general;
-
-    setMensajes([bienvenida]);
-    saveMessage(casoActivo, bienvenida);
-  }
-
-  // también cargamos adjuntos guardados para ese caso
-  setAdjuntos(getFiles(casoActivo) || []);
-}, [casoActivo, pro]);
-
-  // scroll siempre al último mensaje
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mensajes, cargando]);
 
-  // auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -857,7 +836,6 @@ const [mensajes, setMensajes] = useState(() => {
     el.style.height = Math.min(el.scrollHeight, 6 * 28) + "px";
   }, [input]);
 
-  // exponer cierre en window para integraciones fuera
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.litisbotCloseTools = () => setShowModal?.(false);
@@ -866,6 +844,93 @@ const [mensajes, setMensajes] = useState(() => {
       };
     }
   }, [setShowModal]);
+
+  // ====== RECONOCEDOR DE VOZ ======
+  function ensureRecognizer() {
+    if (!recRef.current) {
+      recRef.current = createRecognizer({
+        lang: "es-PE",
+        continuous: true,
+        interimResults: true,
+      });
+      if (!recRef.current) return null;
+
+      recRef.current.onstart = () => setGrabando(true);
+
+      recRef.current.onresult = (e) => {
+        let finalChunk = "";
+        let interimChunk = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const txt = e.results[i][0]?.transcript || "";
+          if (e.results[i].isFinal) finalChunk += txt;
+          else interimChunk += txt;
+        }
+        if (finalChunk) {
+          setInput((prev) =>
+            prev ? (prev + " " + finalChunk).trim() : finalChunk.trim()
+          );
+        }
+        setInterim(interimChunk);
+      };
+
+      recRef.current.onerror = (ev) => {
+        console.warn("SpeechRecognition error:", ev.error);
+        setError(
+          ev.error === "not-allowed"
+            ? "Permiso del micrófono denegado. Habilítalo en el navegador."
+            : ev.error === "no-speech"
+            ? "No se detectó voz. Vuelve a intentarlo."
+            : "Error del reconocimiento de voz."
+        );
+      };
+
+      recRef.current.onend = () => {
+        setGrabando(false);
+        setInterim("");
+      };
+    }
+    return recRef.current;
+  }
+
+  function startDictado() {
+    // coherencia con BubbleChat: si el bot estaba leyendo, lo detenemos
+    try {
+      stopVoz();
+    } catch {}
+    const rec = ensureRecognizer();
+    if (!rec) {
+      setError("Este navegador no soporta dictado por voz.");
+      return;
+    }
+    try {
+      rec.start();
+    } catch {
+      // start puede lanzar si ya está corriendo
+    }
+  }
+
+  function stopDictado() {
+    const rec = recRef.current;
+    if (rec) {
+      try {
+        rec.stop();
+      } catch {}
+    }
+  }
+
+  function toggleDictado() {
+    if (grabando) stopDictado();
+    else startDictado();
+  }
+
+  // cleanup: detener dictado al desmontar
+  useEffect(() => {
+    return () => {
+      try {
+        recRef.current?.abort?.();
+      } catch {}
+    };
+  }, []);
 
   // ====== ADJUNTOS ======
   function handleFileChange(e) {
@@ -895,110 +960,126 @@ const [mensajes, setMensajes] = useState(() => {
   function obtenerHistorial() {
     return mensajes
       .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        role: m.role,
-        content: m.content || "",
-      }));
+      .map((m) => ({ role: m.role, content: m.content || "" }));
   }
 
-  // ====== PROCESADOR GENÉRICO DE CONSULTA (versión unificada con chatClient) ======
-async function procesarConsulta(pregunta, construirPayload) {
-  const texto = (pregunta || "").trim();
-  if (!texto) {
-    setError("⚠️ Escribe una consulta antes de enviar.");
-    return;
+  // ====== PROCESADOR GENÉRICO ======
+  async function procesarConsulta(pregunta, construirPayload) {
+    const texto = (pregunta || "").trim();
+    if (!texto) {
+      setError("⚠️ Escribe una consulta antes de enviar.");
+      return;
+    }
+
+    setCargando(true);
+    setIsSending(true);
+    setError("");
+
+    // placeholder
+    setMensajes((prev) => [
+      ...prev,
+      { role: "assistant", content: "💬 Analizando tu consulta..." },
+    ]);
+
+    const controller = new AbortController();
+
+    try {
+      const payload = construirPayload(texto);
+      const resp = await enviarMensajeIA(payload, controller.signal);
+
+      const finalText =
+        (resp?.respuesta || resp?.text || resp?.message || "").trim() ||
+        "⚠️ No se recibió respuesta válida del servidor.";
+
+      const msgFinal = { role: "assistant", content: finalText };
+      saveMessage(casoActivo, msgFinal);
+
+      setMensajes((prev) => {
+        const copia = [...prev];
+        // sustituye el último (placeholder)
+        for (let i = copia.length - 1; i >= 0; i--) {
+          if (
+            copia[i].role === "assistant" &&
+            copia[i].content.includes("Analizando")
+          ) {
+            copia[i] = msgFinal;
+            return copia;
+          }
+        }
+        // si no encontró placeholder, añade
+        copia.push(msgFinal);
+        return copia;
+      });
+    } catch (err) {
+      console.error("❌ Error en procesarConsulta:", err);
+      let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
+      if (err?.name === "AbortError") msgError = "⏹️ Consulta cancelada.";
+      else if (err.message?.includes("Falta el prompt"))
+        msgError = "⚠️ La consulta no puede enviarse vacía.";
+      else if (err.message?.includes("429"))
+        msgError = "🚫 Límite de consultas por minuto alcanzado.";
+      else if (err.message?.includes("500"))
+        msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
+      else if (err.message?.includes("Failed to fetch"))
+        msgError = "🌐 No se pudo conectar al servidor.";
+
+      setMensajes((prev) => {
+        const copia = [...prev];
+        for (let i = copia.length - 1; i >= 0; i--) {
+          if (
+            copia[i].role === "assistant" &&
+            copia[i].content.includes("Analizando")
+          ) {
+            copia[i] = { role: "assistant", content: msgError };
+            return copia;
+          }
+        }
+        copia.push({ role: "assistant", content: msgError });
+        return copia;
+      });
+    } finally {
+      setCargando(false);
+      setIsSending(false);
+      setInput("");
+    }
   }
 
-  setCargando(true);
-  setIsSending(true);
-  setError("");
-
-  // placeholder de asistente
-  setMensajes((prev) => [
-    ...prev,
-    { role: "assistant", content: "💬 Analizando tu consulta..." },
-  ]);
-
-  const controller = new AbortController();
-
-  try {
-    const payload = construirPayload(texto);
-    // usamos SIEMPRE el cliente unificado
-    const resp = await enviarMensajeIA(payload, controller.signal);
-
-    const finalText =
-      (resp?.respuesta || resp?.text || resp?.message || "").trim() ||
-      "⚠️ No se recibió respuesta válida del servidor.";
-
-    const msgFinal = { role: "assistant", content: finalText };
-    saveMessage(casoActivo, msgFinal);
-
-    setMensajes((prev) => {
-      const copia = [...prev];
-      copia[copia.length - 1] = msgFinal;
-      return copia;
-    });
-  } catch (err) {
-    console.error("❌ Error en procesarConsulta:", err);
-    let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
-    if (err?.name === "AbortError") msgError = "⏹️ Consulta cancelada.";
-    else if (err.message?.includes("Falta el prompt"))
-      msgError = "⚠️ La consulta no puede enviarse vacía.";
-    else if (err.message?.includes("429"))
-      msgError = "🚫 Límite de consultas por minuto alcanzado.";
-    else if (err.message?.includes("500"))
-      msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
-    else if (err.message?.includes("Failed to fetch"))
-      msgError = "🌐 No se pudo conectar al servidor.";
-
-    setMensajes((prev) => {
-      const copia = [...prev];
-      copia[copia.length - 1] = { role: "assistant", content: msgError };
-      return copia;
-    });
-  } finally {
-    setCargando(false);
-    setIsSending(false);
-    setInput("");
+  // ====== INTENTOS IA SEGÚN CONTEXTO ======
+  async function handleConsultaGeneral(pregunta) {
+    await procesarConsulta(pregunta, (texto) => ({
+      prompt: texto,
+      historial: obtenerHistorial(),
+      usuarioId: user?.uid || "invitado",
+      userEmail: user?.email || "",
+      modo: "general",
+      materia: "general",
+      idioma: "es",
+    }));
   }
-}
 
-  // ====== INTENTOS IA SEGÚN CONTEXTO (unificados) ======
-async function handleConsultaGeneral(pregunta) {
-  await procesarConsulta(pregunta, (texto) => ({
-    prompt: texto,
-    historial: obtenerHistorial(),
-    usuarioId: user?.uid || "invitado",
-    userEmail: user?.email || "",
-    modo: "general",
-    materia: "general",
-    idioma: "es",
-  }));
-}
+  async function handleConsultaLegal({ mensaje, materia = "general" }) {
+    await procesarConsulta(mensaje, (texto) => ({
+      prompt: texto,
+      historial: obtenerHistorial(),
+      usuarioId: user?.uid || "invitado",
+      userEmail: user?.email || "",
+      modo: "juridico",
+      materia,
+      idioma: "es",
+    }));
+  }
 
-async function handleConsultaLegal({ mensaje, materia = "general" }) {
-  await procesarConsulta(mensaje, (texto) => ({
-    prompt: texto,
-    historial: obtenerHistorial(),
-    usuarioId: user?.uid || "invitado",
-    userEmail: user?.email || "",
-    modo: "juridico",
-    materia,
-    idioma: "es",
-  }));
-}
-
-async function handleConsultaInvestigacion(pregunta) {
-  await procesarConsulta(pregunta, (texto) => ({
-    prompt: texto,
-    historial: obtenerHistorial(),
-    usuarioId: user?.uid || "invitado",
-    userEmail: user?.email || "",
-    modo: "investigacion",
-    materia: "investigacion",
-    idioma: "es",
-  }));
-}
+  async function handleConsultaInvestigacion(pregunta) {
+    await procesarConsulta(pregunta, (texto) => ({
+      prompt: texto,
+      historial: obtenerHistorial(),
+      usuarioId: user?.uid || "invitado",
+      userEmail: user?.email || "",
+      modo: "investigacion",
+      materia: "investigacion",
+      idioma: "es",
+    }));
+  }
 
   // ====== ENVÍO MENSAJE DEL USUARIO ======
   async function handleSend(e) {
@@ -1007,7 +1088,7 @@ async function handleConsultaInvestigacion(pregunta) {
 
     setAlertaAdjuntos("");
 
-    // primero gestionamos adjuntos como mensajes tipo archivo
+    // adjuntos
     if (adjuntos.length > 0) {
       const msgsParaGuardar = [];
       const msgsParaUI = [];
@@ -1038,12 +1119,9 @@ async function handleConsultaInvestigacion(pregunta) {
     const pregunta = input.trim();
     if (!pregunta) return;
 
-    // agregamos el mensaje del usuario
     const nuevo = { role: "user", content: pregunta };
     setMensajes((msgs) => [...msgs, nuevo]);
     saveMessage(casoActivo, nuevo);
-
-    // limpiamos el input para que no parpadee
     setInput("");
 
     // detección de materia
@@ -1072,10 +1150,7 @@ async function handleConsultaInvestigacion(pregunta) {
         }
       }
       if (materiaDetectada) {
-        await handleConsultaLegal({
-          mensaje: pregunta,
-          materia: materiaDetectada,
-        });
+        await handleConsultaLegal({ mensaje: pregunta, materia: materiaDetectada });
       } else {
         await handleConsultaGeneral(pregunta);
       }
@@ -1083,19 +1158,9 @@ async function handleConsultaInvestigacion(pregunta) {
   }
 
   // ====== ACCIONES SOBRE MENSAJES ======
-  function handleVoice() {
-    if (grabando) return;
-    setGrabando(true);
-    setInput((prev) => (prev ? prev + " " : "") + "[dictado de voz…]");
-    setTimeout(() => {
-      setGrabando(false);
-      setInput((prev) => prev + " (audio convertido a texto)");
-    }, 1000);
-  }
-
   function handleCopy(text) {
     const limpio = prepararTextoParaCopia(text || "");
-    navigator.clipboard.writeText(limpio);
+    copyToClipboard(limpio);
   }
 
   function handleEdit(idx, nuevoTexto) {
@@ -1174,7 +1239,7 @@ async function handleConsultaInvestigacion(pregunta) {
                 >
                   <BotBubblePremium
                     msg={m}
-                    feedback={m.feedback} // <--- pásalo
+                    feedback={m.feedback}
                     onCopy={() => handleCopy(m.content)}
                     onEdit={(nuevo) => handleEdit(i, nuevo)}
                     onFeedback={(type) => handleFeedback(i, type)}
@@ -1208,7 +1273,7 @@ async function handleConsultaInvestigacion(pregunta) {
         </div>
       </div>
 
-      {/* ===== BARRA DE ENTRADA STICKY (BLANCA PRO) ===== */}
+      {/* ===== BARRA DE ENTRADA STICKY ===== */}
       <form
         onSubmit={handleSend}
         className="
@@ -1261,7 +1326,7 @@ async function handleConsultaInvestigacion(pregunta) {
           />
         </label>
 
-        {/* Previews adjuntos (solo si hay Files/Blobs reales) */}
+        {/* Previews adjuntos */}
         {adjuntos.some((a) => a instanceof File || a instanceof Blob) && (
           <div
             className="
@@ -1343,36 +1408,43 @@ async function handleConsultaInvestigacion(pregunta) {
         )}
 
         {/* Área de texto */}
-        <textarea
-          ref={textareaRef}
-          className="
-            flex-1
-            outline-none resize-none
-            text-[16px] sm:text-[15px] md:text-[17px]
-            leading-relaxed text-[#5C2E0B]
-            placeholder:text-[#5C2E0B]/60
-            border rounded-lg px-3 py-2
-            max-h-[160px] overflow-y-auto
-          "
-          style={{
-            minHeight: 48,
-            backgroundColor: "#ffffff",
-            borderColor: "rgba(92,46,11,0.2)",
-            wordBreak: "break-word",
-            whiteSpace: "pre-wrap",
-          }}
-          placeholder="Escribe o dicta tu pregunta legal…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={grabando}
-          rows={1}
-        />
+        <div className="flex-1">
+          <textarea
+            ref={textareaRef}
+            className="
+              w-full
+              outline-none resize-none
+              text-[16px] sm:text-[15px] md:text-[17px]
+              leading-relaxed text-[#5C2E0B]
+              placeholder:text-[#5C2E0B]/60
+              border rounded-lg px-3 py-2
+              max-h-[160px] overflow-y-auto
+            "
+            style={{
+              minHeight: 48,
+              backgroundColor: "#ffffff",
+              borderColor: "rgba(92,46,11,0.2)",
+              wordBreak: "break-word",
+              whiteSpace: "pre-wrap",
+            }}
+            placeholder="Escribe o dicta tu pregunta legal…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+          />
+          {/* Texto provisional del dictado */}
+          {grabando && interim && (
+            <div className="w-full text-sm text-[#5C2E0B]/70 mt-1 px-1">
+              <em>[{interim}]</em>
+            </div>
+          )}
+        </div>
 
-        {/* Micrófono */}
+        {/* Micrófono (start/stop) */}
         <button
           type="button"
-          aria-label="Dictar voz"
+          aria-label={grabando ? "Detener dictado" : "Dictar voz"}
           className="flex-shrink-0 rounded-full hover:opacity-90 transition"
           style={{
             background: grabando ? "#b71c1c" : "#5C2E0B",
@@ -1384,12 +1456,9 @@ async function handleConsultaInvestigacion(pregunta) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            cursor: grabando ? "not-allowed" : "pointer",
-            opacity: grabando ? 0.85 : 1,
           }}
-          onClick={handleVoice}
-          title={grabando ? "Grabando…" : "Dictar voz"}
-          disabled={grabando}
+          onClick={() => (grabando ? stopDictado() : startDictado())}
+          title={grabando ? "Detener dictado" : "Dictar voz"}
         >
           <FaMicrophone size={18} />
         </button>

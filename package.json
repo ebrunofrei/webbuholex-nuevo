@@ -25,11 +25,23 @@
     "fix:alias": "node scripts/fix-alias.mjs",
     "fix:db": "node scripts/fix-db.mjs",
     "fix:all": "node scripts/fix-all.mjs",
+    "fix:especialidades": "dotenv -e ./backend/.env -- dotenv -e ./.env.local -- dotenv -e ./.env.development -- node ./backend/scripts/fix-especialidades.js",
+    "fix:especialidades:dry": "dotenv -e ./backend/.env -- dotenv -e ./.env.local -- dotenv -e ./.env.development -- node ./backend/scripts/fix-especialidades.js --dry",
     "fix:frontend-alias": "node scripts/fix-frontend-alias.mjs",
     "seed:noticias": "node ./scripts/seed-noticias.js",
     "seed:dummy": "node ./scripts/seed-dummys.js",
+    "seed:rss": "dotenv -e ./backend/.env -- dotenv -e ./.env.local -- dotenv -e ./.env.development -- node ./backend/scripts/seed-rss.js",
     "test": "NODE_ENV=test node --experimental-vm-modules ./node_modules/jest/bin/jest.js -i",
-    "smoke:providers": "node ./scripts/smoke-providers.js"
+    "smoke:providers": "node ./backend/scripts/smoke-providers.js",
+    "news:once": "node ./backend/jobs/cronNoticias.js",
+    "news:save": "node ./backend/jobs/saveNoticiasJob.js",
+    "news:cron": "node ./jobs/cronNoticias.js",
+    "news:seed": "node ./scripts/seed-noticias.js",
+    "test:extract": "node ./backend/scripts/test-extract.js",
+    "bf:fuente": "node ./scripts/backfill-fuente-norm.mjs",
+    "bf:fuente:dry": "node ./scripts/backfill-fuente-norm.mjs --dry",
+    "bf:esp": "node ./scripts/backfill-especialidad.mjs",
+    "bf:esp:dry": "node ./scripts/backfill-especialidad.mjs --dry"
   },
   "jest": {
     "testEnvironment": "node"
@@ -151,6 +163,7 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",

@@ -40,6 +40,7 @@ function Modal({ open, onClose, children }) {
       <div
         className="bg-white rounded-xl p-6 w-full max-w-xs relative border-2 border-yellow-700"
         onClick={(e) => e.stopPropagation()}
+        
       >
         <button
           className="absolute right-3 top-2 text-yellow-800 text-2xl font-bold"

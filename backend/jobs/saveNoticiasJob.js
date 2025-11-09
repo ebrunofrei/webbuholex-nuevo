@@ -1,67 +1,79 @@
+// backend/jobs/saveNoticiasJob.js
 // ============================================================
-// 🦉 BÚHOLEX | JOB DE GUARDADO DE NOTICIAS
-// ============================================================
-// Centraliza la lógica de scraping + normalización + guardado
+// 🦉 BÚHOLEX | Guardado manual de noticias (wrapper unificado)
+// - Reusa el agregador de providers y el normalizador PRO
+// - Graba por clave única: { enlace }  (NO url)
 // ============================================================
 
-import { connectDB, disconnectDB } from "../services/db.js";
-import { obtenerNoticiasDeFuentes } from "../services/noticiasScraperService.js";
-import { Noticia } from "../models/Noticia.js";
 import chalk from "chalk";
+import { connectDB, disconnectDB } from "../services/db.js";
+import { collectFromProviders } from "../services/newsProviders/index.js"; // ← agregador unificado
+import { normalizeNoticia, detectEspecialidad } from "../services/newsProviders/normalizer.js";
+import { upsertNoticias } from "../services/noticiasService.js"; // ← mismo que usa el cron
 
-export async function guardarNoticias() {
+export async function guardarNoticias({
+  tipo = "juridica",         // por defecto, jurídicas
+  providers = [],            // si vacío, usa DEFAULT_JURIDICAS/DEFAULT_GENERALES
+  q = "", lang = "es",
+  completos = false,
+  page = 1, limit = 50,
+} = {}) {
   console.log(chalk.blue("\n=========================================="));
-  console.log(chalk.blue("🦉 JOB AUTOMÁTICO DE NOTICIAS BÚHOLEX"));
+  console.log(chalk.blue("🦉 GUARDADO MANUAL DE NOTICIAS (BÚHOLEX)"));
   console.log(chalk.blue("==========================================\n"));
 
   await connectDB();
-
   try {
-    console.log(chalk.yellow("📡 Iniciando scraping desde múltiples fuentes...\n"));
-    const noticias = await obtenerNoticiasDeFuentes();
-    console.log(chalk.cyan(`🧩 Total noticias obtenidas: ${noticias.length}`));
+    console.log(chalk.yellow("📡 Consultando providers...\n"));
 
-    if (!noticias || noticias.length === 0) {
-      console.log(chalk.red("⚠️ No se encontraron noticias nuevas."));
-      return;
+    // 1) Trae noticias desde el agregador (sincronizado con el cron)
+    const { items } = await collectFromProviders({
+      tipo, providers, q, lang, completos, page, limit,
+    });
+
+    if (!items?.length) {
+      console.log(chalk.red("⚠️ No se obtuvieron noticias."));
+      return { inserted: 0, updated: 0, skipped: 0 };
     }
 
-    const ops = noticias.map((n) => ({
-      updateOne: {
-        filter: { url: n.url },
-        update: {
-          $setOnInsert: { createdAt: new Date() },
-          $set: {
-            titulo: n.titulo,
-            resumen: n.resumen,
-            contenido: n.contenido || "",
-            fuente: n.fuente,
-            url: n.url,
-            imagen: n.imagen,
-            tipo: n.tipo,
-            especialidad: n.especialidad,
-            fecha: n.fecha || new Date(),
-            updatedAt: new Date(),
-          },
-        },
-        upsert: true,
-      },
-    }));
+    // 2) Normaliza + clasifica (usa el mismo normalizador PRO)
+    const normalized = items
+      .map((n) =>
+        normalizeNoticia({
+          ...n,
+          especialidad: detectEspecialidad(`${n.titulo} ${n.resumen} ${n.contenido || ""}`),
+        })
+      )
+      // filtro mínimo de calidad
+      .filter(
+        (n) =>
+          n.titulo?.length > 5 &&
+          n.resumen?.length > 10 &&
+          (n.url?.length > 10 || n.enlace?.length > 10)
+      )
+      // asegurar que “enlace” exista (el modelo lo necesita)
+      .map((n) => ({
+        ...n,
+        enlace: n.enlace || n.url,   // 👈 clave correcta para el modelo
+      }));
 
-    const result = await Noticia.bulkWrite(ops, { ordered: false });
-    const inserted = result.upsertedCount || 0;
-    const updated = result.modifiedCount || 0;
+    // 3) Upsert en Mongo (misma función del cron)
+    const { inserted, updated, skipped } = await upsertNoticias(normalized);
 
     console.log(chalk.green("\n------------------------------------------"));
     console.log(chalk.green("📊 RESULTADO DE GUARDADO EN MONGODB"));
     console.log(chalk.green("------------------------------------------"));
     console.log(chalk.green(`🆕 Nuevas insertadas: ${inserted}`));
-    console.log(chalk.green(`♻️  Actualizadas existentes: ${updated}`));
-    console.log(chalk.green("------------------------------------------"));
+    console.log(chalk.green(`♻️  Actualizadas:     ${updated}`));
+    console.log(chalk.yellow(`⏭️ Omitidas/dup.:     ${skipped}`));
+    console.log(chalk.green("------------------------------------------\n"));
+
+    return { inserted, updated, skipped };
   } catch (err) {
-    console.error(chalk.red("❌ Error en guardarNoticias:"), err.message);
+    console.error(chalk.red("❌ Error en guardarNoticias:"), err?.message || err);
+    throw err;
   } finally {
     await disconnectDB();
-    console.log(chalk.blue("\n✅ Finalizado guardado automático.\n"));
+    console.log(chalk.blue("✅ Finalizado guardado manual.\n"));
   }
 }

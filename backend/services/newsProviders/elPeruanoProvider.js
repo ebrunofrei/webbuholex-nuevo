@@ -1,68 +1,131 @@
-Ôªø// backend/services/newsProviders/elPeruanoProvider.js
-import axios from "axios";
+// ============================================================
+// ?? B˙hoLex | Provider El Peruano (buscador)
+// - Contrato: export function fetchNoticias({ q, page, limit, lang, since, especialidad })
+// - Sin puppeteer. Tolerante a cambios menores de layout.
+// ============================================================
 import * as cheerio from "cheerio";
-import { fetchHTML, absUrl, normalizeText, toISODate, proxifyMedia } from "./_helpers.js";
+import {
+  fetchHTML,
+  absUrl,
+  normalizeText,
+  toISODate,
+  proxifyMedia,
+  normalizeItem,
+} from "./_helpers.js";
+
+const BASE = "https://busquedas.elperuano.pe";
 
 /**
- * Scraper ligero del buscador de El Peruano (sin Puppeteer).
- * Acepta { q, lang } y devuelve una lista normalizada.
- * Nota: El buscador funciona mejor con t√É¬©rminos (p.ej. √¢‚Ç¨≈ìcasaci√É¬≥n√¢‚Ç¨¬ù, √¢‚Ç¨≈ìSUNARP√¢‚Ç¨¬ù).
+ * Construye URL de b˙squeda. El sitio soporta `?s=<termino>` y a veces `&page=N`.
  */
-export default async function elPeruanoProvider({ q, lang = "es" } = {}) {
-  try {
-    const qs = new URLSearchParams();
-    if (q) qs.set("s", q);
+function buildSearchUrl({ q = "", page = 1 }) {
+  const qs = new URLSearchParams();
+  if (q) qs.set("s", q);
+  // muchas veces `page` funciona como 2,3... si hay paginaciÛn server-side
+  if (page && Number(page) > 1) qs.set("page", String(page));
+  const path = qs.toString() ? `/?${qs.toString()}` : "/";
+  return `${BASE}${path}`;
+}
 
-    const url = `https://busquedas.elperuano.pe/?${qs.toString()}`;
-    const { data: html } = await axios.get(url, {
-      timeout: 12000,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
+function parseList($) {
+  const items = [];
 
-    const $ = cheerio.load(html);
-    const items = [];
+  // Selectores amplios: el buscador cambia wrappers con frecuencia
+  const blocks = $(
+    ".resultado-busqueda .detalle, .resultado .detalle, .resultado-busqueda li, article, .search-results .item, .listado .item"
+  );
 
-    // Selector aproximado (puede ajustarse si cambia el sitio)
-    $(".resultado-busqueda .detalle, .resultado .detalle, .resultado-busqueda li, article").each(
-      (_, el) => {
-        const $el = $(el);
-        const a = $el.find("a[href]").first();
-        const href = a.attr("href");
-        if (!href) return;
+  blocks.each((_, el) => {
+    const $el = $(el);
 
-        const titulo = a.text().trim();
-        // resumen puede estar en <p> o similares
-        const resumen =
-          $el.find("p").first().text().trim() ||
-          $el.text().trim().slice(0, 400);
+    // tÌtulo + enlace
+    const $a = $el
+      .find("h3 a, h2 a, .titulo a, a[href]")
+      .filter((i, a) => {
+        const href = $(a).attr("href") || "";
+        return href && href !== "#";
+      })
+      .first();
 
-        // fecha si est√É¬° visible; si no, null
-        const rawDate =
-          $el.find("time").attr("datetime") ||
-          $el.find(".fecha, .date").text().trim() ||
-          null;
+    const titulo = normalizeText($a.text());
+    const href = $a.attr("href") || "";
+    const enlace = absUrl(href, BASE);
+    if (!titulo || !enlace) return;
 
-        items.push(
-          normalizeItem({
-            titulo,
-            resumen,
-            url: href.startsWith("http") ? href : `https://busquedas.elperuano.pe${href}`,
-            imagen: "", // El buscador no siempre trae imagen
-            fuente: "elperuano.pe",
-            fecha: rawDate ? smartDate(rawDate) : null,
-            lang,
-          })
-        );
-      }
+    // resumen
+    const resumen = normalizeText(
+      $el.find("p").first().text() ||
+        $el.find(".resumen, .summary, .extracto").first().text() ||
+        ""
     );
 
-    return items;
+    // fecha (si aparece)
+    const rawFecha =
+      $el.find("time").attr("datetime") ||
+      normalizeText($el.find(".fecha, .date").first().text() || "");
+    const fecha = toISODate(rawFecha); // tolera formatos ì12/10/2025î, ì2025-10-12î, etc.
+
+    // imagen (rara vez presente en resultados)
+    const rawImg =
+      $el.find("img").attr("data-src") || $el.find("img").attr("src") || "";
+    const imagenAbs = absUrl(rawImg, BASE);
+    const imagen = imagenAbs ? proxifyMedia(imagenAbs) : "";
+
+    items.push(
+      normalizeItem({
+        titulo,
+        resumen,
+        enlace,               // nuestro campo est·ndar
+        imagen,
+        fecha,
+        fuente: "El Peruano",
+        tipo: "juridica",
+        // no forzamos especialidad; el backend/cliente filtra por texto si se requiere
+        lang: "es",
+      })
+    );
+  });
+
+  return items;
+}
+
+async function fetchNoticias({
+  q = "",
+  page = 1,
+  limit = 12,
+  lang = "all",     // no filtra por idioma en fuente; lo dejamos para el agregador
+  since = null,     // Date o ISO; filtramos aquÌ si llega
+  // especialidad = "administrativo",  // opcional; el cliente puede filtrar por texto
+} = {}) {
+  try {
+    const url = buildSearchUrl({ q, page });
+    const html = await fetchHTML(url, { timeout: 15000 });
+    if (!html) return [];
+
+    const $ = cheerio.load(html);
+    let items = parseList($);
+
+    // Filtra por 'since' si viene
+    if (since) {
+      const d = new Date(since);
+      if (!Number.isNaN(+d)) {
+        items = items.filter((n) => {
+          const nf = new Date(n.fecha || 0);
+          return !Number.isNaN(+nf) && nf >= d;
+        });
+      }
+    }
+
+    // Orden: fecha desc (si no hay, queda al final)
+    items.sort((a, b) => (new Date(b.fecha || 0) - new Date(a.fecha || 0)));
+
+    // Limita tamaÒo (defensivo)
+    const L = Math.max(1, Math.min(50, Number(limit) || 12));
+    return items.slice(0, L);
   } catch (e) {
     console.warn("elPeruanoProvider error:", e?.message || e);
     return [];
   }
 }
+
+export default fetchNoticias;
