@@ -21,6 +21,7 @@ import {
   clearNoticiasCache,
   API_BASE,
 } from "@/services/noticiasClientService.js";
+import { keyOf } from "@utils/keyOf";
 
 // ================== Config ==================
 const PAGE_SIZE = 8;
@@ -318,8 +319,8 @@ export default function NoticiasEspecialidadBotonFlotante({
                 </div>
               )}
 
-              {items.map((n, idx) => (
-                <article key={keyOf(n, idx)} className="mb-3">
+              {(items || []).filter(Boolean).map((n, idx) => (
+                <article key={keyOf(n, idx, "float")} className="mb-3">
                   <div className="bg-[#faf9f6] rounded-xl p-3 shadow-md border border-[#e0d6c8] hover:shadow-lg transition">
                     <div className="flex items-center mb-2">
                       <span className="text-xs bg-[#6d4a28]/80 text-white px-2 py-0.5 rounded-full font-medium mr-2">

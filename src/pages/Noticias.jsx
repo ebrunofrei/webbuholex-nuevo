@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getNoticiasRobust, getEspecialidades } from "@/services/noticiasClientService";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { keyOf } from "@utils/keyOf";
 
 const ESPECIALIDADES_DEFAULT = [
   { key: "todas", count: 0 },
@@ -156,8 +157,8 @@ export default function NoticiasPage() {
           </div>
         )}
 
-        {items.map((n, idx) => (
-          <article key={n.id || n.enlace || idx} className="border rounded-xl overflow-hidden bg-white hover:shadow-lg transition">
+        {(items || []).filter(Boolean).map((n, idx) => (
+          <article key={keyOf(n, idx, "page") } className="border rounded-xl overflow-hidden bg-white hover:shadow transition">
             {n.imagen && (
               <div className="h-44 w-full overflow-hidden">
                 <img src={n.imagen} alt={n.titulo} className="w-full h-full object-cover" />

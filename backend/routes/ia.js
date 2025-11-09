@@ -1,6 +1,11 @@
 // backend/routes/ia.js
 // ============================================================
-// 🦉 BÚHOLEX | Ruta unificada de Inteligencia Artificial (IA)
+// 🦉 BÚHOLEX | IA unificada (chat + test) — versión robusta prod
+// - Validación y normalización de inputs
+// - Rate limit muy ligero (por IP/usuario)
+// - Timeouts/abort para provider
+// - Manejo de errores consistente y trazas mínimas
+// - Respeta el contrato actual del frontend
 // ============================================================
 
 import express from "express";
@@ -13,23 +18,30 @@ import {
 
 const router = express.Router();
 
-/* --------------------- Materias rápidas -------------------- */
+// ----------------------- Config (env) -----------------------
+const OPENAI_MODEL      = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const IA_MAX_TOKENS     = Number(process.env.IA_MAX_TOKENS || 1400);
+const IA_TIMEOUT_MS     = Number(process.env.IA_TIMEOUT_MS || 20_000); // 20s
+const IA_RATE_LIMIT_IP  = Number(process.env.IA_RATE_LIMIT_IP || 30);   // por 5 min
+const IA_RATE_LIMIT_USER= Number(process.env.IA_RATE_LIMIT_USER || 60); // por 5 min
+
+// ------------------ Materias / intención -------------------
 const materias = [
-  { key: "civil", keywords: ["contrato","obligación","obligacion","propiedad","arrendamiento","posesión","posesion","familia","sucesión","sucesion"] },
-  { key: "penal", keywords: ["delito","acusación","acusacion","pena","condena","sentencia penal","procesado"] },
-  { key: "laboral", keywords: ["trabajador","empleador","despido","sindicato","remuneración","remuneracion","planilla"] },
-  { key: "constitucional", keywords: ["derechos fundamentales","amparo","hábeas corpus","habeas corpus","tribunal constitucional"] },
-  { key: "administrativo", keywords: ["procedimiento administrativo","osce","silencio administrativo","resolución administrativa","resolucion administrativa","tupa","sunafil","municipalidad"] },
-  { key: "tributario", keywords: ["impuesto","sunat","tributo","declaración jurada","declaracion jurada","arbitrios"] },
-  { key: "comercial", keywords: ["sociedad","empresa","accionista","factoring","contrato mercantil","acreedor","deudor comercial"] },
-  { key: "procesal", keywords: ["demanda","apelación","apelacion","casación","casacion","proceso judicial","medida cautelar"] },
-  { key: "internacional", keywords: ["corte interamericana","tratado","extradición","extradicion","derecho internacional"] },
-  { key: "informatico", keywords: ["ciberseguridad","protección de datos","proteccion de datos","hábeas data","habeas data","delitos informáticos","delitos informaticos","informatico"] },
+  { key: "civil",           keywords: ["contrato","obligación","obligacion","propiedad","arrendamiento","posesión","posesion","familia","sucesión","sucesion"] },
+  { key: "penal",           keywords: ["delito","acusación","acusacion","pena","condena","sentencia penal","procesado"] },
+  { key: "laboral",         keywords: ["trabajador","empleador","despido","sindicato","remuneración","remuneracion","planilla"] },
+  { key: "constitucional",  keywords: ["derechos fundamentales","amparo","hábeas corpus","habeas corpus","tribunal constitucional"] },
+  { key: "administrativo",  keywords: ["procedimiento administrativo","osce","silencio administrativo","resolución administrativa","resolucion administrativa","tupa","sunafil","municipalidad"] },
+  { key: "tributario",      keywords: ["impuesto","sunat","tributo","declaración jurada","declaracion jurada","arbitrios"] },
+  { key: "comercial",       keywords: ["sociedad","empresa","accionista","factoring","contrato mercantil","acreedor","deudor comercial"] },
+  { key: "procesal",        keywords: ["demanda","apelación","apelacion","casación","casacion","proceso judicial","medida cautelar"] },
+  { key: "internacional",   keywords: ["corte interamericana","tratado","extradición","extradicion","derecho internacional"] },
+  { key: "informatico",     keywords: ["ciberseguridad","protección de datos","proteccion de datos","hábeas data","habeas data","delitos informáticos","delitos informaticos","informatico"] },
 ];
 
-/* -------------------- Clasificador intención -------------------- */
 function clasificarIntencion(tRaw = "") {
   const t = (tRaw || "").toLowerCase();
+
   if (
     t.includes("traduce") || t.includes("tradúceme") || t.includes("traduceme") ||
     t.includes("traducir") || t.includes("explica en quechua") || t.includes("explica en aimara") ||
@@ -64,77 +76,105 @@ function clasificarIntencion(tRaw = "") {
   return "consulta_general";
 }
 
-/* -------------------- Prompts por intención -------------------- */
-function promptRedaccion({ idioma, pais }) { return `
+const promptRedaccion = ({ idioma, pais }) => `
 Eres LitisBot, asistente jurídico y documentalista profesional.
 - Redacta documentos formales completos con estructura real (encabezado, fundamentos, petitorio/solicitud, cierre, anexos).
 - Si faltan datos, usa [CORCHETES] (p. ej. [NOMBRE], [DNI], [MONTO], [FECHA]).
 - Adapta al país base ${pais} salvo indicación distinta.
 - Cierra con: "Este es un borrador inicial que debe ser revisado o adaptado por un profesional antes de su presentación oficial."
-Salida: ${idioma}. Tono formal y claro.
-`.trim();}
+Salida: ${idioma}. Tono formal y claro.`.trim();
 
-function promptAnalisisJuridico({ idioma, pais }) { return `
+const promptAnalisisJuridico = ({ idioma, pais }) => `
 Eres LitisBot, analista jurídico procesal.
 Analiza motivación, congruencia, razonabilidad y debido proceso; sugiere defensas/recursos sin prometer resultados.
 Estructura: 1) Resumen 2) Fortalezas 3) Debilidades/vicios 4) Argumentos 5) Riesgos.
-País base: ${pais}. Responde en ${idioma}.
-`.trim();}
+País base: ${pais}. Responde en ${idioma}.`.trim();
 
-function promptTraduccion({ idioma, pais }) { return `
+const promptTraduccion = ({ idioma, pais }) => `
 Eres LitisBot, intérprete legal multilingüe.
 Traduce/explica el contenido legal manteniendo sentido jurídico; en lenguas originarias, registro digno y claro.
-Contexto base: ${pais}. Responde en ${idioma}.
-`.trim();}
+Contexto base: ${pais}. Responde en ${idioma}.`.trim();
 
-function promptGeneral({ idioma, pais }) { return `
+const promptGeneral = ({ idioma, pais }) => `
 Eres LitisBot, asesor legal práctico.
 Orienta con pasos concretos (plazos, entidad, qué pedir), riesgos y vías de defensa. Si es urgente, sugiere asistencia presencial.
-País base: ${pais}. Responde en ${idioma}.
-`.trim();}
+País base: ${pais}. Responde en ${idioma}.`.trim();
 
 function buildSystemPrompt({ intencion, idioma, pais }) {
   switch (intencion) {
-    case "redaccion": return promptRedaccion({ idioma, pais });
+    case "redaccion":         return promptRedaccion({ idioma, pais });
     case "analisis_juridico": return promptAnalisisJuridico({ idioma, pais });
-    case "traduccion": return promptTraduccion({ idioma, pais });
-    default: return promptGeneral({ idioma, pais });
+    case "traduccion":        return promptTraduccion({ idioma, pais });
+    default:                  return promptGeneral({ idioma, pais });
   }
 }
 
-/* ---------------------- Sanitizado prompt ---------------------- */
+// ------------------- Helpers sanitización -------------------
 function limpiarPromptUsuario(str = "") {
   if (!str || typeof str !== "string") return "";
   const base = str.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   return base.slice(0, 8000);
 }
+const normLocale = (v, d) => String(v || d).toString().slice(0, 10);
+const safeJSON = (res, code, payload) => {
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(code).json(payload);
+};
 
-/* =========================== /api/ia/chat =========================== */
+// ----------------------- Rate limiting ----------------------
+const windowMs = 5 * 60 * 1000; // 5 minutos
+const bucketIP   = new Map();   // ip -> [timestamps]
+const bucketUser = new Map();   // usuarioId -> [timestamps]
+
+function purgeOld(arr, now) {
+  while (arr.length && now - arr[0] > windowMs) arr.shift();
+}
+function checkLimit(bucket, key, limit) {
+  const now = Date.now();
+  const arr = bucket.get(key) || [];
+  purgeOld(arr, now);
+  arr.push(now);
+  bucket.set(key, arr);
+  return arr.length <= limit;
+}
+
+// ======================== /api/ia/chat =======================
 router.post("/chat", async (req, res) => {
   try {
     if (!process.env.OPENAI_API_KEY) {
       console.error(chalk.redBright("❌ Falta OPENAI_API_KEY"));
-      return res.status(500).json({ ok: false, error: "Falta OPENAI_API_KEY" });
+      return safeJSON(res, 500, { ok: false, error: "Falta OPENAI_API_KEY" });
     }
 
+    // --- Rate limit (IP + usuario) ---
+    const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").toString();
+    const userIdForLimit = String(req.body?.usuarioId || "invitado");
+    if (!checkLimit(bucketIP, ip, IA_RATE_LIMIT_IP)) {
+      return safeJSON(res, 429, { ok: false, error: "Demasiadas solicitudes desde esta IP. Intenta más tarde." });
+    }
+    if (!checkLimit(bucketUser, userIdForLimit, IA_RATE_LIMIT_USER)) {
+      return safeJSON(res, 429, { ok: false, error: "Has realizado muchas solicitudes. Intenta más tarde." });
+    }
+
+    // --- Validación / normalización de inputs ---
     const {
       prompt,
-      usuarioId = "invitado",
+      usuarioId    = "invitado",
       expedienteId = "default",
-      idioma = "es-PE",
-      pais = "Perú",
-      modo = "general",           // compat con front
-      materia = "general",        // compat con front
-      historial = [],             // opcional desde el front
-      userEmail = "",             // opcional
+      idioma       = "es-PE",
+      pais         = "Perú",
+      modo         = "general",
+      materia      = "general",
+      historial    = [],
+      userEmail    = "",
     } = req.body || {};
 
     const userPromptLimpio = limpiarPromptUsuario(prompt);
-    if (!userPromptLimpio || userPromptLimpio.length < 3) {
-      return res.status(400).json({ ok: false, error: "Falta prompt" });
+    if (userPromptLimpio.length < 3) {
+      return safeJSON(res, 400, { ok: false, error: "Falta prompt" });
     }
 
-    // Materia detectada
+    // Materia detectada (heurística)
     let materiaDetectada = materia;
     {
       const text = userPromptLimpio.toLowerCase();
@@ -143,12 +183,13 @@ router.post("/chat", async (req, res) => {
       }
     }
 
-    const intencion = clasificarIntencion(userPromptLimpio);
-    const systemPrompt = buildSystemPrompt({ intencion, idioma, pais });
+    const idiomaNorm = normLocale(idioma, "es-PE");
+    const paisNorm   = normLocale(pais,   "Perú");
+    const intencion  = clasificarIntencion(userPromptLimpio);
+    const systemPrompt = buildSystemPrompt({ intencion, idioma: idiomaNorm, pais: paisNorm });
 
-    // Historial desde Mongo
+    // Historial persistido + del cliente
     const historialPrevio = await obtenerHistorialUsuario(usuarioId, expedienteId);
-    // Historial que pueda enviar el front (lo limpiamos a {role, content})
     const historialCliente = Array.isArray(historial)
       ? historial
           .filter(h => h && h.role && h.content)
@@ -164,28 +205,38 @@ router.post("/chat", async (req, res) => {
 
     console.log(
       chalk.cyanBright(
-        `📨 [IA] intencion:${intencion} | materia:${materiaDetectada} | ${idioma} | ${pais} | usuario:${usuarioId} | exp:${expedienteId}`
+        `📨 [IA] intent:${intencion} | mat:${materiaDetectada} | ${idiomaNorm} | ${paisNorm} | user:${usuarioId} | exp:${expedienteId}`
       )
     );
 
-    const temperatura =
-      intencion === "redaccion" ? 0.4 :
-      intencion === "analisis_juridico" ? 0.5 : 0.6;
+    // Abort/timeout para el proveedor
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), IA_TIMEOUT_MS);
 
-    const respuesta = await callOpenAI(messages, {
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      max_tokens: 1400,
-      temperature: temperatura,
-    });
+    let respuesta;
+    try {
+      respuesta = await callOpenAI(messages, {
+        model: OPENAI_MODEL,
+        max_tokens: IA_MAX_TOKENS,
+        temperature:
+          intencion === "redaccion" ? 0.4 :
+          intencion === "analisis_juridico" ? 0.5 : 0.6,
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(to);
+    }
 
-    await guardarHistorial(
+    // Persistencia mínima (no bloquear respuesta si falla)
+    guardarHistorial(
       usuarioId,
       expedienteId,
       userPromptLimpio,
       respuesta,
-      { intencion, materiaDetectada, idioma, pais, modo, userEmail }
-    );
+      { intencion, materiaDetectada, idioma: idiomaNorm, pais: paisNorm, modo, userEmail }
+    ).catch(err => console.warn("⚠️ No se pudo guardar historial:", err?.message || err));
 
+    // Sugerencias contextuales
     let sugerencias = [];
     if (intencion === "redaccion") {
       sugerencias = [
@@ -215,37 +266,56 @@ router.post("/chat", async (req, res) => {
 
     console.log(chalk.greenBright(`✅ [IA] OK (${respuesta?.length || 0} chars) – ${intencion}`));
 
-    return res.json({
+    return safeJSON(res, 200, {
       ok: true,
       respuesta,
       intencion,
       modoDetectado: modo,
       materiaDetectada,
-      idioma,
-      pais,
+      idioma: idiomaNorm,
+      pais: paisNorm,
       sugerencias,
     });
   } catch (err) {
+    const status =
+      err?.name === "AbortError" ? 504 :
+      /rate|quota|limit/i.test(err?.message || "") ? 429 : 500;
+
     console.error(chalk.redBright("❌ Error /api/ia/chat:"), err);
-    return res.status(500).json({ ok: false, error: err?.message || "Error interno del servicio de IA." });
+    return safeJSON(res, status, {
+      ok: false,
+      error: status === 504 ? "El proveedor tardó demasiado en responder." :
+             err?.message || "Error interno del servicio de IA.",
+    });
   }
 });
 
-/* ============================ /api/ia/test ============================ */
+// ======================== /api/ia/test =======================
 router.get("/test", async (_req, res) => {
   try {
     const messages = [
       { role: "system", content: "Eres LitisBot, asistente jurídico de BúhoLex. Responde breve y claro." },
       { role: "user", content: "¿Qué es la conciliación extrajudicial en Perú?" },
     ];
-    const respuesta = await callOpenAI(messages, {
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0.6,
-      max_tokens: 200,
-    });
-    return res.json({ ok: true, respuesta });
+
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), Math.min(IA_TIMEOUT_MS, 8000));
+
+    let respuesta;
+    try {
+      respuesta = await callOpenAI(messages, {
+        model: OPENAI_MODEL,
+        temperature: 0.6,
+        max_tokens: 200,
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(to);
+    }
+
+    return safeJSON(res, 200, { ok: true, respuesta });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
+    return safeJSON(res, 500, { ok: false, error: err.message });
   }
 });
 

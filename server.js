@@ -13,6 +13,7 @@ import morgan from "morgan";
 import mongoose from "mongoose";
 
 // Rutas y servicios principales
+import pingRouter from './backend/routes/ping.js';
 import noticiasRoutes from "./backend/routes/noticias.js";
 import noticiasContenidoRoutes from "./backend/routes/noticiasContenido.js";
 import newsTopics from "./backend/routes/news-topics.js";
@@ -168,6 +169,7 @@ app.use("/api/notificaciones", notificacionesRoutes);
 app.use("/api/traducir", traducirRoutes);
 app.use("/api/voz", vozRoutes);
 app.use("/api/media", mediaRoutes);
+app.use('/api', pingRouter);
 
 // 404 JSON solo /api
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));

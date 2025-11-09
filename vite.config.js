@@ -1,12 +1,4 @@
 // vite.config.js
-// ============================================================
-// 🦉 BÚHOLEX | Configuración Vite (Frontend con proxy a API única)
-// - Un solo backend para chat y noticias: /api
-// - /chat-api es un alias que reescribe a /api (solo dev)
-// - ESM seguro en Windows (fileURLToPath)
-// - Build estable y split básico
-// ============================================================
-
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
@@ -15,20 +7,16 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const COMMIT = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "";
+const BUILD_VERSION = COMMIT || new Date().toISOString();
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const isProd = mode === "production";
-
-  // Backend dev: VITE_DEV_API (ej. http://localhost:3000) o localhost:3000
-  const DEV_API = String(env.VITE_DEV_API || "http://localhost:3000").replace(/\/+$/, "");
+  const DEV_API = String(env.VITE_DEV_API || "http://127.0.0.1:3000").replace(/\/+$/, "");
 
   return {
-    plugins: [
-      react({
-        jsxRuntime: "automatic",
-      }),
-    ],
-
+    plugins: [react({ jsxRuntime: "automatic" })],
     build: {
       minify: isProd,
       sourcemap: !isProd,
@@ -50,27 +38,20 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-
-    // Dev server + proxy a un único backend
     server: {
       host: "0.0.0.0",
       port: 5173,
-      open: true,
       cors: true,
       headers: { "Access-Control-Allow-Origin": "*" },
       proxy: {
-        // API única (chat + noticias)
         "/api": {
-          target: env.VITE_API_BASE_URL || "http://127.0.0.1:3000",
+          target: DEV_API,
           changeOrigin: true,
           secure: false,
           ws: true,
-          // Sin rewrite: /api -> /api
         },
-
-        // Alias de compatibilidad: /chat-api -> /api (solo en dev)
         "/chat-api": {
-          target: `${DEV_API}`,
+          target: DEV_API,
           changeOrigin: true,
           secure: false,
           ws: true,
@@ -78,16 +59,11 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-
-    preview: {
-      port: 4173,
-      cors: true,
-    },
-
+    preview: { port: 4173, cors: true },
     define: {
-      "process.env": {}, // algunas libs viejas lo esperan
+      "process.env": {},                // evita fallos por process.* en browser
+      __BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
     },
-
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),
@@ -104,7 +80,6 @@ export default defineConfig(({ mode }) => {
         "@assets": path.resolve(__dirname, "src/assets"),
       },
     },
-
     optimizeDeps: {
       esbuildOptions: { target: "es2022" },
       include: [
@@ -118,12 +93,7 @@ export default defineConfig(({ mode }) => {
       ],
       exclude: ["rss-parser"],
     },
-
-    css: {
-      devSourcemap: !isProd,
-    },
-
+    css: { devSourcemap: !isProd },
     envPrefix: "VITE_",
   };
 });
-

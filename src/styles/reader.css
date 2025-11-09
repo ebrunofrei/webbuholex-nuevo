@@ -1,0 +1,33 @@
+.blx-reader-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.5);
+  display:flex; align-items:center; justify-content:center;
+  padding:8px; z-index:9999;
+}
+.blx-reader{
+  width:100%; max-width:880px; max-height:90vh;
+  background:#fff; border-radius:12px; overflow:hidden;
+  display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,.2);
+}
+.blx-reader__header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; background:#6b3e14; color:#fff; /* marrón institucional */
+}
+.blx-reader__header h3{
+  margin:0; font-size:1rem; line-height:1.2; max-width:70%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.blx-reader__actions .blx-btn{
+  margin-left:6px; font-size:1rem; padding:.35rem .55rem; border:0; border-radius:8px; background:#fff; color:#6b3e14; cursor:pointer;
+}
+.blx-reader__actions .blx-close{ background:#d32f2f; color:#fff; }
+.blx-reader__cover img{ width:100%; height:auto; display:block; }
+.blx-reader__body{
+  padding:14px; overflow:auto; -webkit-overflow-scrolling:touch;
+  line-height:1.65; font-size:1.05rem;
+}
+.blx-reader__body img, .blx-reader__body video, .blx-reader__body iframe{
+  max-width:100%; height:auto;
+}
+@media (min-width:768px){
+  .blx-reader__header h3{ font-size:1.1rem; }
+  .blx-reader__body{ font-size:1.1rem; padding:18px; }
+}

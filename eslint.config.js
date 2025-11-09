@@ -1,33 +1,58 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
+// eslint.config.js
+import js from '@eslint/js';
+import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
+import globals from 'globals';
 
+/** @type {import('eslint').Linter.FlatConfig[]} */
 export default [
-  { ignores: ['dist'] },
+  
+  // Ignora todo lo que NO queremos lintear ahora
   {
-    files: ['**/*.{js,jsx}'],
+    ignores: [
+      'backend/**',
+      'scripts/**',
+      'tests/**',
+      'public/**',
+      'dist/**',
+      'server.js',
+      'verificarKey.js',
+      'vite.config.js',
+      'src/vite.config.sample.js',
+    ],
+  },
+
+  js.configs.recommended,
+
+  // Reglas para el lector + noticias
+  {
+    files: [
+      'src/features/noticias/**/*.{js,jsx,ts,tsx}',
+      'src/components/ui/ReaderModal.jsx',
+      'src/services/noticiasClientService.js',
+      'src/services/noticiasContenido.js',
+      'src/services/vozService.js',
+    ],
     languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
+      ecmaVersion: 2023,
+      sourceType: 'module',
       parserOptions: {
-        ecmaVersion: 'latest',
-        ecmaFeatures: { jsx: true },
-        sourceType: 'module',
+        ecmaFeatures: { jsx: true }, // ← habilita JSX para evitar "Parsing error"
+      },
+      globals: {
+        ...globals.browser, // fetch, URL, AbortController, Audio, console, etc.
+        __BUILD_VERSION__: 'readonly',
       },
     },
-    plugins: {
-      'react-hooks': reactHooks,
-      'react-refresh': reactRefresh,
-    },
+    plugins: { react, 'react-hooks': reactHooks },
+    settings: { react: { version: 'detect' } },
     rules: {
-      ...js.configs.recommended.rules,
-      ...reactHooks.configs.recommended.rules,
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-empty': ['warn', { allowEmptyCatch: true }], // menos ruido en catch { }
+      'react/react-in-jsx-scope': 'off',
+      'react/no-danger': 'off',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
-]
+];

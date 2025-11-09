@@ -1,3 +1,4 @@
+// src/services/noticiasClientService.js
 /* ============================================================
  * 🦉 BúhoLex | Servicio de Noticias (frontend robusto · PROD)
  * - BASE: env → origin/api (sin /api duplicado; no localhost en prod)
@@ -29,19 +30,21 @@ function normalizeApiBase(input) {
 }
 
 // Fallback por defecto: en browser → origin/api; en SSR/tests → 127.0.0.1
-const DEFAULT_API =
-  (isBrowser ? `${window.location.origin.replace(/\/$/, "")}/api`
-             : "http://127.0.0.1:3000/api");
+const DEFAULT_API = isBrowser
+  ? `${window.location.origin.replace(/\/$/, "")}/api`
+  : "http://127.0.0.1:3000/api";
 
 export const API_BASE =
   normalizeApiBase(import.meta?.env?.VITE_NEWS_API_BASE_URL || "") || DEFAULT_API;
 
 /* ---- Health wait (no bloquea en cross-origin; memoiza OK) ---- */
 export async function waitForApiReady(base, { retries = 8, delayMs = 250, signal } = {}) {
-  try { if (sessionStorage.getItem(HEALTH_OK_KEY) === "1") return true; } catch {}
+  try {
+    if (sessionStorage.getItem(HEALTH_OK_KEY) === "1") return true;
+  } catch {}
   const url = `${String(base || "").replace(/\/+$/, "")}/health`;
 
-  // Si es distinto origen, no bloqueamos: asumimos OK (evita cuello en Vercel)
+  // Si es distinto origen, no bloqueamos
   try {
     if (isBrowser) {
       const sameOrigin = new URL(url).origin === window.location.origin;
@@ -55,7 +58,12 @@ export async function waitForApiReady(base, { retries = 8, delayMs = 250, signal
       const id = setTimeout(() => ctrl.abort(new Error("timeout")), 3500);
       const res = await fetch(url, { signal: signal || ctrl.signal, headers: { accept: "application/json" } });
       clearTimeout(id);
-      if (res.ok) { try { sessionStorage.setItem(HEALTH_OK_KEY, "1"); } catch {} ; return true; }
+      if (res.ok) {
+        try {
+          sessionStorage.setItem(HEALTH_OK_KEY, "1");
+        } catch {}
+        return true;
+      }
     } catch {}
     await new Promise((r) => setTimeout(r, delayMs + i * 80));
   }
@@ -70,9 +78,15 @@ function circuitOpen() {
   try {
     const ts = Number(sessionStorage.getItem(CB_KEY) || 0);
     return ts && now() - ts < CB_WINDOW_MS;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
-function circuitTrip() { try { sessionStorage.setItem(CB_KEY, String(now())); } catch {} }
+function circuitTrip() {
+  try {
+    sessionStorage.setItem(CB_KEY, String(now()));
+  } catch {}
+}
 
 function toQuery(params = {}) {
   const q = new URLSearchParams();
@@ -90,7 +104,7 @@ function toQuery(params = {}) {
 function safeSessionSet(key, val) {
   try {
     const json = JSON.stringify({ ts: now(), val });
-    if (json.length >= 250_000) return; // evita payloads gigantes en móviles
+    if (json.length >= 250_000) return; // evita payloads gigantes
     sessionStorage.setItem(key, json);
   } catch {}
 }
@@ -102,7 +116,9 @@ function safeSessionGet(key, ttl) {
     if (!obj || typeof obj.ts !== "number") return null;
     if (ttl && now() - obj.ts > ttl) return null;
     return obj.val ?? null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /* ---------------- Providers: normalización ---------------- */
@@ -110,7 +126,7 @@ function normalizeProviderName(s = "") {
   let x = String(s).trim().toLowerCase();
   if (!x) return "";
   x = x.replace(/^https?:\/\/(www\.)?/, "");
-  x = x.replace(/\.(com|org|net|pe|es|co|ar|mx|br|uk|us)(\/.*)?$/i, "");
+  x = x.replace(/\.(com|org|net|pe|es|co|ar|mx|br|uk|us)(?:\/.*)?$/i, "");
   x = x.replace(/\./g, "");
 
   x = x.replace(/theguardian/, "guardian");
@@ -118,9 +134,9 @@ function normalizeProviderName(s = "") {
   x = x.replace(/^elpais$/, "el pais");
   x = x.replace(/^pjudicial$/, "poder judicial");
   x = x.replace(/^pj$/, "poder judicial");
-  x = x.replace(/^tribunalconst(itucional)?$/, "tribunal constitucional");
+  x = x.replace(/^tribunalconst(?:itucional)?$/, "tribunal constitucional");
 
-  x = x.replace(/^associatedpress$|^apnews$|^apvideo$/, "ap");
+  x = x.replace(/^(associatedpress|apnews|apvideo)$/, "ap");
   x = x.replace(/^reutersvideo$/, "reuters");
   return x;
 }
@@ -145,7 +161,9 @@ function parseFechaSmart(input) {
   }
 
   // dd/mm/yyyy o dd-mm-yyyy (opcional hora)
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  const m = s.match(
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
   if (m) {
     const dd = parseInt(m[1], 10);
     const mm = parseInt(m[2], 10);
@@ -159,7 +177,7 @@ function parseFechaSmart(input) {
     }
   }
 
-  // RFC 2822 (ej: "Tue, 05 Nov 2024 14:30:00 -0500")
+  // RFC 2822
   if (/^[A-Za-z]{3},\s\d{1,2}\s[A-Za-z]{3}\s\d{4}\s\d{2}:\d{2}(:\d{2})?\s[+-]\d{4}$/.test(s)) {
     const d2822 = new Date(s);
     if (!isNaN(+d2822)) return d2822;
@@ -198,9 +216,10 @@ function stableId(n = {}) {
     n.fuenteNorm || n.fuente || n.source?.name || "",
     n.link || n.enlace || n.url || "",
     n.titulo || n.title || "",
-    n.fecha || n.publishedAt || ""
+    n.fecha || n.publishedAt || "",
   ].join("|");
-  let h = 0; for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
+  let h = 0;
+  for (let i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
   return `n_${h}`;
 }
 function normalizeGeneralItem(raw = {}) {
@@ -212,7 +231,18 @@ function normalizeGeneralItem(raw = {}) {
   const f = raw.fecha || raw.publishedAt || raw.pubDate || raw.date || raw.createdAt;
   const d = parseFechaSmart(f);
   const fecha = d ? d.toISOString() : null;
-  return { ...raw, id: stableId(raw), enlace, titulo, resumen, imagen, fuente, fecha, __hasUrl: !!enlace, tipo: "general" };
+  return {
+    ...raw,
+    id: stableId(raw),
+    enlace,
+    titulo,
+    resumen,
+    imagen,
+    fuente,
+    fecha,
+    __hasUrl: !!enlace,
+    tipo: "general",
+  };
 }
 function normalizeJuridicoItem(raw = {}) {
   const enlace = raw.enlace || raw.url || raw.link || "";
@@ -223,13 +253,25 @@ function normalizeJuridicoItem(raw = {}) {
   const f = raw.fecha || raw.publishedAt || raw.pubDate || raw.date || raw.createdAt;
   const d = parseFechaSmart(f);
   const fecha = d ? d.toISOString() : null;
-  return { ...raw, id: stableId(raw), enlace, titulo, resumen, imagen, fuente, fecha, __hasUrl: !!enlace, tipo: "juridica" };
+  return {
+    ...raw,
+    id: stableId(raw),
+    enlace,
+    titulo,
+    resumen,
+    imagen,
+    fuente,
+    fecha,
+    __hasUrl: !!enlace,
+    tipo: "juridica",
+  };
 }
 function normalizeList(items = [], tipo = "general") {
   const norm = tipo === "juridica" ? normalizeJuridicoItem : normalizeGeneralItem;
   return (Array.isArray(items) ? items : []).map(norm);
 }
-const sortByDateDesc = (a, b) => (b?.fecha ? +new Date(b.fecha) : 0) - (a?.fecha ? +new Date(a.fecha) : 0);
+const sortByDateDesc = (a, b) =>
+  (b?.fecha ? +new Date(b.fecha) : 0) - (a?.fecha ? +new Date(a.fecha) : 0);
 
 /* ------------------- Normalización payload ------------------- */
 function pickItems(payload) {
@@ -265,7 +307,9 @@ function pickPagination(payload) {
     const limit = Number(p.limit) || PAGE_SIZE;
     const total = Number(p.total) || 0;
     return {
-      page, limit, total,
+      page,
+      limit,
+      total,
       pages: Number(p.pages) || (total && limit ? Math.ceil(total / limit) : 0),
       nextPage: p.nextPage ?? (page * limit < total ? page + 1 : null),
       hasMore: p.hasMore ?? page * limit < total,
@@ -295,26 +339,36 @@ async function fetchJSON(url, { signal, timeout = FETCH_TIMEOUT_MS } = {}) {
   try {
     const res = await fetch(url, {
       signal: signal || ctrl.signal,
-      headers: { accept: "application/json" }
+      headers: { accept: "application/json" },
     });
     if (res.status === 204) return {};
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       const err = new Error(`HTTP ${res.status} ${res.statusText}`);
-      err.status = res.status; err.body = txt;
+      err.status = res.status;
+      err.body = txt;
       throw err;
     }
-    try { return await res.json(); }
-    catch { return {}; }
-  } finally { clearTimeout(id); }
+    try {
+      return await res.json();
+    } catch {
+      return {};
+    }
+  } finally {
+    clearTimeout(id);
+  }
 }
 
 function isRetryable(err) {
   const msg = (err?.message || "").toLowerCase();
   return (
-    /timeout/.test(msg) || /fetch failed/.test(msg) || /network/.test(msg) ||
-    /ec[^ ]*refused/.test(msg) || /ec[^ ]*reset/.test(msg) ||
-    (err?.status === 429) || (err?.status && err.status >= 500)
+    /timeout/.test(msg) ||
+    /fetch failed/.test(msg) ||
+    /network/.test(msg) ||
+    /ec[^ ]*refused/.test(msg) ||
+    /ec[^ ]*reset/.test(msg) ||
+    err?.status === 429 ||
+    (err?.status && err.status >= 500)
   );
 }
 
@@ -337,8 +391,15 @@ async function fetchNewsLive(params, { signal } = {}) {
 
 /* ----------------- getNewsLive (con caché) ----------------- */
 export async function getNewsLive({
-  page = 1, limit = PAGE_SIZE, q, tema, lang, providers, signal,
-  noCache = false, cacheTtlMs = 5 * 60 * 1000,
+  page = 1,
+  limit = PAGE_SIZE,
+  q,
+  tema,
+  lang,
+  providers,
+  signal,
+  noCache = false,
+  cacheTtlMs = 5 * 60 * 1000,
 } = {}) {
   await waitForApiReady(API_BASE, { signal });
 
@@ -346,7 +407,7 @@ export async function getNewsLive({
   const providersCsv = providersArr.join(",");
 
   const qParam = q ?? tema;
-  const cacheKey = `nl:${page}:${limit}:${(qParam || "").slice(0,50)}:${lang || "all"}:${providersCsv || "-"}`;
+  const cacheKey = `nl:${page}:${limit}:${(qParam || "").slice(0, 50)}:${lang || "all"}:${providersCsv || "-"}`;
   if (!noCache) {
     const cached = safeSessionGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
@@ -357,7 +418,8 @@ export async function getNewsLive({
     tema,
     lang: lang && lang !== "all" ? lang : undefined,
     providers: providersCsv || undefined,
-    page, limit,
+    page,
+    limit,
   };
 
   try {
@@ -377,26 +439,45 @@ export async function getNewsLive({
       items: [],
       pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false },
       filtros: {},
-      raw: null
+      raw: null,
     };
   }
 }
 
 /* -------- Adaptador ÚNICO para GENERALES (live → fallback) -------- */
 export async function getGeneralNews({
-  page = 1, limit = PAGE_SIZE, q, tema, lang, providers, signal,
-  noCache = false, cacheTtlMs = 5 * 60 * 1000,
+  page = 1,
+  limit = PAGE_SIZE,
+  q,
+  tema,
+  lang,
+  providers,
+  signal,
+  noCache = false,
+  cacheTtlMs = 5 * 60 * 1000,
 } = {}) {
   const providersArr = normalizeProviders(providers);
   const providersCsv = providersArr.join(",");
-  const cacheKey = `gA:${page}:${limit}:${(q||"").slice(0,50)}:${(tema||"").slice(0,50)}:${lang||"all"}:${providersCsv || "-"}`;
+  const cacheKey = `gA:${page}:${limit}:${(q || "").slice(0, 50)}:${(tema || "").slice(0, 50)}:${lang || "all"}:${
+    providersCsv || "-"
+  }`;
   if (!noCache) {
     const cached = safeSessionGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
   }
 
   // 1) Intento live (/news)
-  const live = await getNewsLive({ page, limit, q, tema, lang, providers: providersArr, signal, noCache, cacheTtlMs });
+  const live = await getNewsLive({
+    page,
+    limit,
+    q,
+    tema,
+    lang,
+    providers: providersArr,
+    signal,
+    noCache,
+    cacheTtlMs,
+  });
 
   // Si trajo resultados, devolvemos
   if (Array.isArray(live.items) && live.items.length) {
@@ -418,33 +499,47 @@ export async function getGeneralNews({
     cacheTtlMs,
   });
 
-  // 3) Merge (por si en algún entorno quisieras combinar)
+  // 3) Merge
   const map = new Map();
   [...(live.items || []), ...(mongo.items || [])].forEach((n, i) => {
-    const key = n.enlace || n.url || n.link || n.id || `k#${i}`;
+    const key = n.enlace || n.url || n.link || n.id || stableId(n) || `k#${i}`;
     map.set(key, n);
   });
   const items = Array.from(map.values()).sort(sortByDateDesc);
 
   const payload = {
     items,
-    pagination: mongo.pagination || live.pagination || {
-      page, limit, total: items.length, pages: Math.ceil(items.length / limit), nextPage: null, hasMore: false
-    },
+    pagination:
+      mongo.pagination ||
+      live.pagination || {
+        page,
+        limit,
+        total: items.length,
+        pages: Math.ceil(items.length / limit),
+        nextPage: null,
+        hasMore: false,
+      },
     filtros: mongo.filtros || live.filtros || {},
-    page: (mongo.pagination?.page || live.pagination?.page || page),
+    page: mongo.pagination?.page || live.pagination?.page || page,
     raw: { live, mongo },
   };
-  if ((!noCache || items.length)) safeSessionSet(cacheKey, payload);
+  if (!noCache || items.length) safeSessionSet(cacheKey, payload);
   return payload;
 }
 
 /* ----------------------- /api/noticias (Mongo) ----------------------- */
 export async function getNoticiasRobust({
   tipo = "general",
-  page = 1, limit = PAGE_SIZE,
-  q, tema, lang, especialidad, providers, signal,
-  noCache = false, cacheTtlMs = 5 * 60 * 1000,
+  page = 1,
+  limit = PAGE_SIZE,
+  q,
+  tema,
+  lang,
+  especialidad,
+  providers,
+  signal,
+  noCache = false,
+  cacheTtlMs = 5 * 60 * 1000,
 } = {}) {
   if (circuitOpen()) {
     DEBUG && console.warn("[Noticias] circuit breaker abierto; vacío temporal.");
@@ -452,7 +547,7 @@ export async function getNoticiasRobust({
       items: [],
       pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false },
       filtros: {},
-      raw: null
+      raw: null,
     };
   }
 
@@ -460,9 +555,11 @@ export async function getNoticiasRobust({
 
   const providersArr = normalizeProviders(providers);
   const providersCsv = providersArr.join(",");
-  const providersParam = providersCsv === "all" ? undefined : (providersCsv || undefined);
+  const providersParam = providersCsv === "all" ? undefined : providersCsv || undefined;
 
-  const cacheKey = `news:${tipo}:${page}:${limit}:${(q||"").slice(0,50)}:${(tema||"").slice(0,50)}:${lang||"all"}:${especialidad || "todas"}:${providersParam || "-"}`;
+  const cacheKey = `news:${tipo}:${page}:${limit}:${(q || "").slice(0, 50)}:${(tema || "").slice(0, 50)}:${
+    lang || "all"
+  }:${especialidad || "todas"}:${providersParam || "-"}`;
   if (!noCache) {
     const cached = safeSessionGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
@@ -476,7 +573,8 @@ export async function getNoticiasRobust({
           tema,
           lang: lang && lang !== "all" ? lang : undefined,
           providers: providersParam,
-          page, limit
+          page,
+          limit,
         },
         { signal }
       );
@@ -485,17 +583,21 @@ export async function getNoticiasRobust({
         pagination: live.pagination,
         filtros: live.filtros,
         page: live.pagination.page || Number(page) || 1,
-        raw: live.raw
+        raw: live.raw,
       };
       if (!noCache || (payload.items && payload.items.length)) safeSessionSet(cacheKey, payload);
       return payload;
-    } catch (e) { DEBUG && console.warn("[Noticias] live falló, uso Mongo:", e?.message || e); }
+    } catch (e) {
+      DEBUG && console.warn("[Noticias] live falló, uso Mongo:", e?.message || e);
+    }
   }
 
   const paramsBase = {
-    tipo, page, limit,
+    tipo,
+    page,
+    limit,
     q: q ?? undefined,
-    tema: tipo === "general" ? (tema || undefined) : undefined,
+    tema: tipo === "general" ? tema || undefined : undefined,
     lang: lang && lang !== "all" ? lang : undefined,
     especialidad: tipo === "juridica" && especialidad && especialidad !== "todas" ? especialidad : undefined,
     providers: providersParam,
@@ -521,14 +623,13 @@ export async function getNoticiasRobust({
         pagination: pickPagination(data),
         filtros: pickFiltros(data),
         page: Number(pickPagination(data).page) || Number(page) || 1,
-        raw: data
+        raw: data,
       };
       if (!noCache || (Array.isArray(items) && items.length > 0)) safeSessionSet(cacheKey, payload);
       return payload;
     } catch (e) {
       lastErr = e;
       if (isRetryable(e)) {
-        // Backoff exponencial con jitter (cap ~2.5s)
         const base = Math.min(250 * 2 ** i, 2500);
         const jitter = Math.floor(Math.random() * 150);
         await sleep(base + jitter);
@@ -544,7 +645,7 @@ export async function getNoticiasRobust({
     items: [],
     pagination: { page: Number(page) || 1, limit, total: 0, pages: 0, nextPage: null, hasMore: false },
     filtros: {},
-    raw: null
+    raw: null,
   };
   if (!noCache) safeSessionSet(cacheKey, empty);
   return empty;
@@ -552,7 +653,10 @@ export async function getNoticiasRobust({
 
 /* ----------------------- Chips ----------------------- */
 export async function getEspecialidades({ tipo = "juridica", lang, signal } = {}) {
-  const url = `${API_BASE}/noticias/especialidades${toQuery({ tipo, lang: lang && lang !== "all" ? lang : undefined })}`;
+  const url = `${API_BASE}/noticias/especialidades${toQuery({
+    tipo,
+    lang: lang && lang !== "all" ? lang : undefined,
+  })}`;
   DEBUG && console.debug("[Noticias] GET", url);
   const data = await fetchJSON(url, { signal });
   const list = Array.isArray(data?.items) ? data.items : Array.isArray(data?.data?.items) ? data.data.items : [];
@@ -571,13 +675,8 @@ export function clearNoticiasCache() {
   try {
     if (!isBrowser) return;
     Object.keys(sessionStorage).forEach((k) => {
-      if (
-        k.startsWith("news:") ||
-        k.startsWith("nl:") ||
-        k.startsWith("gA:") ||
-        k === HEALTH_OK_KEY ||
-        k === CB_KEY
-      ) sessionStorage.removeItem(k);
+      if (k.startsWith("news:") || k.startsWith("nl:") || k.startsWith("gA:") || k === HEALTH_OK_KEY || k === CB_KEY)
+        sessionStorage.removeItem(k);
     });
   } catch {}
 }
@@ -588,8 +687,8 @@ export function proxifyMedia(url) {
   if (/^https?:\/\//i.test(url)) {
     const base = String(API_BASE || "").replace(/\/+$/, "");
     return `${base}/media/proxy?url=${encodeURIComponent(url)}`;
-  }
-  return url; // deja pasar rutas relativas o esquemas no proxificables
+    }
+  return url;
 }
 
 /* Reexport extractor de contenidos (tu archivo existente) */

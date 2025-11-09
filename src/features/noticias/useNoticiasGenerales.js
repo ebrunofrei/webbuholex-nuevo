@@ -1,80 +1,123 @@
 // src/features/noticias/useNoticiasGenerales.js
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+/** Punto base para /api/news (solo generales/live) */
+const API_BASE = (import.meta?.env?.VITE_NEWS_API_BASE_URL || "").replace(/\/+$/, "");
 
+/** Ventanas de “densidad” por tema (reintentos con distintos sinceDays) */
 const RETRIES_BY_TEMA = {
   economia: [3, 7],
   tecnologia: [3, 7],
   default: [3, 5],
 };
 
-const makeKey = ({ tema, q, providers, sinceDays, page, limit, lang, vista }) =>
+const makeKey = ({ tema, q, providersKey, sinceDays, page, limit, lang, vista }) =>
   [
-    "general", vista || "home",
+    "general",
+    vista || "home",
     tema || "actualidad",
-    q?.trim() || "",
-    (providers || []).slice().sort().join("|"),
+    (q || "").trim(),
+    providersKey || "-",
     sinceDays || "",
     page || 1,
     limit || 20,
     lang || "es",
   ].join("::");
 
-export function useNoticiasGenerales({ tema, q, providers, page=1, limit=20, lang="es", vista="home" }) {
+/** Hook para consumir /api/news con heurística y memo de dependencias */
+export function useNoticiasGenerales({
+  tema,
+  q,
+  providers,
+  page = 1,
+  limit = 20,
+  lang = "es",
+  vista = "home",
+}) {
   const [items, setItems] = useState([]);
   const [state, setState] = useState({ loading: false, error: null, page, hasMore: false });
   const acRef = useRef(null);
 
   const windows = RETRIES_BY_TEMA[tema] || RETRIES_BY_TEMA.default;
+  const providersKey = useMemo(
+    () => (Array.isArray(providers) ? providers.slice().sort().join("|") : ""),
+    [providers]
+  );
 
-  const load = useCallback(async ({ noCache=false } = {}) => {
-    if (acRef.current) acRef.current.abort();
-    const ac = new AbortController(); acRef.current = ac;
+  const load = useCallback(
+    async ({ noCache = false } = {}) => {
+      acRef.current?.abort?.();
+      const ac = new AbortController();
+      acRef.current = ac;
 
-    setState(s => ({ ...s, loading: true, error: null }));
-    let data = null;
+      setState((s) => ({ ...s, loading: true, error: null }));
 
-    for (let i=0; i<windows.length; i++) {
-      const sinceDays = windows[i];
-      const url = new URL(`${API_BASE}/api/news`);
-      if (tema) url.searchParams.set("tema", tema);
-      if (q) url.searchParams.set("q", q);
-      if (providers?.length) url.searchParams.set("providers", providers.join(","));
-      url.searchParams.set("sinceDays", String(sinceDays));
-      url.searchParams.set("page", String(page));
-      url.searchParams.set("limit", String(limit));
-      url.searchParams.set("lang", lang || "es");
-      if (noCache && i === 0) url.searchParams.set("_", Date.now());
+      let data = null;
+      for (let i = 0; i < windows.length; i++) {
+        const sinceDays = windows[i];
 
-      const res = await fetch(url.toString(), { signal: ac.signal });
-      const d = await res.json();
-      const MIN_DENSITY = 8;
+        const url = new URL(`${API_BASE}/api/news`);
+        if (tema) url.searchParams.set("tema", tema);
+        if (q) url.searchParams.set("q", q);
+        if (providersKey) url.searchParams.set("providers", providersKey.replaceAll("|", ","));
+        url.searchParams.set("sinceDays", String(sinceDays));
+        url.searchParams.set("page", String(page));
+        url.searchParams.set("limit", String(limit));
+        url.searchParams.set("lang", lang || "es");
+        if (noCache && i === 0) url.searchParams.set("_", String(Date.now()));
 
-      if (d?.items?.length >= MIN_DENSITY || i === windows.length - 1) {
-        data = d; break;
+        const res = await fetch(url.toString(), { signal: ac.signal });
+        const d = await res.json().catch(() => ({}));
+        const MIN_DENSITY = 8;
+
+        if (Array.isArray(d?.items) && (d.items.length >= MIN_DENSITY || i === windows.length - 1)) {
+          data = d;
+          break;
+        }
       }
-    }
 
-    if (!ac.signal.aborted) {
-      if (data?.ok) {
-        setItems(data.items || []);
-        setState({
-          loading: false,
-          error: null,
-          page: data.page || page,
-          hasMore: (data.page || 1) * limit < (data.total || 0),
-        });
-      } else {
-        setState(s => ({ ...s, loading: false, error: data?.error || "FETCH_ERROR" }));
+      if (!ac.signal.aborted) {
+        if (data?.ok) {
+          setItems(Array.isArray(data.items) ? data.items : []);
+          const total = Number(data.total || 0);
+          const curPage = Number(data.page || page || 1);
+          setState({
+            loading: false,
+            error: null,
+            page: curPage,
+            hasMore: curPage * limit < total,
+          });
+        } else {
+          setState((s) => ({ ...s, loading: false, error: data?.error || "FETCH_ERROR" }));
+        }
       }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tema, q, JSON.stringify(providers||[]), page, limit, lang]);
+    },
+    // NOTA: API_BASE es estable en runtime; no lo agregamos como dep (eslint warning)
+    [tema, q, providersKey, page, limit, lang, windows]
+  );
 
-  const cacheKey = useMemo(() => makeKey({ tema, q, providers, sinceDays: windows[0], page, limit, lang, vista }), [tema, q, providers, page, limit, lang, vista]);
+  // clave de caché/memo para re-disparar carga (incluye la primera ventana)
+  const cacheKey = useMemo(
+    () =>
+      makeKey({
+        tema,
+        q,
+        providersKey,
+        sinceDays: windows[0],
+        page,
+        limit,
+        lang,
+        vista,
+      }),
+    [tema, q, providersKey, page, limit, lang, vista, windows]
+  );
 
-  useEffect(() => { load({ noCache: true }); return () => acRef.current?.abort(); }, [cacheKey, load]);
+  useEffect(() => {
+    load({ noCache: true });
+    return () => acRef.current?.abort?.();
+  }, [cacheKey, load]);
 
   return { items, ...state, reload: () => load({ noCache: true }) };
 }
+
+export default useNoticiasGenerales;

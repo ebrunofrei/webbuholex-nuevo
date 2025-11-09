@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom"; // <—
 import { getNoticiasRobust, clearNoticiasCache, API_BASE } from "@/services/noticiasClientService";
+import { keyOf } from "@utils/keyOf";
 
 const PROVIDERS_TOP = ["elpais", "elcomercio", "rpp"]; // ajusta a gusto
 
@@ -46,8 +47,8 @@ export default function NoticiasSlider({ variant = "inline", className = "" }) {
           <p className="text-sm text-gray-500">Sin noticias.</p>
         )}
         <ul className="space-y-3">
-          {items.map((n, idx) => (
-            <li key={n.id || n.enlace || idx} className="border rounded-lg p-3 bg-white hover:shadow transition">
+          {(items || []).filter(Boolean).map((n, idx) => (
+            <li key={keyOf(n, idx, "slider")} className="border rounded-lg p-3 bg-white hover:shadow transition">
               <a
                 href={n.enlace}
                 target="_blank"

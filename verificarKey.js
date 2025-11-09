@@ -1,4 +1,7 @@
 // verificarKey.js
+/* eslint-env node */
+// deja el resto del archivo igual
+
 import fetch from "node-fetch";
 
 const API_KEY = process.env.VITE_FIREBASE_API_KEY;
