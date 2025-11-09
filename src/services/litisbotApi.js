@@ -1,59 +1,57 @@
+// ============================================================
+// 🦉 BúhoLex | API de funcionalidad SaaS (documentos, historial, pagos)
+// Usa la capa única de apiBase (sin rutas relativas /api)
+// ============================================================
 import jsPDF from "jspdf";
+import { joinApi, fetchJSON, postJSON } from "@/services/apiBase";
 
-// Backends API para SaaS
+/* ---------------- Documentos ---------------- */
 export async function generarDocumento(texto, tipo, usuarioId, pro) {
-  const res = await fetch("/api/generar-documento", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ texto, tipo, usuarioId, pro }),
-  });
-  const data = await res.json();
-  if (data.url) return data.url;
-  throw new Error(data.error || "No se pudo generar documento");
+  const data = await postJSON("/generar-documento", { texto, tipo, usuarioId, pro });
+  if (data?.url) return data.url;
+  throw new Error(data?.error || "No se pudo generar el documento");
 }
 
-export async function fetchHistorial(usuarioId, page, pageSize) {
-  const res = await fetch(`/api/historial?usuarioId=${usuarioId}&page=${page}&size=${pageSize}`);
-  return await res.json();
+export function generarPDFLocal(texto, nombre = "documento.pdf") {
+  const doc = new jsPDF();
+  doc.text(texto || "", 10, 10);
+  doc.save(nombre);
+}
+
+/* ---------------- Historial / Favoritos -------------- */
+export async function fetchHistorial(usuarioId, page = 1, pageSize = 20) {
+  const qs = new URLSearchParams({
+    usuarioId: String(usuarioId || ""),
+    page: String(page),
+    size: String(pageSize),
+  });
+  return await fetchJSON(joinApi(`/historial?${qs.toString()}`));
 }
 
 export async function marcarFavorito(itemId, favorito) {
-  await fetch("/api/favorito", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ itemId, favorito }),
-  });
+  await postJSON("/favorito", { itemId, favorito: !!favorito });
+  return true;
 }
 
+/* ---------------- Upgrade / Pagos ---------------------- */
 export async function upgradeToPro(usuarioId) {
-  const res = await fetch("/api/upgrade-pro", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ usuarioId }),
-  });
-  const data = await res.json();
-  return data.success;
+  const data = await postJSON("/upgrade-pro", { usuarioId });
+  return !!data?.success;
 }
-
-// --- NUEVO: pagos SaaS ---
 
 export async function pagarProPaypal(usuarioId) {
-  const res = await fetch("/api/pagar-paypal", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ usuarioId }),
-  });
-  const data = await res.json();
-  if (data.checkoutUrl) window.location.href = data.checkoutUrl;
-  return !!data.checkoutUrl;
+  const data = await postJSON("/pagar-paypal", { usuarioId });
+  if (data?.checkoutUrl) {
+    window.location.href = data.checkoutUrl;
+    return true;
+  }
+  return false;
 }
 
-// --- Descargar chat como PDF ---
-export function descargarChatComoPDF(messages) {
-  const doc = new jsPDF();
-  const fullChat = messages
-    .map(m => (m.role === "user" ? "Tú: " : m.role === "assistant" ? "LitisBot: " : "") + m.content)
-    .join("\n\n");
-  doc.text(fullChat, 10, 10);
-  doc.save("LitisBot_chat.pdf");
+/* ---------------- Health opcional ---------------------- */
+export async function pingBackend() {
+  try {
+    const r = await fetchJSON(joinApi("/ping"), { method: "GET" }, { retries: 0, timeoutMs: 5000 });
+    return !!r?.ok || true;
+  } catch { return false; }
 }

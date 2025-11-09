@@ -18,7 +18,7 @@ import {
 } from "react-icons/fa";
 
 import litisLogo from "@/assets/litisbot-logo.png";
-import { enviarMensajeIA } from "@/services/chatClient.js";
+import { enviarMensajeIA, pingIA } from "@/services/chatClient";
 
 // === Voz centralizada (coherente con vozService.js actualizado) ===
 import {

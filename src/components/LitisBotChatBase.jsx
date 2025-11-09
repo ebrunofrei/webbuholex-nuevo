@@ -14,7 +14,7 @@ import { MdSend } from "react-icons/md";
 
 // IA / backend
 import { reproducirVoz, stopVoz } from "@/services/vozService.js"; // ← voz centralizada (parar + reproducir)
-import { enviarMensajeIA } from "@/services/chatClient.js";
+import { enviarMensajeIA, pingIA } from "@/services/chatClient";
 
 // Herramientas
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
@@ -985,7 +985,7 @@ export default function LitisBotChatBase({
 
     try {
       const payload = construirPayload(texto);
-      const resp = await enviarMensajeIA(payload, controller.signal);
+      const resp = await enviarMensajeIA(payload, { signal: controller.signal });
 
       const finalText =
         (resp?.respuesta || resp?.text || resp?.message || "").trim() ||
