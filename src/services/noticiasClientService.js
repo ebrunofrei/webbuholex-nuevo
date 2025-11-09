@@ -1,50 +1,42 @@
 // src/services/noticiasClientService.js
 /* ============================================================
  * 🦉 BúhoLex | Servicio de Noticias (frontend robusto · PROD)
- * - BASE: env → origin/api (sin /api duplicado; no localhost en prod)
- * - fetch con timeout + backoff exponencial + jitter + 429
- * - Health-wait no bloqueante en cross-origin (memo en sessionStorage)
+ * - BASE: VITE_NEWS_API_BASE_URL → VITE_API_BASE → API_BASE (Railway)
+ * - fetchJSON unificado (timeout + backoff) desde apiBase
+ * - Health no bloqueante (memo por sesión) contra /ia/test
  * - General: adaptador único getGeneralNews (live → fallback /noticias)
  * - Jurídica: /api/noticias
  * - Chips: /api/noticias/especialidades · /api/noticias/temas
  * - Normalización: imagenResuelta + fecha robusta (RFC2822/ISO/DD-MM-YYYY)
- * - Cache TTL + bypass (sessionStorage tolerante a quota)
+ * - Cache TTL + bypass (sessionStorage tolerante a cuota)
  * - Media proxy helper (http/https) y clear cache por prefijo
  * ============================================================ */
+import { API_BASE as CORE_API_BASE, fetchJSON as coreFetchJSON } from "@/services/apiBase";
 
+// ───────────────────────── BASE ─────────────────────────
 const isBrowser = typeof window !== "undefined";
+/** Permite separar noticias en otro microservicio si algún día lo necesitas */
+const NEWS_BASE = String(
+  (import.meta.env.VITE_NEWS_API_BASE_URL || import.meta.env.VITE_API_BASE || CORE_API_BASE || "")
+).replace(/\/$/, "");
+
 export const PAGE_SIZE = 12;
-const FETCH_TIMEOUT_MS = 12000;
 const CB_KEY = "__news_circuit_breaker__";
 const CB_WINDOW_MS = 9000;
 const HEALTH_OK_KEY = "__news_health_ok__";
 const DEBUG = !!import.meta?.env?.VITE_DEBUG_NEWS;
 
-/* ----------------------- BASE URL ----------------------- */
-function normalizeApiBase(input) {
-  const raw = (input || "").trim().replace(/\/+$/, "");
-  if (!raw) return "";
-  let base = raw;
-  if (!/\/api$/i.test(base)) base += "/api";
-  return base.replace(/\/api(?:\/api)+$/i, "/api");
-}
-
-// Fallback por defecto: en browser → origin/api; en SSR/tests → 127.0.0.1
-const DEFAULT_API = isBrowser
-  ? `${window.location.origin.replace(/\/$/, "")}/api`
-  : "http://127.0.0.1:3000/api";
-
-export const API_BASE =
-  normalizeApiBase(import.meta?.env?.VITE_NEWS_API_BASE_URL || "") || DEFAULT_API;
+// alias a fetchJSON común
+const fetchJSON = coreFetchJSON;
 
 /* ---- Health wait (no bloquea en cross-origin; memoiza OK) ---- */
-export async function waitForApiReady(base, { retries = 8, delayMs = 250, signal } = {}) {
+export async function waitForApiReady(base, { retries = 4, delayMs = 250, signal } = {}) {
   try {
     if (sessionStorage.getItem(HEALTH_OK_KEY) === "1") return true;
   } catch {}
-  const url = `${String(base || "").replace(/\/+$/, "")}/health`;
+  const url = `${String(base || "").replace(/\/+$/, "")}/ia/test`;
 
-  // Si es distinto origen, no bloqueamos
+  // Si es distinto origen, no bloqueamos (solo ping en mismo origin)
   try {
     if (isBrowser) {
       const sameOrigin = new URL(url).origin === window.location.origin;
@@ -54,23 +46,18 @@ export async function waitForApiReady(base, { retries = 8, delayMs = 250, signal
 
   for (let i = 0; i < retries; i++) {
     try {
-      const ctrl = new AbortController();
-      const id = setTimeout(() => ctrl.abort(new Error("timeout")), 3500);
-      const res = await fetch(url, { signal: signal || ctrl.signal, headers: { accept: "application/json" } });
-      clearTimeout(id);
-      if (res.ok) {
-        try {
-          sessionStorage.setItem(HEALTH_OK_KEY, "1");
-        } catch {}
-        return true;
-      }
+      await fetchJSON(url, { method: "GET", signal }, { timeoutMs: 6000, retries: 0 });
+      try {
+        sessionStorage.setItem(HEALTH_OK_KEY, "1");
+      } catch {}
+      return true;
     } catch {}
     await new Promise((r) => setTimeout(r, delayMs + i * 80));
   }
   return false;
 }
 
-/* ----------------------- Utils ----------------------- */
+// ───────────────────── Utilidades locales ─────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const now = () => Date.now();
 
@@ -121,21 +108,19 @@ function safeSessionGet(key, ttl) {
   }
 }
 
-/* ---------------- Providers: normalización ---------------- */
+// ───────────────────── Normalización / fechas ─────────────────────
 function normalizeProviderName(s = "") {
   let x = String(s).trim().toLowerCase();
   if (!x) return "";
   x = x.replace(/^https?:\/\/(www\.)?/, "");
   x = x.replace(/\.(com|org|net|pe|es|co|ar|mx|br|uk|us)(?:\/.*)?$/i, "");
   x = x.replace(/\./g, "");
-
   x = x.replace(/theguardian/, "guardian");
   x = x.replace(/nytimes/, "nyt");
   x = x.replace(/^elpais$/, "el pais");
   x = x.replace(/^pjudicial$/, "poder judicial");
   x = x.replace(/^pj$/, "poder judicial");
   x = x.replace(/^tribunalconst(?:itucional)?$/, "tribunal constitucional");
-
   x = x.replace(/^(associatedpress|apnews|apvideo)$/, "ap");
   x = x.replace(/^reutersvideo$/, "reuters");
   return x;
@@ -146,7 +131,6 @@ function normalizeProviders(input) {
   return Array.from(new Set(arr.map((p) => normalizeProviderName(p)).filter(Boolean)));
 }
 
-/* ----------------------- Fecha robusta ----------------------- */
 // Acepta: ISO, yyyy-mm-dd, dd/mm/yyyy, dd-mm-yyyy, RFC2822, timestamp
 function parseFechaSmart(input) {
   if (!input) return null;
@@ -161,9 +145,7 @@ function parseFechaSmart(input) {
   }
 
   // dd/mm/yyyy o dd-mm-yyyy (opcional hora)
-  const m = s.match(
-    /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
-  );
+  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if (m) {
     const dd = parseInt(m[1], 10);
     const mm = parseInt(m[2], 10);
@@ -188,7 +170,6 @@ function parseFechaSmart(input) {
   return null;
 }
 
-/* ----------------------- Normalización ----------------------- */
 function coalesceImage(raw) {
   const fromEnclosure = raw?.enclosure?.url || raw?.enclosure?.link || "";
   const fromMultimedia = Array.isArray(raw?.multimedia) && raw.multimedia[0]?.url;
@@ -273,7 +254,7 @@ function normalizeList(items = [], tipo = "general") {
 const sortByDateDesc = (a, b) =>
   (b?.fecha ? +new Date(b.fecha) : 0) - (a?.fecha ? +new Date(a.fecha) : 0);
 
-/* ------------------- Normalización payload ------------------- */
+// ───────────── Normalización payload respuesta ─────────────
 function pickItems(payload) {
   if (!payload) return [];
   if (Array.isArray(payload)) return payload;
@@ -332,47 +313,7 @@ function pickFiltros(payload) {
   return payload?.filtros || payload?.data?.filtros || {};
 }
 
-/* ----------------------- Core fetch ----------------------- */
-async function fetchJSON(url, { signal, timeout = FETCH_TIMEOUT_MS } = {}) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(new Error("timeout")), timeout);
-  try {
-    const res = await fetch(url, {
-      signal: signal || ctrl.signal,
-      headers: { accept: "application/json" },
-    });
-    if (res.status === 204) return {};
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      const err = new Error(`HTTP ${res.status} ${res.statusText}`);
-      err.status = res.status;
-      err.body = txt;
-      throw err;
-    }
-    try {
-      return await res.json();
-    } catch {
-      return {};
-    }
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-function isRetryable(err) {
-  const msg = (err?.message || "").toLowerCase();
-  return (
-    /timeout/.test(msg) ||
-    /fetch failed/.test(msg) ||
-    /network/.test(msg) ||
-    /ec[^ ]*refused/.test(msg) ||
-    /ec[^ ]*reset/.test(msg) ||
-    err?.status === 429 ||
-    (err?.status && err.status >= 500)
-  );
-}
-
-/* =============== /api/news (solo general live) =============== */
+// ───────────────────── /api/news (LIVE GENERAL) ─────────────────────
 async function fetchNewsLive(params, { signal } = {}) {
   const qp = {
     q: params.q,
@@ -382,7 +323,7 @@ async function fetchNewsLive(params, { signal } = {}) {
     page: params.page,
     limit: params.limit,
   };
-  const url = `${API_BASE}/news${toQuery(qp)}`;
+  const url = `${NEWS_BASE}/news${toQuery(qp)}`;
   DEBUG && console.debug(`[Noticias] GET live:`, url);
   const data = await fetchJSON(url, { signal });
   const items = normalizeList(pickItems(data), "general");
@@ -401,7 +342,7 @@ export async function getNewsLive({
   noCache = false,
   cacheTtlMs = 5 * 60 * 1000,
 } = {}) {
-  await waitForApiReady(API_BASE, { signal });
+  await waitForApiReady(NEWS_BASE, { signal });
 
   const providersArr = normalizeProviders(providers);
   const providersCsv = providersArr.join(",");
@@ -485,7 +426,7 @@ export async function getGeneralNews({
     return live;
   }
 
-  // 2) Fallback: /api/noticias?tipo=general
+  // 2) Fallback: /api/noticias?tipo=general (Mongo)
   const mongo = await getNoticiasRobust({
     tipo: "general",
     page,
@@ -551,7 +492,7 @@ export async function getNoticiasRobust({
     };
   }
 
-  await waitForApiReady(API_BASE, { signal });
+  await waitForApiReady(NEWS_BASE, { signal });
 
   const providersArr = normalizeProviders(providers);
   const providersCsv = providersArr.join(",");
@@ -613,7 +554,7 @@ export async function getNoticiasRobust({
   let lastErr = null;
   for (let i = 0; i < attempts.length; i++) {
     const { etiqueta, params } = attempts[i];
-    const url = `${API_BASE}/noticias${toQuery(params)}`;
+    const url = `${NEWS_BASE}/noticias${toQuery(params)}`;
     try {
       DEBUG && console.debug(`[Noticias] GET ${etiqueta}:`, url);
       const data = await fetchJSON(url, { signal });
@@ -629,7 +570,17 @@ export async function getNoticiasRobust({
       return payload;
     } catch (e) {
       lastErr = e;
-      if (isRetryable(e)) {
+      const msg = (e?.message || "").toLowerCase();
+      const retryable =
+        /timeout/.test(msg) ||
+        /fetch failed/.test(msg) ||
+        /network/.test(msg) ||
+        /ec[^ ]*refused/.test(msg) ||
+        /ec[^ ]*reset/.test(msg) ||
+        e?.status === 429 ||
+        (e?.status && e.status >= 500);
+
+      if (retryable) {
         const base = Math.min(250 * 2 ** i, 2500);
         const jitter = Math.floor(Math.random() * 150);
         await sleep(base + jitter);
@@ -653,7 +604,7 @@ export async function getNoticiasRobust({
 
 /* ----------------------- Chips ----------------------- */
 export async function getEspecialidades({ tipo = "juridica", lang, signal } = {}) {
-  const url = `${API_BASE}/noticias/especialidades${toQuery({
+  const url = `${NEWS_BASE}/noticias/especialidades${toQuery({
     tipo,
     lang: lang && lang !== "all" ? lang : undefined,
   })}`;
@@ -663,7 +614,7 @@ export async function getEspecialidades({ tipo = "juridica", lang, signal } = {}
   return list;
 }
 export async function getTemas({ lang = "es", signal } = {}) {
-  const url = `${API_BASE}/noticias/temas${toQuery({ tipo: "general", lang })}`;
+  const url = `${NEWS_BASE}/noticias/temas${toQuery({ tipo: "general", lang })}`;
   DEBUG && console.debug("[Noticias] GET", url);
   const data = await fetchJSON(url, { signal });
   const list = Array.isArray(data?.items) ? data.items : Array.isArray(data?.data?.items) ? data.data.items : [];
@@ -685,9 +636,9 @@ export function clearNoticiasCache() {
 export function proxifyMedia(url) {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) {
-    const base = String(API_BASE || "").replace(/\/+$/, "");
+    const base = String(NEWS_BASE || "").replace(/\/+$/, "");
     return `${base}/media/proxy?url=${encodeURIComponent(url)}`;
-    }
+  }
   return url;
 }
 

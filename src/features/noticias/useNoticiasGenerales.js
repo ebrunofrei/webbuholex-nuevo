@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
 /** Punto base para /api/news (solo generales/live) */
-const API_BASE = (import.meta?.env?.VITE_NEWS_API_BASE_URL || "").replace(/\/+$/, "");
+const NEWS_BASE =
+    (import.meta.env.VITE_NEWS_API_BASE_URL || import.meta.env.VITE_API_BASE || API_BASE)
+        .replace(/\/$/, "");
 
 /** Ventanas de “densidad” por tema (reintentos con distintos sinceDays) */
 const RETRIES_BY_TEMA = {
