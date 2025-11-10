@@ -19,6 +19,8 @@ const isBrowser = typeof window !== "undefined";
 const NEWS_BASE = String(
   (import.meta.env.VITE_NEWS_API_BASE_URL || import.meta.env.VITE_API_BASE || CORE_API_BASE || "")
 ).replace(/\/$/, "");
+export const NEWS_BASE_URL = NEWS_BASE;
+export const API_BASE = NEWS_BASE; // compat histórica
 
 export const PAGE_SIZE = 12;
 const CB_KEY = "__news_circuit_breaker__";
