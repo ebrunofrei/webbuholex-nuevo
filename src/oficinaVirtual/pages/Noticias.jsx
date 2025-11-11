@@ -7,16 +7,19 @@
  * - Responsive móvil/tablet/desktop + scroll táctil
  * - Aislamiento por viewKey (tipo+chip) + IntersectionObserver auto-load
  * ============================================================ */
+// src/oficinaVirtual/pages/Noticias.jsx
+
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import ReaderModal from "@/components/ui/ReaderModal";
-import {
-  API_BASE,
-  getNoticiasRobust,
-  getEspecialidades,
-  getTemas,
-  clearNoticiasCache,
-} from "@/services/noticiasClientService.js";
+import { clearNoticiasCache } from "@/services/newsApis";
+
+// --- Constantes / servicios ---
 import { ES_KEYWORDS } from "@/constants/noticiasKeywords.js";
+import { getNoticiasRobust, getEspecialidades } from "@/services/noticiasClientService.js";
+
+// ⚠️ API_BASE: dejar SOLO este import
+import { API_BASE } from "@/services/newsApis";
+
 
 /* ----------------------- Constantes ----------------------- */
 const PAGE_SIZE = 12;

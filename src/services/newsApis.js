@@ -139,7 +139,19 @@ export async function fetchJSON(
   } finally {
     clearTimeout(timer);
   }
-}
+  }
+  // ==== Cache (simple en memoria) para Noticias ====
+  const _noticiasCache = new Map();
+
+  export function cacheGetNoticias(key) {
+    return _noticiasCache.get(key);
+  }
+  export function cacheSetNoticias(key, value) {
+    _noticiasCache.set(key, value);
+  }
+  export function clearNoticiasCache() {
+    _noticiasCache.clear();
+  }
 
 // Re-export explícito de base para quien lo necesite
 export { API_BASE, joinApi };
