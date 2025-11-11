@@ -464,7 +464,7 @@ export default function NoticiasOficina() {
 
   /* ---- Recargas por cambio de viewKey (aislamiento) ---- */
   useEffect(() => {
-    abortRef.current?.abort?.();
+    abortRef.current?.abort?.(); 
     clearNoticiasCache?.();
     // Si no hay dataset para este viewKey, cargarlo
     const hasData = (itemsByKey.get(viewKey) || []).length > 0;
