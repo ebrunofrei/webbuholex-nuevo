@@ -1,7 +1,7 @@
 // src/oficinaVirtual/hooks/useNoticiasGuardadas.js
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { joinApi } from "@/services/apiBase";
+import { joinApi } from "@/services/apiBase.js";
 
 // Guardamos SOLO IDs en localStorage para no mezclar tipos
 const LOCAL_KEY = "noticiasGuardadas_buholex_ids";

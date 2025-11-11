@@ -1,7 +1,8 @@
 // src/components/NoticiasSlider.jsx
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom"; // <—
-import { getNoticiasRobust, clearNoticiasCache, API_BASE } from "@/services/noticiasClientService";
+import { getNoticiasRobust, clearNoticiasCache } from "@/services/noticiasClientService";
+import { API_BASE } from "@/services/apiBase";
 
 const PROVIDERS_TOP = ["elpais", "elcomercio", "rpp"]; // ajusta a gusto
 

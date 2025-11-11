@@ -560,3 +560,4 @@ export { getContenidoNoticia } from "./noticiasContenido.js";
 export { getNoticiasRobust as getNoticias };
 export { getNoticiasRobust as fetchNoticias };
 export { getNoticiasRobust as getNoticiasLive };
+export { API_BASE } from "./apiBase";

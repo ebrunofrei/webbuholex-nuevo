@@ -1,17 +1,68 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="BúhoLex: justicia sin privilegios. Plataforma jurídica, asistente virtual LitisBot y servicios legales profesionales." />
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="BúhoLex: justicia sin privilegios. Plataforma jurídica con noticias inteligentes, Oficina Virtual y asistente LitisBot."
+    />
     <meta name="theme-color" content="#b03a1a" />
-    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-    <!-- Material Icons para el botón de Noticias flotante -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <meta name="color-scheme" content="light" />
+    <meta name="robots" content="index,follow" />
+
+    <!-- Favicons / PWA (ajusta rutas si ya tienes manifest e iconos) -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Open Graph / Twitter -->
+    <meta property="og:title" content="BúhoLex | Soluciones Jurídicas" />
+    <meta property="og:site_name" content="BúhoLex" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://buholex.com" />
+    <meta
+      property="og:description"
+      content="Noticias legales, Oficina Virtual y LitisBot para abogados. Profesional y listo para producción."
+    />
+    <meta property="og:image" content="/og-image.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Material Icons (optimizado) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons&display=swap"
+      rel="stylesheet"
+    />
+
     <title>BúhoLex | Soluciones Jurídicas</title>
+
+    <!-- CSP ligera (relaja si embebes externos con inline scripts) -->
+    <!--
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules'; connect-src 'self' https:;"
+    />
+    -->
   </head>
+
   <body>
+    <!-- Raíz React -->
     <div id="root"></div>
+
+    <!-- Contenedor estable para modales/portals (no borrar en runtime) -->
+    <div id="portals"></div>
+
+    <noscript>
+      Necesitas habilitar JavaScript para usar BúhoLex.
+    </noscript>
+
+    <!-- Entrada Vite (una sola) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

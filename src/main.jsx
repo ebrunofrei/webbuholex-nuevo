@@ -1,35 +1,60 @@
 // --- (Opcional) Polyfill de process si tu build lo necesita ---
 import "./process-shim";
 
-import React from "react";
-import ReactDOM from "react-dom/client";
+import React, { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
 import App from "./App";
+
 import { initPushClient } from "@/services/pushClient.js";
+
 import "./index.css";
 import "./styles/noticias.css";
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 /* ===================================================================
- * ⚙️ Configuración FCM (opcional por ENV)
- * - VITE_ENABLE_FCM=false   → no registra SW ni obtiene token (y limpia si hubiera)
- * - VITE_FCM_VAPID_KEY      → sólo requerido si ENABLE_FCM=true
+ * 🧩 Crear el root UNA SOLA VEZ (HMR-safe)
  * =================================================================== */
-const ENABLE_FCM = String(import.meta.env.VITE_ENABLE_FCM || "").toLowerCase() === "true";
-if (ENABLE_FCM) {
-  initPushClient({ swUrl: "/firebase-messaging-sw.js", enablePushParam: import.meta.env.VITE_ENABLE_PUSH || "false" });
+const container = document.getElementById("root");
+if (!window.__BUHOLEX_ROOT__) {
+  window.__BUHOLEX_ROOT__ = createRoot(container);
 }
+const root = window.__BUHOLEX_ROOT__;
+
+/* ===================================================================
+ * 🚀 Render principal (idempotente)
+ * =================================================================== */
+root.render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+
+// No desmontar el root en HMR (evita removeChild/insertBefore)
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    // Intencionalmente vacío
+  });
+}
+
+/* ===================================================================
+ * ⚙️ Configuración Push/FCM (condicional por ENV)
+ * - VITE_ENABLE_FCM=false → no registra SW ni obtiene token (y limpia si hubiera)
+ * - VITE_ENABLE_PUSH=true → fuerza sólo notificaciones locales (si tu cliente lo usa)
+ * - VITE_FCM_VAPID_KEY    → requerido si ENABLE_FCM=true y vas por FCM real
+ * =================================================================== */
 
 const ENABLE_PUSH = String(import.meta.env.VITE_ENABLE_PUSH || "").toLowerCase() === "true";
 
-if (ENABLE_PUSH) {
-  initPushClient({
-    swUrl: "/firebase-messaging-sw.js",
-    enablePushParam: "true",
-  });
+const ENABLE_FCM = String(import.meta.env.VITE_ENABLE_FCM || "").toLowerCase() === "true";
+if (!ENABLE_FCM && import.meta.env.DEV) {
+  const origInfo = console.info;
+  console.info = (...args) => {
+    if (String(args[0] || "").includes("FCM deshabilitado")) return;
+    origInfo(...args);
+  };
 }
-/* ===================================================================
- * 🧼 Util: desregistrar cualquier SW previo de Firebase Messaging
- * =================================================================== */
+
+
+/** Desregistra cualquier SW previo de FCM si FCM está deshabilitado */
 async function unregisterFCMSwIfAny() {
   if (!("serviceWorker" in navigator)) return;
   try {
@@ -44,11 +69,7 @@ async function unregisterFCMSwIfAny() {
   }
 }
 
-/* ===================================================================
- * 🚀 Registro condicional del SW de FCM
- * - No registra si ENABLE_FCM=false o contexto no seguro
- * - Usa versión para bust de caché (sin romper si no existe la constante)
- * =================================================================== */
+/** Registra el SW de FCM si procede */
 async function maybeRegisterFCMServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
 
@@ -75,12 +96,7 @@ async function maybeRegisterFCMServiceWorker() {
   }
 }
 
-/* ===================================================================
- * 🔐 Inicialización segura de FCM
- * - No solicita permiso; sólo continúa si YA está "granted"
- * - No intenta getToken si no hay SW listo
- * - Importa Firebase dinámicamente (code-splitting)
- * =================================================================== */
+/** Inicializa FCM de forma segura (no bloquea si no hay permisos) */
 async function safeInitFCM() {
   try {
     if (!ENABLE_FCM) return;
@@ -94,7 +110,7 @@ async function safeInitFCM() {
 
     const reg = await navigator.serviceWorker.ready;
 
-    // Ajusta la ruta a tu inicialización real de Firebase/Messaging:
+    // Ajusta a tu inicialización real:
     const { messaging, getToken } = await import("./firebase.js");
 
     const token = await getToken(messaging, {
@@ -106,29 +122,31 @@ async function safeInitFCM() {
       console.warn("FCM: no se obtuvo token.");
       return;
     }
-    // TODO: envía el token a tu backend si lo necesitas
     console.log("FCM token:", token.slice(0, 8) + "…");
+    // TODO: enviar token a tu backend si aplica
   } catch (err) {
-    // Nunca lanzar: no debe romper UX en móvil (403, bloqueos, etc.)
     console.warn("FCM desactivado/bloqueado:", err?.message || err);
   }
 }
 
 /* ===================================================================
- * 🧩 Render principal de la app
- * =================================================================== */
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-
-/* ===================================================================
- * ⏱️ Hook onload: registrar/limpiar SW y luego inicializar FCM (si aplica)
+ * ⏱️ Post-load: registra/limpia SW y luego inicializa FCM
  * =================================================================== */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
-    await maybeRegisterFCMServiceWorker(); // registra o limpia según ENV
-    await safeInitFCM();                   // sólo corre si ENABLE_FCM y permiso "granted"
+    await maybeRegisterFCMServiceWorker();
+    await safeInitFCM();
+  });
+}
+
+/* ===================================================================
+ * 🔔 Inicialización de PushClient (una sola vez)
+ * - Si usas sólo FCM real: bastaría con ENABLE_FCM
+ * - Si también usas notificaciones locales: ENABLE_PUSH
+ * =================================================================== */
+if (ENABLE_FCM || ENABLE_PUSH) {
+  initPushClient({
+    swUrl: "/firebase-messaging-sw.js",
+    enablePushParam: ENABLE_PUSH ? "true" : (import.meta.env.VITE_ENABLE_PUSH || "false"),
   });
 }

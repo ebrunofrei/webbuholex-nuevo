@@ -1,36 +1,32 @@
 /* eslint-disable no-undef */
 // ============================================================
-// 🦉 BÚHOLEX | Firebase Messaging SW (robusto y silencioso)
-// - Compat v9 (importScripts ...-compat.js)
-// - Toma control inmediato (skipWaiting + clients.claim)
-// - Guardas defensivos: no rompe si FCM falla/está bloqueado
-// - Evita duplicados: si llega "notification", no re-renderiza
-// - Click: enfoca pestaña si existe; si no, abre URL
-// - Permite desactivar push desde registro con ?enablePush=false
-//   (útil mientras arreglas FCM 403 en PROD)
+// 🦉 BÚHOLEX | Firebase Messaging SW (compat v9, robusto)
+// - Usa SDK COMPAT (importScripts) → válido en SW
+// - Control inmediato (skipWaiting + clients.claim)
+// - Silencioso si FCM falla/está bloqueado
+// - Evita duplicados si el payload ya trae `notification`
+// - Click: enfoca pestaña abierta o abre URL segura
+// - Flag ?enablePush=false en el registro para apagar notificaciones
 // ============================================================
 
-// 1) Librerías compat (v9.x)
+// 1) SDKs COMPAT (no modulares) — ¡NO usar `import`/ESM aquí!
 importScripts("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js");
 
-// 2) Toma control del SW
+// 2) Tomar control del SW
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
-// 3) Flag para habilitar/deshabilitar notificaciones desde el registro:
-//    navigator.serviceWorker.register('/firebase-messaging-sw.js?enablePush=false')
+// 3) Leer bandera de query (?enablePush=true/false)
 function getBoolFromQuery(name, defVal) {
   try {
-    const u = new URL(self.location.href);
-    const v = u.searchParams.get(name);
-    if (v == null) return defVal;
-    return String(v).toLowerCase() === "true";
+    const v = new URL(self.location.href).searchParams.get(name);
+    return v == null ? defVal : String(v).toLowerCase() === "true";
   } catch { return defVal; }
 }
 const ENABLE_PUSH = getBoolFromQuery("enablePush", true);
 
-// 4) Inicializar Firebase (SW no puede leer import.meta.env)
+// 4) Inicializar Firebase (SW NO puede leer import.meta.env)
 try {
   firebase.initializeApp({
     apiKey: "AIzaSyDOMhMqkNzpHC-6Lex6c-vDR_Sb3oev0HE",
@@ -39,78 +35,64 @@ try {
     storageBucket: "buholex-ab588.appspot.com",
     messagingSenderId: "608453552779",
     appId: "1:608453552779:web:8ca82b34b76bf7de5b428e",
-    measurementId: "G-NQQZ7P48YX",
+    // measurementId no se usa en SW
   });
 } catch (e) {
-  // Si ya estaba inicializado o falla por bloqueo, no detengas el SW
+  // Si ya estaba inicializado o el navegador bloquea, no romper el SW
 }
 
-// 5) Obtener Messaging (defensivo)
+// 5) Obtener messaging de forma segura
 let messaging = null;
-try {
-  messaging = firebase.messaging?.();
-} catch {
-  // En algunos navegadores sin soporte, simplemente no habrá messaging
-}
+try { messaging = firebase.messaging?.(); } catch { /* sin soporte */ }
 
-// Helper: normaliza/compone notificación
-function showSafeNotification({ title, body, icon, badge, data }) {
+// 6) Helper: mostrar notificación de forma segura
+function showSafeNotification(opts = {}) {
   try {
-    const t = title || "BúhoLex";
-    const b = body || "";
-    const i = icon || "/icons/icon-192.png";
-    const bdg = badge || "/icons/icon-192.png";
-    return self.registration.showNotification(t, {
-      body: b,
-      icon: i,
-      badge: bdg,
-      data: data || {},
-    });
-  } catch {
-    // Ignorar si falla
-  }
+    const title = opts.title || "BúhoLex";
+    const body  = String(opts.body || "");
+    const icon  = opts.icon  || "/icons/icon-192.png";
+    const badge = opts.badge || "/icons/icon-192.png";
+    const data  = opts.data  || {};
+    if (!self?.registration?.showNotification) return;
+    return self.registration.showNotification(title, { body, icon, badge, data });
+  } catch { /* silencioso */ }
 }
 
-// 6) Background messages (data-only). Si llega "notification", FCM ya mostró banner.
-if (ENABLE_PUSH && messaging && messaging.onBackgroundMessage) {
+// 7) Mensajes “data-only” en segundo plano
+if (ENABLE_PUSH && messaging?.onBackgroundMessage) {
   messaging.onBackgroundMessage((payload) => {
-    // Debug visible en Application > Service Workers
-    // console.log("[SW] Background message:", payload);
-
     const notif = payload?.notification || {};
-    const data = payload?.data || {};
+    const data  = payload?.data || {};
 
-    // Si el servidor ya mandó "notification", evita duplicar.
+    // Si ya viene `notification`, el propio FCM muestra el banner → evita duplicar
     if (notif && (notif.title || notif.body)) return;
 
-    const title = data.title;
-    const body  = data.body;
-    const icon  = data.icon;
-    const badge = data.badge;
-    const url   = data.url || data.link || "/";
+    const url = data.url || data.link || "/";
 
     showSafeNotification({
-      title, body, icon, badge,
-      data: { url, ...data },
+      title: data.title,
+      body:  data.body,
+      icon:  data.icon,
+      badge: data.badge,
+      data:  { url, ...data },
     });
   });
 }
 
-// 7) Click en notificación: enfoca si hay una ventana con el mismo base-path; si no, abre.
+// 8) Click en notificación: enfoca pestaña existente o abre URL
 self.addEventListener("notificationclick", (event) => {
   event.notification?.close?.();
 
   const raw = (event.notification?.data && event.notification.data.url) || "/";
-  const targetUrl = (() => {
-    try { return new URL(raw, self.location.origin).toString(); }
-    catch { return "/"; }
-  })();
+  let targetUrl = "/";
+  try { targetUrl = new URL(raw, self.location.origin).toString(); } catch {}
+
   const targetBase = targetUrl.split("#")[0].split("?")[0].replace(/\/+$/, "");
 
   event.waitUntil((async () => {
     try {
-      const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      const match = clientList.find((c) => {
+      const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const match = clientsList.find((c) => {
         try {
           const u = new URL(c.url);
           const base = (u.origin + u.pathname).replace(/\/+$/, "");
@@ -118,44 +100,30 @@ self.addEventListener("notificationclick", (event) => {
         } catch { return false; }
       });
 
-      if (match && "focus" in match) {
-        await match.focus();
-        return;
-      }
+      if (match && "focus" in match) { await match.focus(); return; }
       await self.clients.openWindow(targetUrl);
     } catch {
-      // Si falla, al menos intenta abrir nueva ventana
       try { await self.clients.openWindow(targetUrl); } catch {}
     }
   })());
 });
 
-// 8) Fallback para eventos 'push' raw (algunos proveedores externos)
+// 9) Fallback para `push` genérico (otros proveedores)
 self.addEventListener("push", (event) => {
-  if (!ENABLE_PUSH) return;
-  if (!event?.data) return;
-
+  if (!ENABLE_PUSH || !event?.data) return;
   try {
     const payload = event.data.json();
     const notif = payload?.notification || {};
-    const data = payload?.data || {};
+    const data  = payload?.data || {};
+    if (notif && (notif.title || notif.body)) return; // evitar doble banner
 
-    // Si ya hay "notification", evita duplicar
-    if (notif && (notif.title || notif.body)) return;
-
-    const title = data.title;
-    const body  = data.body;
-    const icon  = data.icon;
-    const badge = data.badge;
-    const url   = data.url || "/";
-
-    event.waitUntil(
-      showSafeNotification({
-        title, body, icon, badge,
-        data: { url, ...data },
-      })
-    );
-  } catch {
-    // Si no es JSON válido, ignorar
-  }
+    const url = data.url || "/";
+    event.waitUntil(showSafeNotification({
+      title: data.title,
+      body:  data.body,
+      icon:  data.icon,
+      badge: data.badge,
+      data:  { url, ...data },
+    }));
+  } catch { /* silencioso */ }
 });
