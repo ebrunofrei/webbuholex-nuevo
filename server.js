@@ -13,7 +13,7 @@ import morgan from "morgan";
 import mongoose from "mongoose";
 
 // Rutas y servicios principales
-import pingRouter from './backend/routes/ping.js';
+import pingRoutes from './backend/routes/ping.js';
 import noticiasRoutes from "./backend/routes/noticias.js";
 import noticiasContenidoRoutes from "./backend/routes/noticiasContenido.js";
 import newsTopics from "./backend/routes/news-topics.js";
@@ -24,8 +24,10 @@ import notificacionesRoutes from "./backend/routes/notificaciones.js";
 import noticiasGuardadasRoutes from "./backend/routes/noticiasGuardadas.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 import vozRoutes from "./backend/routes/voz.js";
-import newsLiveRouter from "./backend/routes/news-live.js";
+import newsLiveRoutes from "./backend/routes/news-live.js";
 import mediaRoutes from "./backend/routes/media.js";
+import researchRoutes from "./backend/routes/research.js";
+import exportRoutes from "./backend/routes/export.js";
 
 // ============================================================
 // ⚙️ Carga temprana del entorno (.env)
@@ -158,7 +160,7 @@ app.get("/api/health", (_req, res) => {
 // ============================================================
 
 app.use("/api/noticias/contenido", noticiasContenidoRoutes);
-app.use("/api/news", newsLiveRouter);
+app.use("/api/news", newsLiveRoutes);
 app.use("/api/noticias", noticiasRoutes);
 app.use("/api/noticias-guardadas", noticiasGuardadasRoutes);
 app.use("/api/news", newsTopics);
@@ -169,7 +171,9 @@ app.use("/api/notificaciones", notificacionesRoutes);
 app.use("/api/traducir", traducirRoutes);
 app.use("/api/voz", vozRoutes);
 app.use("/api/media", mediaRoutes);
-app.use('/api', pingRouter);
+app.use('/api', pingRoutes);
+app.use("/api/research", researchRoutes);
+app.use("/api/export", exportRoutes);
 
 // 404 JSON solo /api
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));

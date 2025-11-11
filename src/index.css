@@ -108,3 +108,38 @@ h1, h2, h3 { color: #a42409; font-weight: 700; margin-top: 0; }
   .sidebar-buholex, .navbar-buholex, .footer-buholex { display: none !important; }
   .main-content-buholex { background: #fff !important; padding: 0 !important; }
 }
+/* ===== LitisBot FAB (animaciones & utilidades) ===== */
+@keyframes lb-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(12, 74, 110, .35); }
+  70%  { box-shadow: 0 0 0 14px rgba(12, 74, 110, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(12, 74, 110, 0); }
+}
+.lb-pulse { animation: lb-pulse 1.8s ease-out 1; }
+
+@keyframes lb-pop {
+  0% { transform: scale(.85); opacity: 0; }
+  50%{ transform: scale(1.02); opacity: 1; }
+  100%{ transform: scale(1); opacity: 1; }
+}
+.lb-pop { animation: lb-pop .25s ease both; }
+
+/* ===== LitisBot FAB: latido con cambio de color ===== */
+
+/* Marrón (branding) */
+@keyframes lb-pulse-brown {
+  0%   { box-shadow: 0 0 0 0 rgba(92,46,11,.32); background-color:#fff; transform: scale(1); }
+  35%  { background-color:#5C2E0B; transform: scale(1.04); }
+  70%  { box-shadow: 0 0 0 14px rgba(92,46,11,0); background-color:#fff; transform: scale(1); }
+  100% { box-shadow: 0 0 0 0 rgba(92,46,11,0); }
+}
+.lb-pulse-brown { animation: lb-pulse-brown 1.4s ease-out 1; }
+
+/* Rojo (alternativa) */
+@keyframes lb-pulse-red {
+  0%   { box-shadow: 0 0 0 0 rgba(132,32,41,.32); background-color:#fff; transform: scale(1); }
+  35%  { background-color:#842029; transform: scale(1.04); }
+  70%  { box-shadow: 0 0 0 14px rgba(132,32,41,0); background-color:#fff; transform: scale(1); }
+  100% { box-shadow: 0 0 0 0 rgba(132,32,41,0); }
+}
+.lb-pulse-red { animation: lb-pulse-red 1.4s ease-out 1; }
+

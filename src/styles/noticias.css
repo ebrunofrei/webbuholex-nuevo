@@ -120,3 +120,20 @@
 .no-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
 .no-scrollbar::-webkit-scrollbar-thumb { background: #e2d7cf; border-radius: 10px; }
 .no-scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+/* ===========================
+   Encabezado del panel
+   =========================== */
+.nx-panel-head{
+  background: linear-gradient(90deg,#8b4a2f,#a86b4f);
+  color: #fff;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.nx-panel-head h3{
+  margin: 0;
+  color: #fff;          /* ← evita que reglas globales pinten rojo */
+  font-weight: 700;
+}

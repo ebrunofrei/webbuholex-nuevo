@@ -17,8 +17,11 @@ import {
   FaBell,
 } from "react-icons/fa";
 
-import litisLogo from "@/assets/litisbot-logo.png";
 import { enviarMensajeIA, pingIA } from "@/services/chatClient";
+import { buscarEnWeb } from "@/services/researchClient";
+import ChatCitations from "@/components/chat/ChatCitations.jsx";
+import ChatExportButtons from "@/components/chat/ChatExportButtons.jsx";
+import { sanitizeForTTS } from "@/utils/ttsSanitizer.js";
 
 // === Voz centralizada (coherente con vozService.js actualizado) ===
 import {
@@ -30,6 +33,19 @@ import {
   getTTSMuted,
   isSpeaking,
 } from "@/services/vozService.js";
+
+// Rutas estables (dev y build)
+const BASE = import.meta.env.BASE_URL || "/";
+const LITIS_HEADER_1X_PNG = `${BASE}images/litisbot/litisbot-96.png`;
+const LITIS_HEADER_2X_PNG = `${BASE}images/litisbot/litisbot-112.png`;
+const LITIS_HEADER_1X_WEBP = `${BASE}images/litisbot/litisbot-96.webp`;
+const LITIS_HEADER_2X_WEBP = `${BASE}images/litisbot/litisbot-112.webp`;
+const LITIS_HERO_1X = `${BASE}images/litisbot/litisbot-640.png`;
+const LITIS_HERO_2X = `${BASE}images/litisbot/litisbot-2048.png`;
+
+// Alias temporal para no romper donde aún se usa `litisLogo`
+const litisLogo = LITIS_HEADER_1X_PNG;
+
 
 /* ============================================================
    ⚙️ Preferencias TTS (voz, velocidad, tono) + storage (v1)
@@ -131,7 +147,6 @@ function prepararTextoParaCopia(html) {
   const plano = toPlain(html);
   return plano.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-
 /* ============================================================
    💬 Mensaje del ASISTENTE (burbuja blanca)
 ============================================================ */
@@ -144,13 +159,14 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback, ttsPrefs }) {
     if (leyendo) return;
     setLeyendo(true);
     try {
-      const plain = toPlain(msg.content || "");
-      // Solo reproduce si el usuario lo pidió (click)
-      await reproducirVoz(plain, {
+      // Limpia Markdown/HTML, URLs y símbolos; genera SSML con pausas.
+      const { plain, ssml } = sanitizeForTTS(msg.content || "");
+      await reproducirVoz(ssml, {
         voz: ttsPrefs?.voiceId || "es-ES-AlvaroNeural",
-        // Se envía en puntos porcentuales (coherente con vozService)
         rate: Math.round(((ttsPrefs?.rate ?? 1) - 1) * 100) || 0,
         pitch: parseInt(ttsPrefs?.pitch ?? 0, 10) || 0,
+        textType: "ssml",     // si el motor lo soporta, enviamos SSML
+        fallbackText: plain,  // si no soporta SSML, usa texto plano limpio
       });
     } catch (err) {
       console.error("🔇 Error TTS:", err);
@@ -160,9 +176,10 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback, ttsPrefs }) {
   }
 
   async function handleCopiar() {
-    const limpio = prepararTextoParaCopia(msg.content);
-    const ok = await copyToClipboardFallback(limpio);
-    onCopy && onCopy(limpio, ok);
+    // Reusa el texto limpio para copiar (sin símbolos ni HTML)
+    const { plain } = sanitizeForTTS(msg.content || "");
+    const ok = await copyToClipboardFallback(plain);
+    onCopy && onCopy(plain, ok);
   }
 
   return (
@@ -174,20 +191,67 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback, ttsPrefs }) {
         color: "#5C2E0B",
       }}
     >
+
+      {/* ================== CONTENIDO MENSAJE ================== */}
       {!editando ? (
-        <div
-          className="leading-relaxed whitespace-pre-wrap break-words text-[16px]"
-          style={{ textAlign: "justify", wordBreak: "break-word" }}
-          dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.content) }}
-        />
+        <>
+          <div
+            role="article"
+            aria-label="Respuesta de LitisBot"
+            className="leading-relaxed whitespace-pre-wrap break-words text-[16px]"
+            style={{
+              textAlign: "justify",
+              textJustify: "inter-word",
+              lineHeight: 1.7,
+              letterSpacing: "0.01em",
+              wordBreak: "break-word",
+              overflowWrap: "anywhere",
+              hyphens: "auto",
+              WebkitHyphens: "auto",
+              MsHyphens: "auto",
+              textWrap: "pretty",
+            }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.content) }}
+          />
+
+          {/* —— Citas (compacto) —— */}
+          {Array.isArray(msg.citations) && msg.citations.length > 0 && (
+            <div className="mt-2">
+              <ChatCitations citations={msg.citations.slice(0, 2)} />
+              {msg.citations.length > 2 && (
+                <div className="text-xs opacity-75 mt-1">
+                  🔒 Hay más citas. Desbloquéalas en BúhoLex PRO.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* —— Export PRO (opcional) —— */}
+          {Boolean(window?.BUHOLEX_PRO) && (
+            <div className="mt-2">
+              <ChatExportButtons
+                title={buildTituloExportLB(msg)}
+                content={toPlainLB(msg.content || "")}
+                citations={msg.citations || []}
+              />
+            </div>
+          )}
+        </>
       ) : (
         <div className="flex flex-col gap-2 w-full">
           <textarea
             className="w-full border rounded p-2 text-[15px] leading-relaxed"
-            style={{ borderColor: "rgba(92,46,11,0.3)", color: "#5C2E0B" }}
-            rows={4}
+            style={{
+              borderColor: "rgba(92,46,11,0.3)",
+              color: "#5C2E0B",
+              backgroundColor: "#fff",
+              lineHeight: 1.6,
+              letterSpacing: "0.01em",
+            }}
+            rows={6}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
+            placeholder="Edita el contenido generado por LitisBot…"
           />
           <div className="flex gap-4 text-[15px]">
             <button
@@ -213,6 +277,7 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback, ttsPrefs }) {
         </div>
       )}
 
+      {/* ================== ACCIONES (voz / copy / edit / feedback) ================== */}
       {!editando && (
         <div className="flex flex-row flex-wrap items-center gap-4 mt-4 text-[18px]">
           {/* voz */}
@@ -539,111 +604,118 @@ function ChatWindow({
     "aria-modal": "true",
     "aria-label": "Chat con LitisBot",
   };
-
-  /* ============ MODO MÓVIL (fullscreen) ============ */
-  if (isMobile) {
-    return (
+/* ============ MODO MÓVIL (fullscreen) ============ */
+if (isMobile) {
+  return (
+    <div
+      {...containerCommonProps}
+      className="fixed inset-0 z-[9998] flex flex-col bg-white"
+      style={{ backgroundColor: "#ffffff", color: "#5C2E0B" }}
+    >
+      {/* Header */}
       <div
-        {...containerCommonProps}
-        className="fixed inset-0 z-[9998] flex flex-col bg-white"
-        style={{ backgroundColor: "#ffffff", color: "#5C2E0B" }}
+        className="flex items-center justify-between px-3 py-2 shadow-md"
+        style={{ background: headerBg, color: headerColor }}
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-3 py-2 shadow-md"
-          style={{ background: headerBg, color: headerColor }}
-        >
-          <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
-            <div
-              className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
-              style={{ color: "#5C2E0B", fontWeight: "bold", fontSize: "11px" }}
-            >
-              <img src={litisLogo} alt="LitisBot" className="w-full h-full object-contain" />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span>LitisBot</span>
-              <span className="text-[11px] font-normal opacity-80">
-                {pro ? "Acceso Pro" : "Asistencia básica"}
-              </span>
-            </div>
-          </div>
-
-          <button
-            className="text-white font-bold text-xl leading-none px-2"
-            onClick={() => {
-              stopVoz(); // al cerrar, no dejamos audio colgado
-              setIsOpen(false);
+        <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
+          {/* Avatar limpio (sin marco) */}
+          <div
+            className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0"
+            style={{
+              backgroundColor: "#fff",
+              backgroundImage: `image-set(url(${LITIS_HERO_1X}) 1x, url(${LITIS_HERO_2X}) 2x)`,
+              backgroundSize: "190%",        // ↑ zoom hasta que no se vean los bordes del panel
+              backgroundPosition: "center 38%", // ↑ sube el encuadre (ajusta 36–44% si hace falta)
+              backgroundRepeat: "no-repeat",
+              boxShadow: "0 0 0 2px #fff inset", // aro blanco para aislar el arte
             }}
-            aria-label="Cerrar chat"
-            title="Cerrar"
-          >
-            ×
-          </button>
-        </div>
+            aria-label="BúhoLex · LitisBot"
+          />
 
-        {/* Feed */}
-        <div
-          ref={feedRef}
-          className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-3 py-3"
-          style={{ backgroundColor: "#ffffff" }}
-        >
-          <div className="flex flex-col gap-4">
-            {mensajes.map((m, idx) =>
-              m.role === "assistant" ? (
-                <div key={idx} className="flex w-full justify-start text-[#5C2E0B]">
-                  <MensajeBotBubble
-                    msg={m}
-                    ttsPrefs={ttsPrefs}
-                    onCopy={() => {}}
-                    onEdit={(nuevo) =>
-                      setMensajes((prev) => {
-                        const cl = [...prev];
-                        cl[idx] = { ...cl[idx], content: nuevo };
-                        return cl;
-                      })
-                    }
-                    onFeedback={(tipo) => console.log("feedback:", tipo)}
-                  />
-                </div>
-              ) : (
-                <MensajeUsuarioBubble key={idx} texto={m.content} />
-              )
-            )}
-
-            {cargando && (
-              <div className="flex w-full justify-start">
-                <div
-                  className="rounded-[1.5rem] shadow text-[15px] max-w-[80%] px-4 py-3"
-                  style={{
-                    backgroundColor: "#ffffff",
-                    border: "1px solid rgba(92,46,11,0.15)",
-                    color: "#5C2E0B",
-                  }}
-                >
-                  Procesando…
-                </div>
-              </div>
-            )}
+          <div className="flex flex-col leading-tight">
+            <span>LitisBot</span>
+            <span className="text-[11px] font-normal opacity-80">
+              {pro ? "Acceso Pro" : "Asistencia básica"}
+            </span>
           </div>
         </div>
 
-        {/* Controles TTS */}
-        <div className="px-3 pb-2">
-          <TTSControls mensajes={mensajes} ttsPrefs={ttsPrefs} />
-        </div>
-
-        {/* Input */}
-        <ChatInputBar
-          PanelTTS={PanelTTS}
-          input={input}
-          setInput={setInput}
-          cargando={cargando}
-          handleKeyDown={handleKeyDown}
-          enviarMensaje={enviarMensaje}
-        />
+        <button
+          className="text-white font-bold text-xl leading-none px-2"
+          onClick={() => {
+            stopVoz(); // al cerrar, no dejamos audio colgado
+            setIsOpen(false);
+          }}
+          aria-label="Cerrar chat"
+          title="Cerrar"
+        >
+          ×
+        </button>
       </div>
-    );
-  }
+
+      {/* Feed */}
+      <div
+        ref={feedRef}
+        className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-3 py-3"
+        style={{ backgroundColor: "#ffffff" }}
+      >
+        <div className="flex flex-col gap-4">
+          {mensajes.map((m, idx) =>
+            m.role === "assistant" ? (
+              <div key={idx} className="flex w-full justify-start text-[#5C2E0B]">
+                <MensajeBotBubble
+                  msg={m}
+                  ttsPrefs={ttsPrefs}
+                  onCopy={() => {}}
+                  onEdit={(nuevo) =>
+                    setMensajes((prev) => {
+                      const cl = [...prev];
+                      cl[idx] = { ...cl[idx], content: nuevo };
+                      return cl;
+                    })
+                  }
+                  onFeedback={(tipo) => console.log("feedback:", tipo)}
+                />
+              </div>
+            ) : (
+              <MensajeUsuarioBubble key={idx} texto={m.content} />
+            )
+          )}
+
+          {cargando && (
+            <div className="flex w-full justify-start">
+              <div
+                className="rounded-[1.5rem] shadow text-[15px] max-w-[80%] px-4 py-3"
+                style={{
+                  backgroundColor: "#ffffff",
+                  border: "1px solid rgba(92,46,11,0.15)",
+                  color: "#5C2E0B",
+                }}
+              >
+                Procesando…
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Controles TTS */}
+      <div className="px-3 pb-2">
+        <TTSControls mensajes={mensajes} ttsPrefs={ttsPrefs} />
+      </div>
+
+      {/* Input */}
+      <ChatInputBar
+        PanelTTS={PanelTTS}
+        input={input}
+        setInput={setInput}
+        cargando={cargando}
+        handleKeyDown={handleKeyDown}
+        enviarMensaje={enviarMensaje}
+      />
+    </div>
+  );
+}
 
   /* ============ MODO DESKTOP (card flotante) ============ */
   return (
@@ -831,6 +903,36 @@ function ChatInputBar({
     </div>
   );
 }
+    function toPlainLB(s = "") {
+      return String(s)
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]*>/g, "")
+        .replace(/[#*_>`~\-+]|!\[.*?\]\(.*?\)|\[.*?\]\(.*?\)/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+
+    function buildTituloExportLB(m) {
+      const base = (m?.meta?.intencion || "Informe LitisBot").replace(/_/g, " ");
+      const first = toPlainLB(m?.content || "").split("\n")[0].slice(0, 60);
+      return `${capitalizeLB(base)} - ${first || "respuesta"}`;
+    }
+
+    function capitalizeLB(s = "") {
+      return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    }
+
+    function toCitation(hit = {}) {
+  const url = hit.url || hit.link || "";
+  let source = "";
+  try { source = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+  return {
+    title: hit.title || "",
+    url,
+    source,
+    date: hit.date || null,
+  };
+}
 
 /* ============================================================
    🌐 Componente principal flotante LitisBotBubbleChat
@@ -958,64 +1060,100 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
   // Placeholder de "pensando…" con índice seguro
   const placeholderIndexRef = useRef(-1);
 
-  // Enviar mensaje
-  async function enviarMensaje() {
-    if (!input?.trim() || cargando) return;
+  // Enviar mensaje (con búsqueda web de respaldo para citas)
+async function enviarMensaje() {
+  if (!input?.trim() || cargando) return;
 
-    const pregunta = input.trim();
-    setInput("");
-    setCargando(true);
+  const pregunta = input.trim();
+  setInput("");
+  setCargando(true);
 
-    setMensajes((prev) => {
-      const next = [...prev, { role: "user", content: pregunta }];
-      placeholderIndexRef.current = next.length;
-      next.push({ role: "assistant", content: "Espera un momento…" });
-      return next;
+  // 1) Empujar mensaje del usuario + placeholder "pensando…"
+  setMensajes((prev) => {
+    const next = [...prev, { role: "user", content: pregunta }];
+    placeholderIndexRef.current = next.length;
+    next.push({ role: "assistant", content: "Espera un momento…" });
+    return next;
+  });
+
+  try {
+    // 2) Llamada a la IA
+    const data = await enviarMensajeIA({
+      prompt: pregunta,
+      usuario: usuarioId || "invitado-burbuja",
+      expedienteId: "burbuja",
+      idioma: "es-PE",
+      pais: "Perú",
     });
 
-    try {
-      const data = await enviarMensajeIA({
-        prompt: pregunta,
-        usuario: usuarioId || "invitado-burbuja",
-        expedienteId: "burbuja",
-        idioma: "es-PE",
-        pais: "Perú",
-      });
+    // 3) Texto final de la IA
+    const finalText =
+      (data?.respuesta || data?.text || "").trim() ||
+      "No pude generar respuesta. ¿Intentamos de nuevo?";
 
-      setMensajes((prev) => {
-        const next = [...prev];
-        const idx = placeholderIndexRef.current;
-        if (idx >= 0 && idx < next.length && next[idx]?.content === "Espera un momento…") {
-          next.splice(idx, 1); // quitamos placeholder en la posición correcta
-        }
-        next.push({
-          role: "assistant",
-          content:
-            data?.respuesta || data?.text || "No pude generar respuesta. ¿Intentamos de nuevo?",
-        });
-        placeholderIndexRef.current = -1;
-        return next;
-      });
-    } catch (err) {
-      console.error("❌ Error burbuja:", err);
-      setMensajes((prev) => {
-        const next = [...prev];
-        const idx = placeholderIndexRef.current;
-        if (idx >= 0 && idx < next.length && next[idx]?.content === "Espera un momento…") {
-          next.splice(idx, 1);
-        }
-        next.push({
-          role: "assistant",
-          content:
-            "Hubo un problema procesando tu consulta. Verifica tu conexión y vuelve a intentarlo.",
-        });
-        placeholderIndexRef.current = -1;
-        return next;
-      });
-    } finally {
-      setCargando(false);
+    // 4) Citas: usar las que vengan… o buscar en la web si no hay
+    let finalCitations = Array.isArray(data?.citations) ? data.citations : [];
+
+    if (!finalCitations.length) {
+      // Heurística simple para clasificar la intención del usuario
+      const esJuris = /jurisprudenc|casaci|precedent|sentenci|expedient|tc\.gob|pj\.gob/i.test(pregunta);
+      const tipo = esJuris ? "jurisprudencia" : "general";
+
+      try {
+        const hits = await buscarEnWeb(pregunta, tipo); // ← GET /api/research/search
+        finalCitations = (hits || []).map(toCitation);
+      } catch {
+        // si la búsqueda web falla, no interrumpimos la respuesta
+      }
     }
+
+    // 5) Reemplazar placeholder con la respuesta final + citas
+    setMensajes((prev) => {
+      const next = [...prev];
+      const idx = placeholderIndexRef.current;
+      if (
+        idx >= 0 &&
+        idx < next.length &&
+        next[idx]?.role === "assistant" &&
+        next[idx]?.content === "Espera un momento…"
+      ) {
+        next.splice(idx, 1);
+      }
+      next.push({
+        role: "assistant",
+        content: finalText,
+        citations: finalCitations,
+      });
+      placeholderIndexRef.current = -1;
+      return next;
+    });
+  } catch (err) {
+    console.error("❌ Error burbuja:", err);
+
+    // Limpiar placeholder y mostrar error amable
+    setMensajes((prev) => {
+      const next = [...prev];
+      const idx = placeholderIndexRef.current;
+      if (
+        idx >= 0 &&
+        idx < next.length &&
+        next[idx]?.role === "assistant" &&
+        next[idx]?.content === "Espera un momento…"
+      ) {
+        next.splice(idx, 1);
+      }
+      next.push({
+        role: "assistant",
+        content:
+          "Hubo un problema procesando tu consulta. Verifica tu conexión y vuelve a intentarlo.",
+      });
+      placeholderIndexRef.current = -1;
+      return next;
+    });
+  } finally {
+    setCargando(false);
   }
+}
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1029,6 +1167,21 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     pos.x !== null && pos.y !== null
       ? { left: pos.x, top: pos.y }
       : { bottom: 24, right: 24 };
+  // Latido automático: primer pulso a los 2.5s y luego cada 12s
+  const [pulse, setPulse] = useState(false);
+
+  // Cambia "marron" por "rojo" si quieres el latido rojo
+  const pulseColor = "marron"; // "marron" | "rojo"
+
+  useEffect(() => {
+    const doPulse = () => {
+      setPulse(true);
+      setTimeout(() => setPulse(false), 1400); // duración de la animación
+    };
+    const t0 = setTimeout(doPulse, 2500);
+    const id = setInterval(doPulse, 12000);
+    return () => { clearTimeout(t0); clearInterval(id); };
+  }, []);
 
   return (
     <>
@@ -1050,32 +1203,47 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
         setShowTtsCfg={setShowTtsCfg}
         setTtsPrefs={setTtsPrefs}
       />
-
-      {/* FAB (draggable con Pointer Events, móvil/desktop) */}
-      <div
-        className="fixed z-[9999] flex items-center justify-center rounded-full shadow-xl border bg-white select-none"
-        role="button"
-        aria-label="Abrir LitisBot"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        style={{
-          borderColor: "rgba(92,46,11,0.3)",
-          width: 60,
-          height: 60,
-          position: "fixed",
-          ...bubbleStyle,
-          touchAction: "none", // IMPORTANTÍSIMO para arrastre táctil sin scroll
-          cursor: "pointer",
-        }}
-      >
-        <img
-          src={litisLogo}
-          alt="LitisBot"
-          className="w-11 h-11 object-contain pointer-events-none"
-          draggable={false}
-        />
-      </div>
-    </>
-  );
+{/* FAB (draggable con Pointer Events, móvil/desktop) — oculto si el chat está abierto */}
+{!isOpen && (
+  <div
+    className={[
+      "fixed z-[9999] flex items-center justify-center rounded-full border bg-white select-none",
+      "shadow-xl hover:shadow-2xl transition-transform",
+      pulse ? (pulseColor === "rojo" ? "lb-pulse-red" : "lb-pulse-brown") : ""
+    ].join(" ")}
+    role="button"
+    aria-label="Abrir LitisBot"
+    onPointerDown={onPointerDown}
+    onPointerMove={onPointerMove}
+    onPointerUp={onPointerUp}
+    style={{
+      borderColor: "rgba(92,46,11,0.3)",
+      width: 64,
+      height: 64,
+      position: "fixed",
+      ...bubbleStyle,
+      touchAction: "none",
+      cursor: "pointer",
+    }}
+    title="Chatea con LitisBot"
+  >
+    <picture>
+      <source
+        type="image/webp"
+        srcSet={`${LITIS_HEADER_1X_WEBP} 1x, ${LITIS_HEADER_2X_WEBP} 2x`}
+      />
+      <img
+        src={LITIS_HEADER_1X_PNG}
+        srcSet={`${LITIS_HEADER_1X_PNG} 1x, ${LITIS_HEADER_2X_PNG} 2x`}
+        alt="LitisBot"
+        className="object-contain pointer-events-none"
+        style={{ width: 42, height: 42 }}
+        draggable={false}
+      />
+    </picture>
+  </div>
+)}
+</>
+);
 }
+

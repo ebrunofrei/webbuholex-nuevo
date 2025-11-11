@@ -1,11 +1,12 @@
 // backend/routes/ia.js
 // ============================================================
 // 🦉 BÚHOLEX | IA unificada (chat + test) — versión robusta prod
+// - Inyección de CITAS (normas / jurisprudencia / precedentes / doctrina)
 // - Validación y normalización de inputs
-// - Rate limit muy ligero (por IP/usuario)
+// - Rate limit ligero (IP/usuario)
 // - Timeouts/abort para provider
-// - Manejo de errores consistente y trazas mínimas
-// - Respeta el contrato actual del frontend
+// - Manejo de errores consistente
+// - Respeta el contrato actual del frontend (+ campo opcional: citations)
 // ============================================================
 
 import express from "express";
@@ -16,14 +17,18 @@ import {
   guardarHistorial,
 } from "../services/memoryService.js";
 
+// 🔎 Búsqueda normalizada de fuentes (sin HTTP, directo al servicio)
+import { researchSearch } from "../services/research/index.js";
+
 const router = express.Router();
 
 // ----------------------- Config (env) -----------------------
-const OPENAI_MODEL      = process.env.OPENAI_MODEL || "gpt-4o-mini";
-const IA_MAX_TOKENS     = Number(process.env.IA_MAX_TOKENS || 1400);
-const IA_TIMEOUT_MS     = Number(process.env.IA_TIMEOUT_MS || 20_000); // 20s
-const IA_RATE_LIMIT_IP  = Number(process.env.IA_RATE_LIMIT_IP || 30);   // por 5 min
-const IA_RATE_LIMIT_USER= Number(process.env.IA_RATE_LIMIT_USER || 60); // por 5 min
+const OPENAI_MODEL       = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const IA_MAX_TOKENS      = Number(process.env.IA_MAX_TOKENS || 1400);
+const IA_TIMEOUT_MS      = Number(process.env.IA_TIMEOUT_MS || 20_000); // 20s
+const IA_RATE_LIMIT_IP   = Number(process.env.IA_RATE_LIMIT_IP || 30);   // por 5 min
+const IA_RATE_LIMIT_USER = Number(process.env.IA_RATE_LIMIT_USER || 60); // por 5 min
+const IA_EXPECTS_CITATIONS_DEFAULT = String(process.env.IA_EXPECTS_CITATIONS_DEFAULT || "true") === "true";
 
 // ------------------ Materias / intención -------------------
 const materias = [
@@ -82,22 +87,26 @@ Eres LitisBot, asistente jurídico y documentalista profesional.
 - Si faltan datos, usa [CORCHETES] (p. ej. [NOMBRE], [DNI], [MONTO], [FECHA]).
 - Adapta al país base ${pais} salvo indicación distinta.
 - Cierra con: "Este es un borrador inicial que debe ser revisado o adaptado por un profesional antes de su presentación oficial."
+- Usa SOLO las fuentes proporcionadas cuando cites; si no hay fuentes, avisa expresamente.
 Salida: ${idioma}. Tono formal y claro.`.trim();
 
 const promptAnalisisJuridico = ({ idioma, pais }) => `
 Eres LitisBot, analista jurídico procesal.
 Analiza motivación, congruencia, razonabilidad y debido proceso; sugiere defensas/recursos sin prometer resultados.
+Cuando cites, usa EXCLUSIVAMENTE las fuentes proporcionadas.
 Estructura: 1) Resumen 2) Fortalezas 3) Debilidades/vicios 4) Argumentos 5) Riesgos.
 País base: ${pais}. Responde en ${idioma}.`.trim();
 
 const promptTraduccion = ({ idioma, pais }) => `
 Eres LitisBot, intérprete legal multilingüe.
 Traduce/explica el contenido legal manteniendo sentido jurídico; en lenguas originarias, registro digno y claro.
+No inventes citas: usa solo las proporcionadas si las hay.
 Contexto base: ${pais}. Responde en ${idioma}.`.trim();
 
 const promptGeneral = ({ idioma, pais }) => `
 Eres LitisBot, asesor legal práctico.
-Orienta con pasos concretos (plazos, entidad, qué pedir), riesgos y vías de defensa. Si es urgente, sugiere asistencia presencial.
+Orienta con pasos concretos (plazos, entidad, qué pedir), riesgos y vías de defensa.
+Si citas normas/jurisprudencia, usa ÚNICAMENTE las fuentes proporcionadas.
 País base: ${pais}. Responde en ${idioma}.`.trim();
 
 function buildSystemPrompt({ intencion, idioma, pais }) {
@@ -119,7 +128,22 @@ const normLocale = (v, d) => String(v || d).toString().slice(0, 10);
 const safeJSON = (res, code, payload) => {
   res.setHeader("Cache-Control", "no-store");
   return res.status(code).json(payload);
-};
+}
+
+// ------------------- Citations helpers ----------------------
+function guessTipoFromQuery(q) {
+  const s = (q || "").toLowerCase();
+  if (/(precedente|vinculante|tc|constitucional)/.test(s)) return "precedente";
+  if (/(casación|casacion|sentencia|expediente)/.test(s))  return "jurisprudencia";
+  if (/(ley|decreto|norma|reglamento|artículo|articulo)/.test(s)) return "norma";
+  if (/(doctrina|tratado|autor|scielo|revista)/.test(s))   return "doctrina";
+  return "general";
+}
+
+function stringifyCitations(citations = []) {
+  if (!citations.length) return "— (no se encontraron fuentes confiables)";
+  return citations.map((c, i) => `(${i + 1}) [${c.source}] ${c.title} — ${c.url}${c.date ? ` — ${c.date}` : ""}`).join("\n");
+}
 
 // ----------------------- Rate limiting ----------------------
 const windowMs = 5 * 60 * 1000; // 5 minutos
@@ -167,6 +191,7 @@ router.post("/chat", async (req, res) => {
       materia      = "general",
       historial    = [],
       userEmail    = "",
+      expectsCitations = IA_EXPECTS_CITATIONS_DEFAULT,
     } = req.body || {};
 
     const userPromptLimpio = limpiarPromptUsuario(prompt);
@@ -196,16 +221,35 @@ router.post("/chat", async (req, res) => {
           .map(h => ({ role: h.role, content: limpiarPromptUsuario(h.content) }))
       : [];
 
+    // 🔎 CITAS: búsqueda previa (sin bloquear si falla)
+    let citations = [];
+    if (expectsCitations) {
+      try {
+        const tipo = guessTipoFromQuery(userPromptLimpio);
+        citations = await researchSearch({ q: userPromptLimpio, tipo });
+      } catch (e) {
+        console.warn("⚠️ researchSearch falló:", e?.message || e);
+      }
+    }
+
+    // Prompt del usuario con fuentes inyectadas
+    const userPromptConFuentes =
+      `Consulta del usuario:\n${userPromptLimpio}\n\n` +
+      `Fuentes disponibles (úsalas para sustentar, no inventes):\n` +
+      `${stringifyCitations(citations)}\n\n` +
+      `Instrucciones de cita: cuando uses una fuente, referencia [n] al final del párrafo pertinente. ` +
+      `Cierra la respuesta con una sección "Citas usadas" listando (n) título — URL.`;
+
     const messages = [
       { role: "system", content: systemPrompt },
       ...historialPrevio,
       ...historialCliente,
-      { role: "user", content: userPromptLimpio },
+      { role: "user", content: userPromptConFuentes },
     ];
 
     console.log(
       chalk.cyanBright(
-        `📨 [IA] intent:${intencion} | mat:${materiaDetectada} | ${idiomaNorm} | ${paisNorm} | user:${usuarioId} | exp:${expedienteId}`
+        `📨 [IA] intent:${intencion} | mat:${materiaDetectada} | ${idiomaNorm} | ${paisNorm} | user:${usuarioId} | exp:${expedienteId} | cites:${citations.length}`
       )
     );
 
@@ -233,7 +277,7 @@ router.post("/chat", async (req, res) => {
       expedienteId,
       userPromptLimpio,
       respuesta,
-      { intencion, materiaDetectada, idioma: idiomaNorm, pais: paisNorm, modo, userEmail }
+      { intencion, materiaDetectada, idioma: idiomaNorm, pais: paisNorm, modo, userEmail, citationsCount: citations.length }
     ).catch(err => console.warn("⚠️ No se pudo guardar historial:", err?.message || err));
 
     // Sugerencias contextuales
@@ -266,6 +310,7 @@ router.post("/chat", async (req, res) => {
 
     console.log(chalk.greenBright(`✅ [IA] OK (${respuesta?.length || 0} chars) – ${intencion}`));
 
+    // 🔁 CONTRATO + citas (campo adicional no rompedor)
     return safeJSON(res, 200, {
       ok: true,
       respuesta,
@@ -275,6 +320,7 @@ router.post("/chat", async (req, res) => {
       idioma: idiomaNorm,
       pais: paisNorm,
       sugerencias,
+      citations, // <-- NUEVO: array [{title,url,source,date}]
     });
   } catch (err) {
     const status =

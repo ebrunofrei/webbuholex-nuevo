@@ -15,6 +15,11 @@ import { MdSend } from "react-icons/md";
 // IA / backend
 import { reproducirVoz, stopVoz } from "@/services/vozService.js"; // ← voz centralizada (parar + reproducir)
 import { enviarMensajeIA, pingIA } from "@/services/chatClient";
+import { buscarEnWeb } from "@/services/researchClient";
+import ChatCitations from "@/components/chat/ChatCitations.jsx";
+import ChatExportButtons from "@/components/chat/ChatExportButtons.jsx";
+import { sanitizeForTTS } from "@/utils/ttsSanitizer.js";
+
 
 // Herramientas
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
@@ -144,11 +149,14 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
     if (leyendo) return;
     setLeyendo(true);
     try {
-      const plain = toPlain(msg.content || "");
-      await reproducirVoz(plain, {
+      // Limpia Markdown/HTML, URLs y símbolos; genera SSML con pausas
+      const { plain, ssml } = sanitizeForTTS(msg.content || "");
+      await reproducirVoz(ssml, {
         voz: "es-ES-AlvaroNeural",
-        rate: 0,
+        rate: 0,          // ya puedes mapear a porcentaje si usas el mismo esquema del otro componente
         pitch: 0,
+        textType: "ssml", // si tu vozService soporta SSML
+        fallbackText: plain,
       });
     } catch (err) {
       console.error("Error TTS:", err);
@@ -158,9 +166,10 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
   }
 
   async function handleCopiar() {
-    const limpio = prepararTextoParaCopia(msg.content || "");
-    const ok = await copyToClipboard(limpio);
-    onCopy && onCopy(limpio, ok);
+    // Copia texto limpio, sin símbolos ni HTML
+    const { plain } = sanitizeForTTS(msg.content || "");
+    const ok = await copyToClipboard(plain);
+    onCopy && onCopy(plain, ok);
   }
 
   function handleGuardar() {
@@ -178,12 +187,26 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
       }}
     >
       {/* CONTENIDO MENSAJE */}
-      {!editando ? (
-        <div
-          className="leading-relaxed whitespace-pre-wrap break-words text-[16px]"
-          style={{ textAlign: "justify", wordBreak: "break-word" }}
-          dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.content) }}
-        />
+{!editando ? (
+  <div
+    role="article"
+    aria-label="Respuesta de LitisBot"
+    className="leading-relaxed whitespace-pre-wrap break-words text-[16px]"
+    style={{
+      textAlign: "justify",
+      textJustify: "inter-word",
+      lineHeight: 1.7,
+      letterSpacing: "0.01em",
+      wordBreak: "break-word",
+      overflowWrap: "anywhere",
+      hyphens: "auto",
+      WebkitHyphens: "auto",
+      MsHyphens: "auto",
+      // en navegadores que lo soporten, mejora el flujo de líneas
+      textWrap: "pretty",
+    }}
+    dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.content) }}
+  />
       ) : (
         <div className="flex flex-col gap-2 w-full">
           <textarea
@@ -191,31 +214,59 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
             style={{
               borderColor: "rgba(92,46,11,0.3)",
               color: "#5C2E0B",
+              backgroundColor: "#fff",
+              // el texto del editor también se ve cómodo
+              lineHeight: 1.6,
+              letterSpacing: "0.01em",
             }}
-            rows={4}
+            rows={6}
+            spellCheck={true}
+            autoCorrect="on"
+            autoCapitalize="sentences"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
+            placeholder="Edita el contenido generado por LitisBot…"
           />
           <div className="flex gap-4 text-[15px]">
             <button
+              type="button"
               className="font-semibold"
               style={{ color: "#0f5132" }}
               onClick={handleGuardar}
+              title="Guardar cambios"
             >
               Guardar
             </button>
             <button
+              type="button"
               style={{ color: "#842029" }}
               onClick={() => {
                 setEditando(false);
                 setEditValue(msg.content || "");
               }}
+              title="Cancelar edición"
             >
               Cancelar
             </button>
           </div>
         </div>
       )}
+       {Array.isArray(msg.citations) && msg.citations.length > 0 && (
+        <div className="mt-2">
+          <ChatCitations citations={msg.citations} />
+        </div>
+      )}
+
+      {/* Exportar solo si la respuesta fue OK (no errores) */}
+        {msg?.ok && (
+          <div className="mt-2">
+            <ChatExportButtons
+              title={buildTituloExportLB(msg)}
+              content={toPlainLB(msg.content || "")}
+              citations={msg.citations || []}
+            />
+          </div>
+        )}
 
       {/* ACCIONES */}
       {!editando && (
@@ -767,6 +818,36 @@ function ModalHerramientas({
     </div>
   );
 }
+    function toPlainLB(s = "") {
+      return String(s)
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]*>/g, "")
+        .replace(/[#*_>`~\-+]|!\[.*?\]\(.*?\)|\[.*?\]\(.*?\)/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+
+    function buildTituloExportLB(m) {
+      const base = (m?.meta?.intencion || "Informe LitisBot").replace(/_/g, " ");
+      const first = toPlainLB(m?.content || "").split("\n")[0].slice(0, 60);
+      return `${capitalizeLB(base)} - ${first || "respuesta"}`;
+    }
+
+    function capitalizeLB(s = "") {
+      return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    }
+
+    function toCitation(hit = {}) {
+  const url = hit.url || hit.link || "";
+  let source = "";
+  try { source = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+  return {
+    title: hit.title || "",
+    url,
+    source,
+    date: hit.date || null,
+  };
+}
 
 /* ============================================================
    🦉 Componente Principal: LitisBotChatBase
@@ -963,86 +1044,129 @@ export default function LitisBotChatBase({
       .map((m) => ({ role: m.role, content: m.content || "" }));
   }
 
-  // ====== PROCESADOR GENÉRICO ======
-  async function procesarConsulta(pregunta, construirPayload) {
-    const texto = (pregunta || "").trim();
-    if (!texto) {
-      setError("⚠️ Escribe una consulta antes de enviar.");
-      return;
-    }
-
-    setCargando(true);
-    setIsSending(true);
-    setError("");
-
-    // placeholder
-    setMensajes((prev) => [
-      ...prev,
-      { role: "assistant", content: "💬 Analizando tu consulta..." },
-    ]);
-
-    const controller = new AbortController();
-
-    try {
-      const payload = construirPayload(texto);
-      const resp = await enviarMensajeIA(payload, { signal: controller.signal });
-
-      const finalText =
-        (resp?.respuesta || resp?.text || resp?.message || "").trim() ||
-        "⚠️ No se recibió respuesta válida del servidor.";
-
-      const msgFinal = { role: "assistant", content: finalText };
-      saveMessage(casoActivo, msgFinal);
-
-      setMensajes((prev) => {
-        const copia = [...prev];
-        // sustituye el último (placeholder)
-        for (let i = copia.length - 1; i >= 0; i--) {
-          if (
-            copia[i].role === "assistant" &&
-            copia[i].content.includes("Analizando")
-          ) {
-            copia[i] = msgFinal;
-            return copia;
-          }
-        }
-        // si no encontró placeholder, añade
-        copia.push(msgFinal);
-        return copia;
-      });
-    } catch (err) {
-      console.error("❌ Error en procesarConsulta:", err);
-      let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
-      if (err?.name === "AbortError") msgError = "⏹️ Consulta cancelada.";
-      else if (err.message?.includes("Falta el prompt"))
-        msgError = "⚠️ La consulta no puede enviarse vacía.";
-      else if (err.message?.includes("429"))
-        msgError = "🚫 Límite de consultas por minuto alcanzado.";
-      else if (err.message?.includes("500"))
-        msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
-      else if (err.message?.includes("Failed to fetch"))
-        msgError = "🌐 No se pudo conectar al servidor.";
-
-      setMensajes((prev) => {
-        const copia = [...prev];
-        for (let i = copia.length - 1; i >= 0; i--) {
-          if (
-            copia[i].role === "assistant" &&
-            copia[i].content.includes("Analizando")
-          ) {
-            copia[i] = { role: "assistant", content: msgError };
-            return copia;
-          }
-        }
-        copia.push({ role: "assistant", content: msgError });
-        return copia;
-      });
-    } finally {
-      setCargando(false);
-      setIsSending(false);
-      setInput("");
-    }
+// ====== PROCESADOR GENÉRICO ======
+async function procesarConsulta(pregunta, construirPayload) {
+  const texto = (pregunta || "").trim();
+  if (!texto) {
+    setError("⚠️ Escribe una consulta antes de enviar.");
+    return;
   }
+
+  setCargando(true);
+  setIsSending(true);
+  setError("");
+
+  // placeholder para evitar parpadeos
+  setMensajes((prev) => [
+    ...prev,
+    { role: "assistant", content: "💬 Analizando tu consulta..." },
+  ]);
+
+  const controller = new AbortController();
+
+  // Normalizador local de resultados web → citas
+  const normalizeCitation = (hit = {}) => {
+    const url = hit.url || hit.link || "";
+    let source = "";
+    try { source = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+    return {
+      title: hit.title || "",
+      url,
+      source,
+      date: hit.date || null,
+    };
+  };
+
+  try {
+    // ⚠️ AQUÍ se construye el payload (antes era "payload" sin definir)
+    const req =
+      typeof construirPayload === "function"
+        ? construirPayload(texto)
+        : { prompt: texto };
+
+    const resp = await enviarMensajeIA(req, { signal: controller.signal });
+
+    const finalText =
+      (resp?.respuesta || resp?.text || resp?.message || "").trim() ||
+      "⚠️ No se recibió respuesta válida del servidor.";
+
+    // 1) ¿La IA ya trajo citas?
+    let finalCitations = Array.isArray(resp?.citations) ? resp.citations : [];
+
+    // 2) Si no hay citas, consultamos el motor web y las añadimos
+    if (!finalCitations.length) {
+      // Heurística: si el texto parece consulta jurídica con jurisprudencia, forzar tipo
+      const esJuris = /jurisprudenc|casaci|precedent|sentenci|expedient|tc\.gob|pj\.gob/i.test(texto);
+      const tipo = esJuris ? "jurisprudencia" : "general";
+      try {
+        const hits = await buscarEnWeb(texto, tipo); // ← llama /api/research/search
+        finalCitations = (hits || []).map(normalizeCitation);
+      } catch {
+        // silencioso: si la búsqueda web falla, no rompemos la respuesta
+      }
+    }
+
+    // marcamos el mensaje como "ok" para que SÍ muestre exportaciones
+    const msgFinal = {
+      role: "assistant",
+      content: finalText,
+      citations: finalCitations,
+      ok: true,
+    };
+
+    saveMessage(casoActivo, msgFinal);
+
+    setMensajes((prev) => {
+      const copia = [...prev];
+      // sustituye el placeholder "Analizando…"
+      for (let i = copia.length - 1; i >= 0; i--) {
+        if (
+          copia[i].role === "assistant" &&
+          String(copia[i].content || "").includes("Analizando")
+        ) {
+          copia[i] = msgFinal;
+          return copia;
+        }
+      }
+      copia.push(msgFinal);
+      return copia;
+    });
+  } catch (err) {
+    console.error("❌ Error en procesarConsulta:", err);
+    let msgError = "❌ Ocurrió un error inesperado al procesar tu consulta.";
+    if (err?.name === "AbortError") msgError = "⏹️ Consulta cancelada.";
+    else if (err.message?.includes("Falta el prompt"))
+      msgError = "⚠️ La consulta no puede enviarse vacía.";
+    else if (err.message?.includes("429"))
+      msgError = "🚫 Límite de consultas por minuto alcanzado.";
+    else if (err.message?.includes("500"))
+      msgError = "⚙️ Error interno del servidor. Intenta más tarde.";
+    else if (err.message?.includes("Failed to fetch"))
+      msgError = "🌐 No se pudo conectar al servidor.";
+
+    // marcamos como error para que NO muestre exportaciones
+    const msgFinalError = { role: "assistant", content: msgError, ok: false };
+
+    setMensajes((prev) => {
+      const copia = [...prev];
+      for (let i = copia.length - 1; i >= 0; i--) {
+        if (
+          copia[i].role === "assistant" &&
+          String(copia[i].content || "").includes("Analizando")
+        ) {
+          copia[i] = msgFinalError;
+          return copia;
+        }
+      }
+      copia.push(msgFinalError);
+      return copia;
+    });
+  } finally {
+    setCargando(false);
+    setIsSending(false);
+    setInput("");
+  }
+}
 
   // ====== INTENTOS IA SEGÚN CONTEXTO ======
   async function handleConsultaGeneral(pregunta) {
