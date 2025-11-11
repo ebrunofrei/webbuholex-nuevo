@@ -181,25 +181,6 @@ app.get("/api/research/health-inline", (_req, res) => {
 });
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));
 
-// Debug: listar rutas montadas
-function listRoutes(app) {
-  console.log("🛣  Rutas montadas:");
-  app._router.stack
-    .filter((l) => l.route || l.name === 'router')
-    .forEach((l) => {
-      if (l.route?.path) {
-        const methods = Object.keys(l.route.methods).join(",").toUpperCase();
-        console.log(`  ${methods.padEnd(6)} ${l.route.path}`);
-      } else if (l.name === 'router' && l.regexp) {
-        // Sub-routers (como /api/research)
-        const mountPath = l.regexp.toString().replace(/^\/\\\^\\\/|\\\/\?\(\?=\\\/\|\$\)\/i$/g, "/");
-        console.log(`  <router> ${mountPath}`);
-      }
-    });
-}
-
-listRoutes(app);
-
 // ============================================================
 // 🕒 Cargas opcionales SOLO en desarrollo/local
 // ============================================================
