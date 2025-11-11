@@ -176,6 +176,9 @@ app.use("/api/research", researchRoutes);
 app.use("/api/export", exportRoutes);
 
 // 404 JSON solo /api
+app.get("/api/research/health-inline", (_req, res) => {
+  res.json({ ok: true, inline: true });
+});
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));
 
 // ============================================================

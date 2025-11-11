@@ -12,6 +12,7 @@
     "backend": "nodemon server.js",
     "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
     "start": "node server.js",
+    "start:prod": "NODE_ENV=production node server.js",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src/features/noticias/**/*.{js,jsx} src/components/ui/ReaderModal.jsx src/services/noticiasClientService.js src/services/noticiasContenido.js src/services/vozService.js",
