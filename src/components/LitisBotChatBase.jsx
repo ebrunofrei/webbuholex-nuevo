@@ -15,7 +15,7 @@ import { MdSend } from "react-icons/md";
 // IA / backend
 import { reproducirVoz, stopVoz } from "@/services/vozService.js"; // ← voz centralizada (parar + reproducir)
 import { enviarMensajeIA } from "@/services/chatClient.js";
-
+import { buscarJurisprudencia } from "@/services/researchClient.js";
 // Herramientas
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
 import HerramientaLiquidacionLaboral from "./Herramientas/HerramientaLiquidacionLaboral";
@@ -1070,16 +1070,102 @@ export default function LitisBotChatBase({
   }
 
   async function handleConsultaInvestigacion(pregunta) {
-    await procesarConsulta(pregunta, (texto) => ({
-      prompt: texto,
-      historial: obtenerHistorial(),
-      usuarioId: user?.uid || "invitado",
-      userEmail: user?.email || "",
-      modo: "investigacion",
-      materia: "investigacion",
-      idioma: "es",
-    }));
+  const texto = (pregunta || "").trim();
+  if (!texto) {
+    setError("⚠️ Escribe una consulta antes de enviar.");
+    return;
   }
+
+  setCargando(true);
+  setIsSending(true);
+  setError("");
+
+  // placeholder visible
+  setMensajes((prev) => [
+    ...prev,
+    { role: "assistant", content: "🔎 Buscando jurisprudencia y material relevante…" },
+  ]);
+
+  try {
+    const data = await buscarJurisprudencia({ q: texto, num: 3, lang: "es" });
+
+    // Estructuras tolerantes: usa lo que haya
+    const answer = data?.answer || data?.respuesta || "";
+    const items  = data?.items || data?.results || data?.citas || [];
+
+    // Render HTML compacto con citas
+    const htmlFuentes = Array.isArray(items) && items.length
+      ? `<hr/><div style="margin-top:8px">
+           <b>📚 Fuentes:</b>
+           <ol style="margin:6px 0 0 18px">
+             ${items
+               .map((it) => {
+                 const t = (it.title || it.titulo || it.name || "Recurso").toString();
+                 const l = (it.link || it.url || "").toString();
+                 const s = (it.snippet || it.descripcion || it.extract || "").toString();
+                 return `<li style="margin-bottom:6px">
+                          <a href="${l}" target="_blank" rel="noopener noreferrer">${t}</a>
+                          ${s ? `<div style="color:#555">${s}</div>` : ""}
+                         </li>`;
+               })
+               .join("")}
+           </ol>
+         </div>`
+      : "";
+
+    const htmlFinal =
+      (answer && sanitizeHtml(answer)) ||
+      "No se encontró una síntesis directa. Revisa las fuentes sugeridas más abajo.";
+
+
+    const msgFinal = {
+      role: "assistant",
+      content: `${htmlFinal}${htmlFuentes}`,
+    };
+
+    saveMessage(casoActivo, msgFinal);
+    setMensajes((prev) => {
+      const copia = [...prev];
+      for (let i = copia.length - 1; i >= 0; i--) {
+        if (
+          copia[i].role === "assistant" &&
+          /Buscando jurisprudencia/i.test(copia[i].content)
+        ) {
+          copia[i] = msgFinal;
+          return copia;
+        }
+      }
+      copia.push(msgFinal);
+      return copia;
+    });
+  } catch (err) {
+    console.error("❌ Research error:", err);
+    const msgErr = {
+      role: "assistant",
+      content:
+        "❌ No pude cargar la jurisprudencia ahora mismo. Inténtalo de nuevo en unos minutos.",
+    };
+    saveMessage(casoActivo, msgErr);
+    setMensajes((prev) => {
+      const copia = [...prev];
+      for (let i = copia.length - 1; i >= 0; i--) {
+        if (
+          copia[i].role === "assistant" &&
+          /Buscando jurisprudencia/i.test(copia[i].content)
+        ) {
+          copia[i] = msgErr;
+          return copia;
+        }
+      }
+      copia.push(msgErr);
+      return copia;
+    });
+  } finally {
+    setCargando(false);
+    setIsSending(false);
+    setInput("");
+  }
+}
 
   // ====== ENVÍO MENSAJE DEL USUARIO ======
   async function handleSend(e) {
