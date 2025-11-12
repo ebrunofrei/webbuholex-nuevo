@@ -14,11 +14,44 @@
     <meta name="color-scheme" content="light" />
     <meta name="robots" content="index,follow" />
 
-    <!-- Favicons / PWA (ajusta rutas si ya tienes manifest e iconos) -->
+    <!-- Favicons / PWA -->
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- ✅ API base declarada para apiBase.js (Vite sustituye %VITE_*%) -->
+    <!-- En producción: VITE_CHAT_API_BASE_URL = https://api.buholex.com/api -->
+    <!-- En dev: p.ej. http://127.0.0.1:3000/api (si no usas proxy) -->
+    <meta name="api-base" content="%VITE_CHAT_API_BASE_URL%" />
+
+    <!-- Fallback duro por si la env viene vacía pero el dominio es buholex.com -->
+    <script>
+      (function () {
+        try {
+          var m = document.querySelector('meta[name="api-base"]');
+          var base = (m && m.content || "").trim();
+
+          if (!base && /\.(^|\.)(buholex\.com)$/i.test(location.hostname)) {
+            base = "https://api.buholex.com/api";
+            if (m) m.content = base;
+            else {
+              m = document.createElement("meta");
+              m.name = "api-base";
+              m.content = base;
+              document.head.appendChild(m);
+            }
+          }
+
+          // Exponer también como global para apiBase.js (fromGlobal)
+          if (base) {
+            window.__API_BASE__ = base;
+          }
+        } catch (e) {
+          // en el peor caso, apiBase.js caerá a su fallback origin/api
+        }
+      })();
+    </script>
 
     <!-- Open Graph / Twitter -->
     <meta property="og:title" content="BúhoLex | Soluciones Jurídicas" />
@@ -42,7 +75,7 @@
 
     <title>BúhoLex | Soluciones Jurídicas</title>
 
-    <!-- CSP ligera (relaja si embebes externos con inline scripts) -->
+    <!-- CSP ligera (comentada por ahora) -->
     <!--
     <meta
       http-equiv="Content-Security-Policy"
@@ -62,7 +95,7 @@
       Necesitas habilitar JavaScript para usar BúhoLex.
     </noscript>
 
-    <!-- Entrada Vite (una sola) -->
+    <!-- Entrada Vite -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
