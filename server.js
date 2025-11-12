@@ -27,8 +27,8 @@ import noticiasGuardadasRoutes from "./backend/routes/noticiasGuardadas.js";
 import traducirRoutes from "./backend/routes/traducir.js";
 import vozRoutes from "./backend/routes/voz.js";
 import newsLiveRouter from "./backend/routes/news-live.js";
-import mediaMetaRoute from "./backend/routes/media.js";
 import mediaRoutes from "./backend/routes/media.js";
+import researchRoutes from "./backend/routes/research.js";
 
 // ============================================================
 // ⚙️ Carga temprana del entorno (.env)
@@ -170,6 +170,7 @@ app.use("/api/notificaciones", notificacionesRoutes);
 app.use("/api/traducir", traducirRoutes);
 app.use("/api/voz", vozRoutes);
 app.use("/api/media", mediaRoutes);
+app.use("/api/research", researchRoutes);
 
 // 404 JSON solo /api
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));
