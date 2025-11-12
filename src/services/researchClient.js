@@ -1,17 +1,41 @@
 // src/services/researchClient.js
-import { API_BASE } from "./apiBase";
+// ============================================================
+// 🦉 BúhoLex | Cliente de Búsqueda (Google CSE vía backend)
+// - Usa joinApi("/research/search") para no duplicar /api
+// - apiFetch() hereda timeout, retries y AbortController
+// ============================================================
 
-export async function buscarJurisprudencia({ q, num = 3, lang = "es" }) {
-  const u = new URL(`${API_BASE}/api/research/search`);
-  u.searchParams.set("q", q);
-  u.searchParams.set("num", String(num));
-  u.searchParams.set("lr", lang);
+import { joinApi, apiFetch } from "./apiBase";
 
-  const r = await fetch(u.toString(), { method: "GET", credentials: "omit" });
-  if (!r.ok) {
-    // Propaga un error legible para tu UI
-    const txt = await r.text().catch(() => "");
-    throw new Error(`Research ${r.status}: ${txt || r.statusText}`);
+/**
+ * Busca jurisprudencia/noticias en el backend de research.
+ * @param {Object} params
+ * @param {string} params.q      - Consulta de búsqueda (obligatoria)
+ * @param {number} [params.num]  - Máximo de resultados (default 3)
+ * @param {string} [params.lang] - Código de idioma/lr (default "es")
+ * @param {number} [params.start]- Paginación CSE (1, 11, 21, ...)
+ */
+export async function buscarJurisprudencia({ q, num = 3, lang = "es", start } = {}) {
+  if (!q || !String(q).trim()) {
+    throw new Error("Falta el parámetro q (consulta).");
   }
-  return r.json();
+
+  const url = new URL(joinApi("/research/search"));
+  url.searchParams.set("q", String(q));
+  url.searchParams.set("num", String(num));
+  if (lang)  url.searchParams.set("lr", String(lang));
+  if (start) url.searchParams.set("start", String(start));
+
+  const res = await apiFetch(url.toString(), {
+    method: "GET",
+    // CORS simple; no cookies
+    credentials: "omit",
+    headers: { "accept": "application/json" },
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Research ${res.status}: ${txt || res.statusText}`);
+  }
+  return res.json();
 }
