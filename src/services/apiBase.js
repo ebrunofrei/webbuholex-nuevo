@@ -1,47 +1,57 @@
-// src/services/apiBase.js
 // ============================================================
-// 🦉 BúhoLex | Fuente única y blindada de API base (frontend)
+// 🦉 BúhoLex | Fuente única y blindada de API base (frontend/SSR)
+// Prioridad de orígenes:
+// 1) VITE_CHAT_API_BASE_URL
+// 2) VITE_API_BASE_URL
+// 3) VITE_API_BASE
+// 4) globalThis.__API_BASE__
+// 5) <meta name="api-base" content="...">
+// 6) Fallback: origin + /api  |  127.0.0.1:3000/api (dev)  |  "/api"
 // ============================================================
 
-/* ------------------------- Entorno y helpers base ------------------------- */
+/* --------------------------------- Entorno -------------------------------- */
 const G = typeof globalThis !== "undefined" ? globalThis : {};
 const IS_BROWSER = typeof window !== "undefined" && !!window.location;
-const IS_SSR = !!(import.meta?.env?.SSR);
 const HAS_PROCESS = typeof process !== "undefined" && !!process.env;
-const NODE_ENV = (
-  import.meta?.env?.MODE ||
+
+const MODE = (
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.MODE) ||
   (HAS_PROCESS ? process.env.NODE_ENV : "") ||
   "production"
 ).toLowerCase();
 
+/* -------------------------------- Helpers --------------------------------- */
 function safeOrigin() {
-  if (IS_BROWSER && window.location?.origin) return window.location.origin;       // Browser
-  if (typeof self !== "undefined" && self.location?.origin) return self.location.origin; // SW/WebWorker
-  return ""; // SSR
+  try {
+    if (IS_BROWSER && window.location?.origin) return window.location.origin;
+    if (typeof self !== "undefined" && self.location?.origin) return self.location.origin; // SW/Worker
+  } catch {}
+  return "";
 }
 
 function normalizeBase(input) {
   if (!input) return "";
   let base = String(input).trim();
 
-  // Protocol-relative ("//host") ⇒ añade protocolo
-  if (/^\/\//.test(base)) {
-    const proto = (IS_BROWSER ? window.location?.protocol : "https:") || "https:";
+  // "//host" ⇒ añade protocolo del contexto (o https:)
+  if (base.startsWith("//")) {
+    const proto = (IS_BROWSER && window.location?.protocol) ? window.location.protocol : "https:";
     base = `${proto}${base}`;
   }
 
-  base = base.replace(/\/+$/, "");                // quita barras finales
-  base = base.replace(/\/api(?:\/api)+$/i, "/api"); // compacta /api/api
+  // quita barras finales
+  base = base.replace(/\/+$/, "");
+  // compacta /api/api
+  base = base.replace(/\/api(?:\/api)+$/i, "/api");
+
   return base;
 }
 
-function isLocalHostLike(url) {
+function isLocalHostLike(urlStr) {
   try {
-    const u = new URL(url);
+    const u = new URL(urlStr);
     return u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]";
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 function isProdOrigin() {
@@ -49,65 +59,147 @@ function isProdOrigin() {
   return !!o && !/localhost|127\.0\.0\.1|\[::1\]/i.test(o);
 }
 
-/* -------------------------- Resolución de la base ------------------------- */
-// 1) Env (build/runtime) — soporta varias claves
+export function isAbsoluteHttp(s = "") {
+  return /^https?:\/\//i.test(String(s));
+}
+export function stripTrailingSlash(s = "") {
+  return String(s).replace(/\/+$/, "");
+}
+export function toQuery(obj = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj)) {
+    if (v == null) continue;
+    if (Array.isArray(v)) v.forEach(x => q.append(k, String(x)));
+    else q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+/* ---------------------------- Resolución de base --------------------------- */
+// 1) Env (añadimos CHAT primero)
+const ENV = (typeof import.meta !== "undefined" && import.meta.env) ? import.meta.env : {};
 const fromEnv =
-  normalizeBase(import.meta?.env?.VITE_API_BASE_URL) ||
-  normalizeBase(import.meta?.env?.VITE_API_BASE) ||
+  normalizeBase(ENV.VITE_CHAT_API_BASE_URL) ||
+  normalizeBase(ENV.VITE_API_BASE_URL) ||
+  normalizeBase(ENV.VITE_API_BASE) ||
   normalizeBase(HAS_PROCESS ? process.env.API_BASE_URL : "");
 
-// 2) Global override (window.__API_BASE__)
+// 2) Global override (inyectado en runtime)
 const fromGlobal = normalizeBase(G.__API_BASE__);
 
 // 3) <meta name="api-base" content="https://api.buholex.com">
 let fromMeta = "";
 try {
   if (IS_BROWSER) {
-    const c = document.querySelector('meta[name="api-base"]')?.content;
-    fromMeta = normalizeBase(c || "");
+    const c = document.querySelector('meta[name="api-base"]')?.content || "";
+    fromMeta = normalizeBase(c);
   }
-} catch { /* noop */ }
+} catch {}
 
 // 4) Fallback coherente
 const origin = safeOrigin();
 const fallback = origin
-  ? normalizeBase(`${origin}/api`) // rewrites del host actual
-  : normalizeBase(NODE_ENV === "development" ? "http://127.0.0.1:3000/api" : "/api");
+  ? normalizeBase(`${origin}/api`)
+  : normalizeBase(MODE === "development" ? "http://127.0.0.1:3000/api" : "/api");
 
-// Prioridad final
-export const API_BASE = normalizeBase(fromEnv || fromGlobal || fromMeta || fallback);
+// Resuelto
+const picked = fromEnv || fromGlobal || fromMeta || fallback;
 
-/* ------------------------------- Utilidades ------------------------------- */
-/** Une la base con un path, evitando /api/api y barras dobles. */
-export function joinApi(path = "") {
-  const base = String(API_BASE || "").replace(/\/+$/, "");
+export const API_BASE = normalizeBase(picked);
+export const API_BASE_SOURCE = fromEnv ? "env" : fromGlobal ? "global" : fromMeta ? "meta" : "fallback";
+
+/* ------------------------------- join / fetch ------------------------------ */
+export function joinApi(path = "", baseOverride) {
+  if (isAbsoluteHttp(path)) return path;
+
+  const base = stripTrailingSlash(baseOverride || API_BASE);
   let p = String(path || "").trim();
-
-  // URL absoluta → respeta
-  if (/^https?:\/\//i.test(p)) return p;
-
   if (!p.startsWith("/")) p = `/${p}`;
+
+  // evita /api/api si base ya termina en /api
   if (/\/api$/i.test(base) && /^\/api(\/|$)/i.test(p)) {
     p = p.replace(/^\/api/i, "") || "/";
   }
+
+  // compacta barras dobles (sin tocar "http://")
   return `${base}${p}`.replace(/([^:]\/)\/+/g, "$1");
 }
 
-/** fetch que acepta path relativo (lo pasa por joinApi). */
-export function apiFetch(input, init) {
-  const url = typeof input === "string" ? joinApi(input) : input;
-  return fetch(url, init);
-}
-
-// Alias conveniente
 export const buildUrl = joinApi;
 
-/* --------------------------- Aviso (una sola vez) ------------------------- */
+/**
+ * fetch con azúcar:
+ * - input relativo → pasa por joinApi()
+ * - timeout con AbortController (respeta signal externa)
+ * - reintentos (GET/HEAD por defecto) ante 429/5xx
+ * - override de base por llamada (init.base)
+ */
+export async function apiFetch(input, init = {}) {
+  const {
+    timeoutMs = 15_000,
+    retries = 0,
+    retryNonIdempotent = false,
+    base,
+    signal: userSignal,
+    ...rest
+  } = init;
+
+  const method = String((rest.method || "GET")).toUpperCase();
+  const allowRetry = retryNonIdempotent || method === "GET" || method === "HEAD";
+  const url = (typeof input === "string") ? joinApi(input, base) : input;
+
+  // Señal compuesta con timeout (DOMException puede no existir en algunos runtimes)
+  const controller = new AbortController();
+  const timeoutErr = (() => {
+    try { return new DOMException("Timeout", "AbortError"); }
+    catch { return Object.assign(new Error("Timeout"), { name: "AbortError" }); }
+  })();
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(timeoutErr), timeoutMs) : null;
+
+  if (userSignal) {
+    if (userSignal.aborted) controller.abort(userSignal.reason);
+    userSignal.addEventListener("abort", () => controller.abort(userSignal.reason), { once: true });
+  }
+
+  const doOnce = () => (G.fetch || fetch)(url, { ...rest, method, signal: controller.signal });
+
+  let attempt = 0;
+  try {
+    // bucle de reintentos
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        const res = await doOnce();
+        if (!res.ok && allowRetry && attempt < retries && shouldRetryStatus(res.status)) {
+          await delay(backoff(attempt++));
+          continue;
+        }
+        return res;
+      } catch (err) {
+        const aborted = (err && (err.name === "AbortError" || err.code === "ABORT_ERR"));
+        if (!aborted && allowRetry && attempt < retries) {
+          await delay(backoff(attempt++));
+          continue;
+        }
+        throw err;
+      }
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function shouldRetryStatus(status) {
+  return status === 429 || (status >= 500 && status < 600);
+}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+function backoff(i) { return Math.min(1000 * 2 ** i, 8000); }
+
+/* ------------------------------- Warnings --------------------------------- */
 let __warned = false;
 if (!__warned && isProdOrigin() && isLocalHostLike(API_BASE)) {
   __warned = true;
   // eslint-disable-next-line no-console
-  console.warn("[BúhoLex] API_BASE apunta a loopback en producción:", API_BASE);
+  console.warn("[BúhoLex] ⚠ API_BASE apunta a loopback en producción:", API_BASE, `(source=${API_BASE_SOURCE})`);
 }
-
-// 🚫 Sin export default (obligamos imports nombrados)
