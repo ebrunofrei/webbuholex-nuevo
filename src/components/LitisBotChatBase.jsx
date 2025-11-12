@@ -1212,6 +1212,11 @@ export default function LitisBotChatBase({
 
     // detección de materia
     const textoLower = pregunta.toLowerCase();
+    const gatillosInvestigacion = /(jurisprudenc|casaci|precedent|ejecutori|tribunal constitucional|tc|r\.n\.|exp\.)/i;
+    if (gatillosInvestigacion.test(textoLower)) {
+      await handleConsultaInvestigacion(pregunta);
+      return;
+    }
     const materias = {
       civil:
         /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
