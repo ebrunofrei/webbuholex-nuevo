@@ -1,79 +1,89 @@
 // backend/routes/research.js
 import express from "express";
+import fetch from "node-fetch";
 
 const router = express.Router();
 
-// GET /api/research/health
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || "";
+const GOOGLE_CSE_ID  = process.env.GOOGLE_CSE_ID  || "";
+const ENABLE_RESEARCH = String(process.env.ENABLE_RESEARCH || "").toLowerCase() === "true";
+
+// ---------- /api/research/health
 router.get("/health", (_req, res) => {
-  const hasKey = !!process.env.GOOGLE_API_KEY;
-  const hasCx  = !!process.env.GOOGLE_CSE_ID;
-  res.json({
-    ok: hasKey && hasCx,
-    msg: hasKey && hasCx ? "ready" : "missing GOOGLE_API_KEY / GOOGLE_CSE_ID",
-  });
+  if (!ENABLE_RESEARCH) {
+    return res.status(200).json({ ok: true, msg: "ready (disabled by flag)" });
+  }
+  if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
+    return res.status(500).json({
+      ok: false,
+      msg: "missing GOOGLE_API_KEY / GOOGLE_CSE_ID",
+    });
+  }
+  return res.status(200).json({ ok: true, msg: "ready" });
 });
 
-// GET /api/research/search?q=...&num=3&start=1
+// ---------- /api/research/search?q=...&num=3
 router.get("/search", async (req, res) => {
   try {
-    const qRaw = String(req.query.q || "").trim();
-    if (!qRaw) return res.status(400).json({ ok: false, error: "q requerido" });
-
-    const num  = Math.min(Math.max(parseInt(req.query.num || "5", 10) || 5, 1), 10);
-    const start = Math.max(parseInt(req.query.start || "1", 10) || 1, 1);
-
-    const key = process.env.GOOGLE_API_KEY;
-    const cx  = process.env.GOOGLE_CSE_ID;
-    if (!key || !cx) {
-      return res.status(500).json({ ok: false, error: "missing GOOGLE_API_KEY / GOOGLE_CSE_ID" });
+    if (!ENABLE_RESEARCH) {
+      return res.status(403).json({ ok: false, error: "research_disabled" });
+    }
+    if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
+      return res.status(500).json({ ok: false, error: "missing_keys" });
     }
 
+    const q = String(req.query.q || "").trim();
+    const numRaw = parseInt(String(req.query.num || "5"), 10);
+    const num = Math.min(Math.max(numRaw || 5, 1), 10); // 1..10
+
+    if (!q) {
+      return res.status(400).json({ ok: false, error: "q_required" });
+    }
+
+    // Construimos URL segura
     const params = new URLSearchParams({
-      key, cx,
-      q: qRaw,
+      key: GOOGLE_API_KEY,
+      cx: GOOGLE_CSE_ID,
+      q,
       num: String(num),
-      start: String(start),
+      lr: "lang_es",         // sesgo a español
       safe: "off",
-      hl: "es",
-      lr: "lang_es",
-      gl: "pe"
+      // fields para respuesta compacta (opcional):
+      // fields: "searchInformation(totalResults),items(title,link,snippet,pagemap(cse_image,cse_thumbnail,metatags))",
     });
 
-    const url = `https://customsearch.googleapis.com/customsearch/v1?${params.toString()}`;
-    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    const url = `https://www.googleapis.com/customsearch/v1?${params.toString()}`;
 
-    // Intenta parsear JSON siempre
-    const data = await r.json().catch(() => ({}));
+    const gx = await fetch(url, { method: "GET" });
+    const ctype = gx.headers.get("content-type") || "";
+    const isJson = ctype.includes("application/json");
 
-    if (!r.ok) {
-      const message = data?.error?.message || JSON.stringify(data) || `HTTP ${r.status}`;
-      return res.status(r.status).json({ ok: false, error: message });
+    if (!gx.ok) {
+      const raw = isJson ? await gx.json().catch(() => ({})) : await gx.text().catch(() => "");
+      // Propagamos el error de Google tal cual para depurar
+      return res.status(gx.status).json({ ok: false, error: raw || `google_http_${gx.status}` });
     }
 
-    // Mapea a un formato limpio
+    const data = await gx.json();
+    // Normalizamos un poco
     const items = (data.items || []).map((it) => ({
       title: it.title,
-      snippet: it.snippet,
       link: it.link,
-      image:
-        it.pagemap?.cse_image?.[0]?.src ||
+      snippet: it.snippet,
+      thumb:
         it.pagemap?.cse_thumbnail?.[0]?.src ||
+        it.pagemap?.cse_image?.[0]?.src ||
+        it.pagemap?.metatags?.[0]?.["og:image"] ||
         null,
-      site: new URL(it.link).hostname
+      source:
+        it.pagemap?.metatags?.[0]?.["og:site_name"] ||
+        (new URL(it.link).hostname.replace(/^www\./, "")),
     }));
 
-    res.json({
-      ok: true,
-      q: qRaw,
-      count: items.length,
-      items,
-      meta: {
-        searchTime: data.searchInformation?.searchTime,
-        totalResults: data.searchInformation?.totalResults
-      }
-    });
+    return res.json({ ok: true, q, count: items.length, items });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message || "internal error" });
+    console.error("[research/search] error:", err);
+    return res.status(500).json({ ok: false, error: "internal_error" });
   }
 });
 
