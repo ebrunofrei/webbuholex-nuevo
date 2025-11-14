@@ -778,6 +778,8 @@ export default function LitisBotChatBase({
   showModal,
   setShowModal,
   expedientes = [],
+  jurisSeleccionada = null,
+  onClearJuris,
 }) {
   // ====== ESTADOS ======
   const [adjuntos, setAdjuntos] = useState(() => getFiles(casoActivo) || []);
@@ -1044,30 +1046,48 @@ export default function LitisBotChatBase({
     }
   }
 
-  // ====== INTENTOS IA SEGÚN CONTEXTO ======
-  async function handleConsultaGeneral(pregunta) {
-    await procesarConsulta(pregunta, (texto) => ({
-      prompt: texto,
-      historial: obtenerHistorial(),
-      usuarioId: user?.uid || "invitado",
-      userEmail: user?.email || "",
-      modo: "general",
-      materia: "general",
-      idioma: "es",
-    }));
-  }
+    // ====== INTENTOS IA SEGÚN CONTEXTO ======
+    async function handleConsultaGeneral(pregunta) {
+      await procesarConsulta(pregunta, (texto) => {
+        const payload = {
+          prompt: texto,
+          historial: obtenerHistorial(),
+          usuarioId: user?.uid || "invitado",
+          userEmail: user?.email || "",
+          modo: "general",
+          materia: "general",
+          idioma: "es",
+        };
 
-  async function handleConsultaLegal({ mensaje, materia = "general" }) {
-    await procesarConsulta(mensaje, (texto) => ({
-      prompt: texto,
-      historial: obtenerHistorial(),
-      usuarioId: user?.uid || "invitado",
-      userEmail: user?.email || "",
-      modo: "juridico",
-      materia,
-      idioma: "es",
-    }));
-  }
+        // 👇 Si hay jurisprudencia seleccionada, se envía su ID al backend
+        if (jurisSeleccionada?._id) {
+          payload.jurisprudenciaId = jurisSeleccionada._id;
+        }
+
+        return payload;
+      });
+    }
+
+    async function handleConsultaLegal({ mensaje, materia = "general" }) {
+      await procesarConsulta(mensaje, (texto) => {
+        const payload = {
+          prompt: texto,
+          historial: obtenerHistorial(),
+          usuarioId: user?.uid || "invitado",
+          userEmail: user?.email || "",
+          modo: "juridico",
+          materia,
+          idioma: "es",
+        };
+
+        // 👇 Igual: manda la sentencia activa si existe
+        if (jurisSeleccionada?._id) {
+          payload.jurisprudenciaId = jurisSeleccionada._id;
+        }
+
+        return payload;
+      });
+    }
 
   async function handleConsultaInvestigacion(pregunta) {
   const texto = (pregunta || "").trim();

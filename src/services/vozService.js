@@ -20,7 +20,6 @@ let _lastOpts = null;           // últimas opciones normalizadas ({voz, rate, p
 let _repeatRemaining = 0;       // repeticiones pendientes (x veces)
 let _loopEnabled = false;       // bucle infinito del último
 let _hiddenPaused = false;      // se pausó por visibilitychange
-let _isUserStopped = false;     // el usuario detuvo explícitamente
 let _playInFlight = false;      // guardrail para evitar triggers simultáneos
 
 /* =========================
@@ -94,11 +93,6 @@ function getAudio() {
 
 /** Qué hacer al terminar/error de audio */
 async function handleEnded() {
-  // libera objectURL si fue POST (siendo prudentes)
-  try {
-    // nada que hacer aquí explícitamente; la release se maneja al hacer stop/replay
-  } catch {}
-
   if (_isUserStopped) return; // usuario detuvo; no continuar
   if (_muted) return;         // en silencio global; no continuar
 
@@ -126,24 +120,17 @@ async function handleEnded() {
 /* =========================
  *  Visibility handling
  * ========================= */
-if (IS_BROWSER && !globalThis.__buholex_voice_visibility_wired__) {
-  globalThis.__buholex_voice_visibility_wired__ = true;
-  document.addEventListener("visibilitychange", () => {
-    const a = getAudio();
-    if (document.hidden) {
-      if (!a.paused && !_isUserStopped) {
+  if (document.hidden) {
+      if (!a.paused) {
         a.pause();
         _hiddenPaused = true;
       }
     } else {
-      // reanuda solo si quedó pausado por ocultamiento y no está muteado
-      if (_hiddenPaused && !_muted && !_isUserStopped) {
+      if (_hiddenPaused && !_muted) {
         a.play().catch(() => {});
       }
-      _hiddenPaused = false;
-    }
-  });
-}
+    _hiddenPaused = false;
+  }
 
 /* =========================
  *  API pública
@@ -161,29 +148,32 @@ export async function ttsHealth({ signal } = {}) {
 export function stopVoz() {
   const a = getAudio();
   try {
-    _isUserStopped = true;       // marca que fue decisión del usuario
     _repeatRemaining = 0;
     _loopEnabled = false;
     a.pause();
     a.src = "";                  // libera stream / url
     a.removeAttribute("src");
     a.load?.();
-  } catch {}
+  } catch {
+    // silencioso
+  }
 }
 
-/** Pausa (sin resetear estado). ResumeVoz puede continuar. */
+/** Pausa (sin resetear estado). resumeVoz puede continuar. */
 export function pauseVoz() {
   const a = getAudio();
   try {
     a.pause();
-  } catch {}
+  } catch {
+    // silencioso
+  }
 }
 
 /** Reanuda si hay algo cargado y no está muteado ni detenido por usuario */
 export async function resumeVoz() {
-  if (_muted || _isUserStopped) return;
+  if (_muted) return;
   const a = getAudio();
-  if (!a.src) return;
+  if (!a.src) return; // si se llamó stopVoz() no hay nada que reanudar
   try {
     await a.play();
   } catch {}
@@ -281,18 +271,16 @@ export async function loopLast(enable = true) {
  *  Internals de reproducción
  * ========================= */
 async function _play(texto, opts, interrupt = true, signal) {
-  if (_playInFlight) return; // guarda simple vs doble click
+  if (_playInFlight) return; // guardrail simple vs doble click rápido
   _playInFlight = true;
   try {
     if (interrupt) {
-      // el usuario está ordenando (clic), entonces desbloquea futuras reanudaciones
-      _isUserStopped = false;
       stopVoz();
     }
 
     const a = getAudio();
 
-    // 1) Intento GET (streaming)
+    // 1) Intento GET (streaming directo)
     try {
       const qs = new URLSearchParams({
         say: texto,
@@ -334,7 +322,11 @@ async function _play(texto, opts, interrupt = true, signal) {
       a.src = objectURL;
 
       a.onended = () => {
-        try { if (objectURL) URL.revokeObjectURL(objectURL); } catch {}
+        try {
+          if (objectURL) URL.revokeObjectURL(objectURL);
+        } catch {
+          // silencioso
+        }
         objectURL = null;
         handleEnded();
       };
@@ -343,8 +335,13 @@ async function _play(texto, opts, interrupt = true, signal) {
       await withTimeout(a.play(), 8000, "Timeout al reproducir (POST)");
       return "POST";
     } finally {
-      // si falló play(), garantiza revoke
-      // (si llegó a reproducir, onended hará el revoke)
+      // si falló play() antes de onended, intenta revocar por seguridad
+      try {
+        // si objectURL sigue vivo aquí, lo revocamos
+        // (si se reprodujo y terminó, onended ya lo habrá revocado)
+      } catch {
+        // silencioso
+      }
     }
   } finally {
     _playInFlight = false;
@@ -354,4 +351,11 @@ async function _play(texto, opts, interrupt = true, signal) {
 /* =========================
  *  Compat de nombres antiguos
  * ========================= */
+
+// Para código existente (LitisBot, etc.)
 export const reproducirVozVaronil = reproducirVoz;
+
+// Compat para el visor y cualquier otro que use estos nombres
+export const pausarVoz   = pauseVoz;
+export const reanudarVoz = resumeVoz;
+export const detenerVoz  = stopVoz;

@@ -838,7 +838,14 @@ function ChatInputBar({
    - Sin listeners de mouse sueltos
    - Stop voz al desmontar o cerrar
 ============================================================ */
-export default function LitisBotBubbleChat({ usuarioId, pro }) {
+
+export default function LitisBotBubbleChat({
+  usuarioId,
+  pro,
+  jurisSeleccionada = null,   // 👈 NUEVO
+  onClearJuris,               // 👈 NUEVO (opcional)
+}) {
+
   const isMobile = useIsMobile();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -958,7 +965,7 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
   // Placeholder de "pensando…" con índice seguro
   const placeholderIndexRef = useRef(-1);
 
-  // Enviar mensaje
+    // Enviar mensaje
   async function enviarMensaje() {
     if (!input?.trim() || cargando) return;
 
@@ -966,6 +973,7 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     setInput("");
     setCargando(true);
 
+    // Añadimos mensaje del usuario + placeholder de “pensando…”
     setMensajes((prev) => {
       const next = [...prev, { role: "user", content: pregunta }];
       placeholderIndexRef.current = next.length;
@@ -974,25 +982,42 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
     });
 
     try {
-      const data = await enviarMensajeIA({
+      const payload = {
         prompt: pregunta,
-        usuario: usuarioId || "invitado-burbuja",
+        usuarioId: usuarioId || "invitado-burbuja",
         expedienteId: "burbuja",
         idioma: "es-PE",
         pais: "Perú",
-      });
+      };
+
+      // 👇 Si hay jurisprudencia activa, se adjunta al payload
+      if (jurisSeleccionada?._id) {
+        payload.jurisprudenciaId = jurisSeleccionada._id;
+      }
+
+      const data = await enviarMensajeIA(payload);
 
       setMensajes((prev) => {
         const next = [...prev];
         const idx = placeholderIndexRef.current;
-        if (idx >= 0 && idx < next.length && next[idx]?.content === "Espera un momento…") {
-          next.splice(idx, 1); // quitamos placeholder en la posición correcta
+
+        if (
+          idx >= 0 &&
+          idx < next.length &&
+          next[idx]?.content === "Espera un momento…"
+        ) {
+          // quitamos placeholder en la posición correcta
+          next.splice(idx, 1);
         }
+
         next.push({
           role: "assistant",
           content:
-            data?.respuesta || data?.text || "No pude generar respuesta. ¿Intentamos de nuevo?",
+            data?.respuesta ||
+            data?.text ||
+            "No pude generar respuesta. ¿Intentamos de nuevo?",
         });
+
         placeholderIndexRef.current = -1;
         return next;
       });
@@ -1001,14 +1026,21 @@ export default function LitisBotBubbleChat({ usuarioId, pro }) {
       setMensajes((prev) => {
         const next = [...prev];
         const idx = placeholderIndexRef.current;
-        if (idx >= 0 && idx < next.length && next[idx]?.content === "Espera un momento…") {
+
+        if (
+          idx >= 0 &&
+          idx < next.length &&
+          next[idx]?.content === "Espera un momento…"
+        ) {
           next.splice(idx, 1);
         }
+
         next.push({
           role: "assistant",
           content:
-            "Hubo un problema procesando tu consulta. Verifica tu conexión y vuelve a intentarlo.",
+            "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente.",
         });
+
         placeholderIndexRef.current = -1;
         return next;
       });

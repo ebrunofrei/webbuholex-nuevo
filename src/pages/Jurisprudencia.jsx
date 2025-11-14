@@ -1,114 +1,103 @@
-import React, { useEffect, useState } from "react";
-import { getJurisprudencia } from "@/services/jurisprudenciaService";
-import JurisprudenciaCard from "@/components/jurisprudencia/JurisprudenciaCard";
-import JurisprudenciaSearchBar from "@/components/jurisprudencia/JurisprudenciaSearchBar";
+// src/pages/Jurisprudencia.jsx
+// ============================================================
+// 🦉 BúhoLex | Página de Jurisprudencia
+// - Bloque 1: Buscador externo (Google CSE / /api/research/search)
+// - Bloque 2: Repositorio interno (Mongo / IA interna)
+// - Visor modal centralizado (PDF + ficha completa)
+// - Integra LitisBot burbuja con la sentencia seleccionada
+// ============================================================
+
+import React, { useCallback, useState } from "react";
+
+// 🔹 Buscador externo (Google CSE / /api/research/search)
+import JurisprudenciaSearch from "@/components/JurisprudenciaSearch";
+
+// 🔹 Repositorio interno (Mongo / IA local)
+import JurisprudenciaInterna from "@/components/JurisprudenciaInterna";
+
+// 🔹 Visor de PDF / detalle
 import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
 
-export default function Jurisprudencia() {
-  const [juris, setJuris] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [loading, setLoading] = useState(true);
+// 🔹 Chat flotante
+import LitisBotBubbleChat from "@/components/ui/LitisBotBubbleChat";
 
-  // Modal visor
+export default function Jurisprudencia() {
+  // ---------- Estado del visor ----------
   const [visorOpen, setVisorOpen] = useState(false);
   const [visorDoc, setVisorDoc] = useState(null);
 
-  // Filtros
-  const [search, setSearch] = useState("");
-  const [materia, setMateria] = useState("");
-  const [organo, setOrgano] = useState("");
-  const [estado, setEstado] = useState("");
-  const [chipFilter, setChipFilter] = useState("");
+  // ---------- Contexto para LitisBot ----------
+  const [jurisSeleccionada, setJurisSeleccionada] = useState(null);
 
-  useEffect(() => {
-    getJurisprudencia().then(data => {
-      setJuris(data);
-      setFiltered(data);
-      setLoading(false);
-    });
+  // Abre el visor con el documento seleccionado
+  const handleAbrirVisor = useCallback((doc) => {
+    if (!doc) return;
+    setVisorDoc(doc);
+    setVisorOpen(true);
   }, []);
 
-  useEffect(() => {
-    let results = juris;
-    if (search)
-      results = results.filter(j =>
-        j.titulo?.toLowerCase().includes(search.toLowerCase()) ||
-        j.resumen?.toLowerCase().includes(search.toLowerCase())
-      );
-    if (materia) results = results.filter(j => j.materia === materia);
-    if (organo) results = results.filter(j => j.organo === organo);
-    if (estado) results = results.filter(j => j.estado === estado);
+  // Cierra el visor y limpia el doc
+  const handleCerrarVisor = useCallback(() => {
+    setVisorOpen(false);
+    setVisorDoc(null);
+  }, []);
 
-    if (chipFilter === "recientes") {
-      results = [...results].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    }
-    if (chipFilter === "citadas") {
-      results = [...results].sort((a, b) => (b.citas || 0) - (a.citas || 0));
-    }
-    if (chipFilter === "destacadas") {
-      results = results.filter(j => j.destacada);
-    }
-    setFiltered(results);
-  }, [search, materia, organo, estado, juris, chipFilter]);
+  // Cuando el usuario hace clic en “Preguntar a LitisBot con esta sentencia”
+  const handlePreguntarConJuris = useCallback((doc) => {
+    if (!doc) return;
+    setJurisSeleccionada(doc);
+  }, []);
+
+  const handleClearJuris = useCallback(() => {
+    setJurisSeleccionada(null);
+  }, []);
 
   return (
-    <section className="max-w-5xl mx-auto px-4 py-12">
-      <h1 className="text-3xl font-bold mb-8 text-center">Jurisprudencia</h1>
-      {/* Chips rápidos */}
-      <div className="flex flex-wrap gap-2 mb-4 justify-center">
-        <button
-          className={`px-3 py-1 rounded-full text-xs border transition 
-            ${chipFilter === "" ? "bg-red-600 text-white border-red-600 shadow" : "bg-white text-red-600 border-red-200"}`}
-          onClick={() => setChipFilter("")}
-        >Todas</button>
-        <button
-          className={`px-3 py-1 rounded-full text-xs border transition 
-            ${chipFilter === "recientes" ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-blue-700 border-blue-200"}`}
-          onClick={() => setChipFilter("recientes")}
-        >Recientes</button>
-        <button
-          className={`px-3 py-1 rounded-full text-xs border transition 
-            ${chipFilter === "citadas" ? "bg-green-600 text-white border-green-600 shadow" : "bg-white text-green-700 border-green-200"}`}
-          onClick={() => setChipFilter("citadas")}
-        >Más citadas</button>
-        <button
-          className={`px-3 py-1 rounded-full text-xs border transition 
-            ${chipFilter === "destacadas" ? "bg-yellow-500 text-white border-yellow-500 shadow" : "bg-white text-yellow-700 border-yellow-200"}`}
-          onClick={() => setChipFilter("destacadas")}
-        >Destacadas</button>
-      </div>
+    <>
+      <section className="max-w-6xl mx-auto px-4 py-10 sm:py-12">
+        {/* Título general de la página */}
+        <h1 className="text-3xl font-bold mb-3 text-center text-neutral-900">
+          Jurisprudencia
+        </h1>
+        <p className="text-sm text-gray-500 text-center mb-8 max-w-3xl mx-auto">
+          Consulta jurisprudencia relevante tanto en nuestro repositorio interno
+          como en motores externos especializados. Esta sección será la base del
+          banco de sentencias que utilizará LitisBot para responder con soporte
+          jurisprudencial.
+        </p>
 
-      <JurisprudenciaSearchBar
-        search={search} setSearch={setSearch}
-        materia={materia} setMateria={setMateria}
-        organo={organo} setOrgano={setOrgano}
-        estado={estado} setEstado={setEstado}
-      />
-      {loading ? (
-        <div className="text-center text-gray-500 py-12">Cargando jurisprudencia...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center text-gray-400 py-12">Sin resultados para la búsqueda.</div>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-6 mt-6">
-          {filtered.map(j => (
-            <JurisprudenciaCard
-              key={j.id}
-              data={j}
-              onVer={doc => {
-                setVisorDoc(doc);
-                setVisorOpen(true);
-              }}
-            />
-          ))}
+        {/* 🧠 Bloque 1: Buscador online (Google CSE / /api/research/search) */}
+        <div className="mb-10">
+          <JurisprudenciaSearch
+            variant="full"
+            // En el futuro, si este buscador devuelve resultados clicables,
+            // podemos reutilizar el mismo handler:
+            // onVer={handleAbrirVisor}
+          />
         </div>
-      )}
 
-      {/* Visor PDF modal */}
-      <JurisprudenciaVisorModal
-        open={visorOpen}
-        onClose={() => setVisorOpen(false)}
-        doc={visorDoc}
+        {/* 🗃 Bloque 2: Repositorio interno de jurisprudencia */}
+        <JurisprudenciaInterna
+          onVer={handleAbrirVisor}
+          showSearchButton={true}
+          onPreguntarConJuris={handlePreguntarConJuris} // 👈 integra con LitisBot
+        />
+
+        {/* 🔎 Visor PDF / ficha en modal (controlado por esta página) */}
+        <JurisprudenciaVisorModal
+          open={visorOpen}
+          doc={visorDoc}
+          onClose={handleCerrarVisor}
+        />
+      </section>
+
+      {/* 🦉 LitisBot flotante conectado a la sentencia seleccionada */}
+      <LitisBotBubbleChat
+        usuarioId={null}          // si luego tienes user real, pásalo aquí
+        pro={false}
+        jurisSeleccionada={jurisSeleccionada}
+        onClearJuris={handleClearJuris}
       />
-    </section>
+    </>
   );
 }

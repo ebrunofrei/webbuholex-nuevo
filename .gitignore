@@ -168,3 +168,5 @@ tests/
 ./backup-scripts/
 ./vite.config_sample.js
 
+echo debug-jns*.html>> .gitignore
+echo debug-jns*.png>> .gitignore

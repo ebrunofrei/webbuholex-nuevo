@@ -99,15 +99,45 @@ try {
 
 // 4) Fallback coherente
 const origin = safeOrigin();
-const fallback = origin
-  ? normalizeBase(`${origin}/api`)
-  : normalizeBase(MODE === "development" ? "http://127.0.0.1:3000/api" : "/api");
+let fallback;
+
+try {
+  if (origin) {
+    const h = new URL(origin).hostname;
+
+    // ✅ Producción en buholex.com → fuerza siempre el subdominio api.buholex.com
+    if (/\.?buholex\.com$/i.test(h)) {
+      fallback = normalizeBase("https://api.buholex.com/api");
+    } else {
+      // Otros dominios → usa origin/api como antes
+      fallback = normalizeBase(`${origin}/api`);
+    }
+  } else {
+    // Sin origin (SSR, tests, etc.)
+    fallback = normalizeBase(
+      MODE === "development"
+        ? "http://127.0.0.1:3000/api"
+        : "/api"
+    );
+  }
+} catch {
+  // Si algo revienta, ultimo fallback genérico
+  fallback = normalizeBase(
+    MODE === "development"
+      ? "http://127.0.0.1:3000/api"
+      : "/api"
+  );
+}
 
 // Resuelto
 const picked = fromEnv || fromGlobal || fromMeta || fallback;
 
 export const API_BASE = normalizeBase(picked);
-export const API_BASE_SOURCE = fromEnv ? "env" : fromGlobal ? "global" : fromMeta ? "meta" : "fallback";
+export const API_BASE_SOURCE =
+  fromEnv   ? "env"   :
+  fromGlobal? "global":
+  fromMeta  ? "meta"  :
+  "fallback";
 
 /* ------------------------------- join / fetch ------------------------------ */
 export function joinApi(path = "", baseOverride) {
