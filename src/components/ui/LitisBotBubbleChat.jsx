@@ -963,8 +963,48 @@ export default function LitisBotBubbleChat({
     drag.current.moved = false;
   }, [pos, setIsOpen]);
 
- // Placeholder de "pensando…" con índice seguro
+// Placeholder de "pensando…" con índice seguro
 const placeholderIndexRef = useRef(-1);
+
+// 🔎 Convierte la sentencia seleccionada en texto plano para la IA
+function buildJurisPlainText(doc) {
+  if (!doc) return "";
+
+  const partes = [];
+
+  if (doc.titulo) {
+    partes.push(`TÍTULO: ${doc.titulo}`);
+  }
+  if (doc.expediente || doc.numeroExpediente) {
+    partes.push(
+      `EXPEDIENTE: ${doc.expediente || doc.numeroExpediente}`
+    );
+  }
+  if (doc.sala || doc.organo || doc.salaSuprema) {
+    partes.push(
+      `ÓRGANO / SALA: ${doc.sala || doc.organo || doc.salaSuprema}`
+    );
+  }
+  if (doc.especialidad || doc.materia) {
+    partes.push(`ESPECIALIDAD / MATERIA: ${doc.especialidad || doc.materia}`);
+  }
+  if (doc.fechaResolucion || doc.fecha) {
+    partes.push(`FECHA: ${doc.fechaResolucion || doc.fecha}`);
+  }
+  if (doc.fuente) {
+    partes.push(`FUENTE: ${doc.fuente}`);
+  }
+  if (doc.sumilla) {
+    partes.push(`SUMILLA:\n${doc.sumilla}`);
+  }
+  if (doc.resumen) {
+    partes.push(`RESUMEN:\n${doc.resumen}`);
+  }
+
+  // Si tienes más campos (fundamentos, parte resolutiva, etc.) los puedes agregar aquí
+
+  return partes.join("\n\n").trim();
+}
 
 // Enviar mensaje desde la burbuja
 async function enviarMensaje() {
@@ -991,8 +1031,61 @@ async function enviarMensaje() {
     return next;
   });
 
-  // Helper para quitar el placeholder y añadir la respuesta final
-  const replacePlaceholder = (contentTexto) => {
+  try {
+    // 🎯 Contexto de jurisprudencia (si hay sentencia seleccionada)
+    const jurisTexto = buildJurisPlainText(jurisSeleccionada);
+
+    // 🎯 Payload base para la IA
+    const payload = {
+      prompt: texto,
+      usuarioId: usuarioId || "invitado-burbuja",
+      expedienteId: "burbuja",
+      idioma: "es-PE",
+      pais: "Perú",
+    };
+
+    // Si existe un _id real (cuando conectemos con Mongo), mándalo también
+    if (jurisSeleccionada && jurisSeleccionada._id) {
+      payload.jurisprudenciaId = jurisSeleccionada._id;
+    }
+
+    // 👉 Y además mandamos el texto plano de la sentencia (frontend)
+    if (jurisTexto) {
+      payload.jurisTexto = jurisTexto;
+    }
+
+    const data = await enviarMensajeIA(payload);
+
+    const respuestaTexto =
+      (data?.respuesta || data?.text || "").toString().trim() ||
+      "No pude generar respuesta. ¿Intentamos de nuevo?";
+
+    setMensajes((prev) => {
+      const next = [...prev];
+      const idx = placeholderIndexRef.current;
+
+      // Si el placeholder sigue en la posición esperada, lo quitamos
+      if (
+        idx >= 0 &&
+        idx < next.length &&
+        next[idx]?.content === "Espera un momento…"
+      ) {
+        next.splice(idx, 1);
+      }
+
+      // Añadimos respuesta real de la IA
+      next.push({
+        role: "assistant",
+        content: respuestaTexto,
+      });
+
+      // Reseteamos índice
+      placeholderIndexRef.current = -1;
+      return next;
+    });
+  } catch (err) {
+    console.error("❌ Error burbuja LitisBot:", err);
+
     setMensajes((prev) => {
       const next = [...prev];
       const idx = placeholderIndexRef.current;
@@ -1007,51 +1100,13 @@ async function enviarMensaje() {
 
       next.push({
         role: "assistant",
-        content: contentTexto,
+        content:
+          "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente.",
       });
 
-      // Reseteamos índice
       placeholderIndexRef.current = -1;
       return next;
     });
-  };
-
-  try {
-    // 🎯 Payload base para la IA
-    const payload = {
-      prompt: texto,
-      usuarioId: usuarioId || "invitado-burbuja",
-      expedienteId: "burbuja",
-      idioma: "es-PE",
-      pais: "Perú",
-    };
-
-    // ID robusto de jurisprudencia: acepta _id o id
-    const jurisId =
-      jurisSeleccionada &&
-      (jurisSeleccionada._id || jurisSeleccionada.id || null);
-
-    // 👇 Si hay jurisprudencia activa, se adjunta al payload
-    if (jurisId) {
-      payload.jurisprudenciaId = jurisId;
-      payload.jurisId = jurisId;
-      payload.jurisprudenciaIds = [jurisId];
-      payload.jurisIds = [jurisId];
-    }
-
-    const data = await enviarMensajeIA(payload);
-
-    const respuestaTexto =
-      (data?.respuesta || data?.text || "").toString().trim() ||
-      "No pude generar respuesta. ¿Intentamos de nuevo?";
-
-    replacePlaceholder(respuestaTexto);
-  } catch (err) {
-    console.error("❌ Error burbuja LitisBot:", err);
-
-    replacePlaceholder(
-      "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente."
-    );
   } finally {
     setCargando(false);
   }

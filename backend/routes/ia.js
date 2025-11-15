@@ -514,6 +514,7 @@ router.post("/chat", async (req, res) => {
       selectedJurisId,
       jurisprudenciaIds,
       jurisIds,
+      jurisTexto,
     } = req.body || {};
 
     const userPromptLimpio = limpiarPromptUsuario(prompt);
@@ -553,6 +554,16 @@ router.post("/chat", async (req, res) => {
             )}]: ${errCtx.message}`
           )
         );
+      }
+    }
+
+    // 🔁 Si no pudimos armar contexto desde Mongo, pero el front envió texto, úsalo
+    if (!jurisContextText && typeof jurisTexto === "string") {
+      const limpio = jurisTexto.trim();
+      if (limpio) {
+        jurisContextText = limpio;
+        // En este caso no tenemos metas estructuradas
+        jurisMetas = [];
       }
     }
 
