@@ -963,105 +963,99 @@ export default function LitisBotBubbleChat({
     drag.current.moved = false;
   }, [pos, setIsOpen]);
 
-  // Placeholder de "pensando…" con índice seguro
-  const placeholderIndexRef = useRef(-1);
-  // Enviar mensaje desde la burbuja
-  async function enviarMensaje() {
-    // 🔒 Evitar envíos vacíos o dobles
-    const texto = input?.trim();
-    if (!texto || cargando) return;
+ // Placeholder de "pensando…" con índice seguro
+const placeholderIndexRef = useRef(-1);
 
-    // Limpiamos input y marcamos estado de carga
-    setInput("");
-    setCargando(true);
+// Enviar mensaje desde la burbuja
+async function enviarMensaje() {
+  // 🔒 Evitar envíos vacíos o dobles
+  const texto = input?.trim();
+  if (!texto || cargando) return;
 
-    // Mensaje del usuario + placeholder "pensando…"
-    setMensajes((prev) => {
-      const next = [...prev, { role: "user", content: texto }];
+  // Limpiamos input y marcamos estado de carga
+  setInput("");
+  setCargando(true);
 
-      // Guardamos índice del placeholder para luego poder reemplazarlo
-      placeholderIndexRef.current = next.length;
-      next.push({
-        role: "assistant",
-        content: "Espera un momento…",
-        _placeholder: true,
-      });
+  // Mensaje del usuario + placeholder "pensando…"
+  setMensajes((prev) => {
+    const next = [...prev, { role: "user", content: texto }];
 
-      return next;
+    // Guardamos índice del placeholder para luego poder reemplazarlo
+    placeholderIndexRef.current = next.length;
+    next.push({
+      role: "assistant",
+      content: "Espera un momento…",
+      _placeholder: true,
     });
 
-    try {
-      // 🎯 Payload base para la IA
-      const payload = {
-        prompt: texto,
-        usuarioId: usuarioId || "invitado-burbuja",
-        expedienteId: "burbuja",
-        idioma: "es-PE",
-        pais: "Perú",
-      };
+    return next;
+  });
 
-      // 👇 Si hay jurisprudencia activa, se adjunta al payload
-      if (jurisSeleccionada && jurisSeleccionada._id) {
-        payload.jurisprudenciaId = jurisSeleccionada._id;
+  // Helper para quitar el placeholder y añadir la respuesta final
+  const replacePlaceholder = (contentTexto) => {
+    setMensajes((prev) => {
+      const next = [...prev];
+      const idx = placeholderIndexRef.current;
+
+      if (
+        idx >= 0 &&
+        idx < next.length &&
+        next[idx]?.content === "Espera un momento…"
+      ) {
+        next.splice(idx, 1);
       }
 
-      const data = await enviarMensajeIA(payload);
-
-      const respuestaTexto =
-        (data?.respuesta || data?.text || "").toString().trim() ||
-        "No pude generar respuesta. ¿Intentamos de nuevo?";
-
-      setMensajes((prev) => {
-        const next = [...prev];
-        const idx = placeholderIndexRef.current;
-
-        // Si el placeholder sigue en la posición esperada, lo quitamos
-        if (
-          idx >= 0 &&
-          idx < next.length &&
-          next[idx]?.content === "Espera un momento…"
-        ) {
-          next.splice(idx, 1);
-        }
-
-        // Añadimos respuesta real de la IA
-        next.push({
-          role: "assistant",
-          content: respuestaTexto,
-        });
-
-        // Reseteamos índice
-        placeholderIndexRef.current = -1;
-        return next;
+      next.push({
+        role: "assistant",
+        content: contentTexto,
       });
-    } catch (err) {
-      console.error("❌ Error burbuja LitisBot:", err);
 
-      setMensajes((prev) => {
-        const next = [...prev];
-        const idx = placeholderIndexRef.current;
+      // Reseteamos índice
+      placeholderIndexRef.current = -1;
+      return next;
+    });
+  };
 
-        if (
-          idx >= 0 &&
-          idx < next.length &&
-          next[idx]?.content === "Espera un momento…"
-        ) {
-          next.splice(idx, 1);
-        }
+  try {
+    // 🎯 Payload base para la IA
+    const payload = {
+      prompt: texto,
+      usuarioId: usuarioId || "invitado-burbuja",
+      expedienteId: "burbuja",
+      idioma: "es-PE",
+      pais: "Perú",
+    };
 
-        next.push({
-          role: "assistant",
-          content:
-            "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente.",
-        });
+    // ID robusto de jurisprudencia: acepta _id o id
+    const jurisId =
+      jurisSeleccionada &&
+      (jurisSeleccionada._id || jurisSeleccionada.id || null);
 
-        placeholderIndexRef.current = -1;
-        return next;
-      });
-    } finally {
-      setCargando(false);
+    // 👇 Si hay jurisprudencia activa, se adjunta al payload
+    if (jurisId) {
+      payload.jurisprudenciaId = jurisId;
+      payload.jurisId = jurisId;
+      payload.jurisprudenciaIds = [jurisId];
+      payload.jurisIds = [jurisId];
     }
+
+    const data = await enviarMensajeIA(payload);
+
+    const respuestaTexto =
+      (data?.respuesta || data?.text || "").toString().trim() ||
+      "No pude generar respuesta. ¿Intentamos de nuevo?";
+
+    replacePlaceholder(respuestaTexto);
+  } catch (err) {
+    console.error("❌ Error burbuja LitisBot:", err);
+
+    replacePlaceholder(
+      "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente."
+    );
+  } finally {
+    setCargando(false);
   }
+}
 
   // Enter envía, Shift+Enter hace salto de línea
   function handleKeyDown(e) {
