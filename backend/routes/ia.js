@@ -303,14 +303,16 @@ function normalizarHistorialCliente(historial) {
   return historial
     .filter((h) => h && h.role && h.content)
     .map((h) => ({
-      role: h.role,
+      role: h.role === "assistant" ? "assistant" : "user",
       content: limpiarPromptUsuario(h.content),
     }));
 }
 
 function recortarHistorialMensajes(messages, maxChars = 16_000) {
-  // Evita que el historial explote el contexto: recorta por la cola (antiguos primero)
-  let total = messages.reduce((acc, m) => acc + (m.content?.length || 0), 0);
+  let total = messages.reduce(
+    (acc, m) => acc + (m.content?.length || 0),
+    0
+  );
   if (total <= maxChars) return messages;
 
   const recortados = [messages[0]]; // preserva siempre el system principal
@@ -548,8 +550,7 @@ router.post("/chat", async (req, res) => {
           chalk.yellowBright(
             `⚠ No se pudo obtener contexto de jurisprudencia para IDs [${idsSolicitados.join(
               ", "
-            )}]:`,
-            errCtx.message
+            )}]: ${errCtx.message}`
           )
         );
       }
@@ -576,8 +577,7 @@ router.post("/chat", async (req, res) => {
     } catch (errHist) {
       console.warn(
         chalk.yellowBright(
-          `⚠ No se pudo cargar historial para ${usuarioId}/${expedienteId}:`,
-          errHist.message
+          `⚠ No se pudo cargar historial para ${usuarioId}/${expedienteId}: ${errHist.message}`
         )
       );
       historialPrevio = [];
@@ -607,7 +607,8 @@ router.post("/chat", async (req, res) => {
 
     console.log(
       chalk.cyanBright(
-        `📨 [IA] intencion:${intencion} | materia:${materiaDetectada} | ${idioma} | ${pais} | usuario:${usuarioId} | exp:${expedienteId} | jurisContext:${tieneJurisContext ? idsSolicitados.length : 0
+        `📨 [IA] intencion:${intencion} | materia:${materiaDetectada} | idioma:${idioma} | pais:${pais} | usuario:${usuarioId} | exp:${expedienteId} | jurisContext:${
+          tieneJurisContext ? idsSolicitados.length : 0
         }`
       )
     );
@@ -646,8 +647,7 @@ router.post("/chat", async (req, res) => {
     } catch (errSave) {
       console.warn(
         chalk.yellowBright(
-          `⚠ No se pudo guardar historial para ${usuarioId}/${expedienteId}:`,
-          errSave.message
+          `⚠ No se pudo guardar historial para ${usuarioId}/${expedienteId}: ${errSave.message}`
         )
       );
     }
