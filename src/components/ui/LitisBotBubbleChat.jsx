@@ -841,9 +841,10 @@ function ChatInputBar({
 
 export default function LitisBotBubbleChat({
   usuarioId,
-  pro,
-  jurisSeleccionada = null,   // 👈 NUEVO
-  onClearJuris,               // 👈 NUEVO (opcional)
+  pro = false,
+  jurisSeleccionada,   // 👈 IMPORTANTE
+  onClearJuris,        // opcional, si ya lo usas
+  // ...otros props
 }) {
 
   const isMobile = useIsMobile();
@@ -964,26 +965,35 @@ export default function LitisBotBubbleChat({
 
   // Placeholder de "pensando…" con índice seguro
   const placeholderIndexRef = useRef(-1);
-
-    // Enviar mensaje
+  // Enviar mensaje desde la burbuja
   async function enviarMensaje() {
-    if (!input?.trim() || cargando) return;
+    // 🔒 Evitar envíos vacíos o dobles
+    const texto = input?.trim();
+    if (!texto || cargando) return;
 
-    const pregunta = input.trim();
+    // Limpiamos input y marcamos estado de carga
     setInput("");
     setCargando(true);
 
-    // Añadimos mensaje del usuario + placeholder de “pensando…”
+    // Mensaje del usuario + placeholder "pensando…"
     setMensajes((prev) => {
-      const next = [...prev, { role: "user", content: pregunta }];
+      const next = [...prev, { role: "user", content: texto }];
+
+      // Guardamos índice del placeholder para luego poder reemplazarlo
       placeholderIndexRef.current = next.length;
-      next.push({ role: "assistant", content: "Espera un momento…" });
+      next.push({
+        role: "assistant",
+        content: "Espera un momento…",
+        _placeholder: true,
+      });
+
       return next;
     });
 
     try {
+      // 🎯 Payload base para la IA
       const payload = {
-        prompt: pregunta,
+        prompt: texto,
         usuarioId: usuarioId || "invitado-burbuja",
         expedienteId: "burbuja",
         idioma: "es-PE",
@@ -991,38 +1001,42 @@ export default function LitisBotBubbleChat({
       };
 
       // 👇 Si hay jurisprudencia activa, se adjunta al payload
-      if (jurisSeleccionada?._id) {
+      if (jurisSeleccionada && jurisSeleccionada._id) {
         payload.jurisprudenciaId = jurisSeleccionada._id;
       }
 
       const data = await enviarMensajeIA(payload);
 
+      const respuestaTexto =
+        (data?.respuesta || data?.text || "").toString().trim() ||
+        "No pude generar respuesta. ¿Intentamos de nuevo?";
+
       setMensajes((prev) => {
         const next = [...prev];
         const idx = placeholderIndexRef.current;
 
+        // Si el placeholder sigue en la posición esperada, lo quitamos
         if (
           idx >= 0 &&
           idx < next.length &&
           next[idx]?.content === "Espera un momento…"
         ) {
-          // quitamos placeholder en la posición correcta
           next.splice(idx, 1);
         }
 
+        // Añadimos respuesta real de la IA
         next.push({
           role: "assistant",
-          content:
-            data?.respuesta ||
-            data?.text ||
-            "No pude generar respuesta. ¿Intentamos de nuevo?",
+          content: respuestaTexto,
         });
 
+        // Reseteamos índice
         placeholderIndexRef.current = -1;
         return next;
       });
     } catch (err) {
-      console.error("❌ Error burbuja:", err);
+      console.error("❌ Error burbuja LitisBot:", err);
+
       setMensajes((prev) => {
         const next = [...prev];
         const idx = placeholderIndexRef.current;
@@ -1049,6 +1063,7 @@ export default function LitisBotBubbleChat({
     }
   }
 
+  // Enter envía, Shift+Enter hace salto de línea
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

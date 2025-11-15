@@ -170,3 +170,12 @@ tests/
 
 echo debug-jns*.html>> .gitignore
 echo debug-jns*.png>> .gitignore
+debug-jns-inicial.html
+debug-jns-inicial.png
+debug-jns-postclick.html
+debug-jns-postclick.png
+debug-jns.html
+debug-jns.png
+
+/.backup-scripts/
+/vite.config_sample.js
