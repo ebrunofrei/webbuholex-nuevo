@@ -18,6 +18,8 @@ import {
 } from "@/services/jurisInternaService";
 
 import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
+import JurisprudenciaCard from "@/components/jurisprudencia/JurisprudenciaCard";
+
 
 const TAGS = [
   { id: "todas", label: "Todas" },
@@ -308,101 +310,137 @@ export default function JurisprudenciaInterna({ onPreguntarConJuris }) {
           </p>
         )}
 
-        {/* Lista de resultados */}
-        {resultados.length > 0 && (
-          <div className="mt-4 space-y-3">
-            <p className="text-xs text-gray-500">
-              {resultados.length} resolución
-              {resultados.length !== 1 ? "es encontradas" : " encontrada"}.
-            </p>
+              {/* Lista de resultados */}
+      {resultados.length > 0 && (
+        <div className="mt-4 space-y-3">
+          <p className="text-xs text-gray-500">
+            {resultados.length} resolución
+            {resultados.length !== 1 ? "es encontradas" : " encontrada"}.
+          </p>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              {resultados.map((item) => (
+          <div className="grid gap-3 md:grid-cols-2">
+            {resultados.map((item) => {
+              const {
+                _id,
+                materia,
+                organo,
+                estado,
+                score,
+                titulo,
+                numero,
+                numeroExpediente,
+                sumilla,
+                resumen,
+                fechaResolucion,
+              } = item;
+
+              const tituloMostrar =
+                titulo ||
+                numero ||
+                numeroExpediente ||
+                "Resolución sin título";
+
+              const fechaMostrar = fechaResolucion
+                ? new Date(fechaResolucion).toLocaleDateString("es-PE")
+                : null;
+
+              return (
                 <article
-                  key={item._id}
+                  key={_id}
                   className="flex flex-col rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm hover:shadow-md transition cursor-pointer"
                   onClick={() => handleAbrirModal(item)}
                 >
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] mb-1">
-                    {item.materia && (
+                  {/* chips superiores */}
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
+                    {materia && (
                       <span className="rounded-full bg-[#fdf4ec] px-2 py-0.5 font-medium text-[#8C3A0E]">
-                        {item.materia}
+                        {materia}
                       </span>
                     )}
-                    {item.organo && (
+
+                    {organo && (
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700">
-                        {item.organo}
+                        {organo}
                       </span>
                     )}
-                    {item.estado && (
+
+                    {estado && (
                       <span
                         className={`rounded-full px-2 py-0.5 ${
-                          item.estado === "Vigente"
+                          estado === "Vigente"
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-gray-100 text-gray-600"
                         }`}
                       >
-                        {item.estado}
+                        {estado}
                       </span>
                     )}
-                    {typeof item.score === "number" && (
+
+                    {typeof score === "number" && (
                       <span className="ml-auto rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700">
-                        score {item.score.toFixed(3)}
+                        score {score.toFixed(3)}
                       </span>
                     )}
                   </div>
 
-                  <h3 className="text-sm font-semibold text-brown-800 mb-1 line-clamp-2">
-                    {item.titulo || item.numero || "Resolución sin título"}
+                  {/* título */}
+                  <h3 className="mb-1 line-clamp-2 text-sm font-semibold text-brown-800">
+                    {tituloMostrar}
                   </h3>
 
-                  {item.sumilla && (
+                  {/* sumilla / resumen */}
+                  {sumilla && (
                     <p className="text-xs text-gray-700 line-clamp-3">
-                      {item.sumilla}
+                      {sumilla}
                     </p>
                   )}
 
-                  {!item.sumilla && item.resumen && (
+                  {!sumilla && resumen && (
                     <p className="text-xs text-gray-700 line-clamp-3">
-                      {item.resumen}
+                      {resumen}
                     </p>
                   )}
 
+                  {/* pie con número y fecha */}
                   <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
                     <span>
-                      {item.numero && (
+                      {numero && (
                         <>
-                          Casación {item.numero}
+                          Casación {numero}
                           {" · "}
                         </>
                       )}
-                      {item.fechaResolucion &&
-                        new Date(item.fechaResolucion).toLocaleDateString(
-                          "es-PE"
-                        )}
+                      {fechaMostrar}
                     </span>
-                    <span className="text-[#8C3A0E] font-medium">
+                    <span className="font-medium text-[#8C3A0E]">
                       Ver detalle →
                     </span>
                   </div>
 
-                  {/* 🦉 Botón para LitisBot */}
+                  {/* 🦉 Botón para LitisBot (no abre el modal) */}
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation(); // no abrir modal
-                      onPreguntarConJuris?.(item);
+                    title="Enviar esta sentencia a LitisBot para analizarla"
+                    onClick={(event) => {
+                      // Evita que el click abra el modal de detalle
+                      event.stopPropagation();
+
+                      if (typeof onPreguntarConJuris === "function") {
+                        onPreguntarConJuris(item);
+                      }
                     }}
                     className="mt-2 inline-flex items-center gap-1 self-start rounded-full border border-[#8C3A0E]/40 bg-[#fdf4ec] px-3 py-1 text-[11px] font-semibold text-[#8C3A0E] hover:bg-[#fbe8d6] transition"
                   >
-                    🦉 Preguntar a LitisBot con esta sentencia
+                    <span aria-hidden="true">🦉</span>
+                    <span>Preguntar a LitisBot con esta sentencia</span>
                   </button>
                 </article>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
-      </section>
+        </div>
+      )}
+    </section>
 
       {/* Modal de lectura / visor */}
       <JurisprudenciaVisorModal

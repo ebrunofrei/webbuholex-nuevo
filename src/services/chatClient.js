@@ -1,3 +1,4 @@
+// src/services/chatClient.js
 // ============================================================
 // 🦉 BúhoLex | Cliente del Chat (frontend)
 // - joinApi para /health y /ia/chat
@@ -5,21 +6,46 @@
 // - Historial acotado (últimos 12 mensajes, 4k chars c/u)
 // - Timeout y 1 reintento en 502/503/504
 // - Sin cookies (credentials: 'omit') para facilitar CORS
+// - Respeta campos de jurisprudencia: jurisprudenciaId, jurisTextoBase, etc.
 // ============================================================
 
 import { joinApi } from "@/services/apiBase";
 
+const IS_BROWSER = typeof window !== "undefined";
+
 /* ------------------------------ utils ------------------------------ */
+
+/**
+ * fetchWithTimeout(url, opts, ms)
+ * - Aplica AbortController interno si no se pasa signal.
+ * - Si se pasa `opts.signal`, se respeta ese signal (y el timeout solo limpia el timer).
+ */
 async function fetchWithTimeout(url, opts = {}, ms = 15000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
+
   try {
-    return await fetch(url, { ...opts, signal: opts.signal || ctrl.signal });
+    const { signal, ...rest } = opts;
+    return await fetch(url, {
+      ...rest,
+      // Si el caller ya trae un signal, se respeta; si no, usamos el nuestro
+      signal: signal || ctrl.signal,
+    });
   } finally {
     clearTimeout(timer);
   }
 }
 
+/**
+ * Normaliza el payload del chat.
+ *
+ * Soporta:
+ *  - "texto"
+ *  - { mensaje: "texto", ... }
+ *  - { prompt: "texto", usuarioId, expedienteId, modo, materia, idioma, pais, historial, ... }
+ *
+ * Mantiene TODOS los campos adicionales (p.ej. jurisprudenciaId, jurisTextoBase, etc.).
+ */
 function normalizeChatPayload(input) {
   // string → { prompt }
   if (typeof input === "string") {
@@ -29,11 +55,13 @@ function normalizeChatPayload(input) {
   }
 
   const obj = input || {};
+
+  // prompt tiene prioridad, luego mensaje
   const raw = obj.prompt ?? obj.mensaje ?? "";
   const prompt = String(raw || "").trim();
   if (!prompt) throw new Error("prompt vacío");
 
-  // acotar historial
+  // acotar historial (si viene)
   let { historial } = obj;
   if (Array.isArray(historial)) {
     const take = 12;
@@ -45,15 +73,26 @@ function normalizeChatPayload(input) {
     historial = [];
   }
 
+  // No reenviamos "mensaje" para evitar duplicidad; el resto se conserva tal cual.
   const { mensaje, ...rest } = obj;
-  return { prompt, historial, ...rest };
+
+  return {
+    prompt,
+    historial,
+    ...rest, // aquí viajan jurisprudenciaId, jurisIds, jurisTextoBase, userEmail, etc.
+  };
 }
 
 async function ping({ signal } = {}) {
   try {
     const res = await fetchWithTimeout(
       joinApi("/health"),
-      { method: "GET", credentials: "omit", cache: "no-store", signal },
+      {
+        method: "GET",
+        credentials: "omit",
+        cache: "no-store",
+        signal,
+      },
       3000
     );
     return res.ok;
@@ -65,16 +104,37 @@ async function ping({ signal } = {}) {
 /* ------------------------------ API ------------------------------ */
 /**
  * enviarMensajeIA(payload, signal?)
+ *
  * payload:
  *  - "texto"
  *  - { mensaje: "texto", ... }
- *  - { prompt: "texto", usuarioId, expedienteId, modo, materia, idioma, pais, historial, userEmail }
+ *  - {
+ *      prompt: "texto",
+ *      usuarioId,
+ *      expedienteId,
+ *      modo,
+ *      materia,
+ *      idioma,
+ *      pais,
+ *      historial,
+ *      userEmail,
+ *      // 🔗 Campos de jurisprudencia (se respetan tal cual):
+ *      jurisprudenciaId,
+ *      jurisId,
+ *      selectedJurisId,
+ *      jurisprudenciaIds,
+ *      jurisIds,
+ *      jurisTextoBase,
+ *    }
  */
 export async function enviarMensajeIA(payload, signal) {
   // “despertar” backend si está frío (ignorar si falla)
   await ping({ signal }).catch(() => {});
 
   const body = JSON.stringify(normalizeChatPayload(payload));
+
+  // ⏱️ margen más amplio para OpenAI + Railway
+  const REQUEST_TIMEOUT_MS = 45000; // 45s
 
   const doPost = () =>
     fetchWithTimeout(
@@ -83,20 +143,27 @@ export async function enviarMensajeIA(payload, signal) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
+        // si desde fuera nos pasan un signal, lo respetamos;
+        // si no, fetchWithTimeout crea el suyo
         signal,
         credentials: "omit",
         cache: "no-store",
         mode: "cors",
       },
-      15000
+      REQUEST_TIMEOUT_MS
     );
 
-  let res = await doPost();
-
-  // Reintento simple si gateway/timeouts del backend
-  if ([502, 503, 504].includes(res.status)) {
-    await new Promise((r) => setTimeout(r, 500));
+  let res;
+  try {
     res = await doPost();
+  } catch (err) {
+    // Caso especial: timeout → mensaje entendible
+    if (err?.name === "AbortError") {
+      throw new Error(
+        "El servidor demoró demasiado en responder. Inténtalo otra vez en unos segundos."
+      );
+    }
+    throw err;
   }
 
   const ctype = res.headers.get("content-type") || "";
@@ -106,7 +173,11 @@ export async function enviarMensajeIA(payload, signal) {
     try {
       if (isJson) {
         const j = await res.json();
-        const msg = j?.error?.message || j?.error || j?.message || `Chat HTTP ${res.status}`;
+        const msg =
+          j?.error?.message ||
+          j?.error ||
+          j?.message ||
+          `Chat HTTP ${res.status}`;
         throw new Error(msg);
       } else {
         const t = await res.text();

@@ -44,6 +44,7 @@ const JurisprudenciaSchema = new Schema(
     organo: { type: String, index: true }, // usado también en el frontend
     instancia: { type: String, default: "" }, // "Suprema", "Superior", etc.
     especialidad: { type: String, index: true }, // Civil, Penal, Const., etc.
+    materia: { type: String, index: true },
     tema: { type: String, index: true },
     subtema: { type: String, index: true },
 
@@ -65,6 +66,7 @@ const JurisprudenciaSchema = new Schema(
 
     // Contenido bruto / HTML de la ficha
     contenidoHTML: { type: String }, // ficha completa en HTML limpio
+    texto: { type: String },
 
     // Recursos externos
     urlResolucion: { type: String }, // enlace directo al PDF o servletdescarga
@@ -104,6 +106,7 @@ JurisprudenciaSchema.pre("save", function (next) {
   this.organo = cleanString(this.organo);
   this.instancia = cleanString(this.instancia);
   this.especialidad = cleanString(this.especialidad);
+  this.materia = cleanString(this.materia);
   this.tema = cleanString(this.tema);
   this.subtema = cleanString(this.subtema);
   this.titulo = cleanString(this.titulo);
@@ -114,6 +117,7 @@ JurisprudenciaSchema.pre("save", function (next) {
   this.fundamentos = cleanString(this.fundamentos);
   this.parteResolutiva = cleanString(this.parteResolutiva);
   this.baseLegal = cleanString(this.baseLegal);
+  this.texto = cleanString(this.texto);
   this.urlResolucion = cleanString(this.urlResolucion);
   this.fuente = cleanString(this.fuente);
   this.fuenteUrl = cleanString(this.fuenteUrl);
@@ -134,6 +138,8 @@ JurisprudenciaSchema.index(
     pretensionDelito: "text",
     normaDerechoInterno: "text",
     palabrasClave: "text",
+    materia: "text",
+    texto: "text",
   },
   {
     name: "juris_text_index",

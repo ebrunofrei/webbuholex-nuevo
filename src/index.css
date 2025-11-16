@@ -108,3 +108,33 @@ h1, h2, h3 { color: #a42409; font-weight: 700; margin-top: 0; }
   .sidebar-buholex, .navbar-buholex, .footer-buholex { display: none !important; }
   .main-content-buholex { background: #fff !important; padding: 0 !important; }
 }
+
+@keyframes litis-bubble-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(92, 46, 11, 0.3);
+    background-color: #ffffff;
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 18px 0 rgba(92, 46, 11, 0.45);
+    background-color: #5C2E0B;
+  }
+}
+
+.litis-bubble-pulse {
+  animation: litis-bubble-pulse 1.6s ease-in-out infinite;
+  transition: background-color 0.25s ease, transform 0.15s ease;
+}
+
+.litis-bubble-pulse:hover {
+  transform: scale(1.09);
+}
+
+.litis-bubble-pulse img {
+  transition: filter 0.25s ease;
+}
+
+.litis-bubble-pulse:hover img {
+  filter: brightness(1.05);
+}

@@ -1,21 +1,30 @@
 // backend/services/memoryService.js
+// ============================================================
+// 🧠 BúhoLex | Servicio de Memoria de Conversaciones (IA)
+// - Guarda turnos user/assistant por usuarioId + expedienteId
+// - Enriquecido con metadatos (intención, materia, juris, etc.)
+// - Devuelve historial limpio para usar como contexto en /ia/chat
+// ============================================================
 
 import Conversacion from "../models/Conversacion.js";
 
+/* ------------------------------------------------------------------ */
+/* 🧠 obtenerHistorialUsuario                                          */
+/* ------------------------------------------------------------------ */
 /**
- * 🧠 obtenerHistorialUsuario
- * Devuelve el historial de mensajes (user / assistant) en orden cronológico
- * para un usuario y un expediente.
+ * Devuelve el historial de mensajes (user / assistant) en orden
+ * cronológico para un usuario y un expediente.
  *
- * Formato devuelto:
+ * Formato devuelto (lo que consume /api/ia/chat):
  * [
- *   { role: "user", content: "..." },
+ *   { role: "user",      content: "..." },
  *   { role: "assistant", content: "..." },
  *   ...
  * ]
  *
- * Esto es lo que tu ruta /api/ia/chat usa para armar el contexto
- * antes de llamar a OpenAI.
+ * Si en el futuro quieres hacer un "modo experto" que vea también
+ * intencion, materiaDetectada, etc., puedes crear otra función:
+ *   obtenerHistorialExtendido(...)
  */
 export async function obtenerHistorialUsuario(usuarioId, expedienteId) {
   try {
@@ -31,33 +40,37 @@ export async function obtenerHistorialUsuario(usuarioId, expedienteId) {
       return [];
     }
 
-    // IMPORTANTE:
-    // El modelo necesita historial como [{role, content}, ...]
-    // Aquí devolvemos exactamente eso.
-    // (OJO: NO cortamos todavía. Si quieres limitar tokens puedes recortar aquí.)
-    return convo.mensajes.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    // Devuelve únicamente {role, content} para el modelo.
+    // La ruta /api/ia/chat se encarga luego de recortar por tokens.
+    return convo.mensajes
+      .filter((m) => m && m.role && typeof m.content === "string")
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
   } catch (err) {
     console.error("❌ Error en obtenerHistorialUsuario:", err);
     return [];
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* 🧾 guardarHistorial                                                 */
+/* ------------------------------------------------------------------ */
 /**
- * 🧾 guardarHistorial
  * Inserta en Mongo el turno actual:
  *   - lo que preguntó el usuario
  *   - la respuesta de LitisBot
  *
- * También guarda metadatos como intención detectada, materiaDetectada,
- * idioma y país. Eso te sirve luego para analytics y para auditar
- * qué tipo de ayuda se le dio al usuario.
+ * Además guarda metadatos:
+ *   - intencion (redaccion, analisis_juridico, etc.)
+ *   - materiaDetectada
+ *   - idioma, pais, modo
+ *   - userEmail (si existiera)
+ *   - jurisprudenciaIds usados en la respuesta
+ *   - jurisprudenciaMeta (resumen de las resoluciones)
  *
- * Además:
- * - limita el historial a las últimas N interacciones para que no
- *   crezca infinito dentro del mismo expediente (control de memoria).
+ * Y limita el historial a las últimas N entradas (control de memoria).
  */
 export async function guardarHistorial(
   usuarioId,
@@ -70,48 +83,61 @@ export async function guardarHistorial(
     const uid = usuarioId || "invitado";
     const exp = expedienteId || "default";
 
-    // construimos los dos mensajes (usuario y bot)
     const now = new Date();
 
+    // Metadatos comunes a ambos mensajes (user y bot)
+    const commonMeta = {
+      intencion: meta.intencion || undefined,
+      materiaDetectada: meta.materiaDetectada || undefined,
+      idioma: meta.idioma || "es-PE",
+      pais: meta.pais || "Perú",
+      modo: meta.modo || "general",
+      userEmail: meta.userEmail || undefined,
+      jurisprudenciaIds: Array.isArray(meta.jurisprudenciaIds)
+        ? meta.jurisprudenciaIds.map(String)
+        : meta.jurisprudenciaIds
+        ? [String(meta.jurisprudenciaIds)]
+        : [],
+      jurisprudenciaMeta: Array.isArray(meta.jurisprudenciaMeta)
+        ? meta.jurisprudenciaMeta
+        : [],
+    };
+
+    // Mensaje del usuario
     const userMsg = {
       role: "user",
       content: pregunta,
-      intencion: meta.intencion || undefined,
-      materiaDetectada: meta.materiaDetectada || undefined,
-      idioma: meta.idioma || "es-PE",
-      pais: meta.pais || "Perú",
       fecha: now,
+      ...commonMeta,
     };
 
+    // Mensaje del asistente
     const botMsg = {
       role: "assistant",
       content: respuesta,
-      intencion: meta.intencion || undefined,
-      materiaDetectada: meta.materiaDetectada || undefined,
-      idioma: meta.idioma || "es-PE",
-      pais: meta.pais || "Perú",
       fecha: now,
+      ...commonMeta,
     };
 
+    // Máximo número de mensajes a conservar (user+bot)
+    // Ejemplo: 40 → aprox. 20 turnos.
+    const MAX_MENSAJES = 40;
+
     // upsert = si no existe la conversación, la crea
-    const convo = await Conversacion.findOneAndUpdate(
+    await Conversacion.findOneAndUpdate(
       { usuarioId: uid, expedienteId: exp },
       {
-        $push: { mensajes: { $each: [userMsg, botMsg] } },
+        $push: {
+          mensajes: {
+            $each: [userMsg, botMsg],
+            $slice: -MAX_MENSAJES, // mantiene sólo los últimos N
+          },
+        },
         $set: { updatedAt: now },
         $setOnInsert: { createdAt: now },
       },
       { upsert: true, new: true }
     );
-
-    // 🔪 Control de tamaño del historial
-    // Mantener, por ejemplo, sólo las últimas ~40 entradas
-    // (20 turnos usuario+bot). Ajusta a tu gusto.
-    const MAX_MENSAJES = 40;
-    if (convo.mensajes.length > MAX_MENSAJES) {
-      convo.mensajes = convo.mensajes.slice(-MAX_MENSAJES);
-      await convo.save();
-    }
 
     return true;
   } catch (err) {

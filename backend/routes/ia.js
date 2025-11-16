@@ -503,10 +503,10 @@ router.post("/chat", async (req, res) => {
       expedienteId = "default",
       idioma = "es-PE",
       pais = "Perú",
-      modo = "general", // compat con front
-      materia = "general", // compat con front
-      historial = [], // opcional desde el front
-      userEmail = "", // opcional
+      modo = "general",       // compat con front
+      materia = "general",    // compat con front
+      historial = [],         // opcional desde el front
+      userEmail = "",         // opcional
 
       // 🔗 Integración con gestor de jurisprudencia
       jurisprudenciaId,
@@ -514,15 +514,36 @@ router.post("/chat", async (req, res) => {
       selectedJurisId,
       jurisprudenciaIds,
       jurisIds,
-      jurisTexto,
+      jurisTextoBase,
     } = req.body || {};
+
+    // 👇 BLOQUE OPCIONAL PARA DEBUG
+    console.log(
+      chalk.blueBright("[IA] Body /ia/chat:"),
+      JSON.stringify(
+        {
+          prompt: prompt?.slice(0, 120),
+          jurisprudenciaId,
+          jurisId,
+          selectedJurisId,
+          jurisTextoBase:
+            typeof jurisTextoBase === "string"
+              ? `${jurisTextoBase.slice(0, 120)}...`
+              : null,
+        },
+        null,
+        2
+      )
+    );
+    /* ---------- 0) Sanitizar prompt del usuario ---------- */
 
     const userPromptLimpio = limpiarPromptUsuario(prompt);
     if (!userPromptLimpio || userPromptLimpio.length < 3) {
       return res.status(400).json({ ok: false, error: "Falta prompt" });
     }
 
-    // IDs de jurisprudencia solicitados (distintas variantes de naming)
+    /* ---------- 1) Normalizar IDs de jurisprudencia ---------- */
+
     const idsSolicitadosRaw = [
       jurisprudenciaId,
       jurisId,
@@ -533,19 +554,23 @@ router.post("/chat", async (req, res) => {
 
     const idsSolicitados = Array.from(new Set(idsSolicitadosRaw.map(String)));
 
-    // Materia detectada
+    /* ---------- 2) Detectar materia ---------- */
+
     const materiaDetectada = detectarMateria(userPromptLimpio, materia);
 
-    // Contexto de jurisprudencia (si hay IDs)
-    let jurisContextText = "";
+    /* ---------- 3) Construir contexto de jurisprudencia ---------- */
+
     let jurisMetas = [];
+    const partesContexto = [];
+
+    // 3.a) Contexto desde Mongo (si hay IDs)
     if (idsSolicitados.length > 0) {
       try {
-        const { text, metas } = await obtenerContextoJurisprudencia(
-          idsSolicitados
-        );
-        jurisContextText = text;
-        jurisMetas = metas;
+        const { text, metas } = await obtenerContextoJurisprudencia(idsSolicitados);
+        if (text && text.trim().length > 0) {
+          partesContexto.push(text.trim());
+        }
+        jurisMetas = Array.isArray(metas) ? metas : [];
       } catch (errCtx) {
         console.warn(
           chalk.yellowBright(
@@ -557,19 +582,40 @@ router.post("/chat", async (req, res) => {
       }
     }
 
-    // 🔁 Si no pudimos armar contexto desde Mongo, pero el front envió texto, úsalo
-    if (!jurisContextText && typeof jurisTexto === "string") {
-      const limpio = jurisTexto.trim();
-      if (limpio) {
-        jurisContextText = limpio;
-        // En este caso no tenemos metas estructuradas
-        jurisMetas = [];
-      }
+    // 3.b) Contexto enviado desde el frontend (jurisTextoBase)
+    const tieneJurisTextoBase =
+      typeof jurisTextoBase === "string" && jurisTextoBase.trim().length > 0;
+
+    if (tieneJurisTextoBase) {
+      partesContexto.push(jurisTextoBase.trim());
     }
 
-    const tieneJurisContext = !!jurisContextText;
+    // 3.c) Texto final de contexto + límite de longitud
+    let jurisContextText = partesContexto.join("\n\n-----\n\n").trim();
+    const MAX_CTX_CHARS = 12_000;
+    if (jurisContextText.length > MAX_CTX_CHARS) {
+      jurisContextText = jurisContextText.slice(0, MAX_CTX_CHARS);
+    }
 
-    // Intención / system prompt
+    const tieneJurisContext = jurisContextText.length > 0;
+
+    // Log de diagnóstico fino
+    console.log(
+      chalk.magentaBright(
+        `[IA] JurisCtx -> ids:${idsSolicitados.length} | hasTextoBase:${tieneJurisTextoBase} | len:${jurisContextText.length}`
+      )
+    );
+
+    if (idsSolicitados.length > 0 && !tieneJurisContext) {
+      console.warn(
+        chalk.yellowBright(
+          "[IA] Advertencia: hay IDs de jurisprudencia pero el contexto final está vacío."
+        )
+      );
+    }
+
+    /* ---------- 4) Intención y system prompt ---------- */
+
     const intencion = clasificarIntencion(userPromptLimpio);
     const systemPrompt = buildSystemPrompt({
       intencion,
@@ -578,7 +624,8 @@ router.post("/chat", async (req, res) => {
       hasJurisContext: tieneJurisContext,
     });
 
-    // Historial desde Mongo (si falla, seguimos sin tumbar el chat)
+    /* ---------- 5) Historial (Mongo + cliente) ---------- */
+
     let historialPrevio = [];
     try {
       const bruto = await obtenerHistorialUsuario(usuarioId, expedienteId);
@@ -594,8 +641,9 @@ router.post("/chat", async (req, res) => {
       historialPrevio = [];
     }
 
-    // Historial que puede enviar el front
     const historialCliente = normalizarHistorialCliente(historial);
+
+    /* ---------- 6) Mensajes para el modelo ---------- */
 
     let messages = [
       { role: "system", content: systemPrompt },
@@ -607,7 +655,9 @@ router.post("/chat", async (req, res) => {
       messages.push({
         role: "system",
         content:
-          "Contexto de jurisprudencia seleccionada (no inventes información fuera de este contenido, úsalo solo como referencia):\n\n" +
+          "Esta es la sentencia o resolución judicial específica que el usuario está analizando. " +
+          "Debes utilizar este contenido como base principal de tu análisis, resúmenes y explicaciones. " +
+          "No inventes hechos ni fundamentos que no se encuentren aquí o que no sean estándares jurídicos generales:\n\n" +
           jurisContextText,
       });
     }
@@ -618,11 +668,11 @@ router.post("/chat", async (req, res) => {
 
     console.log(
       chalk.cyanBright(
-        `📨 [IA] intencion:${intencion} | materia:${materiaDetectada} | idioma:${idioma} | pais:${pais} | usuario:${usuarioId} | exp:${expedienteId} | jurisContext:${
-          tieneJurisContext ? idsSolicitados.length : 0
-        }`
+        `📨 [IA] intencion:${intencion} | materia:${materiaDetectada} | idioma:${idioma} | pais:${pais} | usuario:${usuarioId} | exp:${expedienteId} | jurisCtxLen:${jurisContextText.length}`
       )
     );
+
+    /* ---------- 7) Llamada a OpenAI ---------- */
 
     const temperatura =
       intencion === "redaccion"
@@ -637,7 +687,8 @@ router.post("/chat", async (req, res) => {
       temperature: temperatura,
     });
 
-    // Guardar historial (si falla, no rompemos la respuesta al usuario)
+    /* ---------- 8) Guardar historial ---------- */
+
     try {
       await guardarHistorial(
         usuarioId,
@@ -662,6 +713,8 @@ router.post("/chat", async (req, res) => {
         )
       );
     }
+
+    /* ---------- 9) Sugerencias contextuales ---------- */
 
     let sugerencias = [];
     if (intencion === "redaccion") {
@@ -719,6 +772,7 @@ router.post("/chat", async (req, res) => {
     });
   }
 });
+
 
 /* ============================ /api/ia/test ============================ */
 

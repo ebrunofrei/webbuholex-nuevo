@@ -15,6 +15,7 @@ import {
   FaStop,
   FaBellSlash,
   FaBell,
+  FaSlidersH,
 } from "react-icons/fa";
 
 import litisLogo from "@/assets/litisbot-logo.png";
@@ -30,6 +31,8 @@ import {
   getTTSMuted,
   isSpeaking,
 } from "@/services/vozService.js";
+import LitisBotToolsPanel from "@/components/ui/LitisBotToolsPanel.jsx";
+
 
 /* ============================================================
    ⚙️ Preferencias TTS (voz, velocidad, tono) + storage (v1)
@@ -131,14 +134,30 @@ function prepararTextoParaCopia(html) {
   const plano = toPlain(html);
   return plano.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+function stripMarkdownSyntax(text = "") {
+  let t = String(text || "");
 
+  // Quitar encabezados tipo "#### Título"
+  t = t.replace(/^#{1,6}\s*/gm, "");
+
+  // Quitar negritas/cursivas/código: **texto**, *texto*, `código`
+  t = t.replace(/[*_`~]+/g, "");
+
+  // Normalizar viñetas: "- texto" -> "• texto"
+  t = t.replace(/^\s*[-+*]\s+/gm, "• ");
+
+  // Colapsar espacios múltiples
+  t = t.replace(/\s{2,}/g, " ");
+
+  return t.trim();
+}
+  
 /* ============================================================
    💬 Mensaje del ASISTENTE (burbuja blanca)
 ============================================================ */
 function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback, ttsPrefs }) {
   const [editando, setEditando] = useState(false);
   const [editValue, setEditValue] = useState(msg.content || "");
-  const [leyendo, setLeyendo] = useState(false);
 
   async function handleSpeak() {
     if (leyendo) return;
@@ -213,23 +232,16 @@ function MensajeBotBubble({ msg, onCopy, onEdit, onFeedback, ttsPrefs }) {
         </div>
       )}
 
-      {!editando && (
+     {!editando && (
         <div className="flex flex-row flex-wrap items-center gap-4 mt-4 text-[18px]">
-          {/* voz */}
+          {/* copiar */}
           <button
-            className="flex items-center justify-center w-9 h-9 rounded-full"
-            style={{
-              background: "#5C2E0B",
-              color: "#fff",
-              opacity: leyendo ? 0.6 : 1,
-              cursor: leyendo ? "not-allowed" : "pointer",
-            }}
-            aria-label="Leer en voz alta"
-            title="Leer en voz alta"
-            disabled={leyendo}
-            onClick={handleSpeak}
+            style={{ color: "#5C2E0B" }}
+            onClick={handleCopiar}
+            title="Copiar para Word / PDF"
+            aria-label="Copiar"
           >
-            <FaVolumeUp size={16} />
+            <FaRegCopy size={18} />
           </button>
 
           {/* copiar */}
@@ -334,20 +346,25 @@ function TTSControls({ mensajes, ttsPrefs }) {
   const [reading, setReading] = useState(false);
 
   async function handleLeerUltimo() {
-    const texto = obtenerUltimoMensaje(mensajes);
-    if (!texto) return;
-    setReading(true);
-    try {
-      await reproducirVoz(toPlain(texto), {
-        voz: ttsPrefs.voiceId,
-        rate: Math.round(((ttsPrefs?.rate ?? 1) - 1) * 100) || 0,
-        pitch: parseInt(ttsPrefs?.pitch ?? 0, 10) || 0,
-      });
-    } finally {
-      // reading indica intento; no el estado real (isSpeaking se consulta aparte si hace falta)
-      setReading(false);
-    }
+  const raw = obtenerUltimoMensaje(mensajes);
+  if (!raw) return;
+
+  // 1) Limpiamos markdown (####, **, etc.)
+  const sinMarkdown = stripMarkdownSyntax(raw);
+
+  setReading(true);
+  try {
+    // 2) Pasamos a texto plano (por si viene como HTML)
+    const textoPlano = toPlain(sinMarkdown);
+    await reproducirVoz(textoPlano, {
+      voz: ttsPrefs.voiceId,
+      rate: Math.round(((ttsPrefs?.rate ?? 1) - 1) * 100) || 0,
+      pitch: parseInt(ttsPrefs?.pitch ?? 0, 10) || 0,
+    });
+  } finally {
+    setReading(false);
   }
+}
 
   async function handleRepeat() {
     // Reproduce el último 1 vez más (reinicia)
@@ -440,7 +457,7 @@ function TTSControls({ mensajes, ttsPrefs }) {
 }
 
 /* ============================================================
-   🪟 ChatWindow (no remonta) + a11y + controles TTS
+   🪟 ChatWindow (no remonta) + a11y + controles TTS + PANEL
 ============================================================ */
 function ChatWindow({
   isOpen,
@@ -459,23 +476,21 @@ function ChatWindow({
   showTtsCfg,
   setShowTtsCfg,
   setTtsPrefs,
+  // 👇 nuevos props para el panel
+  usuarioId,
+  jurisSeleccionada,
+  onNuevoChat,
+  onOpenFull,
 }) {
+  const [toolsOpen, setToolsOpen] = useState(false);
   if (!isOpen) return null;
+
   const headerBg = "#5C2E0B";
   const headerColor = "#fff";
 
-  // Panel compacto de configuración TTS
+  // Panel de configuración TTS (sin botón ⚙️ aquí)
   const PanelTTS = (
     <>
-      <button
-        className="rounded-full w-10 h-10 text-white active:scale-95 transition-transform"
-        style={{ background: "#5C2E0B" }}
-        title="Configurar voz"
-        onClick={() => setShowTtsCfg((v) => !v)}
-      >
-        ⚙️
-      </button>
-
       {showTtsCfg && (
         <div
           className="w-full mt-2 p-3 rounded-lg border text-[14px]"
@@ -540,57 +555,238 @@ function ChatWindow({
     "aria-label": "Chat con LitisBot",
   };
 
+  // Panel (drawer) de herramientas
+  const toolsPanel = (
+    <LitisBotToolsPanel
+      open={toolsOpen}
+      onClose={() => setToolsOpen(false)}
+      isPro={pro}
+      usuarioId={usuarioId || "Invitado"}
+      hasJuris={!!jurisSeleccionada}
+      onNuevoChat={onNuevoChat}
+      onToggleTtsCfg={() => setShowTtsCfg((v) => !v)}
+      onOpenFull={onOpenFull}
+    />
+  );
+
   /* ============ MODO MÓVIL (fullscreen) ============ */
   if (isMobile) {
     return (
+      <>
+        <div
+          {...containerCommonProps}
+          className="fixed inset-0 z-[9998] flex flex-col bg-white"
+          style={{ backgroundColor: "#ffffff", color: "#5C2E0B" }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center justify-between px-3 py-2 shadow-md"
+            style={{ background: headerBg, color: headerColor }}
+          >
+            <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
+              <div
+                className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
+                style={{
+                  color: "#5C2E0B",
+                  fontWeight: "bold",
+                  fontSize: "11px",
+                }}
+              >
+                <img
+                  src={litisLogo}
+                  alt="LitisBot"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span>LitisBot</span>
+                <span className="text-[11px] font-normal opacity-80">
+                  {pro ? "Acceso Pro" : "Asistencia básica"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              {/* 🔘 Icono de panel desplegable */}
+              <button
+                className="text-white text-lg px-2"
+                onClick={() => setToolsOpen(true)}
+                aria-label="Abrir panel de herramientas"
+                title="Panel de herramientas"
+              >
+                <FaSlidersH />
+              </button>
+
+              <button
+                className="text-white font-bold text-xl leading-none px-2"
+                onClick={() => {
+                  stopVoz();
+                  setIsOpen(false);
+                }}
+                aria-label="Cerrar chat"
+                title="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {/* Feed */}
+          <div
+            ref={feedRef}
+            className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-3 py-3"
+            style={{ backgroundColor: "#ffffff" }}
+          >
+            <div className="flex flex-col gap-4">
+              {mensajes.map((m, idx) =>
+                m.role === "assistant" ? (
+                  <div
+                    key={idx}
+                    className="flex w-full justify-start text-[#5C2E0B]"
+                  >
+                    <MensajeBotBubble
+                      msg={m}
+                      ttsPrefs={ttsPrefs}
+                      onCopy={() => {}}
+                      onEdit={(nuevo) =>
+                        setMensajes((prev) => {
+                          const cl = [...prev];
+                          cl[idx] = { ...cl[idx], content: nuevo };
+                          return cl;
+                        })
+                      }
+                      onFeedback={(tipo) =>
+                        console.log("feedback:", tipo)
+                      }
+                    />
+                  </div>
+                ) : (
+                  <MensajeUsuarioBubble key={idx} texto={m.content} />
+                )
+              )}
+
+              {cargando && (
+                <div className="flex w-full justify-start">
+                  <div
+                    className="rounded-[1.5rem] shadow text-[15px] max-w-[80%] px-4 py-3"
+                    style={{
+                      backgroundColor: "#ffffff",
+                      border: "1px solid rgba(92,46,11,0.15)",
+                      color: "#5C2E0B",
+                    }}
+                  >
+                    Procesando…
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Controles TTS */}
+          <div className="px-3 pb-2">
+            <TTSControls mensajes={mensajes} ttsPrefs={ttsPrefs} />
+          </div>
+
+          {/* Input */}
+          <ChatInputBar
+            PanelTTS={PanelTTS}
+            input={input}
+            setInput={setInput}
+            cargando={cargando}
+            handleKeyDown={handleKeyDown}
+            enviarMensaje={enviarMensaje}
+          />
+        </div>
+
+        {toolsPanel}
+      </>
+    );
+  }
+
+  /* ============ MODO DESKTOP (card flotante) ============ */
+  return (
+    <>
       <div
         {...containerCommonProps}
-        className="fixed inset-0 z-[9998] flex flex-col bg-white"
-        style={{ backgroundColor: "#ffffff", color: "#5C2E0B" }}
+        className="fixed z-[9998] flex flex-col rounded-[1rem] shadow-2xl border overflow-hidden bg-white"
+        style={{
+          borderColor: "rgba(92,46,11,0.3)",
+          backgroundColor: "#ffffff",
+          color: "#5C2E0B",
+          bottom: "96px",
+          right: "24px",
+          width: "460px",
+          maxHeight: "80vh",
+        }}
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-3 py-2 shadow-md"
+          className="flex items-center justify-between px-4 py-3"
           style={{ background: headerBg, color: headerColor }}
         >
           <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
             <div
               className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
-              style={{ color: "#5C2E0B", fontWeight: "bold", fontSize: "11px" }}
+              style={{
+                color: "#5C2E0B",
+                fontWeight: "bold",
+                fontSize: "11px",
+              }}
             >
-              <img src={litisLogo} alt="LitisBot" className="w-full h-full object-contain" />
+              <img
+                src={litisLogo}
+                alt="LitisBot"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div className="flex flex-col leading-tight">
               <span>LitisBot</span>
               <span className="text-[11px] font-normal opacity-80">
-                {pro ? "Acceso Pro" : "Asistencia básica"}
+                {pro
+                  ? "Acceso Pro • Estrategia legal avanzada"
+                  : "Asistencia básica"}
               </span>
             </div>
           </div>
 
-          <button
-            className="text-white font-bold text-xl leading-none px-2"
-            onClick={() => {
-              stopVoz(); // al cerrar, no dejamos audio colgado
-              setIsOpen(false);
-            }}
-            aria-label="Cerrar chat"
-            title="Cerrar"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-1">
+            {/* 🔘 Icono de panel desplegable */}
+            <button
+              className="text-white text-lg px-2"
+              onClick={() => setToolsOpen(true)}
+              aria-label="Abrir panel de herramientas"
+              title="Panel de herramientas"
+            >
+              <FaSlidersH />
+            </button>
+
+            <button
+              className="text-white font-bold text-xl leading-none px-2"
+              onClick={() => {
+                stopVoz();
+                setIsOpen(false);
+              }}
+              aria-label="Cerrar chat"
+              title="Cerrar"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         {/* Feed */}
         <div
           ref={feedRef}
-          className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-3 py-3"
+          className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-4 py-4"
           style={{ backgroundColor: "#ffffff" }}
         >
           <div className="flex flex-col gap-4">
             {mensajes.map((m, idx) =>
               m.role === "assistant" ? (
-                <div key={idx} className="flex w-full justify-start text-[#5C2E0B]">
+                <div
+                  key={idx}
+                  className="flex w-full justify-start text-[#5C2E0B]"
+                >
                   <MensajeBotBubble
                     msg={m}
                     ttsPrefs={ttsPrefs}
@@ -628,11 +824,11 @@ function ChatWindow({
         </div>
 
         {/* Controles TTS */}
-        <div className="px-3 pb-2">
+        <div className="px-4 pb-2">
           <TTSControls mensajes={mensajes} ttsPrefs={ttsPrefs} />
         </div>
 
-        {/* Input */}
+        {/* Footer */}
         <ChatInputBar
           PanelTTS={PanelTTS}
           input={input}
@@ -640,121 +836,12 @@ function ChatWindow({
           cargando={cargando}
           handleKeyDown={handleKeyDown}
           enviarMensaje={enviarMensaje}
+          pro={pro}
         />
       </div>
-    );
-  }
 
-  /* ============ MODO DESKTOP (card flotante) ============ */
-  return (
-    <div
-      {...containerCommonProps}
-      className="fixed z-[9998] flex flex-col rounded-[1rem] shadow-2xl border overflow-hidden bg-white"
-      style={{
-        borderColor: "rgba(92,46,11,0.3)",
-        backgroundColor: "#ffffff",
-        color: "#5C2E0B",
-        bottom: "96px",
-        right: "24px",
-        width: "460px",
-        maxHeight: "80vh",
-      }}
-    >
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-3"
-        style={{ background: headerBg, color: headerColor }}
-      >
-        <div className="flex items-center gap-2 text-white font-semibold text-[15px] leading-tight">
-          <div
-            className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden"
-            style={{ color: "#5C2E0B", fontWeight: "bold", fontSize: "11px" }}
-          >
-            <img src={litisLogo} alt="LitisBot" className="w-full h-full object-contain" />
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span>LitisBot</span>
-            <span className="text-[11px] font-normal opacity-80">
-              {pro ? "Acceso Pro • Estrategia legal avanzada" : "Asistencia básica"}
-            </span>
-          </div>
-        </div>
-
-        <button
-          className="text-white font-bold text-xl leading-none px-2"
-          onClick={() => {
-            stopVoz();
-            setIsOpen(false);
-          }}
-          aria-label="Cerrar chat"
-          title="Cerrar"
-        >
-          ×
-        </button>
-      </div>
-
-      {/* Feed */}
-      <div
-        ref={feedRef}
-        className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar px-4 py-4"
-        style={{ backgroundColor: "#ffffff" }}
-      >
-        <div className="flex flex-col gap-4">
-          {mensajes.map((m, idx) =>
-            m.role === "assistant" ? (
-              <div key={idx} className="flex w-full justify-start text-[#5C2E0B]">
-                <MensajeBotBubble
-                  msg={m}
-                  ttsPrefs={ttsPrefs}
-                  onCopy={() => {}}
-                  onEdit={(nuevo) =>
-                    setMensajes((prev) => {
-                      const cl = [...prev];
-                      cl[idx] = { ...cl[idx], content: nuevo };
-                      return cl;
-                    })
-                  }
-                  onFeedback={(tipo) => console.log("feedback:", tipo)}
-                />
-              </div>
-            ) : (
-              <MensajeUsuarioBubble key={idx} texto={m.content} />
-            )
-          )}
-
-          {cargando && (
-            <div className="flex w-full justify-start">
-              <div
-                className="rounded-[1.5rem] shadow text-[15px] max-w-[80%] px-4 py-3"
-                style={{
-                  backgroundColor: "#ffffff",
-                  border: "1px solid rgba(92,46,11,0.15)",
-                  color: "#5C2E0B",
-                }}
-              >
-                Procesando…
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Controles TTS */}
-      <div className="px-4 pb-2">
-        <TTSControls mensajes={mensajes} ttsPrefs={ttsPrefs} />
-      </div>
-
-      {/* Footer */}
-      <ChatInputBar
-        PanelTTS={PanelTTS}
-        input={input}
-        setInput={setInput}
-        cargando={cargando}
-        handleKeyDown={handleKeyDown}
-        enviarMensaje={enviarMensaje}
-        pro={pro}
-      />
-    </div>
+      {toolsPanel}
+    </>
   );
 }
 
@@ -896,19 +983,24 @@ export default function LitisBotBubbleChat({
   const BUBBLE_SIZE = 60;
   const MARGIN = 12;
 
-  const POS_KEY = "litis_bubble_pos_v1";
-  const loadPos = () => {
-    try {
-      return JSON.parse(localStorage.getItem(POS_KEY) || "null");
-    } catch {
-      return null;
-    }
-  };
-  const savePos = (p) => {
-    try {
-      localStorage.setItem(POS_KEY, JSON.stringify(p));
-    } catch {}
-  };
+    const POS_KEY = "litis_bubble_pos_v1";
+
+    const loadPos = () => {
+      if (!IS_BROWSER) return null;
+      try {
+        return JSON.parse(window.localStorage.getItem(POS_KEY) || "null");
+      } catch {
+        return null;
+      }
+    };
+
+    const savePos = (p) => {
+      if (!IS_BROWSER) return;
+      try {
+        window.localStorage.setItem(POS_KEY, JSON.stringify(p));
+      } catch {}
+    };
+
 
   // Estado de posición (left/top). Si no hay, usamos bottom/right por defecto.
   const [pos, setPos] = useState(() => loadPos() || { x: null, y: null });
@@ -967,160 +1059,204 @@ export default function LitisBotBubbleChat({
 const placeholderIndexRef = useRef(-1);
 
 // 🔎 Convierte la sentencia seleccionada en texto plano para la IA
-function buildJurisPlainText(doc) {
-  if (!doc) return "";
+  // 🔎 Convierte la sentencia seleccionada en texto plano para la IA
+  function buildJurisPlainText(doc) {
+    if (!doc) return "";
 
-  const partes = [];
+    const partes = [];
 
-  if (doc.titulo) {
-    partes.push(`TÍTULO: ${doc.titulo}`);
-  }
-  if (doc.expediente || doc.numeroExpediente) {
-    partes.push(
-      `EXPEDIENTE: ${doc.expediente || doc.numeroExpediente}`
-    );
-  }
-  if (doc.sala || doc.organo || doc.salaSuprema) {
-    partes.push(
-      `ÓRGANO / SALA: ${doc.sala || doc.organo || doc.salaSuprema}`
-    );
-  }
-  if (doc.especialidad || doc.materia) {
-    partes.push(`ESPECIALIDAD / MATERIA: ${doc.especialidad || doc.materia}`);
-  }
-  if (doc.fechaResolucion || doc.fecha) {
-    partes.push(`FECHA: ${doc.fechaResolucion || doc.fecha}`);
-  }
-  if (doc.fuente) {
-    partes.push(`FUENTE: ${doc.fuente}`);
-  }
-  if (doc.sumilla) {
-    partes.push(`SUMILLA:\n${doc.sumilla}`);
-  }
-  if (doc.resumen) {
-    partes.push(`RESUMEN:\n${doc.resumen}`);
-  }
-
-  // Si tienes más campos (fundamentos, parte resolutiva, etc.) los puedes agregar aquí
-
-  return partes.join("\n\n").trim();
-}
-
-// Enviar mensaje desde la burbuja
-async function enviarMensaje() {
-  // 🔒 Evitar envíos vacíos o dobles
-  const texto = input?.trim();
-  if (!texto || cargando) return;
-
-  // Limpiamos input y marcamos estado de carga
-  setInput("");
-  setCargando(true);
-
-  // Mensaje del usuario + placeholder "pensando…"
-  setMensajes((prev) => {
-    const next = [...prev, { role: "user", content: texto }];
-
-    // Guardamos índice del placeholder para luego poder reemplazarlo
-    placeholderIndexRef.current = next.length;
-    next.push({
-      role: "assistant",
-      content: "Espera un momento…",
-      _placeholder: true,
-    });
-
-    return next;
-  });
-
-  try {
-    // 🎯 Contexto de jurisprudencia (si hay sentencia seleccionada)
-    const jurisTexto = buildJurisPlainText(jurisSeleccionada);
-
-    // 🎯 Payload base para la IA
-    const payload = {
-      prompt: texto,
-      usuarioId: usuarioId || "invitado-burbuja",
-      expedienteId: "burbuja",
-      idioma: "es-PE",
-      pais: "Perú",
-    };
-
-    // Si existe un _id real (cuando conectemos con Mongo), mándalo también
-    if (jurisSeleccionada && jurisSeleccionada._id) {
-      payload.jurisprudenciaId = jurisSeleccionada._id;
+    if (doc.titulo) {
+      partes.push(`TÍTULO: ${doc.titulo}`);
+    }
+    if (doc.numeroExpediente || doc.numero) {
+      partes.push(
+        `EXPEDIENTE: ${doc.numeroExpediente || doc.numero}`
+      );
+    }
+    if (doc.sala || doc.organo || doc.salaSuprema) {
+      partes.push(
+        `ÓRGANO / SALA: ${doc.sala || doc.organo || doc.salaSuprema}`
+      );
+    }
+    if (doc.especialidad || doc.materia) {
+      partes.push(
+        `ESPECIALIDAD / MATERIA: ${doc.especialidad || doc.materia}`
+      );
+    }
+    if (doc.fechaResolucion || doc.fecha) {
+      partes.push(`FECHA: ${doc.fechaResolucion || doc.fecha}`);
+    }
+    if (doc.fuente) {
+      partes.push(`FUENTE: ${doc.fuente}`);
+    }
+    if (doc.sumilla) {
+      partes.push(`SUMILLA:\n${doc.sumilla}`);
+    }
+    if (doc.resumen) {
+      partes.push(`RESUMEN:\n${doc.resumen}`);
     }
 
-    // 👉 Y además mandamos el texto plano de la sentencia (frontend)
-    if (jurisTexto) {
-      payload.jurisTexto = jurisTexto;
-    }
+    // Si luego agregas fundamentos, parte resolutiva, etc., lo metes aquí
 
-    const data = await enviarMensajeIA(payload);
-
-    const respuestaTexto =
-      (data?.respuesta || data?.text || "").toString().trim() ||
-      "No pude generar respuesta. ¿Intentamos de nuevo?";
-
-    setMensajes((prev) => {
-      const next = [...prev];
-      const idx = placeholderIndexRef.current;
-
-      // Si el placeholder sigue en la posición esperada, lo quitamos
-      if (
-        idx >= 0 &&
-        idx < next.length &&
-        next[idx]?.content === "Espera un momento…"
-      ) {
-        next.splice(idx, 1);
-      }
-
-      // Añadimos respuesta real de la IA
-      next.push({
-        role: "assistant",
-        content: respuestaTexto,
-      });
-
-      // Reseteamos índice
-      placeholderIndexRef.current = -1;
-      return next;
-    });
-  } catch (err) {
-    console.error("❌ Error burbuja LitisBot:", err);
-
-    setMensajes((prev) => {
-      const next = [...prev];
-      const idx = placeholderIndexRef.current;
-
-      if (
-        idx >= 0 &&
-        idx < next.length &&
-        next[idx]?.content === "Espera un momento…"
-      ) {
-        next.splice(idx, 1);
-      }
-
-      next.push({
-        role: "assistant",
-        content:
-          "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente.",
-      });
-
-      placeholderIndexRef.current = -1;
-      return next;
-    });
-  } finally {
-    setCargando(false);
+    return partes.join("\n\n").trim();
   }
-}
 
-  // Enter envía, Shift+Enter hace salto de línea
+  // Enviar mensaje desde la burbuja
+  async function enviarMensaje() {
+    const texto = (input || "").trim();
+    if (!texto || cargando) return;
+
+    // limpiar input y marcar estado de carga
+    setInput("");
+    setCargando(true);
+
+    // Mensaje user + placeholder
+    setMensajes((prev) => {
+      const next = [...prev, { role: "user", content: texto }];
+
+      // guardamos índice del placeholder
+      placeholderIndexRef.current = next.length;
+      next.push({
+        role: "assistant",
+        content: "Espera un momento…",
+        _placeholder: true,
+      });
+
+      return next;
+    });
+
+    try {
+      // 🎯 Payload base
+      const payload = {
+        prompt: texto,
+        usuarioId: usuarioId || "invitado-burbuja",
+        expedienteId: "burbuja",
+        idioma: "es-PE",
+        pais: "Perú",
+        modo: "general",
+        materia: "general",
+        // si más adelante quieres mandar historial, se puede añadir aquí
+        // historial: buildHistorial(mensajes),
+      };
+
+            // Intentamos obtener la sentencia desde el prop o, en su defecto, desde sessionStorage
+      let docJuris = jurisSeleccionada || null;
+
+      if (!docJuris && IS_BROWSER) {
+        try {
+          const raw = window.sessionStorage.getItem(
+            "litis:lastJurisSeleccionada"
+          );
+          if (raw) {
+            docJuris = JSON.parse(raw);
+          }
+        } catch (e) {
+          console.warn(
+            "[LitisBotBubble] No se pudo leer juris de sessionStorage:",
+            e
+          );
+        }
+      }
+
+      console.log("[LitisBotBubble] docJuris usado en enviarMensaje:", docJuris);
+
+      // 📎 Adjuntamos CONTEXTO de jurisprudencia si lo hay
+      if (docJuris && typeof docJuris === "object") {
+        const { _id } = docJuris || {};
+
+        // id para que el backend pueda buscar en Mongo si hace falta
+        if (_id) {
+          payload.jurisprudenciaId = String(_id);
+        }
+
+        // Texto plano listo para el modelo (por si falla la búsqueda en BD)
+        const plain = buildJurisPlainText(docJuris);
+        if (plain) {
+          payload.jurisTextoBase = plain;
+        }
+      }
+
+      // 🔎 Log de diagnóstico para verificar qué viaja al backend
+      console.log(
+        "[LitisBotBubble] Payload a /ia/chat:",
+        JSON.stringify(payload, null, 2)
+      );
+
+      const data = await enviarMensajeIA(payload);
+
+      const respuestaTexto =
+        (data?.respuesta || data?.text || "").toString().trim() ||
+        "No pude generar respuesta. ¿Intentamos de nuevo?";
+
+      // Reemplazar placeholder por respuesta real
+      setMensajes((prev) => {
+        const next = [...prev];
+        const idx = placeholderIndexRef.current;
+
+        if (
+          idx >= 0 &&
+          idx < next.length &&
+          next[idx]?._placeholder &&
+          next[idx]?.content === "Espera un momento…"
+        ) {
+          next.splice(idx, 1);
+        }
+
+        next.push({ role: "assistant", content: respuestaTexto });
+        placeholderIndexRef.current = -1;
+        return next;
+      });
+
+      // Si quieres limpiar la selección de jurisprudencia después de usarla:
+      if (onClearJuris) {
+        onClearJuris();
+      }
+    } catch (err) {
+      console.error("❌ Error burbuja LitisBot:", err);
+
+      setMensajes((prev) => {
+        const next = [...prev];
+        const idx = placeholderIndexRef.current;
+
+        if (
+          idx >= 0 &&
+          idx < next.length &&
+          next[idx]?._placeholder &&
+          next[idx]?.content === "Espera un momento…"
+        ) {
+          next.splice(idx, 1);
+        }
+
+        next.push({
+          role: "assistant",
+          content:
+            "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente.",
+        });
+
+        placeholderIndexRef.current = -1;
+        return next;
+      });
+    } finally {
+      setCargando(false);
+    }
+  }
+
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       enviarMensaje();
     }
   }
+  function handleNuevoChat() {
+    const bienvenida = {
+      role: "assistant",
+      content:
+        "Iniciamos un nuevo chat. Cuéntame el caso o la consulta que deseas analizar ahora.",
+    };
+    setMensajes([bienvenida]);
+    saveChatSession([bienvenida]);
+  }
 
-  // Estilos de posición del FAB
   const bubbleStyle =
     pos.x !== null && pos.y !== null
       ? { left: pos.x, top: pos.y }
@@ -1145,11 +1281,19 @@ async function enviarMensaje() {
         showTtsCfg={showTtsCfg}
         setShowTtsCfg={setShowTtsCfg}
         setTtsPrefs={setTtsPrefs}
+        usuarioId={usuarioId}
+        jurisSeleccionada={jurisSeleccionada}
+        onNuevoChat={handleNuevoChat}
+        onOpenFull={() => {
+          if (!IS_BROWSER) return;
+          const url = "/litisbot";
+          window.open(url, "_blank", "noopener,noreferrer");
+      }}
       />
 
       {/* FAB (draggable con Pointer Events, móvil/desktop) */}
       <div
-        className="fixed z-[9999] flex items-center justify-center rounded-full shadow-xl border bg-white select-none"
+        className="fixed z-[9999] flex items-center justify-center rounded-full shadow-xl border select-none litis-bubble-pulse"
         role="button"
         aria-label="Abrir LitisBot"
         onPointerDown={onPointerDown}
@@ -1161,10 +1305,11 @@ async function enviarMensaje() {
           height: 60,
           position: "fixed",
           ...bubbleStyle,
-          touchAction: "none", // IMPORTANTÍSIMO para arrastre táctil sin scroll
+          touchAction: "none",
           cursor: "pointer",
         }}
       >
+
         <img
           src={litisLogo}
           alt="LitisBot"
