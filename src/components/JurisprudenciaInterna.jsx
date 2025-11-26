@@ -20,7 +20,6 @@ import {
 import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
 import JurisprudenciaCard from "@/components/jurisprudencia/JurisprudenciaCard";
 
-
 const TAGS = [
   { id: "todas", label: "Todas" },
   { id: "recientes", label: "Recientes" },
@@ -310,137 +309,157 @@ export default function JurisprudenciaInterna({ onPreguntarConJuris }) {
           </p>
         )}
 
-              {/* Lista de resultados */}
-      {resultados.length > 0 && (
-        <div className="mt-4 space-y-3">
-          <p className="text-xs text-gray-500">
-            {resultados.length} resolución
-            {resultados.length !== 1 ? "es encontradas" : " encontrada"}.
-          </p>
+        {/* Lista de resultados */}
+        {resultados.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-gray-500">
+              {resultados.length} resolución
+              {resultados.length !== 1 ? "es encontradas" : " encontrada"}.
+            </p>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {resultados.map((item) => {
-              const {
-                _id,
-                materia,
-                organo,
-                estado,
-                score,
-                titulo,
-                numero,
-                numeroExpediente,
-                sumilla,
-                resumen,
-                fechaResolucion,
-              } = item;
+            <div className="grid gap-3 md:grid-cols-2">
+              {resultados.map((item) => {
+                const {
+                  _id,
+                  materia,
+                  organo,
+                  estado,
+                  score,
+                  titulo,
+                  numero,
+                  numeroExpediente,
+                  sumilla,
+                  resumen,
+                  fechaResolucion,
+                } = item;
 
-              const tituloMostrar =
-                titulo ||
-                numero ||
-                numeroExpediente ||
-                "Resolución sin título";
+                const tituloMostrar =
+                  titulo ||
+                  numero ||
+                  numeroExpediente ||
+                  "Resolución sin título";
 
-              const fechaMostrar = fechaResolucion
-                ? new Date(fechaResolucion).toLocaleDateString("es-PE")
-                : null;
+                const fechaMostrar = fechaResolucion
+                  ? new Date(fechaResolucion).toLocaleDateString("es-PE")
+                  : null;
 
-              return (
-                <article
-                  key={_id}
-                  className="flex flex-col rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm hover:shadow-md transition cursor-pointer"
-                  onClick={() => handleAbrirModal(item)}
-                >
-                  {/* chips superiores */}
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
-                    {materia && (
-                      <span className="rounded-full bg-[#fdf4ec] px-2 py-0.5 font-medium text-[#8C3A0E]">
-                        {materia}
-                      </span>
-                    )}
+                // 🔹 Aproximación de “ficha completa”:
+                // si tenemos sumilla, resumen o algún PDF asociado.
+                const fichaCompleta = Boolean(
+                  sumilla ||
+                    resumen ||
+                    item.pdfUrl || // agregado por la API
+                    item.urlResolucion
+                );
 
-                    {organo && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700">
-                        {organo}
-                      </span>
-                    )}
+                return (
+                  <article
+                    key={_id}
+                    className="flex flex-col rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm hover:shadow-md transition cursor-pointer"
+                    onClick={() => handleAbrirModal(item)}
+                  >
+                    {/* chips superiores */}
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
+                      {materia && (
+                        <span className="rounded-full bg-[#fdf4ec] px-2 py-0.5 font-medium text-[#8C3A0E]">
+                          {materia}
+                        </span>
+                      )}
 
-                    {estado && (
+                      {organo && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700">
+                          {organo}
+                        </span>
+                      )}
+
+                      {estado && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 ${
+                            estado === "Vigente"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {estado}
+                        </span>
+                      )}
+
+                      {/* 🔹 Badge de ficha completa / básica */}
                       <span
-                        className={`rounded-full px-2 py-0.5 ${
-                          estado === "Vigente"
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          fichaCompleta
                             ? "bg-emerald-50 text-emerald-700"
-                            : "bg-gray-100 text-gray-600"
+                            : "bg-slate-50 text-slate-500"
                         }`}
                       >
-                        {estado}
+                        {fichaCompleta ? "Ficha completa" : "Solo ficha básica"}
                       </span>
-                    )}
 
-                    {typeof score === "number" && (
-                      <span className="ml-auto rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700">
-                        score {score.toFixed(3)}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* título */}
-                  <h3 className="mb-1 line-clamp-2 text-sm font-semibold text-brown-800">
-                    {tituloMostrar}
-                  </h3>
-
-                  {/* sumilla / resumen */}
-                  {sumilla && (
-                    <p className="text-xs text-gray-700 line-clamp-3">
-                      {sumilla}
-                    </p>
-                  )}
-
-                  {!sumilla && resumen && (
-                    <p className="text-xs text-gray-700 line-clamp-3">
-                      {resumen}
-                    </p>
-                  )}
-
-                  {/* pie con número y fecha */}
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
-                    <span>
-                      {numero && (
-                        <>
-                          Casación {numero}
-                          {" · "}
-                        </>
+                      {typeof score === "number" && (
+                        <span className="ml-auto rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700">
+                          score {score.toFixed(3)}
+                        </span>
                       )}
-                      {fechaMostrar}
-                    </span>
-                    <span className="font-medium text-[#8C3A0E]">
-                      Ver detalle →
-                    </span>
-                  </div>
+                    </div>
 
-                  {/* 🦉 Botón para LitisBot (no abre el modal) */}
-                  <button
-                    type="button"
-                    title="Enviar esta sentencia a LitisBot para analizarla"
-                    onClick={(event) => {
-                      // Evita que el click abra el modal de detalle
-                      event.stopPropagation();
+                    {/* título */}
+                    <h3 className="mb-1 line-clamp-2 text-sm font-semibold text-brown-800">
+                      {tituloMostrar}
+                    </h3>
 
-                      if (typeof onPreguntarConJuris === "function") {
-                        onPreguntarConJuris(item);
-                      }
-                    }}
-                    className="mt-2 inline-flex items-center gap-1 self-start rounded-full border border-[#8C3A0E]/40 bg-[#fdf4ec] px-3 py-1 text-[11px] font-semibold text-[#8C3A0E] hover:bg-[#fbe8d6] transition"
-                  >
-                    <span aria-hidden="true">🦉</span>
-                    <span>Preguntar a LitisBot con esta sentencia</span>
-                  </button>
-                </article>
-              );
-            })}
+                    {/* sumilla / resumen */}
+                    {sumilla && (
+                      <p className="text-xs text-gray-700 line-clamp-3">
+                        {sumilla}
+                      </p>
+                    )}
+
+                    {!sumilla && resumen && (
+                      <p className="text-xs text-gray-700 line-clamp-3">
+                        {resumen}
+                      </p>
+                    )}
+
+                    {/* pie con número y fecha */}
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
+                      <span>
+                        {numero && (
+                          <>
+                            Casación {numero}
+                            {" · "}
+                          </>
+                        )}
+                        {fechaMostrar}
+                      </span>
+                      <span className="font-medium text-[#8C3A0E]">
+                        Ver detalle →
+                      </span>
+                    </div>
+
+                    {/* 🦉 Botón para LitisBot (no abre el modal) */}
+                    <button
+                      type="button"
+                      title="Enviar esta sentencia a LitisBot para analizarla"
+                      onClick={(event) => {
+                        // Evita que el click abra el modal de detalle
+                        event.stopPropagation();
+
+                        if (typeof onPreguntarConJuris === "function") {
+                          onPreguntarConJuris(item);
+                        }
+                      }}
+                      className="mt-2 inline-flex items-center gap-1 self-start rounded-full border border-[#8C3A0E]/40 bg-[#fdf4ec] px-3 py-1 text-[11px] font-semibold text-[#8C3A0E] hover:bg-[#fbe8d6] transition"
+                    >
+                      <span aria-hidden="true">🦉</span>
+                      <span>Preguntar a LitisBot con esta sentencia</span>
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-    </section>
+        )}
+      </section>
 
       {/* Modal de lectura / visor */}
       <JurisprudenciaVisorModal

@@ -13,26 +13,30 @@ import { joinApi } from "@/services/apiBase";
 /* =========================
  *  Estado global (módulo)
  * ========================= */
-let _audio;                     // <audio> único
-let _muted = false;             // silencio global (on-demand)
-let _lastText = "";             // último texto reproducible
-let _lastOpts = null;           // últimas opciones normalizadas ({voz, rate, pitch})
-let _repeatRemaining = 0;       // repeticiones pendientes (x veces)
-let _loopEnabled = false;       // bucle infinito del último
-let _hiddenPaused = false;      // se pausó por visibilitychange
-let _playInFlight = false;      // guardrail para evitar triggers simultáneos
+let _audio;                // <audio> único
+let _muted = false;        // silencio global (on-demand)
+let _lastText = "";        // último texto reproducible
+let _lastOpts = null;      // últimas opciones normalizadas ({voz, rate, pitch})
+let _repeatRemaining = 0;  // repeticiones pendientes (x veces)
+let _loopEnabled = false;  // bucle infinito del último
+let _hiddenPaused = false; // se pausó por visibilitychange
+let _playInFlight = false; // guardrail para evitar triggers simultáneos
+let _isUserStopped = false; // bandera: el usuario cortó manualmente
 
 /* =========================
  *  Utilidades base
  * ========================= */
 const IS_BROWSER = typeof window !== "undefined";
-const MAX_TTS_CHARS = 1200;
+
+// Límite máximo de caracteres a leer en una sola pasada.
+// No queremos lecturas eternas de 20 minutos; mejor en bloques “humanos”.
+const MAX_TTS_CHARS = 1600;
 
 const VOICE_ALIASES = {
   masculina_profesional: "es-ES-AlvaroNeural",
-  masculina_alvaro:      "es-ES-AlvaroNeural",
-  femenina_profesional:  "es-ES-ElviraNeural",
-  // agrega aquí más alias si los usas en la UI
+  masculina_alvaro: "es-ES-AlvaroNeural",
+  femenina_profesional: "es-ES-ElviraNeural",
+  // agrega aquí más alias si los uses en la UI
 };
 
 function normalizarVoz(voz) {
@@ -45,10 +49,43 @@ function clamp(n, min, max) {
   return Math.min(max, Math.max(min, x));
 }
 
+/**
+ * Sanitiza el texto para TTS:
+ * - Limpia espacios raros.
+ * - Conserva saltos de línea razonables (párrafos).
+ * - Si es muy largo, recorta en un punto “natural”:
+ *   último punto / signo / doble salto de línea antes del límite.
+ */
 function sanitizarTexto(texto) {
-  let t = String(texto ?? "").replace(/\s+/g, " ").trim();
-  if (t.length > MAX_TTS_CHARS) t = t.slice(0, MAX_TTS_CHARS - 1) + "…";
-  return t;
+  let t = String(texto ?? "");
+
+  // Normaliza espacios dentro de cada línea.
+  t = t.replace(/[ \t]+/g, " ");
+
+  // Normaliza saltos de línea: deja como máximo 2 seguidos.
+  t = t.replace(/\n{3,}/g, "\n\n").trim();
+
+  if (t.length <= MAX_TTS_CHARS) return t;
+
+  // Recortamos a una ventana máxima…
+  const slice = t.slice(0, MAX_TTS_CHARS);
+
+  // Buscamos un corte “humano” dentro de ese fragmento.
+  const lastDot = slice.lastIndexOf(". ");
+  const lastExcl = slice.lastIndexOf("! ");
+  const lastQ = slice.lastIndexOf("? ");
+  const lastPara = slice.lastIndexOf("\n\n");
+
+  const candidates = [lastDot, lastExcl, lastQ, lastPara].filter((i) => i > 0);
+  const cutAt = candidates.length ? Math.max(...candidates) : -1;
+
+  // Si encontramos un buen corte relativamente avanzado, cortamos ahí.
+  if (cutAt > 200) {
+    return slice.slice(0, cutAt + 1).trim() + "…";
+  }
+
+  // Si no, recortamos tal cual el fragmento máximo.
+  return slice.trim() + "…";
 }
 
 async function withTimeout(promise, ms, errMsg = "Timeout") {
@@ -93,8 +130,9 @@ function getAudio() {
 
 /** Qué hacer al terminar/error de audio */
 async function handleEnded() {
-  if (_isUserStopped) return; // usuario detuvo; no continuar
-  if (_muted) return;         // en silencio global; no continuar
+  // Si el usuario detuvo manualmente, no intentamos repetir nada.
+  if (_isUserStopped) return;
+  if (_muted) return; // en silencio global; no continuar
 
   // prioridad: repeticiones discretas
   if (_repeatRemaining > 0 && _lastText) {
@@ -120,23 +158,42 @@ async function handleEnded() {
 /* =========================
  *  Visibility handling
  * ========================= */
-  if (document.hidden) {
+
+/**
+ * Pausa el audio si el tab se oculta y lo reanuda al volver,
+ * siempre que el usuario no haya hecho stop ni esté en modo mute.
+ */
+function initVisibilityHandler() {
+  if (!IS_BROWSER || typeof document === "undefined") return;
+
+  document.addEventListener("visibilitychange", () => {
+    const a = getAudio();
+    if (!a) return;
+
+    if (document.hidden) {
       if (!a.paused) {
         a.pause();
         _hiddenPaused = true;
       }
     } else {
-      if (_hiddenPaused && !_muted) {
+      if (_hiddenPaused && !_muted && a.src) {
         a.play().catch(() => {});
       }
-    _hiddenPaused = false;
-  }
+      _hiddenPaused = false;
+    }
+  });
+}
+
+// inicializamos el handler una vez
+if (IS_BROWSER) {
+  initVisibilityHandler();
+}
 
 /* =========================
  *  API pública
  * ========================= */
 
-/** Health del endpoint /api/voz/health */
+/** Health del endpoint /voz/health */
 export async function ttsHealth({ signal } = {}) {
   const url = joinApi("/voz/health");
   const resp = await fetchWithTimeout(url, { method: "GET", signal }, 6000);
@@ -148,10 +205,11 @@ export async function ttsHealth({ signal } = {}) {
 export function stopVoz() {
   const a = getAudio();
   try {
+    _isUserStopped = true; // 👈 marcamos que el corte fue manual
     _repeatRemaining = 0;
     _loopEnabled = false;
     a.pause();
-    a.src = "";                  // libera stream / url
+    a.src = ""; // libera stream / url
     a.removeAttribute("src");
     a.load?.();
   } catch {
@@ -169,14 +227,17 @@ export function pauseVoz() {
   }
 }
 
-/** Reanuda si hay algo cargado y no está muteado ni detenido por usuario */
+/** Reanuda si hay algo cargado y no está muteado */
 export async function resumeVoz() {
   if (_muted) return;
   const a = getAudio();
   if (!a.src) return; // si se llamó stopVoz() no hay nada que reanudar
   try {
+    _isUserStopped = false; // volvemos a dejar que onended funcione normal
     await a.play();
-  } catch {}
+  } catch {
+    // silencioso
+  }
 }
 
 /** Estado de reproducción actual */
@@ -207,13 +268,14 @@ export async function reproducirVoz(
   { voz = "masculina_profesional", rate = 0, pitch = 0, signal } = {}
 ) {
   if (_muted) return;
+
   const clean = sanitizarTexto(texto);
   if (!clean) return;
 
   // Normaliza y guarda "último"
   const voice = normalizarVoz(voz);
-  const rateInt = clamp(parseInt(rate, 10) || 0, -50, 50);  // -50..+50
-  const pitchInt = clamp(parseInt(pitch, 10) || 0, -6, 6);  // -6..+6
+  const rateInt = clamp(parseInt(rate, 10) || 0, -50, 50); // -50..+50
+  const pitchInt = clamp(parseInt(pitch, 10) || 0, -6, 6); // -6..+6
 
   _lastText = clean;
   _lastOpts = { voz: voice, rate: rateInt, pitch: pitchInt };
@@ -233,8 +295,10 @@ export async function replayText(
   stopCurrent = true
 ) {
   if (_muted) return;
+
   const clean = sanitizarTexto(texto);
   if (!clean) return;
+
   const voice = normalizarVoz(opts.voz);
   const rateInt = clamp(parseInt(opts.rate, 10) || 0, -50, 50);
   const pitchInt = clamp(parseInt(opts.pitch, 10) || 0, -6, 6);
@@ -278,6 +342,8 @@ async function _play(texto, opts, interrupt = true, signal) {
       stopVoz();
     }
 
+    _isUserStopped = false; // nueva reproducción: onended vuelve a estar activo
+
     const a = getAudio();
 
     // 1) Intento GET (streaming directo)
@@ -315,7 +381,9 @@ async function _play(texto, opts, interrupt = true, signal) {
       );
       if (!resp.ok) {
         const msg = await resp.text().catch(() => "");
-        throw new Error(`TTS POST ${resp.status}: ${msg || "Error al generar audio"}`);
+        throw new Error(
+          `TTS POST ${resp.status}: ${msg || "Error al generar audio"}`
+        );
       }
       const blob = await resp.blob();
       objectURL = URL.createObjectURL(blob);
@@ -352,10 +420,10 @@ async function _play(texto, opts, interrupt = true, signal) {
  *  Compat de nombres antiguos
  * ========================= */
 
-// Para código existente (LitisBot, etc.)
+// Para código existente (LitisBot, visor, etc.)
 export const reproducirVozVaronil = reproducirVoz;
 
-// Compat para el visor y cualquier otro que use estos nombres
-export const pausarVoz   = pauseVoz;
+// Compat para firmas antiguas
+export const pausarVoz = pauseVoz;
 export const reanudarVoz = resumeVoz;
-export const detenerVoz  = stopVoz;
+export const detenerVoz = stopVoz;

@@ -12,17 +12,29 @@ const { Schema } = mongoose;
 
 /* ----------------------------- helpers básicos ---------------------------- */
 
+/**
+ * Normaliza un valor a string recortado.
+ * Devuelve "" si viene null/undefined.
+ */
 function cleanString(v) {
-  if (!v) return "";
-  return String(v).trim();
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return s.trim();
 }
 
+/**
+ * Normaliza arrays de strings:
+ * - Convierte todo a string
+ * - Hace trim
+ * - Elimina vacíos
+ * - Elimina duplicados
+ */
 function cleanArrayStrings(arr) {
-  if (!arr) return [];
+  if (!Array.isArray(arr)) return [];
   return Array.from(
     new Set(
       arr
-        .map((s) => String(s || "").trim())
+        .map((s) => (s === null || s === undefined ? "" : String(s).trim()))
         .filter((s) => s.length > 0)
     )
   );
@@ -66,12 +78,16 @@ const JurisprudenciaSchema = new Schema(
 
     // Contenido bruto / HTML de la ficha
     contenidoHTML: { type: String }, // ficha completa en HTML limpio
-    texto: { type: String },
+    texto: { type: String }, // versión "plain text" para búsquedas/clasificación
 
     // Recursos externos
     urlResolucion: { type: String }, // enlace directo al PDF o servletdescarga
+    pdfUrl: { type: String }, 
     fuente: { type: String, default: "Poder Judicial", index: true }, // "JNS", "TC", etc.
     fuenteUrl: { type: String }, // url pública de la ficha original
+
+    // Opcional, pero muy útil para distinguir origen interno
+    origen: { type: String, default: "JNS", index: true }, // "JNS", "TC", "dummy", etc.
 
     // Estado / flags
     estado: { type: String, default: "Vigente", index: true }, // "Vigente", "No vigente", etc.
@@ -86,8 +102,7 @@ const JurisprudenciaSchema = new Schema(
     extra: { type: Schema.Types.Mixed },
 
     // (Opcional) vector embeddings para búsquedas semánticas
-    // NO obligatorio; solo si estás usando Atlas Vector Search u otro motor
-    // embedVector: { type: [Number], index: "2dsphere" | "vector" según motor },
+    // embedVector: { type: [Number], index: "vector" | "2dsphere" según motor },
   },
   {
     timestamps: true, // createdAt / updatedAt
@@ -97,11 +112,13 @@ const JurisprudenciaSchema = new Schema(
 /* ---------------------------- normalización hook -------------------------- */
 
 JurisprudenciaSchema.pre("save", function (next) {
-  // this = doc
+  // Identificadores
   this.recurso = cleanString(this.recurso);
   this.numeroExpediente = cleanString(this.numeroExpediente);
   this.numeroProceso = cleanString(this.numeroProceso);
   this.tipoResolucion = cleanString(this.tipoResolucion);
+
+  // Órgano / estructura judicial
   this.salaSuprema = cleanString(this.salaSuprema);
   this.organo = cleanString(this.organo);
   this.instancia = cleanString(this.instancia);
@@ -109,6 +126,8 @@ JurisprudenciaSchema.pre("save", function (next) {
   this.materia = cleanString(this.materia);
   this.tema = cleanString(this.tema);
   this.subtema = cleanString(this.subtema);
+
+  // Contenido jurídico
   this.titulo = cleanString(this.titulo);
   this.sumilla = cleanString(this.sumilla);
   this.resumen = cleanString(this.resumen);
@@ -117,19 +136,35 @@ JurisprudenciaSchema.pre("save", function (next) {
   this.fundamentos = cleanString(this.fundamentos);
   this.parteResolutiva = cleanString(this.parteResolutiva);
   this.baseLegal = cleanString(this.baseLegal);
+
+  // Contenido bruto
+  this.contenidoHTML = cleanString(this.contenidoHTML);
   this.texto = cleanString(this.texto);
+
+  // Recursos externos
   this.urlResolucion = cleanString(this.urlResolucion);
-  this.fuente = cleanString(this.fuente);
+  // pdfUrl prioriza su propio valor, y si viene vacío hereda de urlResolucion
+  this.pdfUrl = cleanString(this.pdfUrl || this.urlResolucion);
+
+  this.fuente = cleanString(this.fuente || "Poder Judicial");
   this.fuenteUrl = cleanString(this.fuenteUrl);
-  this.estado = cleanString(this.estado);
+
+  // Origen interno del registro (JNS, TC, dummy, etc.)
+  this.origen = cleanString(this.origen || "JNS");
+
+  // Estado / tags
+  this.estado = cleanString(this.estado || "Vigente");
+
   this.palabrasClave = cleanArrayStrings(this.palabrasClave);
   this.tags = cleanArrayStrings(this.tags);
+
   next();
 });
 
+
 /* ------------------------------- índices ---------------------------------- */
 
-// Texto completo básico (opcional, depende de tu estrategia de búsqueda clásica)
+// Texto completo básico
 JurisprudenciaSchema.index(
   {
     titulo: "text",
@@ -147,7 +182,8 @@ JurisprudenciaSchema.index(
   }
 );
 
-// Filtros frecuentes ya están marcados como index en los campos definidos arriba
+// Los campos más usados ya tienen index: numeroExpediente, organo, especialidad,
+// materia, tema, subtema, fechaResolucion, fechaScraping, fuente, estado, etc.
 
 /* --------------------------- toJSON / toObject ---------------------------- */
 

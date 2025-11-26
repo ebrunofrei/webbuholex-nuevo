@@ -10,6 +10,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" }); // MONGODB_URI, JNS_DEBUG, etc.
 
 import fs from "fs";
+import crypto from "crypto";
 import puppeteer from "puppeteer";
 import { dbConnect, dbDisconnect } from "../services/db.js";
 import Jurisprudencia from "../models/Jurisprudencia.js";
@@ -22,6 +23,87 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function normText(s = "") {
   return String(s).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Convierte "dd/mm/yyyy" → Date (UTC local) o null
+ */
+function parseFechaPeru(s) {
+  if (!s) return null;
+  if (s instanceof Date) return s;
+
+  const str = String(s).trim();
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+
+  const [, dd, mm, yyyy] = m;
+  const d = Number(dd);
+  const mIdx = Number(mm) - 1;
+  const y = Number(yyyy);
+
+  if (
+    Number.isNaN(d) ||
+    Number.isNaN(mIdx) ||
+    Number.isNaN(y) ||
+    d <= 0 ||
+    d > 31 ||
+    mIdx < 0 ||
+    mIdx > 11
+  ) {
+    return null;
+  }
+
+  return new Date(y, mIdx, d);
+}
+
+/**
+ * Normaliza palabras clave:
+ * - acepta string ("a; b, c") o array
+ * - devuelve array limpio y sin duplicados
+ */
+function parsePalabrasClave(value) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .map((s) => normText(s || ""))
+          .filter((s) => s.length > 0)
+      )
+    );
+  }
+
+  const raw = String(value)
+    .replace(/;/g, ",")
+    .split(",")
+    .map((s) => normText(s));
+
+  return Array.from(new Set(raw.filter((s) => s.length > 0)));
+}
+
+/**
+ * Construye un hash antifraude / anti-duplicado
+ * basado en los campos más estables de la resolución.
+ */
+function buildHashKey({
+  numeroExpediente,
+  tipoResolucion,
+  salaSuprema,
+  fechaResolucion,
+}) {
+  const base = [
+    numeroExpediente || "",
+    tipoResolucion || "",
+    salaSuprema || "",
+    fechaResolucion ? String(fechaResolucion).slice(0, 10) : "",
+  ]
+    .join("|")
+    .toLowerCase();
+
+  if (!base.trim()) return null;
+
+  return crypto.createHash("sha1").update(base).digest("hex");
 }
 
 // ---------- Constantes de la fuente ----------
@@ -53,7 +135,7 @@ function buildContenidoHtmlFromItem(item = {}) {
 
   const partes = [];
 
-  partes.push("<article class=\"blx-ficha-jns\">");
+  partes.push('<article class="blx-ficha-jns">');
 
   if (tipoResolucion || recurso) {
     partes.push("<header>");
@@ -115,37 +197,81 @@ function buildContenidoHtmlFromItem(item = {}) {
 }
 
 /* ---------------------------------------------
- * Guardado en Mongo
+ * Guardado en Mongo (normalizado, con hash)
  * -------------------------------------------*/
 
 async function saveOrUpdateJurisprudencia(data = {}) {
   // Si ni título ni expediente, no guardamos
   if (!data.titulo && !data.numeroExpediente) return null;
 
-  // Filtro mínimo para evitar duplicados
-  const filtro = { fuente: "PJ - Jurisprudencia Nacional" };
-  if (data.numeroExpediente) {
+  // Fecha como Date real
+  const fechaResolucion =
+    data.fechaResolucion instanceof Date
+      ? data.fechaResolucion
+      : parseFechaPeru(data.fechaResolucion);
+
+  // Palabras clave como array
+  const palabrasClaveArr = parsePalabrasClave(
+    data.palabrasClave || data.palabrasClaveRaw
+  );
+
+    // URL de resolución / PDF (priorizamos pdfUrl si viene)
+  const urlResolucion =
+    data.pdfUrl ||
+    data.urlResolucion ||
+    data.linkPdf ||
+    data.url ||
+    data.href ||
+    "";
+
+  // Hash antifraude / duplicado
+  const hash = buildHashKey({
+    numeroExpediente: data.numeroExpediente,
+    tipoResolucion: data.tipoResolucion,
+    salaSuprema: data.salaSuprema,
+    fechaResolucion,
+  });
+
+  // Filtro mínimo para evitar duplicados (además del hash)
+  const filtro = {
+    fuente: "PJ - Jurisprudencia Nacional",
+  };
+
+  if (hash) {
+    filtro.hash = hash;
+  } else if (data.numeroExpediente) {
     filtro.numeroExpediente = data.numeroExpediente;
   } else if (data.titulo) {
     filtro.titulo = data.titulo;
   }
 
-  // 🧷 Aseguramos tener urlResolucion y linkPdf coherentes
-  const urlResolucion =
-    data.urlResolucion || data.linkPdf || data.url || data.href || "";
+  const ahora = new Date();
 
   const payload = {
     ...data,
+    fechaResolucion,
+    palabrasClave: palabrasClaveArr,
     urlResolucion,
+    pdfUrl: urlResolucion || data.linkPdf || "",
     linkPdf: urlResolucion || data.linkPdf || "",
     fuente: "PJ - Jurisprudencia Nacional",
-    updatedAt: new Date(),
+    origen: "JNS",
+    estado: data.estado || "Vigente",
+    hash: hash || data.hash || undefined,
+    updatedAt: ahora,
   };
 
-  // ⛔ Bypass al schema de Mongoose (sin strict)
+  // ⛔ Bypass al schema de Mongoose (sin strict) pero
+  // ✅ aseguramos createdAt / fechaScraping en inserciones nuevas
   await Jurisprudencia.collection.updateOne(
     filtro,
-    { $set: payload },
+    {
+      $set: payload,
+      $setOnInsert: {
+        createdAt: ahora,
+        fechaScraping: ahora,
+      },
+    },
     { upsert: true }
   );
 
@@ -163,7 +289,7 @@ async function scrapeListadoJNS(page) {
         .replace(/\s+/g, " ")
         .trim();
 
-    // Panel que contiene TODAS las tarjetas de resultados
+    // Panel principal de resultados (si esto no existe, no hay nada)
     const panel = document.querySelector('#formBuscador\\:panel');
 
     const debug = {
@@ -177,22 +303,15 @@ async function scrapeListadoJNS(page) {
 
     const resoluciones = [];
 
-    if (panel) {
-      debug.foundPanel = true;
-      debug.panelId = panel.id;
-    }
-
-    // 1) Miramos TODOS los div.rf-p de la página
+    // 1) Capturar TODOS los rf-p (RichFaces Panels)
     const allRf = Array.from(document.querySelectorAll("div.rf-p"));
-    debug.allRfIds = allRf.map((d) => d.id || "").slice(0, 40); // 👈 para debug
+    debug.allRfIds = allRf.map((d) => d.id || "").slice(0, 40);
 
-    // 2) Nos quedamos solo con los que parecen tarjetas de resultado
-    //    id="formBuscador:repeat:0:j_idt455", etc.
+    // 2) Filtrar solo los rf-p de resultados
     const rfDivs = allRf.filter(
-      (d) => d.id && d.id.indexOf("formBuscador:repeat:") !== -1
+      (d) => d.id && d.id.includes("formBuscador:repeat:")
     );
 
-    // Debug de conteo
     debug.totalRf = rfDivs.length;
     debug.sampleIds = rfDivs.slice(0, 5).map((d) => d.id);
 
@@ -204,51 +323,57 @@ async function scrapeListadoJNS(page) {
       const bold = Array.from(row.querySelectorAll(".txtbold")).find((b) =>
         b.textContent.includes(etiqueta)
       );
-
       if (!bold) return "";
 
       const col = bold.parentElement?.nextElementSibling || bold.parentElement;
       return norm(col?.textContent || "");
     };
 
+    // 3) Extraer información de cada tarjeta
     for (const div of rfDivs) {
       const header = div.querySelector(".rf-p-hdr");
       const body = div.querySelector(".rf-p-b");
       if (!header || !body) continue;
 
-      // Encabezado: Recurso + Nº expediente
-      const headerSpans = header.querySelectorAll("span[style*='font-weight']");
-      const recurso = norm(headerSpans[0]?.textContent || "");
-      const numero = norm(headerSpans[1]?.textContent || "");
+      // Datos del encabezado
+      const spans = header.querySelectorAll("span[style*='font-weight']");
+      const recurso = norm(spans[0]?.textContent || "");
+      const numeroExpediente = norm(spans[1]?.textContent || "");
 
-      // Campos internos (coinciden con lo del HTML real)
+      // Campos internos
       const pretensionDelito =
         getCampoEnFila(body, "Pretensión/Delito:") ||
         getCampoEnFila(body, "Pretensión / Delito");
+
       const tipoResolucion = getCampoEnFila(body, "Tipo Resolución:");
       const fechaResolucion = getCampoEnFila(body, "Fecha Resolución:");
       const salaSuprema = getCampoEnFila(body, "Sala Suprema:");
-      const normaDerechoInterno = getCampoEnFila(
-        body,
-        "Norma de Derecho Interno:"
-      );
+      const normaDerechoInterno = getCampoEnFila(body, "Norma de Derecho Interno:");
       const sumilla = getCampoEnFila(body, "Sumilla:");
       const palabrasClave = getCampoEnFila(body, "Palabras Clave:");
 
-      // Link a la resolución PDF/Word
+      // PDF directo (si el PJ lo muestra en el resultado)
       const linkResolucion = body.querySelector('a[href*="ServletDescarga"]');
-      const hrefResolucion = linkResolucion
-        ? linkResolucion.getAttribute("href") || ""
-        : "";
+      const hrefResolucion = linkResolucion?.getAttribute("href") || "";
       const urlResolucion = hrefResolucion
-        ? hrefResolucion.startsWith("http")
-          ? hrefResolucion
-          : window.location.origin + hrefResolucion
+        ? (hrefResolucion.startsWith("http")
+            ? hrefResolucion
+            : window.location.origin + hrefResolucion)
         : "";
 
+      // Link de detalle (ficha completa RichFaces)
+      const linkDetalle = body.querySelector('a[href*="resultado.xhtml"]');
+      const hrefDetalle = linkDetalle?.getAttribute("href") || "";
+      const detalleUrl = hrefDetalle
+        ? (hrefDetalle.startsWith("http")
+            ? hrefDetalle
+            : window.location.origin + hrefDetalle)
+        : "";
+
+      // Push de la tarjeta parseada
       resoluciones.push({
         recurso,
-        numeroExpediente: numero,
+        numeroExpediente,
         pretensionDelito,
         tipoResolucion,
         fechaResolucion,
@@ -257,11 +382,11 @@ async function scrapeListadoJNS(page) {
         sumilla,
         palabrasClave,
         urlResolucion,
+        detalleUrl,
       });
     }
 
     debug.totalCards = resoluciones.length;
-    window._JNS_LAST_DEBUG = debug;
 
     return {
       ...debug,
@@ -269,6 +394,7 @@ async function scrapeListadoJNS(page) {
     };
   });
 
+  // --- DEBUG CONSOLA ---
   console.log("[JNS] Debug listado:", {
     foundPanel: payload.foundPanel,
     panelId: payload.panelId,
@@ -277,15 +403,25 @@ async function scrapeListadoJNS(page) {
     sampleIds: payload.sampleIds,
   });
 
-  if (!payload.foundPanel || !payload.totalRf || !payload.totalCards) {
+  // ❌ Si ni siquiera existe el panel → error real
+  if (!payload.foundPanel) {
     throw new Error(
-      `[JNS] scrapeListadoJNS: panel=${payload.panelId}, ` +
-        `rf-divs=${payload.totalRf}, cards=${payload.totalCards}, ` +
-        `sampleIds=${JSON.stringify(payload.sampleIds || [])}`
+      `[JNS] scrapeListadoJNS: NO se encontró panel de resultados (panel=${payload.panelId})`
     );
   }
 
-  // Lo que usan el resto de funciones
+  // ⚠ Panel ok pero sin resultados
+  if (!payload.totalRf || !payload.totalCards) {
+    console.warn(
+      "[JNS] scrapeListadoJNS: panel OK pero sin resultados. " +
+        `rf-divs=${payload.totalRf}, cards=${payload.totalCards}, sampleIds=${JSON.stringify(
+          payload.sampleIds || []
+        )}`
+    );
+    return [];
+  }
+
+  // Resultado correcto
   return payload.resoluciones;
 }
 
@@ -407,36 +543,57 @@ export async function scrapeJNS(query = "") {
 
     if (!lista.length) {
       console.warn("[JNS] ⚠ No se encontraron resultados para esa query.");
+      return 0;
     }
 
-    // 6. Guardar en Mongo con mapeo coherente + contenidoHTML (Fase A)
+        // 6. Guardar en Mongo con mapeo coherente + ficha de detalle (Fase B)
     for (const item of lista) {
       try {
         const tituloCompuesto =
           normText(`${item.tipoResolucion || ""} ${item.recurso || ""}`) ||
           item.numeroExpediente;
 
-        const contenidoHTML = buildContenidoHtmlFromItem(item);
+        // Ficha "sintética" de respaldo
+        let contenidoHTML = buildContenidoHtmlFromItem(item);
+        let texto = "";
+        let pdfUrl = item.urlResolucion || ""; // PDF detectado en el listado (si lo hubo)
+
+        // Si tenemos URL de detalle, intentamos scrapear la ficha real
+        if (item.detalleUrl) {
+          const det = await scrapeDetalleJNS(browser, item.detalleUrl);
+          if (det) {
+            if (det.html) contenidoHTML = det.html;
+            if (det.texto) texto = det.texto;
+            if (det.pdfUrl) pdfUrl = det.pdfUrl;
+          }
+        }
 
         await saveOrUpdateJurisprudencia({
           titulo: tituloCompuesto,
           organo: item.salaSuprema,
           fechaResolucion: item.fechaResolucion,
-          especialidad: "",
+          especialidad: "", // Se podría poblar en una Fase 2 si el PJ lo expone claramente
           numeroExpediente: item.numeroExpediente,
           sumilla: item.sumilla || item.pretensionDelito,
-          fuenteUrl: BASE_URL_RESULTADO,
-          urlResolucion: item.urlResolucion,
 
-          // Contenido de ficha (Fase A)
+          // Fuente pública de la ficha
+          fuenteUrl: item.detalleUrl || BASE_URL_RESULTADO,
+
+          // 🔥 Aquí "poblamos" el PDF en la BD
+          urlResolucion: pdfUrl,
+          pdfUrl, // campo extra por si lo usas directamente en frontend
+
+          // Contenido de ficha (real o sintético)
           contenidoHTML,
+          texto,
+
           pretensionDelito: item.pretensionDelito,
           tipoResolucion: item.tipoResolucion,
           salaSuprema: item.salaSuprema,
           palabrasClave: item.palabrasClave,
+          palabrasClaveRaw: item.palabrasClave,
           normaDerechoInterno: item.normaDerechoInterno,
 
-          // Campos que luego podremos rellenar con Ver Ficha real
           baseLegal: "",
           parteResolutiva: "",
           estado: "Vigente",

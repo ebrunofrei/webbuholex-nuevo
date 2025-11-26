@@ -123,18 +123,28 @@ h1, h2, h3 { color: #a42409; font-weight: 700; margin-top: 0; }
 }
 
 .litis-bubble-pulse {
-  animation: litis-bubble-pulse 1.6s ease-in-out infinite;
-  transition: background-color 0.25s ease, transform 0.15s ease;
+  animation: litis-bubble-pulse 3s ease-in-out infinite;
 }
 
-.litis-bubble-pulse:hover {
-  transform: scale(1.09);
-}
+@keyframes litis-bubble-pulse {
+  /* normal */
+  0%, 70%, 100% {
+    transform: scale(1);
+  }
 
-.litis-bubble-pulse img {
-  transition: filter 0.25s ease;
-}
+  /* primer latido */
+  8% {
+    transform: scale(1.06);
+  }
+  12% {
+    transform: scale(1);
+  }
 
-.litis-bubble-pulse:hover img {
-  filter: brightness(1.05);
+  /* segundo latido */
+  18% {
+    transform: scale(1.06);
+  }
+  22% {
+    transform: scale(1);
+  }
 }

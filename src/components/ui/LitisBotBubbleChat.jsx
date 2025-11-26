@@ -1058,7 +1058,6 @@ export default function LitisBotBubbleChat({
 // Placeholder de "pensando…" con índice seguro
 const placeholderIndexRef = useRef(-1);
 
-// 🔎 Convierte la sentencia seleccionada en texto plano para la IA
   // 🔎 Convierte la sentencia seleccionada en texto plano para la IA
   function buildJurisPlainText(doc) {
     if (!doc) return "";
@@ -1096,227 +1095,232 @@ const placeholderIndexRef = useRef(-1);
       partes.push(`RESUMEN:\n${doc.resumen}`);
     }
 
-    // Si luego agregas fundamentos, parte resolutiva, etc., lo metes aquí
+      // Si luego agregas fundamentos, parte resolutiva, etc., lo metes aquí
+  return partes.join("\n\n").trim();
+}
 
-    return partes.join("\n\n").trim();
-  }
+// Enviar mensaje desde la burbuja
+async function enviarMensaje() {
+  const texto = (input || "").trim();
+  if (!texto || cargando) return;
 
-  // Enviar mensaje desde la burbuja
-  async function enviarMensaje() {
-    const texto = (input || "").trim();
-    if (!texto || cargando) return;
+  // limpiar input y marcar estado de carga
+  setInput("");
+  setCargando(true);
 
-    // limpiar input y marcar estado de carga
-    setInput("");
-    setCargando(true);
+  // Mensaje user + placeholder
+  setMensajes((prev) => {
+    const next = [...prev, { role: "user", content: texto }];
 
-    // Mensaje user + placeholder
+    // guardamos índice del placeholder
+    placeholderIndexRef.current = next.length;
+    next.push({
+      role: "assistant",
+      content: "Espera un momento…",
+      _placeholder: true,
+    });
+
+    return next;
+  });
+
+  try {
+    // 1️⃣ Resolver la sentencia a usar: prop → sessionStorage
+    let docJuris = jurisSeleccionada || null;
+
+    if (!docJuris && IS_BROWSER) {
+      try {
+        const raw = window.sessionStorage.getItem(
+          "litis:lastJurisSeleccionada"
+        );
+        if (raw) {
+          docJuris = JSON.parse(raw);
+        }
+      } catch (e) {
+        console.warn(
+          "[LitisBotBubble] No se pudo leer juris de sessionStorage:",
+          e
+        );
+      }
+    }
+
+    console.log(
+      "[LitisBotBubble] docJuris usado en enviarMensaje:",
+      docJuris
+    );
+
+    // 2️⃣ IDs y contexto de la jurisprudencia (si existe)
+    const jurisId =
+      docJuris?.id || docJuris?._id || docJuris?.jurisprudenciaId || null;
+
+    const expedienteId =
+      docJuris?.numeroExpediente || jurisId || `juris-${Date.now()}`;
+
+    let jurisTextoBase = "";
+    if (docJuris && typeof docJuris === "object") {
+      jurisTextoBase = buildJurisPlainText(docJuris);
+    }
+
+    // 🎯 Payload base
+    const payload = {
+      prompt: texto,
+      usuarioId: usuarioId || "invitado-burbuja",
+      expedienteId, // 👈 ahora único por sentencia
+      idioma: "es-PE",
+      pais: "Perú",
+      modo: "general",
+      materia: docJuris?.especialidad || docJuris?.materia || "general",
+      // historial: buildHistorial(mensajes), // si luego quieres mandar historial
+    };
+
+    // IDs y texto extra solo si hay docJuris
+    if (jurisId) {
+      payload.jurisprudenciaId = String(jurisId);
+    }
+    if (jurisTextoBase) {
+      payload.jurisTextoBase = jurisTextoBase;
+    }
+
+    // 🔎 Log de diagnóstico para verificar qué viaja al backend
+    console.log(
+      "[LitisBotBubble] Payload a /ia/chat:",
+      JSON.stringify(payload, null, 2)
+    );
+
+    const data = await enviarMensajeIA(payload);
+
+    const respuestaTexto =
+      (data?.respuesta || data?.text || "").toString().trim() ||
+      "No pude generar respuesta. ¿Intentamos de nuevo?";
+
+    // Reemplazar placeholder por respuesta real
     setMensajes((prev) => {
-      const next = [...prev, { role: "user", content: texto }];
+      const next = [...prev];
+      const idx = placeholderIndexRef.current;
 
-      // guardamos índice del placeholder
-      placeholderIndexRef.current = next.length;
-      next.push({
-        role: "assistant",
-        content: "Espera un momento…",
-        _placeholder: true,
-      });
+      if (
+        idx >= 0 &&
+        idx < next.length &&
+        next[idx]?._placeholder &&
+        next[idx]?.content === "Espera un momento…"
+      ) {
+        next.splice(idx, 1);
+      }
 
+      next.push({ role: "assistant", content: respuestaTexto });
+      placeholderIndexRef.current = -1;
       return next;
     });
 
-    try {
-      // 🎯 Payload base
-      const payload = {
-        prompt: texto,
-        usuarioId: usuarioId || "invitado-burbuja",
-        expedienteId: "burbuja",
-        idioma: "es-PE",
-        pais: "Perú",
-        modo: "general",
-        materia: "general",
-        // si más adelante quieres mandar historial, se puede añadir aquí
-        // historial: buildHistorial(mensajes),
-      };
+    // Si quieres limpiar la selección de jurisprudencia después de usarla:
+    if (onClearJuris) {
+      onClearJuris();
+    }
+  } catch (err) {
+    console.error("❌ Error burbuja LitisBot:", err);
 
-            // Intentamos obtener la sentencia desde el prop o, en su defecto, desde sessionStorage
-      let docJuris = jurisSeleccionada || null;
+    setMensajes((prev) => {
+      const next = [...prev];
+      const idx = placeholderIndexRef.current;
 
-      if (!docJuris && IS_BROWSER) {
-        try {
-          const raw = window.sessionStorage.getItem(
-            "litis:lastJurisSeleccionada"
-          );
-          if (raw) {
-            docJuris = JSON.parse(raw);
-          }
-        } catch (e) {
-          console.warn(
-            "[LitisBotBubble] No se pudo leer juris de sessionStorage:",
-            e
-          );
-        }
+      if (
+        idx >= 0 &&
+        idx < next.length &&
+        next[idx]?._placeholder &&
+        next[idx]?.content === "Espera un momento…"
+      ) {
+        next.splice(idx, 1);
       }
 
-      console.log("[LitisBotBubble] docJuris usado en enviarMensaje:", docJuris);
-
-      // 📎 Adjuntamos CONTEXTO de jurisprudencia si lo hay
-      if (docJuris && typeof docJuris === "object") {
-        const { _id } = docJuris || {};
-
-        // id para que el backend pueda buscar en Mongo si hace falta
-        if (_id) {
-          payload.jurisprudenciaId = String(_id);
-        }
-
-        // Texto plano listo para el modelo (por si falla la búsqueda en BD)
-        const plain = buildJurisPlainText(docJuris);
-        if (plain) {
-          payload.jurisTextoBase = plain;
-        }
-      }
-
-      // 🔎 Log de diagnóstico para verificar qué viaja al backend
-      console.log(
-        "[LitisBotBubble] Payload a /ia/chat:",
-        JSON.stringify(payload, null, 2)
-      );
-
-      const data = await enviarMensajeIA(payload);
-
-      const respuestaTexto =
-        (data?.respuesta || data?.text || "").toString().trim() ||
-        "No pude generar respuesta. ¿Intentamos de nuevo?";
-
-      // Reemplazar placeholder por respuesta real
-      setMensajes((prev) => {
-        const next = [...prev];
-        const idx = placeholderIndexRef.current;
-
-        if (
-          idx >= 0 &&
-          idx < next.length &&
-          next[idx]?._placeholder &&
-          next[idx]?.content === "Espera un momento…"
-        ) {
-          next.splice(idx, 1);
-        }
-
-        next.push({ role: "assistant", content: respuestaTexto });
-        placeholderIndexRef.current = -1;
-        return next;
+      next.push({
+        role: "assistant",
+        content:
+          "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente.",
       });
 
-      // Si quieres limpiar la selección de jurisprudencia después de usarla:
-      if (onClearJuris) {
-        onClearJuris();
-      }
-    } catch (err) {
-      console.error("❌ Error burbuja LitisBot:", err);
-
-      setMensajes((prev) => {
-        const next = [...prev];
-        const idx = placeholderIndexRef.current;
-
-        if (
-          idx >= 0 &&
-          idx < next.length &&
-          next[idx]?._placeholder &&
-          next[idx]?.content === "Espera un momento…"
-        ) {
-          next.splice(idx, 1);
-        }
-
-        next.push({
-          role: "assistant",
-          content:
-            "Ocurrió un error al procesar tu consulta. Por favor, intenta nuevamente.",
-        });
-
-        placeholderIndexRef.current = -1;
-        return next;
-      });
-    } finally {
-      setCargando(false);
-    }
+      placeholderIndexRef.current = -1;
+      return next;
+    });
+  } finally {
+    setCargando(false);
   }
+}
 
-  function handleKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      enviarMensaje();
-    }
+function handleKeyDown(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    enviarMensaje();
   }
-  function handleNuevoChat() {
-    const bienvenida = {
-      role: "assistant",
-      content:
-        "Iniciamos un nuevo chat. Cuéntame el caso o la consulta que deseas analizar ahora.",
-    };
-    setMensajes([bienvenida]);
-    saveChatSession([bienvenida]);
-  }
+}
 
-  const bubbleStyle =
-    pos.x !== null && pos.y !== null
-      ? { left: pos.x, top: pos.y }
-      : { bottom: 24, right: 24 };
+function handleNuevoChat() {
+  const bienvenida = {
+    role: "assistant",
+    content:
+      "Iniciamos un nuevo chat. Cuéntame el caso o la consulta que deseas analizar ahora.",
+  };
+  setMensajes([bienvenida]);
+  saveChatSession([bienvenida]);
+}
 
-  return (
-    <>
-      <ChatWindow
-        isOpen={isOpen}
-        isMobile={isMobile}
-        pro={pro}
-        feedRef={feedRef}
-        mensajes={mensajes}
-        cargando={cargando}
-        input={input}
-        setInput={setInput}
-        handleKeyDown={handleKeyDown}
-        enviarMensaje={enviarMensaje}
-        setMensajes={setMensajes}
-        setIsOpen={setIsOpen}
-        ttsPrefs={ttsPrefs}
-        showTtsCfg={showTtsCfg}
-        setShowTtsCfg={setShowTtsCfg}
-        setTtsPrefs={setTtsPrefs}
-        usuarioId={usuarioId}
-        jurisSeleccionada={jurisSeleccionada}
-        onNuevoChat={handleNuevoChat}
-        onOpenFull={() => {
-          if (!IS_BROWSER) return;
-          const url = "/litisbot";
-          window.open(url, "_blank", "noopener,noreferrer");
+const bubbleStyle =
+  pos.x !== null && pos.y !== null
+    ? { left: pos.x, top: pos.y }
+    : { bottom: 24, right: 24 };
+
+return (
+  <>
+    <ChatWindow
+      isOpen={isOpen}
+      isMobile={isMobile}
+      pro={pro}
+      feedRef={feedRef}
+      mensajes={mensajes}
+      cargando={cargando}
+      input={input}
+      setInput={setInput}
+      handleKeyDown={handleKeyDown}
+      enviarMensaje={enviarMensaje}
+      setMensajes={setMensajes}
+      setIsOpen={setIsOpen}
+      ttsPrefs={ttsPrefs}
+      showTtsCfg={showTtsCfg}
+      setShowTtsCfg={setShowTtsCfg}
+      setTtsPrefs={setTtsPrefs}
+      usuarioId={usuarioId}
+      jurisSeleccionada={jurisSeleccionada}
+      onNuevoChat={handleNuevoChat}
+      onOpenFull={() => {
+        if (!IS_BROWSER) return;
+        const url = "/litisbot";
+        window.open(url, "_blank", "noopener,noreferrer");
       }}
+    />
+
+    {/* FAB (draggable con Pointer Events, móvil/desktop) */}
+    <div
+      className="fixed z-[9999] flex items-center justify-center rounded-full shadow-xl border select-none litis-bubble-pulse"
+      role="button"
+      aria-label="Abrir LitisBot"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      style={{
+        borderColor: "rgba(92,46,11,0.3)",
+        width: 60,
+        height: 60,
+        position: "fixed",
+        ...bubbleStyle,
+        touchAction: "none",
+        cursor: "pointer",
+      }}
+    >
+      <img
+        src={litisLogo}
+        alt="LitisBot"
+        className="W-11 h-11 object-contain pointer-events-none"
+        draggable={false}
       />
-
-      {/* FAB (draggable con Pointer Events, móvil/desktop) */}
-      <div
-        className="fixed z-[9999] flex items-center justify-center rounded-full shadow-xl border select-none litis-bubble-pulse"
-        role="button"
-        aria-label="Abrir LitisBot"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        style={{
-          borderColor: "rgba(92,46,11,0.3)",
-          width: 60,
-          height: 60,
-          position: "fixed",
-          ...bubbleStyle,
-          touchAction: "none",
-          cursor: "pointer",
-        }}
-      >
-
-        <img
-          src={litisLogo}
-          alt="LitisBot"
-          className="w-11 h-11 object-contain pointer-events-none"
-          draggable={false}
-        />
-      </div>
-    </>
-  );
+    </div>
+  </>
+);
 }

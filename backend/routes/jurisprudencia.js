@@ -1,12 +1,15 @@
 // backend/routes/jurisprudencia.js
 // ============================================================
 // 🦉 BúhoLex | API de Repositorio Interno de Jurisprudencia
-// - GET /api/jurisprudencia            → lista con filtros
-// - GET /api/jurisprudencia/:id        → detalle completo (JSON)
-// - GET /api/jurisprudencia/:id/context → contexto textual para LitisBot
+// ------------------------------------------------------------
+// - GET  /api/jurisprudencia             → lista con filtros + búsqueda full-text
+// - GET  /api/jurisprudencia/:id         → detalle completo (JSON + meta)
+// - GET  /api/jurisprudencia/:id/context → contexto textual para LitisBot (Fase B)
+// - GET  /api/jurisprudencia/:id/pdf     → proxy de PDF (visor + descarga)
 // ============================================================
 
 import express from "express";
+import fetch from "node-fetch";
 import Jurisprudencia from "../models/Jurisprudencia.js";
 
 const router = express.Router();
@@ -18,10 +21,7 @@ function buildFilter({ q, materia, organo, estado, tipo }) {
 
   // Materia / especialidad (soportamos ambos campos)
   if (materia && materia !== "todas" && materia !== "") {
-    filter.$or = [
-      { materia },
-      { especialidad: materia },
-    ];
+    filter.$or = [{ materia }, { especialidad: materia }];
   }
 
   if (organo && organo !== "todos" && organo !== "") {
@@ -50,7 +50,21 @@ function buildFilter({ q, materia, organo, estado, tipo }) {
   return filter;
 }
 
-/* ------------------------- helper: contexto para IA ----------------------- */
+function buildSort(tipo) {
+  let sort = { createdAt: -1 };
+
+  if (tipo === "recientes") {
+    sort = { fechaResolucion: -1, createdAt: -1 };
+  } else if (tipo === "citadas" || tipo === "mas_citadas") {
+    sort = { citadaCount: -1, createdAt: -1 };
+  } else if (tipo === "destacadas") {
+    sort = { fechaResolucion: -1, createdAt: -1 };
+  }
+
+  return sort;
+}
+
+/* ------------------------- helper: HTML → texto plano --------------------- */
 
 function htmlToPlain(html = "") {
   if (!html) return "";
@@ -62,6 +76,8 @@ function htmlToPlain(html = "") {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/* -------------------- helper: contexto textual para IA -------------------- */
 
 function buildContextFromDoc(doc) {
   const parts = [];
@@ -85,15 +101,11 @@ function buildContextFromDoc(doc) {
   }
 
   if (doc.organo || doc.salaSuprema) {
-    parts.push(
-      `ÓRGANO: ${doc.organo || doc.salaSuprema}`
-    );
+    parts.push(`ÓRGANO: ${doc.organo || doc.salaSuprema}`);
   }
 
   if (doc.especialidad || doc.materia) {
-    parts.push(
-      `ESPECIALIDAD: ${doc.especialidad || doc.materia}`
-    );
+    parts.push(`ESPECIALIDAD: ${doc.especialidad || doc.materia}`);
   }
 
   if (doc.fechaResolucion) {
@@ -121,7 +133,7 @@ function buildContextFromDoc(doc) {
     parts.push(`RESUMEN:\n${doc.resumen}`);
   }
 
-  // Contenido completo / ficha
+  // Contenido completo / ficha (Fase B: cuando tengamos ficha HTML o texto extraído)
   if (doc.contenidoHTML) {
     const plain = htmlToPlain(doc.contenidoHTML);
     if (plain) {
@@ -146,6 +158,41 @@ function buildContextFromDoc(doc) {
   return parts.join("\n\n").trim();
 }
 
+/* ----------------------- helper: meta compacto (Fase B) ------------------- */
+
+function buildMetaFromDoc(doc) {
+  const safePdfUrl = doc.pdfUrl || doc.urlResolucion || null;
+
+  return {
+    titulo: doc.titulo,
+    numeroExpediente: doc.numeroExpediente,
+    tipoResolucion: doc.tipoResolucion,
+    recurso: doc.recurso,
+    salaSuprema: doc.salaSuprema,
+    organo: doc.organo,
+    especialidad: doc.especialidad || doc.materia,
+    fechaResolucion: doc.fechaResolucion,
+    fuente: doc.fuente,
+    fuenteUrl: doc.fuenteUrl || doc.urlResolucion || safePdfUrl,
+    pdfUrl: safePdfUrl,
+  };
+}
+
+/* ---------------- helper: normalizar item para el frontend ---------------- */
+
+function normalizeItemForFrontend(doc) {
+  const safeId = String(doc._id || "");
+  const safePdfUrl = doc.pdfUrl || doc.urlResolucion || null;
+
+  return {
+    ...doc,
+    id: safeId, // por si el front prefiere id en lugar de _id
+    pdfUrl: safePdfUrl,
+    origen: doc.origen || doc.fuente || "JNS",
+    hasContenido: !!(doc.contenidoHTML || doc.texto),
+  };
+}
+
 /* ------------------------ GET /api/jurisprudencia ------------------------- */
 
 router.get("/", async (req, res) => {
@@ -166,22 +213,19 @@ router.get("/", async (req, res) => {
       (tagQuery && String(tagQuery)) ||
       "todas";
 
-    const filter = buildFilter({ q, materia, organo, estado, tipo });
+    const hayTexto = q && q.trim().length > 0;
 
-    // Orden según tipo
-    let sort = { createdAt: -1 };
-
-    if (tipo === "recientes") {
-      sort = { fechaResolucion: -1, createdAt: -1 };
-    } else if (tipo === "citadas" || tipo === "mas_citadas") {
-      sort = { citadaCount: -1, createdAt: -1 };
-    } else if (tipo === "destacadas") {
-      sort = { fechaResolucion: -1, createdAt: -1 };
-    }
+    const filter = buildFilter({
+      q: hayTexto ? q : "",
+      materia,
+      organo,
+      estado,
+      tipo,
+    });
 
     const lim = Math.min(parseInt(limit, 10) || 50, 100);
 
-    // Proyección ligera para listado (no mandamos contenidoHTML pesado)
+    // Proyección base para listado (no mandamos contenidoHTML pesado)
     const projection = {
       titulo: 1,
       numeroExpediente: 1,
@@ -199,16 +243,31 @@ router.get("/", async (req, res) => {
       fuente: 1,
       fuenteUrl: 1,
       urlResolucion: 1,
+      pdfUrl: 1,
       createdAt: 1,
       destacada: 1,
       destacado: 1,
       citadaCount: 1,
     };
 
-    const items = await Jurisprudencia.find(filter, projection)
-      .sort(sort)
-      .limit(lim)
-      .lean();
+    let query;
+
+    if (hayTexto) {
+      // 🔍 Búsqueda por texto completo: orden por relevancia (score)
+      projection.score = { $meta: "textScore" };
+
+      query = Jurisprudencia.find(filter, projection).sort({
+        score: { $meta: "textScore" },
+      });
+    } else {
+      // Orden según tipo (sin texto)
+      const sort = buildSort(tipo);
+      query = Jurisprudencia.find(filter, projection).sort(sort);
+    }
+
+    const rawItems = await query.limit(lim).lean();
+
+    const items = rawItems.map((doc) => normalizeItemForFrontend(doc));
 
     return res.json({
       ok: true,
@@ -216,11 +275,112 @@ router.get("/", async (req, res) => {
       items,
     });
   } catch (err) {
-    console.error("[API] /api/jurisprudencia error:", err);
+    console.error("[API] GET /api/jurisprudencia error:", err);
     return res.status(500).json({
       ok: false,
       error: "internal_error",
       msg: "Error al consultar jurisprudencia interna.",
+    });
+  }
+});
+
+/* ------------------ GET /api/jurisprudencia/:id/pdf ----------------------- */
+/* Proxy de PDF para visor + descarga (Fase B listo) */
+
+router.get("/:id/pdf", async (req, res) => {
+  try {
+    const doc = await Jurisprudencia.findById(req.params.id).lean();
+    if (!doc || !(doc.urlResolucion || doc.pdfUrl)) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "pdf_not_found", msg: "PDF no disponible." });
+    }
+
+    const pdfUrl = doc.pdfUrl || doc.urlResolucion;
+    const download =
+      String(req.query.download || "").toLowerCase() === "1";
+
+    // Pedimos el PDF a la fuente original
+    const upstream = await fetch(pdfUrl);
+    if (!upstream.ok || !upstream.body) {
+      console.error(
+        "[API] /api/jurisprudencia/:id/pdf upstream error:",
+        upstream.status,
+        pdfUrl
+      );
+      return res.status(502).json({
+        ok: false,
+        error: "upstream_error",
+        msg: "No se pudo obtener el PDF desde la fuente original.",
+      });
+    }
+
+    // Nombre de archivo razonable
+    let filename = "resolucion.pdf";
+    try {
+      const urlObj = new URL(pdfUrl);
+      const last = urlObj.pathname.split("/").filter(Boolean).pop();
+      if (last && last.toLowerCase().endsWith(".pdf")) {
+        filename = last;
+      } else if (doc.numeroExpediente) {
+        filename = `resolucion_${doc.numeroExpediente}.pdf`;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `${download ? "attachment" : "inline"}; filename="${filename}"`
+    );
+
+    upstream.body.pipe(res);
+    upstream.body.on("error", (err) => {
+      console.error("[API] /api/jurisprudencia/:id/pdf stream error:", err);
+      if (!res.headersSent) {
+        res.status(500).end();
+      } else {
+        res.end();
+      }
+    });
+  } catch (err) {
+    console.error("[API] /api/jurisprudencia/:id/pdf error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "internal_error",
+      msg: "Error al obtener el PDF de la resolución.",
+    });
+  }
+});
+
+/* ----------------- GET /api/jurisprudencia/:id/context -------------------- */
+/* Contexto textual compacto para LitisBot (Fase B) */
+
+router.get("/:id/context", async (req, res) => {
+  try {
+    const doc = await Jurisprudencia.findById(req.params.id).lean();
+    if (!doc) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    const context = buildContextFromDoc(doc);
+    const meta = buildMetaFromDoc(doc);
+    const item = normalizeItemForFrontend(doc);
+
+    return res.json({
+      ok: true,
+      id: String(doc._id),
+      context,
+      meta,
+      item,
+    });
+  } catch (err) {
+    console.error("[API] /api/jurisprudencia/:id/context error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "internal_error",
+      msg: "Error al generar el contexto de la resolución.",
     });
   }
 });
@@ -233,62 +393,17 @@ router.get("/:id", async (req, res) => {
     if (!doc) {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
-    return res.json({ ok: true, item: doc });
+
+    const item = normalizeItemForFrontend(doc);
+    const meta = buildMetaFromDoc(doc);
+
+    return res.json({ ok: true, item, meta });
   } catch (err) {
     console.error("[API] /api/jurisprudencia/:id error:", err);
     return res.status(500).json({
       ok: false,
       error: "internal_error",
       msg: "Error al obtener la resolución.",
-    });
-  }
-});
-
-/* --------------- GET /api/jurisprudencia/:id/context (LitisBot) ----------- */
-
-router.get("/:id/context", async (req, res) => {
-  try {
-    const { maxChars } = req.query;
-
-    const doc = await Jurisprudencia.findById(req.params.id).lean();
-    if (!doc) {
-      return res.status(404).json({ ok: false, error: "not_found" });
-    }
-
-    let text = buildContextFromDoc(doc);
-
-    // Recorte opcional para no saturar el prompt de LitisBot
-    let clipped = text;
-    if (maxChars) {
-      const n = parseInt(maxChars, 10);
-      if (!Number.isNaN(n) && n > 0) {
-        clipped = text.slice(0, n);
-      }
-    }
-
-    return res.json({
-      ok: true,
-      id: String(doc._id),
-      text: clipped,
-      meta: {
-        titulo: doc.titulo,
-        numeroExpediente: doc.numeroExpediente,
-        tipoResolucion: doc.tipoResolucion,
-        recurso: doc.recurso,
-        salaSuprema: doc.salaSuprema,
-        organo: doc.organo,
-        especialidad: doc.especialidad || doc.materia,
-        fechaResolucion: doc.fechaResolucion,
-        fuente: doc.fuente,
-        fuenteUrl: doc.fuenteUrl || doc.urlResolucion,
-      },
-    });
-  } catch (err) {
-    console.error("[API] /api/jurisprudencia/:id/context error:", err);
-    return res.status(500).json({
-      ok: false,
-      error: "internal_error",
-      msg: "Error al construir el contexto de la resolución.",
     });
   }
 });

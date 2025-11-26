@@ -2,18 +2,13 @@
 // ============================================================
 // 🦉 BúhoLex | Cliente API Repositorio Interno de Jurisprudencia
 // - Búsqueda clásica por filtros
-// - Búsqueda semántica (embeddings)
+// - Búsqueda "inteligente" usando el mismo endpoint con q
 // ============================================================
 
 import { joinApi } from "@/services/apiBase";
 
 /**
  * Mapea el tag del frontend al "tipo" que entiende el backend.
- * TAGS frontend:
- *  - "todas"       → tipo = "todas"
- *  - "recientes"   → tipo = "recientes"
- *  - "mas_citadas" → tipo = "citadas"
- *  - "destacadas"  → tipo = "destacadas"
  */
 function mapTagToTipo(tag) {
   switch (tag) {
@@ -28,57 +23,72 @@ function mapTagToTipo(tag) {
   }
 }
 
-export async function buscarJurisprudenciaInterna({
-  materia,
-  organo,
-  estado,
-  tag,
-  signal,
-} = {}) {
+async function fetchJurisprudencia({ q, materia, organo, estado, tag, limit, signal } = {}) {
   const params = new URLSearchParams();
 
+  if (q && q.trim()) params.set("q", q.trim());
   if (materia) params.set("materia", materia);
   if (organo) params.set("organo", organo);
   if (estado) params.set("estado", estado);
 
-  // 🔁 En vez de mandar "tag", mandamos "tipo" como espera el backend
   const tipo = mapTagToTipo(tag || "todas");
   if (tipo && tipo !== "todas") {
     params.set("tipo", tipo);
   }
 
-  const url = params.toString()
-    ? `${joinApi("/jurisprudencia")}?${params.toString()}`
+  if (limit) {
+    params.set("limit", String(limit));
+  }
+
+  const qs = params.toString();
+  const url = qs
+    ? `${joinApi("/jurisprudencia")}?${qs}`
     : joinApi("/jurisprudencia");
 
   const resp = await fetch(url, { signal });
 
-  if (!resp.ok) throw new Error(`Error interna ${resp.status}`);
+  if (!resp.ok) {
+    throw new Error(`Error jurisprudencia ${resp.status}`);
+  }
 
   const data = await resp.json();
   return {
     ok: !!data.ok,
-    count: data.count || 0,
+    count: data.count || (Array.isArray(data.items) ? data.items.length : 0),
     items: data.items || [],
   };
 }
 
-export async function buscarJurisprudenciaEmbed({ q, limit = 20, signal } = {}) {
-  const params = new URLSearchParams();
-  if (q) params.set("q", q);
-  if (limit) params.set("limit", String(limit));
+// 🎯 Búsqueda clásica por filtros (sin q)
+export async function buscarJurisprudenciaInterna({
+  materia,
+  organo,
+  estado,
+  tag,
+  limit = 50,
+  signal,
+} = {}) {
+  return fetchJurisprudencia({
+    materia,
+    organo,
+    estado,
+    tag,
+    limit,
+    signal,
+  });
+}
 
-  const resp = await fetch(
-    `${joinApi("/jurisprudencia/search-embed")}?${params.toString()}`,
-    { signal }
-  );
-
-  if (!resp.ok) throw new Error(`Error embed ${resp.status}`);
-
-  const data = await resp.json();
-  return {
-    ok: !!data.ok,
-    count: data.count || 0,
-    items: data.items || [],
-  };
+// 🤖 Búsqueda "IA" (por texto) → mismo endpoint con q
+export async function buscarJurisprudenciaEmbed({
+  q,
+  limit = 20,
+  tag = "todas",
+  signal,
+} = {}) {
+  return fetchJurisprudencia({
+    q,
+    tag,
+    limit,
+    signal,
+  });
 }

@@ -21,7 +21,8 @@ import JurisprudenciaVisorModal from "@/components/jurisprudencia/Jurisprudencia
 // 🔹 Chat flotante
 import LitisBotBubbleChat from "@/components/ui/LitisBotBubbleChat";
 
-const IS_BROWSER = typeof window !== "undefined";
+// 🔹 Hook que sincroniza la sentencia seleccionada con sessionStorage
+import useSyncJurisprudenciaSelection from "@/hooks/useSyncJurisprudenciaSelection";
 
 export default function Jurisprudencia() {
   /* --------------------------- Estado del visor --------------------------- */
@@ -29,79 +30,49 @@ export default function Jurisprudencia() {
   const [visorDoc, setVisorDoc] = useState(null);
 
   /* ---------------------- Contexto para LitisBot burbuja ------------------ */
-  const [jurisSeleccionada, setJurisSeleccionada] = useState(null);
+  const { jurisSeleccionada, setJurisSeleccionada } =
+    useSyncJurisprudenciaSelection();
 
   // Abre el visor con el documento seleccionado
-  const handleAbrirVisor = useCallback((doc) => {
-    if (!doc) return;
-    setVisorDoc(doc);
-    setVisorOpen(true);
+  const handleAbrirVisor = useCallback(
+    (doc) => {
+      if (!doc) return;
+      setVisorDoc(doc);
+      setVisorOpen(true);
 
-    // sincronizamos también con LitisBot (estado + sessionStorage)
-    setJurisSeleccionada(doc);
-    if (IS_BROWSER) {
-      try {
-        window.sessionStorage.setItem(
-          "litis:lastJurisSeleccionada",
-          JSON.stringify(doc)
-        );
-      } catch (e) {
-        console.warn(
-          "[Jurisprudencia] No se pudo guardar juris en sessionStorage (visor):",
-          e
-        );
-      }
-    }
+      // sincronizamos también con LitisBot (hook ya guarda en sessionStorage)
+      setJurisSeleccionada(doc);
 
-    console.log("[Jurisprudencia] Abrir visor + seleccionar para LitisBot:", doc);
-  }, []);
+      console.log(
+        "[Jurisprudencia] Abrir visor + seleccionar para LitisBot:",
+        doc
+      );
+    },
+    [setJurisSeleccionada]
+  );
 
-  // Cierra el visor y limpia el documento
+  // Cierra el visor y limpia solo el doc visual (no borramos la selección
+  // para que LitisBot siga teniendo contexto aunque cierres el visor)
   const handleCerrarVisor = useCallback(() => {
     setVisorOpen(false);
     setVisorDoc(null);
   }, []);
 
-  // Cuando el usuario hace clic en “Preguntar a LitisBot con esta sentencia”
-  const handlePreguntarConJuris = useCallback((doc) => {
-    if (!doc) return;
+  // Cuando el usuario hace clic en “Consultar con LitisBot” (desde listado o visor)
+  const handlePreguntarConJuris = useCallback(
+    (doc) => {
+      if (!doc) return;
+      setJurisSeleccionada(doc);
+      console.log("[Jurisprudencia] handlePreguntarConJuris doc:", doc);
+    },
+    [setJurisSeleccionada]
+  );
 
-    setJurisSeleccionada(doc);
-
-    if (IS_BROWSER) {
-      try {
-        window.sessionStorage.setItem(
-          "litis:lastJurisSeleccionada",
-          JSON.stringify(doc)
-        );
-      } catch (e) {
-        console.warn(
-          "[Jurisprudencia] No se pudo guardar juris en sessionStorage:",
-          e
-        );
-      }
-    }
-
-    console.log("[Jurisprudencia] handlePreguntarConJuris doc:", doc);
-  }, []);
-
-  // Limpia selección (estado + sessionStorage)
+  // Limpia selección (estado + sessionStorage vía hook)
   const handleClearJuris = useCallback(() => {
     setJurisSeleccionada(null);
-
-    if (IS_BROWSER) {
-      try {
-        window.sessionStorage.removeItem("litis:lastJurisSeleccionada");
-      } catch (e) {
-        console.warn(
-          "[Jurisprudencia] No se pudo limpiar juris de sessionStorage:",
-          e
-        );
-      }
-    }
-
     console.log("[Jurisprudencia] jurisSeleccionada limpia");
-  }, []);
+  }, [setJurisSeleccionada]);
 
   return (
     <>
@@ -143,12 +114,13 @@ export default function Jurisprudencia() {
           open={visorOpen}
           doc={visorDoc}
           onClose={handleCerrarVisor}
+          onPreguntarConJuris={handlePreguntarConJuris}
         />
       </main>
 
       {/* 🦉 LitisBot flotante conectado a la sentencia seleccionada */}
       <LitisBotBubbleChat
-        usuarioId={null}          // cuando tengas usuario real, pásalo aquí
+        usuarioId={null} // cuando tengas usuario real, pásalo aquí
         pro={false}
         jurisSeleccionada={jurisSeleccionada}
         onClearJuris={handleClearJuris}
@@ -156,4 +128,3 @@ export default function Jurisprudencia() {
     </>
   );
 }
-
