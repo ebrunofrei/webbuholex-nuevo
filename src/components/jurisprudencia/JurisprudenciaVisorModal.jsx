@@ -1,20 +1,13 @@
 // src/components/jurisprudencia/JurisprudenciaVisorModal.jsx
 // ============================================================
-// 🦉 BúhoLex | Visor de Jurisprudencia (modal + TTS + ficha completa)
-// - Desktop: ficha + PDF en dos columnas
-// - Móvil: visor PDF casi a pantalla completa (detalles van en otro modal)
+// 🦉 BúhoLex | Visor de Jurisprudencia (modal de detalles + LitisBot)
+// - Muestra datos esenciales, resumen amplio y acciones claras
+// - Sin visor PDF embebido, sin TTS
+// - Botones: abrir PDF oficial + consultar con LitisBot
 // - Bloquea scroll del body cuando está abierto
 // ============================================================
 
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  reproducirVozVaronil,
-  pauseVoz,
-  resumeVoz,
-  stopVoz,
-} from "@/services/vozService";
-import { sanitizeHtml } from "@/utils/sanitizeHtml";
-import { joinApi } from "@/services/apiBase";
 
 const IS_BROWSER = typeof window !== "undefined";
 
@@ -24,12 +17,9 @@ export default function JurisprudenciaVisorModal({
   onClose,
   onPreguntarConJuris, // opcional: dispara LitisBot con esta sentencia
 }) {
-  const [hasStarted, setHasStarted] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // --- Detectar móvil vs desktop ---
+  // --- Detectar móvil vs desktop (solo para ajustar layout) ---
   useEffect(() => {
     if (!IS_BROWSER) return;
     const check = () => {
@@ -58,18 +48,6 @@ export default function JurisprudenciaVisorModal({
       resumen: doc.resumen,
       palabrasClave: doc.palabrasClave,
 
-      // URL oficial / normalizada de resolución
-      urlResolucion:
-        doc.pdfUrl ||
-        doc.pdfOficialUrl ||
-        doc.urlResolucion ||
-        doc.enlaceOficial ||
-        doc.fuenteUrl,
-
-      contenidoHTML: doc.contenidoHTML || doc.html || "",
-      fundamentos: doc.fundamentos || "",
-      baseLegal: doc.baseLegal || "",
-      parteResolutiva: doc.parteResolutiva || "",
       organo: doc.organo || doc.sala || doc.salaSuprema,
       especialidad: doc.especialidad || doc.materia,
       tema: doc.tema,
@@ -79,25 +57,31 @@ export default function JurisprudenciaVisorModal({
       fuenteUrl: doc.fuenteUrl || doc.enlaceOficial,
       fechaScraping: doc.fechaScraping,
 
-      // Texto de trabajo (IA): primero textoIA, luego texto legacy
-      texto: doc.textoIA || doc.texto || "",
+      baseLegal: doc.baseLegal || "",
+      parteResolutiva: doc.parteResolutiva || "",
+
+      // URL oficial / normalizada de resolución (para abrir en nueva pestaña)
+      urlResolucion:
+        doc.pdfUrl ||
+        doc.pdfOficialUrl ||
+        doc.urlResolucion ||
+        doc.enlaceOficial ||
+        doc.fuenteUrl,
     };
   }, [doc]);
 
-  const hasDetalle = useMemo(() => {
+  const tieneInfoDetallada = useMemo(() => {
     if (!data) return false;
     return Boolean(
-      data.sumilla ||
-        data.resumen ||
-        data.fundamentos ||
+      data.resumen ||
+        data.sumilla ||
         data.baseLegal ||
         data.parteResolutiva ||
-        data.contenidoHTML ||
-        data.texto
+        (Array.isArray(data.palabrasClave) && data.palabrasClave.length > 0)
     );
   }, [data]);
 
-  const isSoloBasica = data && !hasDetalle;
+  const isSoloBasica = data && !tieneInfoDetallada;
 
   // -------- Scroll lock del body --------
   useEffect(() => {
@@ -115,129 +99,7 @@ export default function JurisprudenciaVisorModal({
     };
   }, [open, data]);
 
-  // -------- Texto que leerá el TTS (texto de trabajo) --------
-  const textoLector = useMemo(() => {
-    if (!data) return "";
-    const partes = [];
-
-    if (data.titulo) {
-      partes.push(`Título de la resolución: ${data.titulo}.`);
-    }
-
-    if (data.numeroExpediente || data.pretensionDelito || data.organo) {
-      const meta = [];
-      if (data.numeroExpediente)
-        meta.push(`Expediente ${data.numeroExpediente}`);
-      if (data.organo) meta.push(`órgano o sala: ${data.organo}`);
-      if (data.pretensionDelito)
-        meta.push(`materia o delito: ${data.pretensionDelito}`);
-      partes.push(meta.join(". ") + ".");
-    }
-
-    if (data.sumilla) {
-      partes.push(`Sumilla: ${data.sumilla}.`);
-    } else if (data.resumen) {
-      partes.push(`Resumen de la decisión: ${data.resumen}.`);
-    }
-
-    if (data.parteResolutiva) {
-      partes.push(
-        `En la parte resolutiva se decide lo siguiente: ${data.parteResolutiva}.`
-      );
-    }
-
-    // Si tenemos texto de trabajo, solo un fragmento inicial
-    if (data.texto && data.texto.trim().length > 0) {
-      const fragmento = data.texto.trim().slice(0, 3000);
-      partes.push(
-        "A continuación, un fragmento relevante de la sentencia (texto de trabajo, no oficial): " +
-          fragmento
-      );
-    }
-
-    return partes.join(" ");
-  }, [data]);
-
-  // -------- Reset de audio al cerrar/cambiar doc/open --------
-  useEffect(() => {
-    if (!open || !data) {
-      stopVoz();
-      setHasStarted(false);
-      setIsPlaying(false);
-      setIsPaused(false);
-      return;
-    }
-    setHasStarted(false);
-    setIsPlaying(false);
-    setIsPaused(false);
-  }, [open, data]);
-
   if (!open || !data) return null;
-
-  // -------- Handlers de audio --------
-  async function handleStart() {
-    try {
-      if (!textoLector) return;
-      await reproducirVozVaronil(textoLector, {
-        voz: "masculina_profesional",
-      });
-      setHasStarted(true);
-      setIsPlaying(true);
-      setIsPaused(false);
-    } catch (err) {
-      console.error("[VisorJuris] Error al iniciar voz:", err);
-      setIsPlaying(false);
-      setIsPaused(false);
-    }
-  }
-
-  function handlePause() {
-    try {
-      pauseVoz();
-      setIsPlaying(false);
-      setIsPaused(true);
-    } catch (err) {
-      console.error("[VisorJuris] Error al pausar voz:", err);
-    }
-  }
-
-  function handleResume() {
-    try {
-      resumeVoz();
-      setIsPlaying(true);
-      setIsPaused(false);
-    } catch (err) {
-      console.error("[VisorJuris] Error al reanudar voz:", err);
-    }
-  }
-
-  async function handleRestart() {
-    try {
-      if (!textoLector) return;
-      stopVoz();
-      await reproducirVozVaronil(textoLector, {
-        voz: "masculina_profesional",
-      });
-      setHasStarted(true);
-      setIsPlaying(true);
-      setIsPaused(false);
-    } catch (err) {
-      console.error("[VisorJuris] Error al reiniciar voz:", err);
-      setIsPlaying(false);
-      setIsPaused(false);
-    }
-  }
-
-  function handleClose() {
-    try {
-      stopVoz();
-    } finally {
-      setHasStarted(false);
-      setIsPlaying(false);
-      setIsPaused(false);
-      onClose?.();
-    }
-  }
 
   // -------- Helpers UI --------
   const palabrasClaveTexto = Array.isArray(data.palabrasClave)
@@ -255,249 +117,83 @@ export default function JurisprudenciaVisorModal({
   const enlaceOficial =
     data.fuenteUrl || data.urlResolucion || doc?.enlaceOficial || null;
 
-  // PDF oficial → siempre vía proxy, que a su vez apunta al PJ
-  const pdfProxyUrl = data.id
-    ? joinApi(`/api/jurisprudencia/${data.id}/pdf`)
-    : null;
+  const puedeAbrirPdf = !!data.urlResolucion;
 
-  const hasPdf = !!pdfProxyUrl;
+  function handleClose() {
+    onClose?.();
+  }
 
-  const pdfInlineUrl = pdfProxyUrl
-    ? `${pdfProxyUrl}#view=FitH&zoom=page-width`
-    : null;
-
-  const pdfDownloadUrl = pdfProxyUrl ? `${pdfProxyUrl}?download=1` : null;
+  function handleAbrirPdf() {
+    if (!puedeAbrirPdf || !IS_BROWSER) return;
+    window.open(data.urlResolucion, "_blank", "noopener,noreferrer");
+  }
 
   // ======================================================================
   // RENDER
   // ======================================================================
 
-  // --- Header desktop (título + chips + TTS + cerrar) ---
-  const headerDesktop = (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-3 sm:px-6 py-3 sm:py-4">
-      <div className="flex-1 min-w-0">
-        <h2 className="text-base sm:text-lg md:text-xl font-semibold text-slate-800 leading-snug">
-          {data.titulo}
-        </h2>
-        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-          {data.especialidad && (
-            <span className="rounded-full bg-rose-50 text-rose-700 border border-rose-100 px-2 py-0.5">
-              {data.especialidad}
-            </span>
-          )}
-          {data.organo && (
-            <span className="rounded-full bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5">
-              {data.organo}
-            </span>
-          )}
-          {data.tipoResolucion && (
-            <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5">
-              {data.tipoResolucion}
-            </span>
-          )}
-          {fechaResolucionTexto && (
-            <span className="rounded-full bg-slate-50 text-slate-600 border border-slate-100 px-2 py-0.5">
-              {fechaResolucionTexto}
-            </span>
-          )}
-          {data.numeroExpediente && (
-            <span className="rounded-full bg-slate-50 text-slate-600 border border-slate-100 px-2 py-0.5">
-              Exp. {data.numeroExpediente}
-            </span>
-          )}
-          {data.fuente && (
-            <span className="rounded-full bg-slate-50 text-slate-500 border border-slate-100 px-2 py-0.5">
-              Fuente: {data.fuente}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-col items-end gap-2">
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <button
-            type="button"
-            onClick={handleStart}
-            className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] sm:text-xs font-medium text-amber-900 hover:bg-amber-200 transition disabled:opacity-40"
-            disabled={!textoLector || hasStarted}
-          >
-            <span className="text-[13px]">🔊</span>
-            Escuchar
-          </button>
-          <button
-            type="button"
-            onClick={handlePause}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-700 hover:bg-slate-100 transition disabled:opacity-40"
-            disabled={!isPlaying}
-          >
-            Pausar
-          </button>
-          <button
-            type="button"
-            onClick={handleResume}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-700 hover:bg-slate-100 transition disabled:opacity-40"
-            disabled={!isPaused}
-          >
-            Reanudar
-          </button>
-          <button
-            type="button"
-            onClick={handleRestart}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-700 hover:bg-slate-100 transition disabled:opacity-40"
-            disabled={!hasStarted}
-          >
-            Reiniciar
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleClose}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 text-lg hover:bg-slate-100 hover:text-slate-700 transition"
-          aria-label="Cerrar visor"
-        >
-          ×
-        </button>
-      </div>
-    </div>
-  );
-
-  // --- Header móvil (audio + cerrar) ---
-  const headerMobile = (
-    <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 bg-white">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          onClick={handleStart}
-          className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-200 transition disabled:opacity-40"
-          disabled={!textoLector || hasStarted}
-        >
-          <span className="text-[13px]">🔊</span>
-          Escuchar
-        </button>
-        <button
-          type="button"
-          onClick={handlePause}
-          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-700 hover:bg-slate-100 transition disabled:opacity-40"
-          disabled={!isPlaying}
-        >
-          Pausar
-        </button>
-        <button
-          type="button"
-          onClick={handleResume}
-          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-700 hover:bg-slate-100 transition disabled:opacity-40"
-          disabled={!isPaused}
-        >
-          Reanudar
-        </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={handleClose}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 text-lg hover:bg-slate-100 hover:text-slate-700 transition"
-        aria-label="Cerrar visor"
-      >
-        ×
-      </button>
-    </div>
-  );
-
-  // ======================================================================
-  // Vista móvil: visor PDF oficial (con fallback)
-  // ======================================================================
-  if (isMobile) {
-    return (
-      <div
-        className="fixed inset-0 z-[9990] flex flex-col bg-black/40 px-2 py-4"
-        aria-modal="true"
-        role="dialog"
-      >
-        <div className="mx-auto w-full max-w-md h-full bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-          {headerMobile}
-
-          <div className="px-3 py-1 border-b border-slate-100 bg-[#fdf7f2]">
-            <p className="text-[11px] font-semibold text-slate-800">
-              Resolución oficial (PDF)
-            </p>
-            <p className="text-[10px] text-slate-500">
-              Visualización directa del PDF oficial del Poder Judicial.
-            </p>
-          </div>
-
-          <div className="flex-1 w-full overflow-hidden bg-[#fdf7f2]">
-            {hasPdf && pdfInlineUrl ? (
-              <iframe
-                title="PDF de jurisprudencia"
-                src={pdfInlineUrl}
-                className="w-full h-full border-0"
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center px-4">
-                {data.contenidoHTML ? (
-                  <div
-                    className="prose prose-sm max-w-none text-slate-800 overflow-y-auto"
-                    dangerouslySetInnerHTML={{
-                      __html: sanitizeHtml(
-                        data.contenidoHTML ||
-                          "<p>Sin contenido disponible para visualizar.</p>"
-                      ),
-                    }}
-                  />
-                ) : data.texto ? (
-                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                    {data.texto}
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-500 text-center">
-                    Sin PDF ni contenido disponible para el visor.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {hasPdf && pdfDownloadUrl && (
-            <div className="px-3 py-2 flex items-center justify-between gap-2 border-t border-[#e3c7a3] bg-[#fdf7f2]">
-              <button
-                type="button"
-                onClick={() =>
-                  window.open(pdfDownloadUrl, "_blank", "noopener,noreferrer")
-                }
-                className="flex-1 inline-flex items-center justify-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 transition"
-              >
-                Abrir / descargar PDF oficial
-              </button>
-              {enlaceOficial && (
-                <a
-                  href={enlaceOficial}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] underline underline-offset-2 text-slate-500 hover:text-slate-700 whitespace-nowrap"
-                >
-                  Ver ficha en el sitio del PJ
-                </a>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ======================================================================
-  // Vista desktop / tablet (Lectura rápida + Resolución oficial)
-  // ======================================================================
   return (
     <div
       className="fixed inset-0 z-[9990] flex items-center justify-center bg-black/30 px-2 sm:px-4"
       aria-modal="true"
       role="dialog"
     >
-      <div className="w-full max-w-[1180px] h-[88vh] max-h-[92vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-        {headerDesktop}
+      <div
+        className={`w-full ${
+          isMobile ? "max-w-md h-[90vh]" : "max-w-[1080px] h-[86vh]"
+        } max-h-[92vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden`}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-3 sm:px-6 py-3 sm:py-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg md:text-xl font-semibold text-slate-800 leading-snug">
+              {data.titulo}
+            </h2>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
+              {data.especialidad && (
+                <span className="rounded-full bg-rose-50 text-rose-700 border border-rose-100 px-2 py-0.5">
+                  {data.especialidad}
+                </span>
+              )}
+              {data.organo && (
+                <span className="rounded-full bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5">
+                  {data.organo}
+                </span>
+              )}
+              {data.tipoResolucion && (
+                <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5">
+                  {data.tipoResolucion}
+                </span>
+              )}
+              {fechaResolucionTexto && (
+                <span className="rounded-full bg-slate-50 text-slate-600 border border-slate-100 px-2 py-0.5">
+                  {fechaResolucionTexto}
+                </span>
+              )}
+              {data.numeroExpediente && (
+                <span className="rounded-full bg-slate-50 text-slate-600 border border-slate-100 px-2 py-0.5">
+                  Exp. {data.numeroExpediente}
+                </span>
+              )}
+              {data.fuente && (
+                <span className="rounded-full bg-slate-50 text-slate-500 border border-slate-100 px-2 py-0.5">
+                  Fuente: {data.fuente}
+                </span>
+              )}
+            </div>
+          </div>
 
+          <button
+            type="button"
+            onClick={handleClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 text-lg hover:bg-slate-100 hover:text-slate-700 transition"
+            aria-label="Cerrar visor"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
         <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-5 touch-pan-y overscroll-contain">
           {isSoloBasica && (
             <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] sm:text-xs text-amber-900">
@@ -507,19 +203,10 @@ export default function JurisprudenciaVisorModal({
             </div>
           )}
 
-          <div className="grid gap-5 md:gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)]">
-            {/* Columna izquierda: Lectura rápida (texto de trabajo) */}
+          <div className="grid gap-5 md:gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+            {/* Columna izquierda: datos + resumen amplio */}
             <div className="space-y-4">
-              <section className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] font-semibold text-slate-800">
-                  Lectura rápida (texto de trabajo)
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Transcripción y resumen para análisis y apoyo de lectura.
-                  No reemplaza la resolución oficial en PDF.
-                </p>
-              </section>
-
+              {/* Datos principales */}
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs sm:text-[13px] text-slate-600">
                 {data.numeroExpediente && (
                   <div>
@@ -611,24 +298,25 @@ export default function JurisprudenciaVisorModal({
                 )}
               </section>
 
-              {data.sumilla && (
+              {/* Resumen amplio / Sumilla */}
+              {data.resumen && (
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
+                    Resumen ampliado
+                  </h3>
+                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                    {data.resumen}
+                  </p>
+                </section>
+              )}
+
+              {!data.resumen && data.sumilla && (
                 <section>
                   <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
                     Sumilla
                   </h3>
                   <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
                     {data.sumilla}
-                  </p>
-                </section>
-              )}
-
-              {data.resumen && (
-                <section>
-                  <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
-                    Resumen
-                  </h3>
-                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                    {data.resumen}
                   </p>
                 </section>
               )}
@@ -658,128 +346,70 @@ export default function JurisprudenciaVisorModal({
               {data.parteResolutiva && (
                 <section>
                   <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
-                    Parte resolutiva
+                    Parte resolutiva (extracto)
                   </h3>
                   <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
                     {data.parteResolutiva}
                   </p>
                 </section>
               )}
-
-              {onPreguntarConJuris && (
-                <section>
-                  <button
-                    type="button"
-                    onClick={() => onPreguntarConJuris(doc)}
-                    className="w-full inline-flex items-center justify-center rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs sm:text-sm font-semibold text-amber-900 hover:bg-amber-100 transition"
-                  >
-                    Consultar con LitisBot
-                  </button>
-                </section>
-              )}
-
-              {enlaceOficial && (
-                <section>
-                  <a
-                    href={enlaceOficial}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:text-amber-900 underline underline-offset-2"
-                  >
-                    Ver ficha en el sitio oficial
-                  </a>
-                </section>
-              )}
             </div>
 
-            {/* Columna derecha: Resolución oficial (PDF) */}
-            <div className="min-h-[260px] rounded-xl border border-[#cda27a]/60 bg-[#fdf7f2] overflow-hidden flex flex-col">
-              <div className="px-3 sm:px-4 py-2 border-b border-[#e3c7a3] bg-[#fdf3e7] flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[11px] font-semibold text-slate-800">
-                    Resolución oficial (PDF)
-                  </p>
-                  <p className="text-[11px] text-slate-600">
-                    Visor integrado del PDF oficial proveniente del Poder
-                    Judicial.
-                  </p>
-                </div>
-                {enlaceOficial && (
-                  <a
-                    href={enlaceOficial}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] underline underline-offset-2 text-slate-500 hover:text-slate-700"
-                  >
-                    Ver ficha PJ
-                  </a>
-                )}
-              </div>
+            {/* Columna derecha: acciones + enlaces */}
+            <div className="space-y-4">
+              {/* Bloque acciones principales */}
+              <section className="rounded-xl border border-amber-200 bg-[#fff7ec] px-3 sm:px-4 py-3 text-xs sm:text-[13px] text-slate-700">
+                <p className="text-[12px] sm:text-sm font-semibold text-amber-900 mb-1.5">
+                  Acciones rápidas
+                </p>
 
-              {hasPdf && pdfInlineUrl ? (
-                <>
-                  <div className="flex-1 w-full overflow-hidden">
-                    <iframe
-                      title="PDF de jurisprudencia"
-                      src={pdfInlineUrl}
-                      className="w-full h-full min-h-[340px] md:min-h-[480px] border-0"
-                    />
-                  </div>
+                <div className="flex flex-col gap-2">
+                  {onPreguntarConJuris && (
+                    <button
+                      type="button"
+                      onClick={() => onPreguntarConJuris(doc)}
+                      className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-900 hover:bg-amber-100 transition"
+                    >
+                      Consultar con LitisBot esta sentencia
+                    </button>
+                  )}
 
-                  <div className="px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 bg-[#fdf7f2] border-t border-[#e3c7a3]">
-                    {pdfDownloadUrl && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          window.open(
-                            pdfDownloadUrl,
-                            "_blank",
-                            "noopener,noreferrer"
-                          )
-                        }
-                        className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 transition"
-                      >
-                        Abrir / descargar PDF oficial
-                      </button>
-                    )}
+                  {puedeAbrirPdf && (
+                    <button
+                      type="button"
+                      onClick={handleAbrirPdf}
+                      className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-800 hover:bg-slate-50 transition"
+                    >
+                      Abrir / descargar PDF oficial
+                    </button>
+                  )}
 
-                    {enlaceOficial && (
-                      <span className="text-[11px] text-slate-500">
-                        El PDF se carga desde el portal oficial del Poder
-                        Judicial.
-                      </span>
-                    )}
-                  </div>
-                </>
-              ) : data.contenidoHTML ? (
-                <div className="flex-1 overflow-auto px-4 py-3 touch-pan-y overscroll-contain">
-                  <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
-                    Contenido de la resolución
-                  </h3>
-                  <div
-                    className="prose prose-sm max-w-none text-slate-800"
-                    dangerouslySetInnerHTML={{
-                      __html: sanitizeHtml(
-                        data.contenidoHTML || "<p>Sin contenido disponible.</p>"
-                      ),
-                    }}
-                  />
+                  {enlaceOficial && (
+                    <a
+                      href={enlaceOficial}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-2"
+                    >
+                      Ver ficha completa en el sitio oficial
+                    </a>
+                  )}
                 </div>
-              ) : data.texto ? (
-                <div className="flex-1 overflow-auto px-4 py-3 touch-pan-y overscroll-contain">
-                  <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
-                    Texto de trabajo
-                  </h3>
-                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                    {data.texto}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center px-4 py-3">
-                  <p className="text-xs sm:text-[13px] text-slate-500 text-center">
-                    Sin contenido adjunto para visualización en el visor.
-                  </p>
-                </div>
+
+                <p className="mt-2 text-[11px] text-slate-500">
+                  El análisis y el resumen son de BúhoLex. Para efectos
+                  probatorios siempre prevalece la resolución oficial en PDF.
+                </p>
+              </section>
+
+              {/* Estado / notas internas */}
+              {data.estado && (
+                <section className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] sm:text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">
+                    Estado de la resolución:
+                  </span>{" "}
+                  {data.estado}
+                </section>
               )}
             </div>
           </div>
