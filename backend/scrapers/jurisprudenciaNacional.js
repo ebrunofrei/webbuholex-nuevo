@@ -114,7 +114,7 @@ const BASE_URL_INICIO =
   "https://jurisprudencia.pj.gob.pe/jurisprudenciaweb/faces/page/inicio.xhtml";
 
 /* ---------------------------------------------
- * Helper: construir ficha HTML (Fase A)
+ * Helper: construir ficha HTML sintética (Fase A)
  * -------------------------------------------*/
 
 function buildContenidoHtmlFromItem(item = {}) {
@@ -197,6 +197,132 @@ function buildContenidoHtmlFromItem(item = {}) {
 }
 
 /* ---------------------------------------------
+ * Helper Fase B: Scraping de ficha completa
+ * -------------------------------------------*/
+
+/**
+ * Navega a la URL de detalle (ficha RichFaces) y devuelve:
+ * - html: contenido HTML del contenedor principal
+ * - texto: texto plano normalizado
+ * - pdfUrl: URL del PDF si hay link en la ficha
+ */
+async function scrapeDetalleJNS(browser, detalleUrl) {
+  // Guardrail básico
+  if (!detalleUrl) {
+    console.log("[JNS] scrapeDetalleJNS llamado SIN detalleUrl");
+    return null;
+  }
+
+  console.log("[JNS] Abriendo detalle JNS:", detalleUrl);
+
+  let page;
+
+  try {
+    page = await browser.newPage();
+
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    );
+    await page.setExtraHTTPHeaders({
+      "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
+    });
+
+    await page.goto(detalleUrl, {
+      waitUntil: "networkidle2",
+      timeout: 120000,
+    });
+
+    await delay(2000);
+
+    // Debug opcional: HTML + screenshot de la ficha
+    if (JNS_DEBUG) {
+      try {
+        const htmlDebug = await page.content();
+        fs.writeFileSync("debug-jns-detalle.html", htmlDebug, "utf8");
+        await page.screenshot({
+          path: "debug-jns-detalle.png",
+          fullPage: true,
+        });
+        console.log(
+          "[JNS][DEBUG] HTML detalle guardado en debug-jns-detalle.html y captura en debug-jns-detalle.png"
+        );
+      } catch (e) {
+        console.warn("[JNS][DEBUG] No se pudo guardar debug detalle:", e);
+      }
+    }
+
+        const result = await page.evaluate(() => {
+      const norm = (s) =>
+        (s || "")
+          .replace(/\u00a0/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      // Buscamos el contenedor principal de la ficha
+      const contenedor =
+        document.querySelector("#formFicha") ||
+        document.querySelector("#formPrincipal") ||
+        document.querySelector("div[id*='formFicha']") ||
+        document.querySelector("div.rich-panel") ||
+        document.body;
+
+      const html = contenedor ? contenedor.innerHTML : document.body.innerHTML;
+      const texto = norm(contenedor ? contenedor.textContent : document.body.textContent);
+
+      const linkPdf =
+        contenedor.querySelector('a[href*="ServletDescarga"]') ||
+        document.querySelector('a[href*="ServletDescarga"]');
+
+      const hrefPdf = linkPdf?.getAttribute("href") || "";
+      const pdfUrl = hrefPdf
+        ? hrefPdf.startsWith("http")
+          ? hrefPdf
+          : window.location.origin + hrefPdf
+        : "";
+
+      const tituloNode =
+        contenedor.querySelector(".txtbold") ||
+        contenedor.querySelector("h1, h2");
+
+      const titulo = norm(tituloNode?.textContent || "");
+
+      return {
+        html,
+        texto,
+        pdfUrl,
+        titulo,
+      };
+    });
+
+    console.log("[JNS] Resultado detalle:", {
+      lenHtml: (result.html || "").length,
+      lenTexto: (result.texto || "").length,
+      pdfUrl: result.pdfUrl,
+      titulo: result.titulo,
+    });
+
+    return {
+      html: result.html || "",
+      texto: result.texto || "",
+      pdfUrl: result.pdfUrl || "",
+      titulo: result.titulo || "",
+    };
+
+  } catch (err) {
+    console.error("[JNS] Error en scrapeDetalleJNS:", err.message);
+    return null;
+  } finally {
+    if (page) {
+      try {
+        await page.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+/* ---------------------------------------------
  * Guardado en Mongo (normalizado, con hash)
  * -------------------------------------------*/
 
@@ -215,7 +341,7 @@ async function saveOrUpdateJurisprudencia(data = {}) {
     data.palabrasClave || data.palabrasClaveRaw
   );
 
-    // URL de resolución / PDF (priorizamos pdfUrl si viene)
+  // URL de resolución / PDF (priorizamos pdfUrl si viene)
   const urlResolucion =
     data.pdfUrl ||
     data.urlResolucion ||
@@ -262,7 +388,7 @@ async function saveOrUpdateJurisprudencia(data = {}) {
   };
 
   // ⛔ Bypass al schema de Mongoose (sin strict) pero
-  // ✅ aseguramos createdAt / fechaScraping en inserciones nuevas
+  // ✅ aseguramos createdAt / fechaScraping / contextVersion en inserciones nuevas
   await Jurisprudencia.collection.updateOne(
     filtro,
     {
@@ -270,6 +396,7 @@ async function saveOrUpdateJurisprudencia(data = {}) {
       $setOnInsert: {
         createdAt: ahora,
         fechaScraping: ahora,
+        contextVersion: 1,
       },
     },
     { upsert: true }
@@ -362,7 +489,12 @@ async function scrapeListadoJNS(page) {
         : "";
 
       // Link de detalle (ficha completa RichFaces)
-      const linkDetalle = body.querySelector('a[href*="resultado.xhtml"]');
+      const linkDetalle =
+        body.querySelector('a[href*="ficha"]') ||
+        body.querySelector('a[href*="resultado"]') ||
+        body.querySelector('a[href*="temporal"]') ||
+        body.querySelector('a[href*="p_ficha"]');
+
       const hrefDetalle = linkDetalle?.getAttribute("href") || "";
       const detalleUrl = hrefDetalle
         ? (hrefDetalle.startsWith("http")
@@ -541,13 +673,29 @@ export async function scrapeJNS(query = "") {
     const lista = await scrapeListadoJNS(page);
     console.log(`[JNS] Se encontraron ${lista.length} resoluciones preliminares.`);
 
+    // 👀 LOG: revisar qué viene del listado (solo primeros 5)
+    console.log(
+      "[JNS] Muestra de items del listado:",
+      lista.slice(0, 5).map((it) => ({
+        expediente: it.numeroExpediente,
+        detalleUrl: it.detalleUrl,
+        urlResolucion: it.urlResolucion,
+      }))
+    );
+
     if (!lista.length) {
       console.warn("[JNS] ⚠ No se encontraron resultados para esa query.");
       return 0;
     }
 
-        // 6. Guardar en Mongo con mapeo coherente + ficha de detalle (Fase B)
+    // 6. Guardar en Mongo con mapeo coherente + ficha de detalle (Fase B)
     for (const item of lista) {
+      console.log("[JNS] Procesando item:", {
+        expediente: item.numeroExpediente,
+        detalleUrl: item.detalleUrl,
+        pdf: item.urlResolucion
+      });
+
       try {
         const tituloCompuesto =
           normText(`${item.tipoResolucion || ""} ${item.recurso || ""}`) ||
@@ -558,7 +706,7 @@ export async function scrapeJNS(query = "") {
         let texto = "";
         let pdfUrl = item.urlResolucion || ""; // PDF detectado en el listado (si lo hubo)
 
-        // Si tenemos URL de detalle, intentamos scrapear la ficha real
+        // Si tenemos URL de detalle, intentamos scrapear la ficha real (Fase B)
         if (item.detalleUrl) {
           const det = await scrapeDetalleJNS(browser, item.detalleUrl);
           if (det) {

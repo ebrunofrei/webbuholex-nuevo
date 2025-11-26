@@ -29,7 +29,7 @@ export default function JurisprudenciaVisorModal({
   const [isPaused, setIsPaused] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // --- Detectar móvil vs desktop (simple pero efectivo) ---
+  // --- Detectar móvil vs desktop ---
   useEffect(() => {
     if (!IS_BROWSER) return;
     const check = () => {
@@ -58,8 +58,10 @@ export default function JurisprudenciaVisorModal({
       resumen: doc.resumen,
       palabrasClave: doc.palabrasClave,
 
+      // URL oficial / normalizada de resolución
       urlResolucion:
         doc.pdfUrl ||
+        doc.pdfOficialUrl ||
         doc.urlResolucion ||
         doc.enlaceOficial ||
         doc.fuenteUrl,
@@ -76,7 +78,9 @@ export default function JurisprudenciaVisorModal({
       fuente: doc.fuente || "Poder Judicial",
       fuenteUrl: doc.fuenteUrl || doc.enlaceOficial,
       fechaScraping: doc.fechaScraping,
-      texto: doc.texto || "",
+
+      // Texto de trabajo (IA): primero textoIA, luego texto legacy
+      texto: doc.textoIA || doc.texto || "",
     };
   }, [doc]);
 
@@ -111,7 +115,7 @@ export default function JurisprudenciaVisorModal({
     };
   }, [open, data]);
 
-  // -------- Texto que leerá el TTS (más humano, por bloques) --------
+  // -------- Texto que leerá el TTS (texto de trabajo) --------
   const textoLector = useMemo(() => {
     if (!data) return "";
     const partes = [];
@@ -137,14 +141,17 @@ export default function JurisprudenciaVisorModal({
     }
 
     if (data.parteResolutiva) {
-      partes.push(`En la parte resolutiva se decide lo siguiente: ${data.parteResolutiva}.`);
+      partes.push(
+        `En la parte resolutiva se decide lo siguiente: ${data.parteResolutiva}.`
+      );
     }
 
-    // Si tenemos texto completo, solo un fragmento inicial como lectura guiada
+    // Si tenemos texto de trabajo, solo un fragmento inicial
     if (data.texto && data.texto.trim().length > 0) {
       const fragmento = data.texto.trim().slice(0, 3000);
       partes.push(
-        "A continuación, un fragmento relevante de la sentencia: " + fragmento
+        "A continuación, un fragmento relevante de la sentencia (texto de trabajo, no oficial): " +
+          fragmento
       );
     }
 
@@ -248,17 +255,18 @@ export default function JurisprudenciaVisorModal({
   const enlaceOficial =
     data.fuenteUrl || data.urlResolucion || doc?.enlaceOficial || null;
 
-  const hasPdf = !!data.urlResolucion;
-  const pdfProxyUrl =
-    data.id && hasPdf ? joinApi(`/api/jurisprudencia/${data.id}/pdf`) : null;
+  // PDF oficial → siempre vía proxy, que a su vez apunta al PJ
+  const pdfProxyUrl = data.id
+    ? joinApi(`/api/jurisprudencia/${data.id}/pdf`)
+    : null;
+
+  const hasPdf = !!pdfProxyUrl;
 
   const pdfInlineUrl = pdfProxyUrl
     ? `${pdfProxyUrl}#view=FitH&zoom=page-width`
-    : data.urlResolucion || null;
+    : null;
 
-  const pdfDownloadUrl = pdfProxyUrl
-    ? `${pdfProxyUrl}?download=1`
-    : data.urlResolucion || null;
+  const pdfDownloadUrl = pdfProxyUrl ? `${pdfProxyUrl}?download=1` : null;
 
   // ======================================================================
   // RENDER
@@ -354,7 +362,7 @@ export default function JurisprudenciaVisorModal({
     </div>
   );
 
-  // --- Header móvil (solo audio + cerrar, sin título ni detalle) ---
+  // --- Header móvil (audio + cerrar) ---
   const headerMobile = (
     <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 bg-white">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -397,7 +405,7 @@ export default function JurisprudenciaVisorModal({
   );
 
   // ======================================================================
-  // Vista móvil: SOLO PDF
+  // Vista móvil: visor PDF oficial (con fallback)
   // ======================================================================
   if (isMobile) {
     return (
@@ -408,6 +416,15 @@ export default function JurisprudenciaVisorModal({
       >
         <div className="mx-auto w-full max-w-md h-full bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           {headerMobile}
+
+          <div className="px-3 py-1 border-b border-slate-100 bg-[#fdf7f2]">
+            <p className="text-[11px] font-semibold text-slate-800">
+              Resolución oficial (PDF)
+            </p>
+            <p className="text-[10px] text-slate-500">
+              Visualización directa del PDF oficial del Poder Judicial.
+            </p>
+          </div>
 
           <div className="flex-1 w-full overflow-hidden bg-[#fdf7f2]">
             {hasPdf && pdfInlineUrl ? (
@@ -470,7 +487,7 @@ export default function JurisprudenciaVisorModal({
   }
 
   // ======================================================================
-  // Vista desktop / tablet (ficha + PDF)
+  // Vista desktop / tablet (Lectura rápida + Resolución oficial)
   // ======================================================================
   return (
     <div
@@ -491,8 +508,18 @@ export default function JurisprudenciaVisorModal({
           )}
 
           <div className="grid gap-5 md:gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)]">
-            {/* Columna izquierda: metadatos + texto clave */}
+            {/* Columna izquierda: Lectura rápida (texto de trabajo) */}
             <div className="space-y-4">
+              <section className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-[11px] font-semibold text-slate-800">
+                  Lectura rápida (texto de trabajo)
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Transcripción y resumen para análisis y apoyo de lectura.
+                  No reemplaza la resolución oficial en PDF.
+                </p>
+              </section>
+
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs sm:text-[13px] text-slate-600">
                 {data.numeroExpediente && (
                   <div>
@@ -665,8 +692,30 @@ export default function JurisprudenciaVisorModal({
               )}
             </div>
 
-            {/* Columna derecha: visor PDF */}
+            {/* Columna derecha: Resolución oficial (PDF) */}
             <div className="min-h-[260px] rounded-xl border border-[#cda27a]/60 bg-[#fdf7f2] overflow-hidden flex flex-col">
+              <div className="px-3 sm:px-4 py-2 border-b border-[#e3c7a3] bg-[#fdf3e7] flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-800">
+                    Resolución oficial (PDF)
+                  </p>
+                  <p className="text-[11px] text-slate-600">
+                    Visor integrado del PDF oficial proveniente del Poder
+                    Judicial.
+                  </p>
+                </div>
+                {enlaceOficial && (
+                  <a
+                    href={enlaceOficial}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] underline underline-offset-2 text-slate-500 hover:text-slate-700"
+                  >
+                    Ver ficha PJ
+                  </a>
+                )}
+              </div>
+
               {hasPdf && pdfInlineUrl ? (
                 <>
                   <div className="flex-1 w-full overflow-hidden">
@@ -678,29 +727,27 @@ export default function JurisprudenciaVisorModal({
                   </div>
 
                   <div className="px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 bg-[#fdf7f2] border-t border-[#e3c7a3]">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        window.open(
-                          pdfDownloadUrl,
-                          "_blank",
-                          "noopener,noreferrer"
-                        )
-                      }
-                      className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 transition"
-                    >
-                      Abrir / descargar PDF oficial
-                    </button>
+                    {pdfDownloadUrl && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.open(
+                            pdfDownloadUrl,
+                            "_blank",
+                            "noopener,noreferrer"
+                          )
+                        }
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 transition"
+                      >
+                        Abrir / descargar PDF oficial
+                      </button>
+                    )}
 
                     {enlaceOficial && (
-                      <a
-                        href={enlaceOficial}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] underline underline-offset-2 text-slate-500 hover:text-slate-700"
-                      >
-                        Ver ficha en el sitio del PJ
-                      </a>
+                      <span className="text-[11px] text-slate-500">
+                        El PDF se carga desde el portal oficial del Poder
+                        Judicial.
+                      </span>
                     )}
                   </div>
                 </>
@@ -721,7 +768,7 @@ export default function JurisprudenciaVisorModal({
               ) : data.texto ? (
                 <div className="flex-1 overflow-auto px-4 py-3 touch-pan-y overscroll-contain">
                   <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
-                    Texto completo
+                    Texto de trabajo
                   </h3>
                   <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
                     {data.texto}
