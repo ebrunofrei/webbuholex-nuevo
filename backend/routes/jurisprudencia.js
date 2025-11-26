@@ -285,7 +285,7 @@ router.get("/", async (req, res) => {
 });
 
 /* ------------------ GET /api/jurisprudencia/:id/pdf ----------------------- */
-/* Proxy de PDF para visor + descarga (Fase B listo) */
+/* Proxy de PDF para visor + descarga, con fallback a redirect al PJ */
 
 router.get("/:id/pdf", async (req, res) => {
   try {
@@ -297,55 +297,99 @@ router.get("/:id/pdf", async (req, res) => {
     }
 
     const pdfUrl = doc.pdfUrl || doc.urlResolucion;
-    const download =
-      String(req.query.download || "").toLowerCase() === "1";
+    const download = String(req.query.download || "").toLowerCase() === "1";
 
-    // Pedimos el PDF a la fuente original
-    const upstream = await fetch(pdfUrl);
-    if (!upstream.ok || !upstream.body) {
-      console.error(
-        "[API] /api/jurisprudencia/:id/pdf upstream error:",
-        upstream.status,
-        pdfUrl
-      );
-      return res.status(502).json({
-        ok: false,
-        error: "upstream_error",
-        msg: "No se pudo obtener el PDF desde la fuente original.",
-      });
-    }
+    // ---------- helper de fallback: redirigir directo al sitio del PJ ----------
+    const fallbackRedirect = () => {
+      // último seguro: mandamos al usuario directo al PDF original
+      if (!pdfUrl) {
+        return res.status(502).json({
+          ok: false,
+          error: "upstream_error",
+          msg: "No se pudo obtener el PDF desde la fuente original.",
+        });
+      }
 
-    // Nombre de archivo razonable
-    let filename = "resolucion.pdf";
+      // redirección estándar; el navegador manejará el PDF
+      return res.redirect(302, pdfUrl);
+    };
+
+    // ---------- intento de proxy desde el backend ----------
     try {
-      const urlObj = new URL(pdfUrl);
-      const last = urlObj.pathname.split("/").filter(Boolean).pop();
-      if (last && last.toLowerCase().endsWith(".pdf")) {
-        filename = last;
-      } else if (doc.numeroExpediente) {
-        filename = `resolucion_${doc.numeroExpediente}.pdf`;
+      const upstream = await fetch(pdfUrl, {
+        // seguimos redirecciones del PJ si las hay
+        redirect: "follow",
+        // mejoramos el "perfil" de la petición para que no parezca un bot raro
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/119.0 Safari/537.36 BúhoLexBot/1.0",
+          Accept:
+            "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+        },
+      });
+
+      if (!upstream.ok || !upstream.body) {
+        console.error(
+          "[API] /api/jurisprudencia/:id/pdf upstream error:",
+          upstream.status,
+          pdfUrl
+        );
+        return fallbackRedirect();
       }
-    } catch {
-      /* ignore */
+
+      // comprobamos que realmente viene un PDF
+      const contentType = upstream.headers.get("content-type") || "";
+      const looksPdf = contentType.toLowerCase().includes("pdf");
+
+      if (!looksPdf) {
+        console.warn(
+          "[API] /api/jurisprudencia/:id/pdf content-type no PDF:",
+          contentType,
+          pdfUrl
+        );
+        return fallbackRedirect();
+      }
+
+      // ---------- nombre de archivo razonable ----------
+      let filename = "resolucion.pdf";
+      try {
+        const urlObj = new URL(pdfUrl);
+        const last = urlObj.pathname.split("/").filter(Boolean).pop();
+        if (last && last.toLowerCase().endsWith(".pdf")) {
+          filename = last;
+        } else if (doc.numeroExpediente) {
+          filename = `resolucion_${doc.numeroExpediente}.pdf`;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // ---------- cabeceras y pipe de stream ----------
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `${download ? "attachment" : "inline"}; filename="${filename}"`
+      );
+
+      upstream.body.pipe(res);
+      upstream.body.on("error", (err) => {
+        console.error("[API] /api/jurisprudencia/:id/pdf stream error:", err);
+        if (!res.headersSent) {
+          fallbackRedirect();
+        } else {
+          res.end();
+        }
+      });
+    } catch (err) {
+      console.error(
+        "[API] /api/jurisprudencia/:id/pdf fetch exception:",
+        err?.message || err
+      );
+      return fallbackRedirect();
     }
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `${download ? "attachment" : "inline"}; filename="${filename}"`
-    );
-
-    upstream.body.pipe(res);
-    upstream.body.on("error", (err) => {
-      console.error("[API] /api/jurisprudencia/:id/pdf stream error:", err);
-      if (!res.headersSent) {
-        res.status(500).end();
-      } else {
-        res.end();
-      }
-    });
   } catch (err) {
-    console.error("[API] /api/jurisprudencia/:id/pdf error:", err);
+    console.error("[API] /api/jurisprudencia/:id/pdf error general:", err);
     return res.status(500).json({
       ok: false,
       error: "internal_error",
