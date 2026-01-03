@@ -2,55 +2,139 @@
 // ============================================================
 // 🦉 BúhoLex | API de Repositorio Interno de Jurisprudencia
 // ------------------------------------------------------------
-// - GET  /api/jurisprudencia             → lista con filtros + búsqueda full-text
+// - GET  /api/jurisprudencia             → lista con filtros + búsqueda
 // - GET  /api/jurisprudencia/:id         → detalle completo (JSON + meta)
-// - GET  /api/jurisprudencia/:id/context → contexto textual para LitisBot (Fase B)
+// - GET  /api/jurisprudencia/:id/context → contexto textual para LitisBot
 // - GET  /api/jurisprudencia/:id/pdf     → proxy de PDF oficial (visor + descarga)
 // ============================================================
 
 import express from "express";
 import fetch from "node-fetch";
+import { dbConnect } from "../services/db.js";
 import Jurisprudencia from "../models/Jurisprudencia.js";
 import { buildJurisprudenciaContext } from "../services/jurisprudenciaContext.js";
 
 const router = express.Router();
 
-/* ---------------------------- helpers de filtro --------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                               helpers generales                             */
+/* -------------------------------------------------------------------------- */
 
-function buildFilter({ q, materia, organo, estado, tipo }) {
+function safeInt(value, def = 0) {
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? def : n;
+}
+
+/**
+ * Regex seguro para Mongo: evita errores tipo 51091 (quantifier...).
+ * - corta inputs basura
+ * - escapa caracteres
+ * - try/catch por si el motor rechaza el patrón
+ */
+function buildSafeRegex(input) {
+  if (!input || typeof input !== "string") return null;
+
+  const trimmed = input.trim();
+  if (trimmed.length < 2) return null; // evita "+" "*" "(" etc.
+
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  try {
+    return new RegExp(escaped, "i");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * URL segura de PDF (misma lógica en toda la API).
+ */
+function getSafePdfUrl(doc = {}) {
+  return (
+    (doc.pdfOficialUrl && String(doc.pdfOficialUrl).trim()) ||
+    (doc.pdfUrl && String(doc.pdfUrl).trim()) ||
+    (doc.urlResolucion && String(doc.urlResolucion).trim()) ||
+    null
+  );
+}
+
+/**
+ * Construye el filtro base a partir de query params.
+ * Pensado para datos JNS pero compatible con otras fuentes.
+ */
+function buildFilter({ q, materia, organo, estado, tipo, origen, tag, anio }) {
   const filter = {};
 
-  // Materia / especialidad (soportamos ambos campos)
-  if (materia && materia !== "todas" && materia !== "") {
-    filter.$or = [{ materia }, { especialidad: materia }];
+  // Origen / fuente (ej. JNS, TC, etc.)
+  if (origen && origen !== "todos" && origen !== "todas") {
+    filter.origen = origen;
   }
 
+  // Materia / especialidad
+  if (materia && materia !== "todas" && materia !== "") {
+    const orArr = filter.$or ? [...filter.$or] : [];
+    orArr.push({ materia }, { especialidad: materia });
+    filter.$or = orArr;
+  }
+
+  // Órgano / sala
   if (organo && organo !== "todos" && organo !== "") {
     filter.organo = organo;
   }
 
+  // Estado del registro
   if (estado && estado !== "todos" && estado !== "") {
     filter.estado = estado;
   }
 
-  // tipo se maneja más en el sort, salvo "destacadas"
-  if (tipo === "destacadas") {
-    filter.$or = [
-      ...(filter.$or || []),
-      { destacado: true },
-      { destacada: true },
-    ];
+  // Tags específicos
+  if (tag && tag !== "") {
+    filter.tags = { $in: [tag] };
   }
 
-  // Búsqueda por texto completo (índice text)
-  if (q && q.trim()) {
-    const text = q.trim();
-    filter.$text = { $search: text };
+  // Tipo especial de listado
+  if (tipo === "destacadas") {
+    const orArr = filter.$or ? [...filter.$or] : [];
+    orArr.push({ destacado: true }, { destacada: true });
+    filter.$or = orArr;
   }
+
+  // 🔹 Filtro por año de la resolución
+  if (anio) {
+    const yearInt = safeInt(anio, 0);
+    if (yearInt > 0) {
+      const from = new Date(yearInt, 0, 1);   // 1 enero año
+      const to = new Date(yearInt + 1, 0, 1); // 1 enero año siguiente
+      filter.fechaResolucion = { $gte: from, $lt: to };
+    }
+  }
+
+  // 🔍 Búsqueda textual SIN $text (evitamos índice especial)
+if (q && q.trim()) {
+  const regex = buildSafeRegex(q);
+
+  // Si el patrón es inválido o demasiado corto, no aplicamos búsqueda
+  if (regex) {
+    const orArr = filter.$or ? [...filter.$or] : [];
+
+    orArr.push(
+      { titulo: regex },
+      { numeroExpediente: regex },
+      { sumilla: regex },
+      { resumen: regex },
+      { palabrasClave: regex }
+    );
+
+    filter.$or = orArr;
+  }
+}
 
   return filter;
 }
 
+/**
+ * Ordenamiento para listados sin búsqueda textual.
+ */
 function buildSort(tipo) {
   let sort = { createdAt: -1 };
 
@@ -68,11 +152,7 @@ function buildSort(tipo) {
 /* ----------------------- helper: meta compacto (Fase B) ------------------- */
 
 function buildMetaFromDoc(doc) {
-  const safePdfUrl =
-    (doc.pdfOficialUrl && doc.pdfOficialUrl.trim()) ||
-    (doc.pdfUrl && doc.pdfUrl.trim()) ||
-    (doc.urlResolucion && doc.urlResolucion.trim()) ||
-    null;
+  const safePdfUrl = getSafePdfUrl(doc);
 
   return {
     titulo: doc.titulo || "",
@@ -87,6 +167,7 @@ function buildMetaFromDoc(doc) {
     subtema: doc.subtema || "",
     fechaResolucion: doc.fechaResolucion || null,
     fuente: doc.fuente || "Poder Judicial",
+    origen: doc.origen || doc.fuente || "JNS",
     fuenteUrl: doc.fuenteUrl || safePdfUrl || "",
     pdfUrl: safePdfUrl,
   };
@@ -96,15 +177,11 @@ function buildMetaFromDoc(doc) {
 
 function normalizeItemForFrontend(doc) {
   const safeId = String(doc._id || "");
-  const safePdfUrl =
-    (doc.pdfOficialUrl && doc.pdfOficialUrl.trim()) ||
-    (doc.pdfUrl && doc.pdfUrl.trim()) ||
-    (doc.urlResolucion && doc.urlResolucion.trim()) ||
-    null;
+  const safePdfUrl = getSafePdfUrl(doc);
 
   return {
     ...doc,
-    id: safeId, // front trabaja con id en lugar de _id
+    id: safeId, // el frontend trabaja con id en lugar de _id
     pdfUrl: safePdfUrl,
     origen: doc.origen || doc.fuente || "JNS",
     hasContenido: !!(doc.contenidoHTML || doc.texto || doc.textoIA),
@@ -112,9 +189,22 @@ function normalizeItemForFrontend(doc) {
 }
 
 /* ------------------------ GET /api/jurisprudencia ------------------------- */
-
+/**
+ * Listado con filtros + búsqueda.
+ * Soporta:
+ *  - q: texto libre
+ *  - materia: "Penal", "Civil", etc.
+ *  - organo: nombre del órgano / sala
+ *  - estado: "Vigente", "Anulado", etc.
+ *  - tipo: "recientes" | "destacadas" | "citadas" | ...
+ *  - tag: etiqueta específica (penal, jns, interno, etc.)
+ *  - origen: "JNS", "TC", etc.
+ *  - page, limit: paginación
+ */
 router.get("/", async (req, res) => {
   try {
+    await dbConnect();
+
     const {
       q = "",
       materia = "todas",
@@ -122,16 +212,20 @@ router.get("/", async (req, res) => {
       estado = "todos",
       tipo: tipoQuery = "todas",
       tag: tagQuery = "",
+      origen = "JNS",
+      anio = "",
       limit = "50",
+      page = "1",
     } = req.query;
 
-    // Permitimos tag o tipo; prioridad a tipo si viene explícito
     const tipo =
       (tipoQuery && String(tipoQuery)) ||
       (tagQuery && String(tagQuery)) ||
       "todas";
 
     const hayTexto = q && q.trim().length > 0;
+    const tag =
+      tagQuery && String(tagQuery).trim() ? String(tagQuery).trim() : "";
 
     const filter = buildFilter({
       q: hayTexto ? q : "",
@@ -139,11 +233,16 @@ router.get("/", async (req, res) => {
       organo,
       estado,
       tipo,
+      origen,
+      tag,
+      anio,
     });
 
-    const lim = Math.min(parseInt(limit, 10) || 50, 100);
+    const lim = Math.min(safeInt(limit, 50) || 50, 100);
+    const pageNum = Math.max(safeInt(page, 1), 1);
+    const skip = (pageNum - 1) * lim;
 
-    // Proyección base para listado (no mandamos contenido pesado)
+    // Proyección base para listado (evitar payload pesado)
     const projection = {
       titulo: 1,
       numeroExpediente: 1,
@@ -159,6 +258,7 @@ router.get("/", async (req, res) => {
       pretensionDelito: 1,
       palabrasClave: 1,
       fuente: 1,
+      origen: 1,
       fuenteUrl: 1,
       urlResolucion: 1,
       pdfUrl: 1,
@@ -167,30 +267,31 @@ router.get("/", async (req, res) => {
       destacada: 1,
       destacado: 1,
       citadaCount: 1,
+      tags: 1,
     };
 
     let query;
 
     if (hayTexto) {
-      // 🔍 Búsqueda por texto completo: orden por relevancia (score)
-      projection.score = { $meta: "textScore" };
-
-      query = Jurisprudencia.find(filter, projection).sort({
-        score: { $meta: "textScore" },
-      });
+      // 🔎 Ahora solo ordenamos por relevancia “manual”
+      const sort = { fechaResolucion: -1, citadaCount: -1, createdAt: -1 };
+      query = Jurisprudencia.find(filter, projection).sort(sort);
     } else {
-      // Orden según tipo (sin texto)
+      // Ordenamiento normal por tipo
       const sort = buildSort(tipo);
       query = Jurisprudencia.find(filter, projection).sort(sort);
     }
 
-    const rawItems = await query.limit(lim).lean();
-
+    const total = await Jurisprudencia.countDocuments(filter);
+    const rawItems = await query.skip(skip).limit(lim).lean();
     const items = rawItems.map((doc) => normalizeItemForFrontend(doc));
 
     return res.json({
       ok: true,
       count: items.length,
+      total,
+      page: pageNum,
+      limit: lim,
       items,
     });
   } catch (err) {
@@ -199,6 +300,7 @@ router.get("/", async (req, res) => {
       ok: false,
       error: "internal_error",
       msg: "Error al consultar jurisprudencia interna.",
+      debug: err?.message || String(err),
     });
   }
 });
@@ -208,6 +310,8 @@ router.get("/", async (req, res) => {
 
 router.get("/:id/pdf", async (req, res) => {
   try {
+    await dbConnect();
+
     const doc = await Jurisprudencia.findById(req.params.id).lean();
     if (!doc) {
       return res
@@ -215,11 +319,7 @@ router.get("/:id/pdf", async (req, res) => {
         .json({ ok: false, error: "not_found", msg: "Resolución no encontrada." });
     }
 
-    const pdfUrl =
-      (doc.pdfOficialUrl && doc.pdfOficialUrl.trim()) ||
-      (doc.pdfUrl && doc.pdfUrl.trim()) ||
-      (doc.urlResolucion && doc.urlResolucion.trim()) ||
-      "";
+    const pdfUrl = getSafePdfUrl(doc) || "";
 
     if (!pdfUrl) {
       return res
@@ -227,8 +327,7 @@ router.get("/:id/pdf", async (req, res) => {
         .json({ ok: false, error: "pdf_not_found", msg: "PDF no disponible." });
     }
 
-    const download =
-      String(req.query.download || "").toLowerCase() === "1";
+    const download = String(req.query.download || "").toLowerCase() === "1";
 
     const wantsJson =
       String(req.query.format || "").toLowerCase() === "json" ||
@@ -259,7 +358,6 @@ router.get("/:id/pdf", async (req, res) => {
         });
       }
 
-      const safePdfUrl = pdfUrl;
       res.status(200).type("html").send(`<!doctype html>
 <html lang="es">
 <head>
@@ -318,7 +416,7 @@ router.get("/:id/pdf", async (req, res) => {
       Hubo un problema al obtener el PDF desde el Poder Judicial.
       Puedes intentar abrir directamente la resolución oficial en una nueva pestaña.
     </p>
-    <a class="btn" href="${safePdfUrl}" target="_blank" rel="noopener noreferrer">
+    <a class="btn" href="${pdfUrl}" target="_blank" rel="noopener noreferrer">
       Abrir PDF oficial del Poder Judicial
     </a>
   </div>
@@ -367,13 +465,14 @@ router.get("/:id/pdf", async (req, res) => {
 });
 
 /* ----------------- GET /api/jurisprudencia/:id/context -------------------- */
-/* Contexto textual compacto para LitisBot (Fase B, usa textoIA) */
+/* Contexto textual compacto para LitisBot */
 
 router.get("/:id/context", async (req, res) => {
   try {
+    await dbConnect();
     const { id } = req.params;
 
-    // lean(false) para tener métodos / virtuals en el doc
+    // lean(false) para obtener documento Mongoose con métodos/virtuals
     const doc = await Jurisprudencia.findById(id).lean(false);
     if (!doc) {
       return res.status(404).json({
@@ -413,6 +512,7 @@ router.get("/:id/context", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
+    await dbConnect();
     const doc = await Jurisprudencia.findById(req.params.id).lean();
     if (!doc) {
       return res.status(404).json({ ok: false, error: "not_found" });

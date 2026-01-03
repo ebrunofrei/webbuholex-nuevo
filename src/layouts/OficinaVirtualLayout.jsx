@@ -1,23 +1,17 @@
-// src/layouts/oficinavirtuallayout.jsx
-import React from "react";
+import { Outlet } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 
-/**
- * OficinaVirtualLayout
- * - Layout simple con sidebar fijo y área principal para children
- * - Sin dependencias de NoticiasContext ni LitisBotChatContext
- */
-export default function OficinaVirtualLayout({ children }) {
+export default function OficinaVirtualLayout() {
   return (
-    <div className="min-h-screen w-full flex bg-gray-50">
-      {/* Sidebar fijo (izquierda) */}
+    <div className="w-full min-h-screen flex bg-gray-50">
+      {/* Sidebar SIEMPRE */}
       <aside className="flex-shrink-0">
         <Sidebar />
       </aside>
 
-      {/* Contenido principal */}
+      {/* Contenido oficina */}
       <main className="flex-1 min-w-0 p-4">
-        {children}
+        <Outlet />
       </main>
     </div>
   );

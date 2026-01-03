@@ -1,121 +1,217 @@
 // backend/services/jurisprudenciaContext.js
 // ============================================================
-// 🦉 BúhoLex | Builder de contexto para LitisBot (Jurisprudencia)
+// 🦉 BúhoLex | Builder de Contexto Jurídico (Jurisprudencia)
 // ------------------------------------------------------------
-// Recibe un documento de Jurisprudencia (Mongoose) y devuelve:
-// - contextText: texto plano para alimentar al modelo (IA)
-// - meta: datos estructurados para UI / razonamiento
-// - Usa textoIA cuando exista (texto de trabajo - no oficial)
+// FUNCIÓN (CANÓNICA):
+// - Construye CONTEXTO DESCRIPTIVO para LitisBot (NO razona)
+// - Solo arma texto plano tipo Word: METADATOS + TEXTO BASE
+// - Normaliza SIEMPRE con jurisprudenciaNormalizer (fuente única de verdad)
+// - Estable y seguro: límites duros + sin romper endpoint
 // ============================================================
 
-function limpiarTexto(str = "") {
-  if (!str) return "";
-  return String(str)
-    .replace(/\u00A0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+import { normalizeJurisprudencia } from "./jurisprudenciaNormalizer.js";
+
+/* ============================================================
+   CONFIG (ENTERPRISE)
+============================================================ */
+
+const MAX_CONTEXT_CHARS = 12000;
+const MAX_BODY_CHARS = 11500; // deja margen para cabeceras
+
+/* ============================================================
+   HELPERS (SEGUROS + ESTABLES)
+============================================================ */
+
+function safeStr(v, maxLen = 5000) {
+  if (v === null || v === undefined) return "";
+  let s = String(v).replace(/\u00A0/g, " ");
+  s = s.replace(/\r\n/g, "\n");
+  s = s.replace(/[ \t]+$/gm, "");
+  s = s.replace(/\n{4,}/g, "\n\n\n");
+  s = s.trim();
+  if (maxLen && s.length > maxLen) s = s.slice(0, maxLen);
+  return s;
 }
 
-/**
- * Construye el contexto IA para LitisBot
- * - Nunca expone PDF
- * - Nunca mezcla texto oficial con texto de trabajo
- */
+// Metadatos: 1 línea (compacto)
+function metaLine(v) {
+  return safeStr(v, 1200).replace(/\s+/g, " ").trim();
+}
+
+function formatFechaISO(fecha) {
+  if (!fecha) return "";
+  try {
+    const d = new Date(fecha);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
+function pushIf(lines, label, value) {
+  const v = metaLine(value);
+  if (v) lines.push(`${label}: ${v}`);
+}
+
+function hardSlice(s, maxChars) {
+  const t = safeStr(s, maxChars);
+  return t.length > maxChars ? t.slice(0, maxChars) : t;
+}
+
+/* ============================================================
+   BUILDER PRINCIPAL (CANÓNICO)
+============================================================ */
+
 export function buildJurisprudenciaContext(doc) {
   if (!doc) return null;
 
-  // ---------------- METADATOS PRINCIPALES ---------------- //
+  // 1) Normalización canónica (si falla, no tumba el endpoint)
+  let n = null;
+  let computed = null;
 
-  const titulo = limpiarTexto(doc.titulo);
-  const expediente = limpiarTexto(doc.expediente);
-  const organo =
-    limpiarTexto(doc.organoJurisdiccional || doc.organo || doc.salaSuprema);
-  const especialidad = limpiarTexto(doc.especialidad);
-  const materia = limpiarTexto(doc.materia);
-  const tema = limpiarTexto(doc.tema);
-  const subtema = limpiarTexto(doc.subtema);
-
-  const sumilla = limpiarTexto(doc.sumilla);
-  const pretension = limpiarTexto(doc.pretensionDelito || doc.pretension);
-
-  const fecha = doc.fechaResolucion
-    ? new Date(doc.fechaResolucion).toISOString().slice(0, 10)
-    : "";
-
-  // ---------------- TEXTO DE ANÁLISIS (IA) ---------------- //
-
-  // Priorizamos textoIA porque es el texto EXTRACIDO DEL PDF / SCRAPER
-  const textoIA = limpiarTexto(doc.textoIA || "");
-  const tieneTextoIA = textoIA.length > 0;
-
-  // Si no hay textoIA, usamos texto general (texto plano legacy)
-  const textoFallback = limpiarTexto(doc.texto || "");
-  const tieneTextoGeneral = textoFallback.length > 0;
-
-  const textoParaContexto = textoIA || textoFallback || "";
-
-  // ---------------- ARMADO DEL CONTEXTO ---------------- //
-
-  const partes = [];
-
-  if (titulo) partes.push(`TÍTULO: ${titulo}`);
-  if (expediente) partes.push(`EXPEDIENTE: ${expediente}`);
-  if (organo) partes.push(`ÓRGANO JURISDICCIONAL: ${organo}`);
-  if (especialidad) partes.push(`ESPECIALIDAD: ${especialidad}`);
-  if (materia) partes.push(`MATERIA: ${materia}`);
-  if (tema) partes.push(`TEMA: ${tema}`);
-  if (subtema) partes.push(`SUBTEMA: ${subtema}`);
-  if (fecha) partes.push(`FECHA DE LA RESOLUCIÓN: ${fecha}`);
-  if (pretension) partes.push(`PRETENSIÓN / DELITO PRINCIPAL: ${pretension}`);
-  if (sumilla) partes.push(`SUMILLA: ${sumilla}`);
-
-  // ------ CUERPO IA ------ //
-  if (textoParaContexto) {
-    partes.push("");
-    partes.push(
-      tieneTextoIA
-        ? "TEXTO DE TRABAJO PARA ANÁLISIS (extraído del PDF, no oficial):"
-        : "TEXTO GENERAL DE LA RESOLUCIÓN (no oficial):"
-    );
-    partes.push(textoParaContexto);
-  } else {
-    partes.push("");
-    partes.push(
-      "NOTA: No se cuenta con texto de la resolución en el repositorio. Solo metadatos y sumilla."
-    );
+  try {
+    const r = normalizeJurisprudencia(doc);
+    n = r?.normalized || doc;
+    computed = r?.computed || null;
+  } catch {
+    n = doc;
+    computed = null;
   }
 
-  // Límite de seguridad para prompt (~12k chars)
-  const contextText = partes.join("\n").slice(0, 12000);
+  // 2) Metadatos (tomamos YA NORMALIZADO)
+  const meta = {
+    id: String(n._id || n.id || ""),
+    titulo: metaLine(n.titulo),
+    expediente: metaLine(n.numeroExpediente || n.expediente),
+    tipoResolucion: metaLine(n.tipoResolucion),
+    recurso: metaLine(n.recurso),
+    organo: metaLine(n.organo || n.organoJurisdiccional || n.salaSuprema),
+    materia: metaLine(n.materia),
+    especialidad: metaLine(n.especialidad),
+    tema: metaLine(n.tema),
+    subtema: metaLine(n.subtema),
+    fechaResolucion: formatFechaISO(n.fechaResolucion),
 
-  // -------------------- META (UI / razonamiento) -------------------- //
+    sumilla: metaLine(n.sumilla),
+    resumen: metaLine(n.resumen),
+    pretension: metaLine(n.pretensionDelito || n.pretension),
 
-  return {
-    contextText,
-    meta: {
-      id: String(doc._id),
-      titulo,
-      expediente,
-      organo,
-      especialidad,
-      materia,
-      tema,
-      subtema,
-      sumilla,
-      pretension,
-      fechaResolucion: fecha,
+    fuente: metaLine(n.fuente) || "Poder Judicial",
+    origen: metaLine(n.origen) || "JNS",
 
-      // Metadata real
-      fuente: doc.fuente || "Poder Judicial",
-      fuenteUrl: doc.fuenteUrl || "",
-      origen: doc.origen || "",
-      contextVersion: doc.contextVersion || 1,
+    fuenteUrl: metaLine(n.fuenteUrl),
+    urlResolucion: metaLine(n.urlResolucion),
 
-      // PDF oficial → solo meta, NO se usa en IA
-      pdfOficialUrl: doc.pdfUrlEfectivo || "",
-      tieneTextoIA,
-      tieneTextoGeneral,
-      esTextoOficial: !!doc.esTextoOficial, // en scrapers será false
-    },
+    pdfOficialUrl: metaLine(n.pdfOficialUrl),
+    pdfUrl: metaLine(n.pdfUrl),
   };
+
+  // URL efectiva (mejor usar lo que calcula el normalizer si existe)
+  const pdfUrlEfectivo =
+    (computed?.pdfUrlEfectivo && metaLine(computed.pdfUrlEfectivo)) ||
+    meta.pdfOficialUrl ||
+    meta.pdfUrl ||
+    meta.urlResolucion ||
+    "";
+
+  const fuenteUrlEfectiva = meta.fuenteUrl || meta.urlResolucion || "";
+
+  // 3) Texto base (canónico)
+  // Nota: el normalizer ya limpia saltos; aquí solo limitamos.
+  const textoOficial = safeStr(n.textoOficial || "", MAX_BODY_CHARS);
+  const textoIA = safeStr(n.textoIA || "", MAX_BODY_CHARS);
+  const textoGeneral = safeStr(n.texto || n.textoRepo || "", MAX_BODY_CHARS);
+
+  const tieneTextoOficial = !!textoOficial;
+  const tieneTextoIA = !!textoIA;
+  const tieneTextoGeneral = !!textoGeneral;
+
+  const textoBase = textoOficial || textoIA || textoGeneral || "";
+
+  // 4) Ensamble del contexto (texto plano tipo Word)
+  const lines = [];
+
+  lines.push("I. IDENTIFICACIÓN DE LA RESOLUCIÓN");
+  pushIf(lines, "TÍTULO", meta.titulo);
+  pushIf(lines, "EXPEDIENTE", meta.expediente);
+  pushIf(lines, "TIPO DE RESOLUCIÓN", meta.tipoResolucion);
+  pushIf(lines, "RECURSO", meta.recurso);
+  pushIf(lines, "ÓRGANO JURISDICCIONAL", meta.organo);
+  pushIf(lines, "MATERIA", meta.materia);
+  pushIf(lines, "ESPECIALIDAD", meta.especialidad);
+  pushIf(lines, "FECHA DE LA RESOLUCIÓN", meta.fechaResolucion);
+  pushIf(lines, "TEMA", meta.tema);
+  pushIf(lines, "SUBTEMA", meta.subtema);
+  pushIf(lines, "PDF", pdfUrlEfectivo);
+  pushIf(lines, "FUENTE", fuenteUrlEfectiva);
+
+  if (meta.sumilla || meta.resumen || meta.pretension) {
+    lines.push("");
+    lines.push("II. CONTEXTO DESCRIPTIVO");
+    pushIf(lines, "SUMILLA", meta.sumilla);
+    pushIf(lines, "RESUMEN", meta.resumen);
+    pushIf(lines, "PRETENSIÓN / DELITO", meta.pretension);
+  }
+
+  lines.push("");
+  lines.push("III. TEXTO BASE PARA ANÁLISIS");
+
+  if (textoBase) {
+    // Etiqueta honesta, sin adivinar “OCR”
+    const nota = tieneTextoOficial
+      ? "NOTA: Texto OFICIAL disponible (prioritario)."
+      : (tieneTextoIA
+          ? "NOTA: Texto de trabajo para análisis (NO OFICIAL)."
+          : "NOTA: Texto de repositorio (NO OFICIAL).");
+
+    lines.push(nota);
+    lines.push("");
+    lines.push(textoBase);
+  } else {
+    lines.push("NOTA: No se dispone del texto. El análisis se basará en metadatos.");
+  }
+
+  lines.push("");
+  lines.push("IV. LÍMITE DEL CONTEXTO");
+  lines.push(
+    "Este bloque describe y transcribe. La identificación de RATIO DECIDENDI, OBITER DICTA, falacias, agravios o defectos de motivación corresponde al análisis jurídico posterior."
+  );
+
+  const contextText = hardSlice(lines.join("\n"), MAX_CONTEXT_CHARS);
+
+  // 5) Meta final (para UI/engine)
+  const outMeta = {
+    id: meta.id,
+    titulo: meta.titulo,
+    numeroExpediente: meta.expediente,
+    tipoResolucion: meta.tipoResolucion,
+    recurso: meta.recurso,
+    organo: meta.organo,
+    materia: meta.materia,
+    especialidad: meta.especialidad,
+    tema: meta.tema,
+    subtema: meta.subtema,
+    fechaResolucion: meta.fechaResolucion,
+
+    fuente: meta.fuente,
+    origen: meta.origen,
+    fuenteUrl: fuenteUrlEfectiva,
+    pdfUrlEfectivo,
+
+    tieneTextoOficial,
+    tieneTextoIA,
+    tieneTextoGeneral,
+    longitudTexto: textoBase.length,
+
+    // Si existe lo calculado por normalizer, úsalo (canónico)
+    textQuality: computed?.textQuality || (tieneTextoOficial ? "oficial" : (tieneTextoIA ? "extraccion_ia" : (tieneTextoGeneral ? "repositorio_general" : "sin_texto"))),
+    esTextoOficial: typeof computed?.esTextoOficial === "boolean" ? computed.esTextoOficial : tieneTextoOficial,
+
+    contextVersion: typeof n.contextVersion === "number" && n.contextVersion > 0 ? n.contextVersion : 2,
+  };
+
+  return { contextText, meta: outMeta };
 }
+
+export default buildJurisprudenciaContext;

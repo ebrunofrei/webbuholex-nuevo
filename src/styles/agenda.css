@@ -1,0 +1,68 @@
+/* ============================================================
+   📅 BÚHOLEX – AGENDA (BigCalendar + Eventos Enterprise)
+============================================================ */
+
+.blx-agenda-wrapper {
+  padding: 1rem;
+  width: 100%;
+}
+
+.blx-event-critico {
+  background: #b03a1a !important;
+  color: white !important;
+  border: none !important;
+}
+
+.blx-event-proximo {
+  background: #e8c19d !important;
+  color: #5C2E0B !important;
+  border: none !important;
+}
+
+/* Quick-create */
+.blx-quick-create {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 10px 14px;
+  background: #b03a1a;
+  color: white;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(176,58,26,0.35);
+}
+
+/* Tooltip legal premium */
+.blx-agenda-tooltip {
+  background: white;
+  border: 1px solid #d4c8c0;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 6px 22px rgba(0,0,0,.12);
+  width: 240px;
+}
+
+.blx-tooltip-title {
+  font-weight: 700;
+  color: #5C2E0B;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.blx-tooltip-meta {
+  font-size: 13px;
+  color: #7a6b5e;
+}
+
+/* Transición suave */
+.rbc-event {
+  transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+}
+
+.rbc-event:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 5px 14px rgba(0,0,0,.25);
+}
+

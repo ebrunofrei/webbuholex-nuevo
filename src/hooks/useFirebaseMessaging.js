@@ -1,5 +1,4 @@
-// src/hooks/useFirebaseMessaging.js
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   solicitarPermisoYToken,
   listenToForegroundMessages,
@@ -7,41 +6,63 @@ import {
 
 /**
  * Hook centralizado para inicializar y escuchar FCM.
- * Seguro para producción y SSR (no rompe en Vercel).
- *
- * @param {function} onMessageCallback - Callback opcional para manejar mensajes en foreground.
+ * ✔ Seguro para React 18 + StrictMode
+ * ✔ No devuelve Promises en cleanup
+ * ✔ No rompe el árbol React
  */
 export function useFirebaseMessaging(onMessageCallback) {
+  const unsubscribeRef = useRef(null);
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    // 🚫 Proteger: solo ejecutar en navegador
+    // 🚫 Solo navegador
     if (typeof window === "undefined") return;
 
-    let unsubscribe = null;
+    // 🛑 Evitar doble inicialización (StrictMode)
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
-    async function initFCM() {
+    let active = true;
+
+    (async () => {
       try {
         const token = await solicitarPermisoYToken();
+        if (!active) return;
+
         if (token) {
-          console.log("✅ Token FCM obtenido y listo:", token);
+          console.log("✅ Token FCM obtenido:", token);
         }
 
-        // Escuchar notificaciones en foreground
-        unsubscribe = listenToForegroundMessages((payload) => {
-          console.log("📩 Notificación en primer plano:", payload);
+        const unsubscribe = listenToForegroundMessages((payload) => {
+          if (!active) return;
+
+          console.log("📩 Notificación FCM (foreground):", payload);
+
           if (typeof onMessageCallback === "function") {
             onMessageCallback(payload);
           }
         });
+
+        // ✅ Guardar SOLO si es función
+        if (typeof unsubscribe === "function") {
+          unsubscribeRef.current = unsubscribe;
+        }
       } catch (err) {
-        console.warn("⚠️ Error inicializando FCM:", err?.message || err);
+        console.warn(
+          "⚠️ Error inicializando Firebase Messaging:",
+          err?.message || err
+        );
       }
-    }
+    })();
 
-    initFCM();
-
-    // cleanup al desmontar
+    // 🧹 Cleanup seguro
     return () => {
-      if (typeof unsubscribe === "function") unsubscribe();
+      active = false;
+
+      if (typeof unsubscribeRef.current === "function") {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
     };
   }, [onMessageCallback]);
 }

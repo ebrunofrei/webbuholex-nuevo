@@ -1,8 +1,8 @@
 // ============================================================
-// ?? BúhoLex | Provider Poder Judicial (gob.pe)
+// ?? Bï¿½hoLex | Provider Poder Judicial (gob.pe)
 // Contrato: fetchNoticias({ q, page, limit, lang, since, especialidad })
 // - Usa puppeteer-extra + stealth (tolerante a JS/render).
-// - Extrae título, enlace, resumen, imagen, fecha.
+// - Extrae tï¿½tulo, enlace, resumen, imagen, fecha.
 // - Normaliza a tu formato (normalizeItem / normalizeNoticia).
 // - Aplica filtros ligeros (q, since).
 // - NO persiste en DB (que lo haga el orquestador/ingestor).
@@ -91,8 +91,8 @@ async function fetchNoticias({
   page = 1,
   limit = 12,
   lang = "es",
-  since = null,           // recomendado para “máx. 2 días”
-  especialidad = "todas", // no se usa duro aquí; el front/back superior puede filtrar
+  since = null,           // recomendado para ï¿½mï¿½x. 2 dï¿½asï¿½
+  especialidad = "todas", // no se usa duro aquï¿½; el front/back superior puede filtrar
 } = {}) {
   let browser;
   try {
@@ -111,8 +111,8 @@ async function fetchNoticias({
     p.on("request", (req) => {
       const type = req.resourceType();
       if (type === "image" || type === "media" || type === "font") {
-        // dejamos pasar algunas imágenes de portada para obtener src, pero en general bloqueamos
-        // aquí bloqueamos todo por simplicidad (mejor desempeño en server)
+        // dejamos pasar algunas imï¿½genes de portada para obtener src, pero en general bloqueamos
+        // aquï¿½ bloqueamos todo por simplicidad (mejor desempeï¿½o en server)
         return req.abort();
       }
       req.continue();
@@ -120,7 +120,7 @@ async function fetchNoticias({
 
     // Navega
     await p.goto(PJ_LIST_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
-    // Algunas tarjetas cargan con más scroll
+    // Algunas tarjetas cargan con mï¿½s scroll
     await autoScroll(p);
     await p.waitForSelector("a, article, .news-card, h3 a", { timeout: 20000 }).catch(() => {});
 
@@ -128,7 +128,7 @@ async function fetchNoticias({
     const rawItems = await p.evaluate(() => {
       const out = [];
 
-      // intenta recoger artículos en distintas estructuras
+      // intenta recoger artï¿½culos en distintas estructuras
       const candidates = Array.from(
         document.querySelectorAll([
           "article",
@@ -145,7 +145,7 @@ async function fetchNoticias({
         const href = a.getAttribute("href") || "";
         if (!href || href === "#") continue;
 
-        // título
+        // tï¿½tulo
         const tEl =
           el.querySelector("h3, h2, .article-title, .news-card__title, .u-lis__title") || a;
         const titulo = (tEl?.textContent || a.textContent || "").trim();
@@ -204,7 +204,7 @@ async function fetchNoticias({
         fecha: fechaISO,
         fuente: "Poder Judicial",
         tipo: "juridica",
-        especialidad: "administrativo", // etiqueta genérica; el front puede reclasificar por keywords
+        especialidad: "administrativo", // etiqueta genï¿½rica; el front puede reclasificar por keywords
         lang: "es",
       });
     });
@@ -216,7 +216,7 @@ async function fetchNoticias({
     // Ordena por fecha descendente
     items.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
 
-    // Paginación
+    // Paginaciï¿½n
     const L = Math.max(1, Math.min(50, Number(limit) || 12));
     const P = Math.max(1, Number(page) || 1);
     const start = (P - 1) * L;

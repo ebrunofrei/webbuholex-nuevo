@@ -1,14 +1,15 @@
 // src/services/jurisInternaService.js
 // ============================================================
 // 🦉 BúhoLex | Cliente API Repositorio Interno de Jurisprudencia
-// - Búsqueda clásica por filtros
-// - Búsqueda "inteligente" usando el mismo endpoint con q
+// - Filtros completos
+// - Paginación real
+// - Búsqueda por texto (q) con el mismo endpoint
 // ============================================================
 
 import { joinApi } from "@/services/apiBase";
 
 /**
- * Mapea el tag del frontend al "tipo" que entiende el backend.
+ * Mapea el tag del frontend al "tipo" del backend
  */
 function mapTagToTipo(tag) {
   switch (tag) {
@@ -23,7 +24,21 @@ function mapTagToTipo(tag) {
   }
 }
 
-async function fetchJurisprudencia({ q, materia, organo, estado, tag, limit, signal } = {}) {
+/**
+ * Cliente universal para /api/jurisprudencia
+ */
+async function fetchJurisprudencia({
+  q,
+  materia,
+  organo,
+  estado,
+  tag,
+  origen,
+  anio,
+  page,
+  limit,
+  signal,
+} = {}) {
   const params = new URLSearchParams();
 
   if (q && q.trim()) params.set("q", q.trim());
@@ -31,14 +46,16 @@ async function fetchJurisprudencia({ q, materia, organo, estado, tag, limit, sig
   if (organo) params.set("organo", organo);
   if (estado) params.set("estado", estado);
 
-  const tipo = mapTagToTipo(tag || "todas");
+  const tipo = mapTagToTipo(tag);
   if (tipo && tipo !== "todas") {
     params.set("tipo", tipo);
   }
 
-  if (limit) {
-    params.set("limit", String(limit));
-  }
+  if (anio) params.set("anio", String(anio));
+  if (origen) params.set("origen", String(origen));
+
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
 
   const qs = params.toString();
   const url = qs
@@ -52,9 +69,12 @@ async function fetchJurisprudencia({ q, materia, organo, estado, tag, limit, sig
   }
 
   const data = await resp.json();
+
   return {
     ok: !!data.ok,
-    count: data.count || (Array.isArray(data.items) ? data.items.length : 0),
+    page: Number(data.page || page || 1),
+    limit: Number(data.limit || limit || 20),
+    count: Number(data.count || (Array.isArray(data.items) ? data.items.length : 0)),
     items: data.items || [],
   };
 }
@@ -64,30 +84,42 @@ export async function buscarJurisprudenciaInterna({
   materia,
   organo,
   estado,
-  tag,
-  limit = 50,
+  origen = "JNS",
+  anio,
+  tag = "todas",
+  page = 1,
+  limit = 20,
   signal,
 } = {}) {
   return fetchJurisprudencia({
     materia,
     organo,
     estado,
+    origen,
+    anio,
     tag,
+    page,
     limit,
     signal,
   });
 }
 
-// 🤖 Búsqueda "IA" (por texto) → mismo endpoint con q
+// 🤖 Búsqueda "IA" (por texto q) → mismo endpoint
 export async function buscarJurisprudenciaEmbed({
   q,
-  limit = 20,
+  origen = "JNS",
+  anio,
   tag = "todas",
+  page = 1,
+  limit = 20,
   signal,
 } = {}) {
   return fetchJurisprudencia({
     q,
+    origen,
+    anio,
     tag,
+    page,
     limit,
     signal,
   });

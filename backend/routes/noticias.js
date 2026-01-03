@@ -344,35 +344,46 @@ router.get("/", async (req, res) => {
       return res.json({ ok: true, debugFilter: filter });
     }
 
-    const execQuery = async (filt) => {
-      const [docsRaw, totalRaw] = await Promise.all([
-        Noticia.find(filt).sort(sort).skip(skip).limit(overFetch).select(projection).lean(),
-        Noticia.countDocuments(filt),
-      ]);
-      return { docsRaw, totalRaw };
+        const execQuery = async (filt, label = "base") => {
+      try {
+        const [docsRaw, totalRaw] = await Promise.all([
+          Noticia.find(filt)
+            .sort(sort)
+            .skip(skip)
+            .limit(overFetch)
+            .select(projection)
+            .lean(),
+          Noticia.countDocuments(filt),
+        ]);
+        return { docsRaw, totalRaw, error: null };
+      } catch (e) {
+        console.error(`❌ GET /api/noticias execQuery (${label}):`, e?.message || e, "\nFiltro:", filt);
+        // Devolvemos vacío pero SIN lanzar; así no se dispara el 500 global
+        return { docsRaw: [], totalRaw: 0, error: e };
+      }
     };
 
     // Intento 1 (tal cual)
-    let { docsRaw, totalRaw } = await execQuery(filter);
+        let { docsRaw, totalRaw } = await execQuery(filter, "base");
 
-    // Fallback #1: si hay 'since' y no hay resultados → quitar 'since'
-    if (!docsRaw.length && since) {
-      const f2 = buildMatchBase({ tipo, especialidad, lang, providers, since: null });
-      let f2final = f2;
-      if (qClause) f2final = { $and: [f2, qClause] };
-      ({ docsRaw, totalRaw } = await execQuery(f2final));
-      if (docsRaw.length) filter = f2final;
-    }
+    // Fallback #1
+        if (!docsRaw.length && since) {
+          const f2 = buildMatchBase({ tipo, especialidad, lang, providers, since: null });
+          let f2final = f2;
+          if (qClause) f2final = { $and: [f2, qClause] };
+          ({ docsRaw, totalRaw } = await execQuery(f2final, "sin-since"));
+          if (docsRaw.length) filter = f2final;
+        }
 
-    // Fallback #2: si aún vacío y había restricción por providers JUR → quitar providers
-    const providersWereApplied = (tipo === "juridica") || (tipo !== "juridica" && providers.length > 0);
-    if (!docsRaw.length && providersWereApplied) {
-      const f3base = buildMatchBase({ tipo, especialidad, lang, providers: [], since });
-      let f3final = f3base;
-      if (qClause) f3final = { $and: [f3base, qClause] };
-      ({ docsRaw, totalRaw } = await execQuery(f3final));
-      if (docsRaw.length) filter = f3final;
-    }
+    // Fallback #2
+        const providersWereApplied = (tipo === "juridica") || (tipo !== "juridica" && providers.length > 0);
+        if (!docsRaw.length && providersWereApplied) {
+          const f3base = buildMatchBase({ tipo, especialidad, lang, providers: [], since });
+          let f3final = f3base;
+          if (qClause) f3final = { $and: [f3base, qClause] };
+          ({ docsRaw, totalRaw } = await execQuery(f3final, "sin-providers"));
+          if (docsRaw.length) filter = f3final;
+        }
 
     const docs = completos
       ? docsRaw.filter((n) => isCompleteEnough(n.contenido || n.resumen || "", "")) //
@@ -412,114 +423,139 @@ router.get("/", async (req, res) => {
    GET /api/noticias/especialidades
    ?tipo=juridica&lang=es[&providers=all|poder judicial,tc,...]
 ============================================================ */
-router.get("/especialidades", async (req, res) => {
-  try {
-    const tipo = norm(req.query.tipo || "juridica");
-    const lang = norm(req.query.lang || "");
-    let providers = parseProviders(req.query.providers);
+  router.get("/especialidades", async (req, res) => {
+    try {
+      const tipo = norm(req.query.tipo || "juridica");
+      const lang = norm(req.query.lang || "");
+      let providers = parseProviders(req.query.providers);
 
-    if (tipo === "general") {
-      // placeholder fijo para la vista de generales
+      if (tipo === "general") {
+        // placeholder fijo para la vista de generales
+        return res.json({
+          ok: true,
+          items: [
+            { key: "política", count: 0 },
+            { key: "economía", count: 0 },
+            { key: "corrupción", count: 0 },
+            { key: "ciencia", count: 0 },
+            { key: "tecnología", count: 0 },
+            { key: "sociedad", count: 0 },
+          ],
+        });
+      }
+
+      const matchBase = { tipo };
+      // idioma
+      if (lang && lang !== "all") {
+        matchBase.$or = (matchBase.$or || []).concat([
+          { lang: { $regex: safeRegex(`^${escapeRx(lang)}`, "i") } },
+          { lang: { $exists: false } },
+          { lang: "" },
+        ]);
+      }
+
+      // providers (si no es "all", aplicar por canónicos + regex de apoyo)
+      const isAll = providers.length === 1 && providers[0] === "all";
+      if (!providers.length && !isAll) providers = DEFAULT_PROVIDERS_JUR.slice();
+      if (providers.length && !isAll) {
+        const rxList = providers.map((p) => safeRegex(`\\b${escapeRx(p)}\\b`, "i"));
+        matchBase.$or = (matchBase.$or || []).concat([
+          { fuenteNorm: { $in: providers } },
+          ...rxList.map((rx) => ({ fuente: { $regex: rx } })),
+        ]);
+      }
+
+      const ESPEC_REGEX = {
+        penal: /(penal|delito|fiscal|ministerio publico|mp)/i,
+        civil: /(civil|propiedad|contrato|obligaciones)/i,
+        laboral: /(laboral|trabajador|sindicato|sunafil)/i,
+        constitucional: /(constitucional|tribunal constitucional|tc)/i,
+        familiar: /(familia|alimentos|tenencia|violencia familiar)/i,
+        administrativo: /(administrativo|tupa|procedimiento administrativo|resolucion)/i,
+        comercial: /(comercial|mercantil|societario|empresa)/i,
+        tributario: /(tributario|sunat|igv|renta|impuesto)/i,
+        procesal: /(procesal|proceso|procedimiento)/i,
+        registral: /(registral|sunarp|registro|partida)/i,
+        ambiental: /(ambiental|oefa|eia|impacto ambiental)/i,
+        notarial: /(notarial|notario)/i,
+        penitenciario: /(penitenciario|inpe|prision)/i,
+        consumidor: /(consumidor|indecopi|proteccion al consumidor)/i,
+        "seguridad social": /(seguridad social|previsional|pensiones?)/i,
+        "derechos humanos": /(derechos humanos|corte idh|cidh|oea|onu derechos|convencion americana)/i,
+        internacional: /(internacional|onu|oea|cij|tjue|corte internacional)/i,
+      };
+      const keys = Object.keys(ESPEC_REGEX);
+
+      const addFields = {
+        _text: {
+          $toLower: {
+            $concat: [
+              { $ifNull: ["$especialidad", ""] }, " ",
+              { $ifNull: ["$area", ""] }, " ",
+              { $ifNull: ["$categoria", ""] }, " ",
+              { $ifNull: ["$titulo", ""] }, " ",
+              { $ifNull: ["$resumen", ""] }, " ",
+              { $ifNull: ["$contenido", ""] }, " ",
+              { $ifNull: ["$fuente", ""] },
+            ],
+          },
+        },
+      };
+
+      const groupSpec = keys.reduce((acc, k) => {
+        acc[k] = {
+          $sum: {
+            $cond: [
+              { $regexMatch: { input: "$_text", regex: ESPEC_REGEX[k] } },
+              1,
+              0,
+            ],
+          },
+        };
+        return acc;
+      }, {});
+
+      const projectSpec = {
+        _id: 0,
+        items: keys.map((k) => ({ key: k, count: `$${k}` })),
+      };
+
+      const pipeline = [
+        { $match: matchBase },
+        { $addFields: addFields },
+        { $group: Object.assign({ _id: null }, groupSpec) },
+        { $project: projectSpec },
+      ];
+
+      if (req.query.debug === "1") {
+        return res.json({ ok: true, matchBase, pipeline });
+      }
+
+      let items;
+      try {
+        const agg = await Noticia.aggregate(pipeline);
+        items = agg[0]?.items ?? keys.map((k) => ({ key: k, count: 0 }));
+      } catch (e) {
+        console.error("❌ GET /api/noticias/especialidades aggregate fallo:", e?.message || e);
+        // Fallback: devolvemos catálogo estático, sin 500
+        items = keys.map((k) => ({ key: k, count: 0 }));
+      }
+
+      return res.json({ ok: true, items });
+    } catch (err) {
+      console.error("❌ GET /api/noticias/especialidades (wrap):", err);
+      // Último fallback: devolver catálogo base en 200
+      const base = [
+        "penal","civil","laboral","constitucional","familiar","administrativo",
+        "comercial","tributario","procesal","registral","ambiental","notarial",
+        "penitenciario","consumidor","seguridad social","derechos humanos","internacional",
+      ];
       return res.json({
         ok: true,
-        items: [
-          { key: "política", count: 0 },
-          { key: "economía", count: 0 },
-          { key: "corrupción", count: 0 },
-          { key: "ciencia", count: 0 },
-          { key: "tecnología", count: 0 },
-          { key: "sociedad", count: 0 },
-        ],
+        items: base.map((k) => ({ key: k, count: 0 })),
       });
     }
-
-    const matchBase = { tipo };
-    // idioma
-    if (lang && lang !== "all") {
-      matchBase.$or = (matchBase.$or || []).concat([
-        { lang: { $regex: safeRegex(`^${escapeRx(lang)}`, "i") } },
-        { lang: { $exists: false } },
-        { lang: "" },
-      ]);
-    }
-
-    // providers (si no es "all", aplicar por canónicos + regex de apoyo)
-    const isAll = providers.length === 1 && providers[0] === "all";
-    if (!providers.length && !isAll) providers = DEFAULT_PROVIDERS_JUR.slice();
-    if (providers.length && !isAll) {
-      const rxList = providers.map((p) => safeRegex(`\\b${escapeRx(p)}\\b`, "i"));
-      matchBase.$or = (matchBase.$or || []).concat([
-        { fuenteNorm: { $in: providers } },
-        ...rxList.map((rx) => ({ fuente: { $regex: rx } })),
-      ]);
-    }
-
-    const ESPEC_REGEX = {
-      penal: /(penal|delito|fiscal|ministerio publico|mp)/i,
-      civil: /(civil|propiedad|contrato|obligaciones)/i,
-      laboral: /(laboral|trabajador|sindicato|sunafil)/i,
-      constitucional: /(constitucional|tribunal constitucional|tc)/i,
-      familiar: /(familia|alimentos|tenencia|violencia familiar)/i,
-      administrativo: /(administrativo|tupa|procedimiento administrativo|resolucion)/i,
-      comercial: /(comercial|mercantil|societario|empresa)/i,
-      tributario: /(tributario|sunat|igv|renta|impuesto)/i,
-      procesal: /(procesal|proceso|procedimiento)/i,
-      registral: /(registral|sunarp|registro|partida)/i,
-      ambiental: /(ambiental|oefa|eia|impacto ambiental)/i,
-      notarial: /(notarial|notario)/i,
-      penitenciario: /(penitenciario|inpe|prision)/i,
-      consumidor: /(consumidor|indecopi|proteccion al consumidor)/i,
-      "seguridad social": /(seguridad social|previsional|pensiones?)/i,
-      "derechos humanos": /(derechos humanos|corte idh|cidh|oea|onu derechos|convencion americana)/i,
-      internacional: /(internacional|onu|oea|cij|tjue|corte internacional)/i,
-    };
-    const keys = Object.keys(ESPEC_REGEX);
-
-    const addFields = {
-      _text: {
-        $toLower: {
-          $concat: [
-            { $ifNull: ["$especialidad", ""] }, " ",
-            { $ifNull: ["$area", ""] }, " ",
-            { $ifNull: ["$categoria", ""] }, " ",
-            { $ifNull: ["$titulo", ""] }, " ",
-            { $ifNull: ["$resumen", ""] }, " ",
-            { $ifNull: ["$contenido", ""] }, " ",
-            { $ifNull: ["$fuente", ""] },
-          ],
-        },
-      },
-    };
-
-    const groupSpec = keys.reduce((acc, k) => {
-      acc[k] = { $sum: { $cond: [{ $regexMatch: { input: "$_text", regex: ESPEC_REGEX[k] } }, 1, 0] } };
-      return acc;
-    }, {});
-
-    const projectSpec = {
-      _id: 0,
-      items: keys.map((k) => ({ key: k, count: `$${k}` })),
-    };
-
-    const pipeline = [
-      { $match: matchBase },
-      { $addFields: addFields },
-      { $group: Object.assign({ _id: null }, groupSpec) },
-      { $project: projectSpec },
-    ];
-
-    if (req.query.debug === "1") {
-      return res.json({ ok: true, matchBase, pipeline });
-    }
-
-    const agg = await Noticia.aggregate(pipeline);
-    const items = agg[0]?.items ?? keys.map((k) => ({ key: k, count: 0 }));
-    return res.json({ ok: true, items });
-  } catch (err) {
-    console.error("❌ GET /api/noticias/especialidades:", err);
-    return res.status(500).json({ ok: false, error: "Error al obtener especialidades" });
-  }
-});
+  });
 
 /* ============================================================
    GET /api/noticias/temas
@@ -547,6 +583,36 @@ router.get("/temas", async (req, res) => {
   } catch (err) {
     console.error("❌ GET /api/noticias/temas:", err);
     return res.status(500).json({ ok: false, error: "Error al obtener temas" });
+  }
+});
+
+// ============================================================
+// 🔍 Debug temporal: contar noticias LP que ve ESTE backend
+//   GET /api/noticias/debug-lp
+// ============================================================
+router.get("/debug-lp", async (req, res) => {
+  try {
+    const filtro = {
+      $or: [
+        { fuente: /lp\s*derecho/i },
+        { enlace: /lpderecho\.pe/i },
+      ],
+    };
+
+    const total = await Noticia.countDocuments(filtro);
+    const muestra = await Noticia.find(filtro)
+      .sort({ fecha: -1 })
+      .limit(3)
+      .select("titulo tipo lang fuente fuenteNorm enlace especialidad");
+
+    return res.json({
+      ok: true,
+      total,
+      sample: muestra,
+    });
+  } catch (err) {
+    console.error("❌ Error en /api/noticias/debug-lp:", err);
+    return res.status(500).json({ ok: false, error: err.message || "error" });
   }
 });
 

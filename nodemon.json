@@ -1,0 +1,13 @@
+{
+  "watch": ["server.js", "backend"],
+  "ignore": [
+    "src/**",
+    "public/**",
+    "dist/**",
+    "node_modules/**",
+    ".git/**",
+    "**/*.log"
+  ],
+  "ext": "js,json",
+  "delay": "250"
+}

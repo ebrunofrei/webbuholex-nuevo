@@ -1,52 +1,79 @@
-import React, { useEffect } from "react";
-import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import EmailVerificationModal from "../components/ui/EmailVerificationModal";
+// ============================================================================
+// 🔐 ProtectedRoute — Guardia de acceso (Enterprise Safe)
+// ----------------------------------------------------------------------------
+// - No depende de Firebase directamente
+// - Un solo timer de verificación
+// - UX limpia (sin alert())
+// - Coordinado con AuthContext + EmailVerificationModal
+// ============================================================================
 
-// Cierra sesión automáticamente si no verifica en X minutos
+import React, { useEffect, useRef } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import EmailVerificationModal from "@/components/ui/EmailVerificationModal";
+
+// ⏱️ Tiempo máximo para verificar correo
 const MINUTES_TO_VERIFY = 15;
 
 export default function ProtectedRoute({ children }) {
   const { user, loading, emailVerificado, cerrarSesion } = useAuth();
   const location = useLocation();
 
-  // Timer autocierre si no verifica
+  const verificationTimerRef = useRef(null);
+
+  // --------------------------------------------------------------------------
+  // ⏳ Timer único de autocierre si no verifica correo
+  // --------------------------------------------------------------------------
   useEffect(() => {
-    let timer = null;
-    if (
-      user &&
-      !user.isAnonymous &&
-      !emailVerificado
-    ) {
-      timer = setTimeout(async () => {
-        await cerrarSesion();
-        alert("No verificaste tu correo en el tiempo indicado. Se cerró la sesión.");
+    // Limpiar cualquier timer previo
+    if (verificationTimerRef.current) {
+      clearTimeout(verificationTimerRef.current);
+      verificationTimerRef.current = null;
+    }
+
+    // Condición estricta: usuario logueado y NO verificado
+    if (user && !emailVerificado) {
+      verificationTimerRef.current = setTimeout(() => {
+        cerrarSesion();
       }, MINUTES_TO_VERIFY * 60 * 1000);
     }
+
     return () => {
-      if (timer) clearTimeout(timer);
+      if (verificationTimerRef.current) {
+        clearTimeout(verificationTimerRef.current);
+        verificationTimerRef.current = null;
+      }
     };
-    // eslint-disable-next-line
-  }, [user?.emailVerified, user, emailVerificado]);
+  }, [user, emailVerificado, cerrarSesion]);
 
-  // Mientras carga
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
-
-  // No logueado
-  if (!user || user.isAnonymous) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  // Logueado pero no verificado (modal bloqueante)
-  if (!emailVerificado) {
+  // --------------------------------------------------------------------------
+  // ⏳ Estado de carga global
+  // --------------------------------------------------------------------------
+  if (loading) {
     return (
-      <>
-        <EmailVerificationModal open />
-        <div className="fixed inset-0 z-[110] bg-black/30"></div>
-      </>
+      <div className="min-h-screen flex items-center justify-center text-black/60">
+        Cargando…
+      </div>
     );
   }
 
-  // Acceso permitido
+  // --------------------------------------------------------------------------
+  // 🚫 No autenticado
+  // --------------------------------------------------------------------------
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // --------------------------------------------------------------------------
+  // ✉️ Autenticado pero NO verificado
+  // (modal bloqueante)
+  // --------------------------------------------------------------------------
+  if (!emailVerificado) {
+    return <EmailVerificationModal open />;
+  }
+
+  // --------------------------------------------------------------------------
+  // ✅ Acceso permitido
+  // --------------------------------------------------------------------------
   return children;
 }

@@ -9,6 +9,9 @@ import { initPushClient } from "@/services/pushClient.js";
 
 import "./index.css";
 import "./styles/noticias.css";
+import "@/styles/agenda.css";
+import "@/styles/firmarPdf.css";
+
 
 /* ===================================================================
  * 🧩 Crear el root UNA SOLA VEZ (HMR-safe)

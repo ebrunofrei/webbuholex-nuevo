@@ -22,7 +22,14 @@ export default function ChatAudiencia() {
       utilFeedback: null,
       favorito: false,
     };
-    setMensajes((prev) => [...prev, nuevoMsg]);
+    setMensajes((prev) => [
+    ...prev,
+    {
+      role: "assistant",
+      content: data.reply || data.respuesta || data.text || "",
+      meta: data.meta || null,       // ✅ CLAVE
+    },
+  ]);
     setInput("");
     // Aquí puedes guardar en Firestore si quieres, o solo probar en local
   }

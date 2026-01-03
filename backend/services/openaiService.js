@@ -66,7 +66,7 @@ export async function callOpenAI(messages, options = {}) {
   const {
     model = "gpt-4o-mini",
     temperature = 0.7,
-    max_tokens = 800,
+    max_completion_tokens = 800,
   } = options;
 
   try {
@@ -76,14 +76,16 @@ export async function callOpenAI(messages, options = {}) {
       model,
       messages,
       temperature,
-      max_tokens,
+      max_completion_tokens,
     });
 
-    const respuesta = completion?.choices?.[0]?.message?.content?.trim() ?? "";
+    const respuesta =
+      completion?.choices?.[0]?.message?.content?.trim() ?? "";
+
     console.log(chalk.greenBright(`🧩 Respuesta IA (${respuesta.length} chars)`));
     return respuesta;
+
   } catch (err) {
-    // Log detallado para depurar claves/permiso/modelo
     console.error(
       chalk.red(
         `❌ Error OpenAI: ${err?.status ?? ""} ${err?.code ?? ""} – ${err?.message ?? err}`
@@ -92,3 +94,4 @@ export async function callOpenAI(messages, options = {}) {
     return "❌ No pude obtener respuesta de la IA. Inténtalo de nuevo.";
   }
 }
+

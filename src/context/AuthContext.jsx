@@ -1,7 +1,22 @@
-// src/context/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+// ============================================================================
+// 🔐 AuthContext — Autenticación (Firebase Auth | Hardened)
+// ----------------------------------------------------------------------------
+// - Ciclo de vida seguro
+// - Ningún useEffect async
+// - Ningún cleanup inválido
+// - API estable para el resto de la app
+// ============================================================================
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
+
 import {
-  getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -10,91 +25,222 @@ import {
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
+
 import { auth } from "@/firebase";
 
-const AuthContext = createContext();
+// ============================================================================
+// CONTEXT
+// ============================================================================
 
-// Hook
+const AuthContext = createContext(null);
+
+// ============================================================================
+// HOOK
+// ============================================================================
+
 export function useAuth() {
-  return useContext(AuthContext);
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("useAuth debe usarse dentro de <AuthProvider>");
+  }
+  return ctx;
 }
 
-// Provider
+// ============================================================================
+// PROVIDER
+// ============================================================================
+
 export function AuthProvider({ children }) {
-  const [user, setUsuario] = useState(null);
+  // --------------------------------------------------------------------------
+  // STATE
+  // --------------------------------------------------------------------------
+
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const [isPremium, setIsPremium] = useState(false);
   const [emailVerificado, setEmailVerificado] = useState(false);
+
   const [modalLoginOpen, setModalLoginOpen] = useState(false);
   const [modalLoginTab, setModalLoginTab] = useState("login");
-  const [toast, setToast] = useState({ show: false, message: "", type: "info" });
 
-  const abrirModalLogin = (tab = "login") => {
+  const [toast, setToast] = useState({
+    show: false,
+    message: "",
+    type: "info",
+  });
+
+  // --------------------------------------------------------------------------
+  // AUTH LISTENER (CRÍTICO – HARDENED)
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser || null);
+
+      setEmailVerificado(
+        Boolean(firebaseUser?.emailVerified || firebaseUser?.isAnonymous)
+      );
+
+      // ⚠️ Premium se decide fuera (Mongo / backend)
+      setIsPremium(false);
+
+      setLoading(false);
+    });
+
+    // 🔒 Cleanup 100% válido
+    return () => {
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // MODAL CONTROL
+  // --------------------------------------------------------------------------
+
+  const abrirModalLogin = useCallback((tab = "login") => {
     setModalLoginTab(tab);
     setModalLoginOpen(true);
-  };
-  const cerrarModalLogin = () => setModalLoginOpen(false);
-
-  const login = async (email, password) => {
-    await signInWithEmailAndPassword(auth, email, password);
-    setToast({ show: true, message: "¡Bienvenido!", type: "success" });
-    cerrarModalLogin();
-  };
-
-  const register = async (email, password, name = "") => {
-    const res = await createUserWithEmailAndPassword(auth, email, password);
-    if (name) await updateProfile(res.user, { displayName: name });
-    await sendEmailVerification(res.user);
-    setToast({ show: true, message: "¡Registro exitoso! Revisa tu correo.", type: "success" });
-    cerrarModalLogin();
-  };
-
-  const resetPassword = async (email) => {
-    await sendPasswordResetEmail(auth, email);
-    setToast({ show: true, message: "Correo de recuperación enviado.", type: "success" });
-    cerrarModalLogin();
-  };
-
-  const cerrarSesion = async () => {
-    await signOut(auth);
-    setToast({ show: true, message: "Sesión cerrada.", type: "info" });
-  };
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUsuario(u);
-      setLoading(false);
-      setEmailVerificado(u?.emailVerified || u?.isAnonymous || false);
-      setIsPremium(false);
-    });
-    return () => unsub();
   }, []);
+
+  const cerrarModalLogin = useCallback(() => {
+    setModalLoginOpen(false);
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // AUTH ACTIONS
+  // --------------------------------------------------------------------------
+
+  const login = useCallback(async (email, password) => {
+    await signInWithEmailAndPassword(auth, email, password);
+
+    setToast({
+      show: true,
+      message: "¡Bienvenido!",
+      type: "success",
+    });
+
+    cerrarModalLogin();
+  }, [cerrarModalLogin]);
+
+  const register = useCallback(
+    async (email, password, name = "") => {
+      const res = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      if (name) {
+        await updateProfile(res.user, { displayName: name });
+      }
+
+      await sendEmailVerification(res.user);
+
+      setToast({
+        show: true,
+        message: "¡Registro exitoso! Revisa tu correo.",
+        type: "success",
+      });
+
+      cerrarModalLogin();
+    },
+    [cerrarModalLogin]
+  );
+
+  const resetPassword = useCallback(async (email) => {
+    await sendPasswordResetEmail(auth, email);
+
+    setToast({
+      show: true,
+      message: "Correo de recuperación enviado.",
+      type: "success",
+    });
+
+    cerrarModalLogin();
+  }, [cerrarModalLogin]);
+
+  const cerrarSesion = useCallback(async () => {
+    await signOut(auth);
+
+    setToast({
+      show: true,
+      message: "Sesión cerrada.",
+      type: "info",
+    });
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // 🔁 REFRESCAR USUARIO (EMAIL VERIFICADO / RELOAD SEGURO)
+  // --------------------------------------------------------------------------
 
   const refrescarUsuario = useCallback(async () => {
-    if (auth.currentUser) {
-      await auth.currentUser.reload();
-      setUsuario({ ...auth.currentUser });
-      setEmailVerificado(auth.currentUser.emailVerified || auth.currentUser.isAnonymous);
-    }
+    const current = auth.currentUser;
+    if (!current) return;
+
+    await current.reload();
+
+    setUser({ ...current });
+    setEmailVerificado(
+      Boolean(current.emailVerified || current.isAnonymous)
+    );
   }, []);
 
-  const value = {
-    user,
-    loading,
-    isPremium,
-    emailVerificado,
-    login,
-    register,
-    resetPassword,
-    cerrarSesion,
-    abrirModalLogin,
-    cerrarModalLogin,
-    refrescarUsuario,
-    modalLoginOpen,
-    modalLoginTab,
-    setToast,
-    toast,
-  };
+  // --------------------------------------------------------------------------
+  // CONTEXT VALUE (MEMOIZADO)
+  // --------------------------------------------------------------------------
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const value = useMemo(
+    () => ({
+      // estado
+      user,
+      loading,
+      isPremium,
+      emailVerificado,
+
+      // auth actions
+      login,
+      register,
+      resetPassword,
+      cerrarSesion,
+      refrescarUsuario,
+
+      // ui
+      modalLoginOpen,
+      modalLoginTab,
+      abrirModalLogin,
+      cerrarModalLogin,
+
+      // feedback
+      toast,
+      setToast,
+    }),
+    [
+      user,
+      loading,
+      isPremium,
+      emailVerificado,
+      login,
+      register,
+      resetPassword,
+      cerrarSesion,
+      refrescarUsuario,
+      modalLoginOpen,
+      modalLoginTab,
+      abrirModalLogin,
+      cerrarModalLogin,
+      toast,
+    ]
+  );
+
+  // --------------------------------------------------------------------------
+  // RENDER
+  // --------------------------------------------------------------------------
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }

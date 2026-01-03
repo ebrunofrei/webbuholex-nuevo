@@ -1,57 +1,61 @@
 // src/hooks/useSyncJurisprudenciaSelection.js
-// ============================================================
-// Hook para mantener sincronizada la sentencia seleccionada
-// entre estado React y sessionStorage (clave única del proyecto).
-// ============================================================
+import { useState, useEffect, useCallback } from "react";
 
-import { useCallback, useEffect, useState } from "react";
-
-const STORAGE_KEY = "litis:lastJurisSeleccionada";
 const IS_BROWSER = typeof window !== "undefined";
+const STORAGE_KEY = "litis:lastJurisSeleccionada";
 
-export default function useSyncJurisprudenciaSelection(initialValue = null) {
-  const [jurisSeleccionada, setJurisSeleccionadaState] = useState(
-    initialValue
-  );
+// 🔹 estado global en memoria (compartido entre componentes)
+let globalJuris = null;
+const listeners = new Set();
 
-  // Carga inicial desde sessionStorage si no hay valor en memoria
-  useEffect(() => {
-    if (!IS_BROWSER) return;
-    if (jurisSeleccionada) return; // ya hay algo en memoria
-
+/**
+ * Hook para compartir la jurisprudencia seleccionada entre:
+ * - Jurisprudencia.jsx
+ * - BubbleWithUser (App.jsx) → LitisBotBubbleChat
+ */
+export default function useSyncJurisprudenciaSelection() {
+  const [localJuris, setLocalJuris] = useState(() => {
+    if (!IS_BROWSER) return globalJuris;
+    // 1ª carga desde memoria o sessionStorage
+    if (globalJuris) return globalJuris;
     try {
       const raw = window.sessionStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setJurisSeleccionadaState(parsed);
-      }
-    } catch (e) {
-      console.warn(
-        "[useSyncJurisprudenciaSelection] No se pudo leer sessionStorage:",
-        e
-      );
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
     }
-  }, [jurisSeleccionada]);
+  });
 
-  // Setter centralizado que también sincroniza sessionStorage
-  const setJurisSeleccionada = useCallback((doc) => {
-    setJurisSeleccionadaState(doc);
+  // suscripción a cambios globales
+  useEffect(() => {
+    const listener = (value) => setLocalJuris(value);
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }, []);
 
-    if (!IS_BROWSER) return;
+  // setter sincronizado
+  const setJurisSeleccionada = useCallback((value) => {
+    globalJuris = value || null;
 
-    try {
-      if (doc) {
-        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-      } else {
-        window.sessionStorage.removeItem(STORAGE_KEY);
+    // avisar a todos los que usan el hook
+    listeners.forEach((fn) => fn(globalJuris));
+
+    // persistir en sessionStorage para usarlo también desde LitisBotBubbleChat (fallback)
+    if (IS_BROWSER) {
+      try {
+        if (value) {
+          window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+        } else {
+          window.sessionStorage.removeItem(STORAGE_KEY);
+        }
+      } catch (e) {
+        console.warn("[useSyncJurisprudenciaSelection] Error guardando en sessionStorage:", e);
       }
-    } catch (e) {
-      console.warn(
-        "[useSyncJurisprudenciaSelection] No se pudo guardar en sessionStorage:",
-        e
-      );
     }
   }, []);
 
-  return { jurisSeleccionada, setJurisSeleccionada };
+  return {
+    jurisSeleccionada: localJuris,
+    setJurisSeleccionada,
+  };
 }

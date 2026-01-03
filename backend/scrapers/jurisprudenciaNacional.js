@@ -14,9 +14,18 @@ import crypto from "crypto";
 import puppeteer from "puppeteer";
 import { dbConnect, dbDisconnect } from "../services/db.js";
 import Jurisprudencia from "../models/Jurisprudencia.js";
+import { normalizeJurisprudencia } from "../services/jurisprudenciaNormalizer.js";
 
 // ---------- Flags de debug ----------
 const JNS_DEBUG = String(process.env.JNS_DEBUG || "").toLowerCase() === "1";
+
+// ---------- Error específico para página de error de Chrome ----------
+export class JnsChromeError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "JnsChromeError";
+  }
+}
 
 // ---------- Helpers generales ----------
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,6 +89,42 @@ function parsePalabrasClave(value) {
     .map((s) => normText(s));
 
   return Array.from(new Set(raw.filter((s) => s.length > 0)));
+}
+
+// ---------------------------------------------
+// Normalizador de parámetros para scrapeJNS
+// ---------------------------------------------
+function normalizeScrapeParams(arg1, arg2) {
+  let query = "";
+  const meta = {
+    materia: "",
+    tema: "",
+    tags: [],
+  };
+
+  // Caso clásico: scrapeJNS("desalojo")
+  if (typeof arg1 === "string") {
+    query = String(arg1 || "").trim();
+    if (arg2 && typeof arg2 === "object") {
+      meta.materia = arg2.materia || "";
+      meta.tema = arg2.tema || "";
+      if (Array.isArray(arg2.tags)) {
+        meta.tags = arg2.tags.filter(Boolean);
+      }
+    }
+  }
+
+  // Caso PRO: scrapeJNS({ query, materia, tema, tags })
+  if (arg1 && typeof arg1 === "object" && !Array.isArray(arg1)) {
+    query = String(arg1.query || "").trim();
+    meta.materia = arg1.materia || "";
+    meta.tema = arg1.tema || "";
+    if (Array.isArray(arg1.tags)) {
+      meta.tags = arg1.tags.filter(Boolean);
+    }
+  }
+
+  return { query, meta };
 }
 
 /**
@@ -200,14 +245,7 @@ function buildContenidoHtmlFromItem(item = {}) {
  * Helper Fase B: Scraping de ficha completa
  * -------------------------------------------*/
 
-/**
- * Navega a la URL de detalle (ficha RichFaces) y devuelve:
- * - html: contenido HTML del contenedor principal
- * - texto: texto plano normalizado
- * - pdfUrl: URL del PDF si hay link en la ficha
- */
 async function scrapeDetalleJNS(browser, detalleUrl) {
-  // Guardrail básico
   if (!detalleUrl) {
     console.log("[JNS] scrapeDetalleJNS llamado SIN detalleUrl");
     return null;
@@ -234,7 +272,6 @@ async function scrapeDetalleJNS(browser, detalleUrl) {
 
     await delay(2000);
 
-    // Debug opcional: HTML + screenshot de la ficha
     if (JNS_DEBUG) {
       try {
         const htmlDebug = await page.content();
@@ -251,14 +288,13 @@ async function scrapeDetalleJNS(browser, detalleUrl) {
       }
     }
 
-        const result = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
       const norm = (s) =>
         (s || "")
           .replace(/\u00a0/g, " ")
           .replace(/\s+/g, " ")
           .trim();
 
-      // Buscamos el contenedor principal de la ficha
       const contenedor =
         document.querySelector("#formFicha") ||
         document.querySelector("#formPrincipal") ||
@@ -267,7 +303,9 @@ async function scrapeDetalleJNS(browser, detalleUrl) {
         document.body;
 
       const html = contenedor ? contenedor.innerHTML : document.body.innerHTML;
-      const texto = norm(contenedor ? contenedor.textContent : document.body.textContent);
+      const texto = norm(
+        contenedor ? contenedor.textContent : document.body.textContent
+      );
 
       const linkPdf =
         contenedor.querySelector('a[href*="ServletDescarga"]') ||
@@ -307,7 +345,6 @@ async function scrapeDetalleJNS(browser, detalleUrl) {
       pdfUrl: result.pdfUrl || "",
       titulo: result.titulo || "",
     };
-
   } catch (err) {
     console.error("[JNS] Error en scrapeDetalleJNS:", err.message);
     return null;
@@ -323,34 +360,49 @@ async function scrapeDetalleJNS(browser, detalleUrl) {
 }
 
 /* ---------------------------------------------
- * Guardado en Mongo (normalizado, con hash)
+ * Guardado en Mongo (CANÓNICO + HASH + UPSERT)
+ * - Fuente fija JNS
+ * - Normaliza SIEMPRE con normalizeJurisprudencia()
+ * - Dedupe por hash > expediente > título
  * -------------------------------------------*/
 
-async function saveOrUpdateJurisprudencia(data = {}) {
-  // Si ni título ni expediente, no guardamos
-  if (!data.titulo && !data.numeroExpediente) return null;
+const FUENTE_JNS = "PJ - Jurisprudencia Nacional";
+const ORIGEN_JNS = "JNS";
 
-  // Fecha como Date real
+function pickFirstNonEmpty(...vals) {
+  for (const v of vals) {
+    if (v === null || v === undefined) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+function resolveUrlResolucion(d = {}) {
+  return pickFirstNonEmpty(d.pdfOficialUrl, d.pdfUrl, d.urlResolucion, d.linkPdf, d.url, d.href);
+}
+
+function buildFiltroCanonico({ fuente, hash, numeroExpediente, titulo }) {
+  const filtro = { fuente };
+  if (hash) return { ...filtro, hash };
+  if (numeroExpediente) return { ...filtro, numeroExpediente };
+  if (titulo) return { ...filtro, titulo };
+  return filtro;
+}
+
+async function saveOrUpdateJurisprudencia(data = {}) {
+  // Guard clause
+  if (!data || (!data.titulo && !data.numeroExpediente)) return null;
+
+  // 1) Parseos de entrada (mínimos)
   const fechaResolucion =
     data.fechaResolucion instanceof Date
       ? data.fechaResolucion
       : parseFechaPeru(data.fechaResolucion);
 
-  // Palabras clave como array
-  const palabrasClaveArr = parsePalabrasClave(
-    data.palabrasClave || data.palabrasClaveRaw
-  );
+  const palabrasClaveArr = parsePalabrasClave(data.palabrasClave || data.palabrasClaveRaw);
 
-  // URL de resolución / PDF (priorizamos pdfUrl si viene)
-  const urlResolucion =
-    data.pdfUrl ||
-    data.urlResolucion ||
-    data.linkPdf ||
-    data.url ||
-    data.href ||
-    "";
-
-  // Hash antifraude / duplicado
+  // 2) Hash antifraude (preferente)
   const hash = buildHashKey({
     numeroExpediente: data.numeroExpediente,
     tipoResolucion: data.tipoResolucion,
@@ -358,45 +410,52 @@ async function saveOrUpdateJurisprudencia(data = {}) {
     fechaResolucion,
   });
 
-  // Filtro mínimo para evitar duplicados (además del hash)
-  const filtro = {
-    fuente: "PJ - Jurisprudencia Nacional",
-  };
+  // 3) Candidato base (antes de normalizar)
+  const urlResolucion = resolveUrlResolucion(data);
 
-  if (hash) {
-    filtro.hash = hash;
-  } else if (data.numeroExpediente) {
-    filtro.numeroExpediente = data.numeroExpediente;
-  } else if (data.titulo) {
-    filtro.titulo = data.titulo;
-  }
-
-  const ahora = new Date();
-
-  const payload = {
+  const candidate = {
     ...data,
+    fuente: FUENTE_JNS,
+    origen: ORIGEN_JNS,
+
     fechaResolucion,
     palabrasClave: palabrasClaveArr,
+
     urlResolucion,
-    pdfUrl: urlResolucion || data.linkPdf || "",
-    linkPdf: urlResolucion || data.linkPdf || "",
-    fuente: "PJ - Jurisprudencia Nacional",
-    origen: "JNS",
-    estado: data.estado || "Vigente",
+    pdfUrl: urlResolucion || "",
+
     hash: hash || data.hash || undefined,
-    updatedAt: ahora,
+
+    estado: data.estado || "Vigente",
   };
 
-  // ⛔ Bypass al schema de Mongoose (sin strict) pero
-  // ✅ aseguramos createdAt / fechaScraping / contextVersion en inserciones nuevas
-  await Jurisprudencia.collection.updateOne(
+  // 4) Normalización CANÓNICA estricta (una sola verdad)
+  const { normalized } = normalizeJurisprudencia(candidate);
+
+  // Si hash quedó vacío, lo quitamos (evita hash: "")
+  if (!normalized.hash) delete normalized.hash;
+
+  // 5) Filtro canónico para UPSERT
+  const filtro = buildFiltroCanonico({
+    fuente: FUENTE_JNS,
+    hash: normalized.hash,
+    numeroExpediente: normalized.numeroExpediente,
+    titulo: normalized.titulo,
+  });
+
+  const now = new Date();
+
+  // 6) Upsert vía MODELO (NO collection.updateOne)
+  await Jurisprudencia.updateOne(
     filtro,
     {
-      $set: payload,
+      $set: normalized,
       $setOnInsert: {
-        createdAt: ahora,
-        fechaScraping: ahora,
-        contextVersion: 1,
+        createdAt: now,
+        fechaScraping: now,
+        contextVersion: normalized.contextVersion || 2,
+        fuente: FUENTE_JNS,
+        origen: ORIGEN_JNS,
       },
     },
     { upsert: true }
@@ -412,11 +471,10 @@ async function scrapeListadoJNS(page) {
   const payload = await page.evaluate(() => {
     const norm = (s) =>
       (s || "")
-        .replace(/\u00a0/g, " ") // NBSP → espacio normal
+        .replace(/\u00a0/g, " ")
         .replace(/\s+/g, " ")
         .trim();
 
-    // Panel principal de resultados (si esto no existe, no hay nada)
     const panel = document.querySelector('#formBuscador\\:panel');
 
     const debug = {
@@ -430,11 +488,9 @@ async function scrapeListadoJNS(page) {
 
     const resoluciones = [];
 
-    // 1) Capturar TODOS los rf-p (RichFaces Panels)
     const allRf = Array.from(document.querySelectorAll("div.rf-p"));
     debug.allRfIds = allRf.map((d) => d.id || "").slice(0, 40);
 
-    // 2) Filtrar solo los rf-p de resultados
     const rfDivs = allRf.filter(
       (d) => d.id && d.id.includes("formBuscador:repeat:")
     );
@@ -456,18 +512,15 @@ async function scrapeListadoJNS(page) {
       return norm(col?.textContent || "");
     };
 
-    // 3) Extraer información de cada tarjeta
     for (const div of rfDivs) {
       const header = div.querySelector(".rf-p-hdr");
       const body = div.querySelector(".rf-p-b");
       if (!header || !body) continue;
 
-      // Datos del encabezado
       const spans = header.querySelectorAll("span[style*='font-weight']");
       const recurso = norm(spans[0]?.textContent || "");
       const numeroExpediente = norm(spans[1]?.textContent || "");
 
-      // Campos internos
       const pretensionDelito =
         getCampoEnFila(body, "Pretensión/Delito:") ||
         getCampoEnFila(body, "Pretensión / Delito");
@@ -475,20 +528,21 @@ async function scrapeListadoJNS(page) {
       const tipoResolucion = getCampoEnFila(body, "Tipo Resolución:");
       const fechaResolucion = getCampoEnFila(body, "Fecha Resolución:");
       const salaSuprema = getCampoEnFila(body, "Sala Suprema:");
-      const normaDerechoInterno = getCampoEnFila(body, "Norma de Derecho Interno:");
+      const normaDerechoInterno = getCampoEnFila(
+        body,
+        "Norma de Derecho Interno:"
+      );
       const sumilla = getCampoEnFila(body, "Sumilla:");
       const palabrasClave = getCampoEnFila(body, "Palabras Clave:");
 
-      // PDF directo (si el PJ lo muestra en el resultado)
       const linkResolucion = body.querySelector('a[href*="ServletDescarga"]');
       const hrefResolucion = linkResolucion?.getAttribute("href") || "";
       const urlResolucion = hrefResolucion
-        ? (hrefResolucion.startsWith("http")
-            ? hrefResolucion
-            : window.location.origin + hrefResolucion)
+        ? hrefResolucion.startsWith("http")
+          ? hrefResolucion
+          : window.location.origin + hrefResolucion
         : "";
 
-      // Link de detalle (ficha completa RichFaces)
       const linkDetalle =
         body.querySelector('a[href*="ficha"]') ||
         body.querySelector('a[href*="resultado"]') ||
@@ -497,12 +551,11 @@ async function scrapeListadoJNS(page) {
 
       const hrefDetalle = linkDetalle?.getAttribute("href") || "";
       const detalleUrl = hrefDetalle
-        ? (hrefDetalle.startsWith("http")
-            ? hrefDetalle
-            : window.location.origin + hrefDetalle)
+        ? hrefDetalle.startsWith("http")
+          ? hrefDetalle
+          : window.location.origin + hrefDetalle
         : "";
 
-      // Push de la tarjeta parseada
       resoluciones.push({
         recurso,
         numeroExpediente,
@@ -526,7 +579,6 @@ async function scrapeListadoJNS(page) {
     };
   });
 
-  // --- DEBUG CONSOLA ---
   console.log("[JNS] Debug listado:", {
     foundPanel: payload.foundPanel,
     panelId: payload.panelId,
@@ -535,14 +587,12 @@ async function scrapeListadoJNS(page) {
     sampleIds: payload.sampleIds,
   });
 
-  // ❌ Si ni siquiera existe el panel → error real
   if (!payload.foundPanel) {
     throw new Error(
       `[JNS] scrapeListadoJNS: NO se encontró panel de resultados (panel=${payload.panelId})`
     );
   }
 
-  // ⚠ Panel ok pero sin resultados
   if (!payload.totalRf || !payload.totalCards) {
     console.warn(
       "[JNS] scrapeListadoJNS: panel OK pero sin resultados. " +
@@ -553,7 +603,6 @@ async function scrapeListadoJNS(page) {
     return [];
   }
 
-  // Resultado correcto
   return payload.resoluciones;
 }
 
@@ -561,12 +610,18 @@ async function scrapeListadoJNS(page) {
  * Scraper principal
  * -------------------------------------------*/
 
-export async function scrapeJNS(query = "") {
+export async function scrapeJNS(arg1 = "", arg2 = {}) {
+  const { query, meta } = normalizeScrapeParams(arg1, arg2);
+  const { materia, tema, tags } = meta;
+
   if (!query) throw new Error("Falta query para scrapeJNS");
 
   await dbConnect();
   console.log(
-    `\n[JNS] Conectado a MongoDB. Buscando resoluciones para: "${query}"...\n`
+    `\n[JNS] Conectado a MongoDB. Buscando resoluciones para: "${query}"...` +
+      (materia ? ` [Materia: ${materia}]` : "") +
+      (tema ? ` [Tema: ${tema}]` : "") +
+      "\n"
   );
 
   let browser;
@@ -593,7 +648,7 @@ export async function scrapeJNS(query = "") {
 
     await page.setViewport({ width: 1280, height: 800 });
 
-    // 1. Ir a la página de INICIO (flujo real del PJ)
+    // 1. INICIO
     console.log("[JNS] Navegando a la página de inicio...");
     await page.goto(BASE_URL_INICIO, {
       waitUntil: "networkidle2",
@@ -601,6 +656,14 @@ export async function scrapeJNS(query = "") {
     });
 
     await delay(3000);
+
+    // 🔍 Guardrail temprano: ¿ya estamos en chrome-error?
+    const initialUrl = page.url();
+    if (initialUrl.startsWith("chrome-error://")) {
+      throw new JnsChromeError(
+        `[JNS] Página de inicio devolvió error de navegador (URL=${initialUrl})`
+      );
+    }
 
     if (JNS_DEBUG) {
       try {
@@ -615,7 +678,7 @@ export async function scrapeJNS(query = "") {
       }
     }
 
-    // 2. Input de texto GENERAL: formBuscador:txtBusqueda
+    // 2. Input de texto GENERAL
     console.log("[JNS] Buscando input de texto para la query...");
     await page.waitForSelector('#formBuscador\\:txtBusqueda', {
       visible: true,
@@ -629,7 +692,7 @@ export async function scrapeJNS(query = "") {
     await page.keyboard.press("Backspace");
     await page.type('#formBuscador\\:txtBusqueda', query, { delay: 40 });
 
-    // 3. Click en el botón de buscar de INICIO (j_idt31)
+    // 3. Click en el botón de buscar
     console.log("[JNS] Lanzando búsqueda en la web del PJ...");
     await Promise.all([
       page.click('input[type="image"][name="formBuscador:j_idt31"]'),
@@ -661,19 +724,26 @@ export async function scrapeJNS(query = "") {
       }
     }
 
-    console.log("[JNS] URL actual después de buscar:", page.url());
+    const currentUrl = page.url();
+    console.log("[JNS] URL actual después de buscar:", currentUrl);
+
+    // 🔍 Guardrail principal: si el PJ devolvió página de error de navegador
+    if (currentUrl.startsWith("chrome-error://")) {
+      throw new JnsChromeError(
+        `[JNS] Navegador en página de error de Chrome al buscar "${query}" (URL=${currentUrl})`
+      );
+    }
 
     // 4. Asegurarnos de estar en la página de RESULTADOS
     await page.waitForSelector('#formBuscador\\:panel', {
       timeout: 60000,
     });
 
-    // 5. Parsear listado con la lógica nueva
+    // 5. Parsear listado
     console.log("[JNS] Extrayendo listado de resoluciones...");
     const lista = await scrapeListadoJNS(page);
     console.log(`[JNS] Se encontraron ${lista.length} resoluciones preliminares.`);
 
-    // 👀 LOG: revisar qué viene del listado (solo primeros 5)
     console.log(
       "[JNS] Muestra de items del listado:",
       lista.slice(0, 5).map((it) => ({
@@ -688,12 +758,12 @@ export async function scrapeJNS(query = "") {
       return 0;
     }
 
-    // 6. Guardar en Mongo con mapeo coherente + ficha de detalle (Fase B)
+    // 6. Guardar en Mongo + ficha detalle
     for (const item of lista) {
       console.log("[JNS] Procesando item:", {
         expediente: item.numeroExpediente,
         detalleUrl: item.detalleUrl,
-        pdf: item.urlResolucion
+        pdf: item.urlResolucion,
       });
 
       try {
@@ -701,12 +771,10 @@ export async function scrapeJNS(query = "") {
           normText(`${item.tipoResolucion || ""} ${item.recurso || ""}`) ||
           item.numeroExpediente;
 
-        // Ficha "sintética" de respaldo
         let contenidoHTML = buildContenidoHtmlFromItem(item);
         let texto = "";
-        let pdfUrl = item.urlResolucion || ""; // PDF detectado en el listado (si lo hubo)
+        let pdfUrl = item.urlResolucion || "";
 
-        // Si tenemos URL de detalle, intentamos scrapear la ficha real (Fase B)
         if (item.detalleUrl) {
           const det = await scrapeDetalleJNS(browser, item.detalleUrl);
           if (det) {
@@ -716,22 +784,30 @@ export async function scrapeJNS(query = "") {
           }
         }
 
+        const baseTags = ["jns", "interno"];
+        if (materia) baseTags.push(materia.toLowerCase());
+        if (tema) baseTags.push(tema.toLowerCase());
+        if (Array.isArray(tags)) baseTags.push(...tags);
+
+        const uniqueTags = Array.from(
+          new Set(baseTags.filter(Boolean).map((t) => String(t).trim()))
+        );
+
         await saveOrUpdateJurisprudencia({
           titulo: tituloCompuesto,
           organo: item.salaSuprema,
           fechaResolucion: item.fechaResolucion,
-          especialidad: "", // Se podría poblar en una Fase 2 si el PJ lo expone claramente
+
+          especialidad: materia || "",
+          tema: tema || "",
+
           numeroExpediente: item.numeroExpediente,
           sumilla: item.sumilla || item.pretensionDelito,
 
-          // Fuente pública de la ficha
           fuenteUrl: item.detalleUrl || BASE_URL_RESULTADO,
 
-          // 🔥 Aquí "poblamos" el PDF en la BD
           urlResolucion: pdfUrl,
-          pdfUrl, // campo extra por si lo usas directamente en frontend
-
-          // Contenido de ficha (real o sintético)
+          pdfUrl,
           contenidoHTML,
           texto,
 
@@ -745,7 +821,7 @@ export async function scrapeJNS(query = "") {
           baseLegal: "",
           parteResolutiva: "",
           estado: "Vigente",
-          tags: ["jns", "interno"],
+          tags: uniqueTags,
         });
 
         totalGuardadas += 1;
@@ -776,8 +852,7 @@ export async function scrapeJNS(query = "") {
 }
 
 // ============================================================
-// CLI directo: node backend/scrapers/jurisprudenciaNacional.js "desalojo"
-// ó npm run scrape:jns -- "desalojo"
+// CLI directo
 // ============================================================
 
 const isDirectRun =

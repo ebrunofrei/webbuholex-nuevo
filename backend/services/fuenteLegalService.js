@@ -20,7 +20,7 @@ await connectMongo();
  */
 export async function guardarFuente(usuarioId, fuente, datos) {
   // Guardar en Firestore
-  await db.collection("fuentes_legales").add({
+  await mongoDb.collection("fuentes_legales").add({
     usuarioId,
     fuente,
     datos,

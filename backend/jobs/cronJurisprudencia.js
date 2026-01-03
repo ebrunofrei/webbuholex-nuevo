@@ -11,6 +11,7 @@ import chalk from "chalk";
 import Jurisprudencia from "../models/Jurisprudencia.js";
 import { scrapePJ } from "../scrapers/poderJudicial.js";
 import { scrapeTC } from "../scrapers/tc.js";
+import { normalizeJurisprudencia } from "../services/jurisprudenciaNormalizer.js";
 
 // Palabras clave iniciales (puedes ajustar/expandir)
 const KEYWORDS = [
@@ -24,31 +25,6 @@ const KEYWORDS = [
 const MAX_PER_SOURCE = 10;
 
 /**
- * Normaliza un registro crudo del scraper para el modelo de Mongo.
- * Ajusta los campos a tu esquema real de Jurisprudencia.
- */
-function mapToJurisDoc(raw, fuente) {
-  return {
-    titulo: raw.titulo || raw.title || "",
-    numero: raw.numero || "",
-    materia: raw.materia || "",
-    organo: raw.organo || "",
-    fechaResolucion: raw.fecha || null,
-    estado: raw.estado || "Vigente",
-    sumilla: raw.sumilla || "",
-    resumen: raw.resumen || "",
-    texto: raw.texto || "",
-    fuente: fuente,           // "PJ" | "TC"
-    enlaceOficial: raw.pdfLink || raw.link || "",
-    pdfPath: raw.pdfPath || "",
-    embedding: null,          // se completa luego con embed-jurisprudencia.js
-    // campos auxiliares para filtros internos:
-    tags: raw.tags || [],
-    creadoPor: "cronJurisprudencia",
-  };
-}
-
-/**
  * Guarda documentos evitando duplicados por (fuente + titulo + fechaResolucion)
  */
 async function persistMany(items, fuente) {
@@ -57,21 +33,44 @@ async function persistMany(items, fuente) {
   for (const raw of items) {
     if (inserted >= MAX_PER_SOURCE) break;
 
-    const titulo = raw.titulo || raw.title || "";
-    const fecha = raw.fecha || raw.fechaResolucion || null;
+    // 1️⃣ Mapear datos crudos → estructura base
+    const mapped = {
+      titulo: raw.titulo || raw.title || "",
+      numero: raw.numero || "",
+      materia: raw.materia || "",
+      organo: raw.organo || "",
+      fechaResolucion: raw.fecha || null,
+      estado: raw.estado || "Vigente",
+      sumilla: raw.sumilla || "",
+      resumen: raw.resumen || "",
+      texto: raw.texto || "",
+      fuente, // "PJ" | "TC"
+      enlaceOficial: raw.pdfLink || raw.link || "",
+      pdfPath: raw.pdfPath || "",
+      embedding: null, // se completa luego con embed-jurisprudencia.js
+      tags: raw.tags || [],
+      creadoPor: "cronJurisprudencia",
+    };
 
+    // 2️⃣ Canonizar SIEMPRE antes de cualquier operación
+    const { normalized } = normalizeJurisprudencia(mapped);
+
+    const { titulo, fuente: fuenteCanon, fechaResolucion } = normalized;
+
+    // Regla mínima de existencia
     if (!titulo) continue;
 
+    // 3️⃣ Check de duplicado usando valores CANÓNICOS
     const exists = await Jurisprudencia.findOne({
       titulo,
-      fuente,
-      ...(fecha ? { fechaResolucion: fecha } : {}),
+      fuente: fuenteCanon,
+      ...(fechaResolucion ? { fechaResolucion } : {}),
     }).lean();
 
     if (exists) continue;
 
-    const doc = mapToJurisDoc(raw, fuente);
-    await Jurisprudencia.create(doc);
+    // 4️⃣ Persistencia final (solo canon entra a Mongo)
+    await Jurisprudencia.create(normalized);
     inserted += 1;
   }
 

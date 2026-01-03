@@ -3,7 +3,13 @@ import mongoose from "mongoose";
 
 /* ------------------------- Helpers ------------------------- */
 const normArray = (arr) =>
-  Array.from(new Set((arr || []).map((s) => String(s || "").trim().toLowerCase()).filter(Boolean)));
+  Array.from(
+    new Set(
+      (arr || [])
+        .map((s) => String(s || "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
 
 const hostFromUrl = (u = "") => {
   try {
@@ -57,8 +63,8 @@ const NoticiaSchema = new mongoose.Schema(
     resumen: { type: String, default: "", trim: true },
     contenido: { type: String, default: "", trim: true },
 
-    fuente: { type: String, default: "", trim: true },         // Ej: "Poder Judicial"
-    fuenteNorm: { type: String, default: "", index: true },    // Normalizada p/ filtros
+    fuente: { type: String, default: "", trim: true }, // Ej: "Poder Judicial"
+    fuenteNorm: { type: String, default: "", index: true }, // Normalizada p/ filtros
     enlace: { type: String, default: "", trim: true },
 
     imagen: { type: String, default: "", trim: true },
@@ -93,6 +99,7 @@ const NoticiaSchema = new mongoose.Schema(
 
 /* ------------------------- Hooks ------------------------- */
 NoticiaSchema.pre("validate", function (next) {
+  // Normalización básica
   if (this.fuente) this.fuente = String(this.fuente).trim();
   if (this.enlace) this.enlace = String(this.enlace).trim();
   if (this.especialidadSlug && !this.especialidad) {
@@ -102,8 +109,32 @@ NoticiaSchema.pre("validate", function (next) {
   if (this.lang) this.lang = String(this.lang).trim().toLowerCase();
   if (Array.isArray(this.tema)) this.tema = normArray(this.tema);
 
+  // 💡 Blindaje: asegurar strings para texto indexado
+  if (this.titulo != null && typeof this.titulo !== "string") {
+    this.titulo = String(this.titulo);
+  }
+  if (this.resumen != null && typeof this.resumen !== "string") {
+    this.resumen = String(this.resumen);
+  }
+  if (this.contenido != null && typeof this.contenido !== "string") {
+    this.contenido = String(this.contenido);
+  }
+
+  // 💡 Blindaje: asegurar Date en 'fecha'
+  if (this.fecha && !(this.fecha instanceof Date)) {
+    const d = new Date(this.fecha);
+    if (!Number.isNaN(+d)) {
+      this.fecha = d;
+    } else {
+      // si viene algo completamente inválido, déjala en now para no romper índices
+      this.fecha = new Date();
+    }
+  }
+
+  // Normalizar fuenteNorm
   this.fuenteNorm = normFuente(this.fuente, this.enlace);
 
+  // Detección automática de "tipo" si no viene o viene raro
   if (!this.tipo || !["juridica", "general"].includes(this.tipo)) {
     const juridicos = new Set([
       "poder judicial",
@@ -122,6 +153,7 @@ NoticiaSchema.pre("validate", function (next) {
     ]);
     this.tipo = juridicos.has(this.fuenteNorm) ? "juridica" : "general";
   }
+
   next();
 });
 
@@ -141,10 +173,15 @@ NoticiaSchema.index({ tipo: 1, fecha: -1 });
 NoticiaSchema.index({ fuenteNorm: 1, fecha: -1 });
 NoticiaSchema.index({ tipo: 1, lang: 1, fecha: -1 });
 
-// ÚNICO parcial por enlace (solo si enlace no es vacío)
+// ÚNICO por enlace (solo documentos que tengan enlace definido)
+// Usamos sparse en lugar de partialFilterExpression complicada
 NoticiaSchema.index(
   { enlace: 1 },
-  { unique: true, partialFilterExpression: { enlace: { $type: "string", $exists: true, $ne: "" } } }
+  {
+    unique: true,
+    sparse: true,
+    name: "enlace_1",
+  }
 );
 
 /* ------------------------- Export ------------------------- */

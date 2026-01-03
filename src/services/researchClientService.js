@@ -2,7 +2,7 @@
 // ============================================================
 // 🦉 BúhoLex | Cliente de Research / Jurisprudencia (Google CSE)
 // - Usa apiBase.js: joinApi + apiFetch
-// - searchJurisprudencia(q): devuelve { ok, items, count }
+// - searchJurisprudencia(q, { start, num }) con paginación
 // ============================================================
 
 import { joinApi, apiFetch } from "@/services/apiBase";
@@ -23,14 +23,16 @@ export async function checkResearchHealth(options = {}) {
   }
 
   const data = await res.json();
-  return data; // { ok, msg, ... }
+  return data; // { ok, enabled, hasKeys, msg, ... }
 }
 
 /**
  * Busca jurisprudencia / research en el backend
  * @param {string} q - Texto de búsqueda (casación, expediente, etc.)
  * @param {Object} opts - Opciones adicionales
- * @param {AbortSignal} opts.signal - Para cancelar peticiones previas
+ *   - signal: AbortSignal para cancelar peticiones
+ *   - start: índice de inicio (1, 11, 21, ...)
+ *   - num: cantidad de resultados por página (1..10, backend limita)
  */
 export async function searchJurisprudencia(q, opts = {}) {
   const query = String(q || "").trim();
@@ -45,9 +47,13 @@ export async function searchJurisprudencia(q, opts = {}) {
     };
   }
 
-  const url = joinApi(
-    `/research/search?q=${encodeURIComponent(query)}`
-  );
+  const params = new URLSearchParams();
+  params.set("q", query);
+
+  if (opts.start) params.set("start", String(opts.start));
+  if (opts.num) params.set("num", String(opts.num));
+
+  const url = joinApi(`/research/search?${params.toString()}`);
 
   const res = await apiFetch(url, {
     method: "GET",
@@ -63,12 +69,20 @@ export async function searchJurisprudencia(q, opts = {}) {
 
   const data = await res.json();
 
-  // Normalizamos un poco la respuesta por si el backend cambia
+  const items = Array.isArray(data.items) ? data.items : [];
+  const count = Number(data.count || items.length || 0);
+  const totalResults = Number(data.totalResults || 0) || count;
+  const num = Number(data.num || opts.num || items.length || 0) || count;
+  const start = Number(data.start || opts.start || 1) || 1;
+
   return {
     ok: Boolean(data.ok),
     q: data.q || query,
-    count: Number(data.count || (data.items ? data.items.length : 0)),
-    items: Array.isArray(data.items) ? data.items : [],
+    count,
+    items,
+    totalResults,
+    num,
+    start,
     raw: data,
   };
 }

@@ -1,147 +1,173 @@
-// backend/services/memoryService.js
 // ============================================================
-// 🧠 BúhoLex | Servicio de Memoria de Conversaciones (IA)
-// - Guarda turnos user/assistant por usuarioId + expedienteId
-// - Enriquecido con metadatos (intención, materia, juris, etc.)
-// - Devuelve historial limpio para usar como contexto en /ia/chat
+// 🧠 BúhoLex | SessionMemoryService (CANÓNICO)
+// ------------------------------------------------------------
+// - Memoria corta para IA (NO auditoría)
+// - Fuente: MongoDB / Conversacion
+// - Clave ÚNICA: usuarioId + sessionId (case_<caseId>)
+// - Usado exclusivamente por /ia/chat
 // ============================================================
 
 import Conversacion from "../models/Conversacion.js";
 
-/* ------------------------------------------------------------------ */
-/* 🧠 obtenerHistorialUsuario                                          */
-/* ------------------------------------------------------------------ */
-/**
- * Devuelve el historial de mensajes (user / assistant) en orden
- * cronológico para un usuario y un expediente.
- *
- * Formato devuelto (lo que consume /api/ia/chat):
- * [
- *   { role: "user",      content: "..." },
- *   { role: "assistant", content: "..." },
- *   ...
- * ]
- *
- * Si en el futuro quieres hacer un "modo experto" que vea también
- * intencion, materiaDetectada, etc., puedes crear otra función:
- *   obtenerHistorialExtendido(...)
- */
-export async function obtenerHistorialUsuario(usuarioId, expedienteId) {
+// ===============================
+// Configuración
+// ===============================
+
+const MAX_MENSAJES = 40;   // 20 turnos
+const MAX_LEN_MSG = 6000;
+
+// ===============================
+// Helpers internos
+// ===============================
+
+function safeStr(v, maxLen = MAX_LEN_MSG) {
+  if (v === null || v === undefined) return "";
+  const s = String(v).replace(/\r/g, "").trim();
+  return s.length > maxLen ? s.slice(0, maxLen) : s;
+}
+
+function isCanonicalSessionId(sessionId) {
+  return typeof sessionId === "string" && sessionId.startsWith("case_");
+}
+
+function normalizeRole(roleRaw) {
+  const r = String(roleRaw || "").toLowerCase();
+  if (r === "assistant" || r === "system" || r === "user") return r;
+  return "user";
+}
+
+function normalizeMeta(meta = {}) {
+  return {
+    // --- core ---
+    intencion: meta.intencion,
+    materiaDetectada: meta.materiaDetectada,
+    idioma: meta.idioma || "es-PE",
+    pais: meta.pais || "Perú",
+    modo: meta.modo || "general",
+
+    // --- orquestación ---
+    toolMode: meta.toolMode,
+    modoLitis: meta.modoLitis,
+    ratioEngine: meta.ratioEngine,
+
+    // --- agenda ---
+    agendaHandled: meta.agendaHandled,
+    agendaDraft: meta.agendaDraft,
+    agendaEventPersisted: meta.agendaEventPersisted,
+    agendaFollowUp: meta.agendaFollowUp,
+
+    // --- jurisprudencia ---
+    jurisprudenciaIds: Array.isArray(meta.jurisprudenciaIds)
+      ? meta.jurisprudenciaIds.map(String)
+      : [],
+    jurisprudenciaMeta: Array.isArray(meta.jurisprudenciaMeta)
+      ? meta.jurisprudenciaMeta
+      : [],
+  };
+}
+
+// ============================================================
+// 🧠 OBTENER HISTORIAL DE SESIÓN (para LLM)
+// ============================================================
+
+export async function obtenerHistorialSesion(usuarioId, sessionId) {
   try {
-    const uid = usuarioId || "invitado";
-    const exp = expedienteId || "default";
-
-    const convo = await Conversacion.findOne(
-      { usuarioId: uid, expedienteId: exp },
-      { mensajes: 1 } // sólo queremos el array de mensajes
-    ).lean();
-
-    if (!convo || !Array.isArray(convo.mensajes)) {
+    if (!usuarioId || !isCanonicalSessionId(sessionId)) {
       return [];
     }
 
-    // Devuelve únicamente {role, content} para el modelo.
-    // La ruta /api/ia/chat se encarga luego de recortar por tokens.
-    return convo.mensajes
-      .filter((m) => m && m.role && typeof m.content === "string")
-      .map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+    const convo = await Conversacion.findOne(
+      { usuarioId, expedienteId: sessionId },
+      { mensajes: 1 }
+    ).lean();
+
+    const mensajes = Array.isArray(convo?.mensajes)
+      ? convo.mensajes
+      : [];
+
+    if (!mensajes.length) return [];
+
+    return mensajes
+      .slice(-MAX_MENSAJES)
+      .filter(m => m && m.content)
+      .map(m => ({
+        role: normalizeRole(m.role),
+        content: safeStr(m.content),
+        fecha: m.fecha ? new Date(m.fecha).getTime() : 0,
+      }))
+      .sort((a, b) => a.fecha - b.fecha)
+      .map(({ role, content }) => ({ role, content }));
+
   } catch (err) {
-    console.error("❌ Error en obtenerHistorialUsuario:", err);
+    console.error("❌ obtenerHistorialSesion:", err);
     return [];
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* 🧾 guardarHistorial                                                 */
-/* ------------------------------------------------------------------ */
-/**
- * Inserta en Mongo el turno actual:
- *   - lo que preguntó el usuario
- *   - la respuesta de LitisBot
- *
- * Además guarda metadatos:
- *   - intencion (redaccion, analisis_juridico, etc.)
- *   - materiaDetectada
- *   - idioma, pais, modo
- *   - userEmail (si existiera)
- *   - jurisprudenciaIds usados en la respuesta
- *   - jurisprudenciaMeta (resumen de las resoluciones)
- *
- * Y limita el historial a las últimas N entradas (control de memoria).
- */
-export async function guardarHistorial(
+// ============================================================
+// 🧾 GUARDAR TURNO DE SESIÓN (user + assistant)
+// ============================================================
+
+export async function guardarTurnoSesion(
   usuarioId,
-  expedienteId,
+  sessionId,
   pregunta,
   respuesta,
   meta = {}
 ) {
   try {
-    const uid = usuarioId || "invitado";
-    const exp = expedienteId || "default";
+    if (!usuarioId || !isCanonicalSessionId(sessionId)) {
+      return false;
+    }
+
+    const p = safeStr(pregunta);
+    const r = safeStr(respuesta);
+
+    if (!p || !r) return false;
 
     const now = new Date();
+    const commonMeta = normalizeMeta(meta);
 
-    // Metadatos comunes a ambos mensajes (user y bot)
-    const commonMeta = {
-      intencion: meta.intencion || undefined,
-      materiaDetectada: meta.materiaDetectada || undefined,
-      idioma: meta.idioma || "es-PE",
-      pais: meta.pais || "Perú",
-      modo: meta.modo || "general",
-      userEmail: meta.userEmail || undefined,
-      jurisprudenciaIds: Array.isArray(meta.jurisprudenciaIds)
-        ? meta.jurisprudenciaIds.map(String)
-        : meta.jurisprudenciaIds
-        ? [String(meta.jurisprudenciaIds)]
-        : [],
-      jurisprudenciaMeta: Array.isArray(meta.jurisprudenciaMeta)
-        ? meta.jurisprudenciaMeta
-        : [],
-    };
-
-    // Mensaje del usuario
     const userMsg = {
       role: "user",
-      content: pregunta,
+      content: p,
       fecha: now,
-      ...commonMeta,
     };
 
-    // Mensaje del asistente
     const botMsg = {
       role: "assistant",
-      content: respuesta,
+      content: r,
       fecha: now,
       ...commonMeta,
     };
 
-    // Máximo número de mensajes a conservar (user+bot)
-    // Ejemplo: 40 → aprox. 20 turnos.
-    const MAX_MENSAJES = 40;
-
-    // upsert = si no existe la conversación, la crea
     await Conversacion.findOneAndUpdate(
-      { usuarioId: uid, expedienteId: exp },
+      { usuarioId, expedienteId: sessionId },
       {
         $push: {
           mensajes: {
             $each: [userMsg, botMsg],
-            $slice: -MAX_MENSAJES, // mantiene sólo los últimos N
+            $slice: -MAX_MENSAJES,
           },
         },
         $set: { updatedAt: now },
         $setOnInsert: { createdAt: now },
       },
-      { upsert: true, new: true }
+      { upsert: true }
     );
 
     return true;
   } catch (err) {
-    console.error("❌ Error en guardarHistorial:", err);
+    console.error("❌ guardarTurnoSesion:", err);
     return false;
   }
 }
+
+// ============================================================
+// Export canónico
+// ============================================================
+
+export default {
+  obtenerHistorialSesion,
+  guardarTurnoSesion,
+};

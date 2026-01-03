@@ -84,6 +84,12 @@ export default defineConfig(({ mode }) => {
           ws: true,
           rewrite: (p) => p.replace(/^\/chat-api/, "/api"),
         },
+
+         "/exports": {
+          target: DEV_BACKEND,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
 

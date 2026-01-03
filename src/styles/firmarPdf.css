@@ -1,0 +1,47 @@
+/* ============================================================
+   ✍️ BÚHOLEX – FIRMAR PDF (Panel elegante)
+============================================================ */
+
+.blx-firmar-container {
+  display: flex;
+  gap: 2rem;
+  padding: 1.2rem;
+}
+
+.blx-firmar-left {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.blx-firmar-box {
+  background: #fff;
+  padding: 16px;
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(0,0,0,.08);
+}
+
+.blx-firmar-button {
+  background: #b03a1a;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.blx-firmar-button:hover {
+  background: #992e15;
+}
+
+.blx-firmar-preview {
+  flex: 1;
+  background: #faf6f4;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6d5c54;
+}

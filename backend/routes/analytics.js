@@ -48,6 +48,44 @@ router.get("/resumen", async (req, res) => {
       { $limit: 10 }, // opcional: top 10 fuentes
     ]).toArray();
 
+    //------------------------------------------------------------------
+// 🔥 7. POSTPROCESADOR DE RESPUESTA (Anti-Markdown + Negrita Legal)
+//------------------------------------------------------------------
+function limpiarMarkdownPeroMantenerNegrita(texto = "") {
+  return texto
+    // elimina encabezados markdown
+    .replace(/#{1,6}\s*/g, "")
+    // convierte negrita markdown **texto** → texto resaltado (sin asteriscos)
+    .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+    // elimina cursivas *texto*
+    .replace(/\*(.*?)\*/g, "$1")
+    // bullets markdown a bullets formales
+    .replace(/^\s*-\s+/gm, "• ")
+    .replace(/^\s*\*\s+/gm, "• ")
+    // evita saltos de línea excesivos
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function convertirAFormatoWord(texto = "") {
+  let t = limpiarMarkdownPeroMantenerNegrita(texto);
+
+  // Convertir encabezados típicos del bot a estilo Word procesal
+  t = t.replace(/^\s*I\.\s*/i, "I. ");
+  t = t.replace(/^\s*II\.\s*/i, "II. ");
+  t = t.replace(/^\s*III\.\s*/i, "III. ");
+
+  // Si el texto trae títulos sueltos, los convertimos
+  t = t.replace(/^Introducción/i, "I. Introducción");
+  t = t.replace(/^Fundamentos/i, "II. Fundamentos");
+  t = t.replace(/^Conclusión/i, "III. Conclusión Estratégica");
+
+  return t;
+}
+
+// aplicar transformación
+respuesta = convertirAFormatoWord(respuesta);
+
     return res.json({
       success: true,
       porDia,

@@ -1,65 +1,80 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
+  Outlet,
   useLocation,
 } from "react-router-dom";
 import "./app-layout.css";
 
-/* Páginas públicas */
+/* =========================
+   Páginas públicas
+========================= */
 import SeedBrandingPage from "@/pages/SeedBrandingPage";
-import Blog from "./pages/Blog";
 import Home from "./pages/Home";
 import Servicios from "./pages/Servicios";
+import ServicioDetalle from "@/pages/ServicioDetalle";
 import Contacto from "./pages/Contacto";
-import BibliotecaJ from "./pages/Biblioteca";
-import Jurisprudencia from "@/pages/Jurisprudencia";
-import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
+import Blog from "./pages/Blog";
+import ArticuloBlog from "./pages/ArticuloBlog";
+import Nosotros from "./pages/Nosotros";
 import Codigos from "./pages/Codigos";
 import CodigoDetalle from "./pages/CodigoDetalle";
 import NoticiasHome from "./pages/Noticias";
-import ArticuloBlog from "./pages/ArticuloBlog";
-import Nosotros from "./pages/Nosotros";
+import PruebaNoticias from "@/pages/PruebaNoticias";
+import Jurisprudencia from "@/pages/Jurisprudencia";
+import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
+
+import Login from "./pages/Login";
+import RecuperarPassword from "./components/RecuperarPassword";
+import MiCuenta from "./pages/MiCuenta";
+import HistorialArchivos from "./pages/HistorialArchivos";
+import BibliotecaJ from "./pages/Biblioteca";
+import BibliotecaDrive from "./components/BibliotecaDrive";
+
+import PoliticaPrivacidad from "@/pages/legal/politica-de-privacidad";
+import TerminosCondiciones from "@/pages/legal/terminos-y-condiciones";
+import AvisoCookies from "@/pages/legal/aviso-cookies";
+
+import PricingPage from "./pages/PricingPage";
+import LandingSaaS from "./pages/LandingSaaS";
+
+import Error404 from "./pages/Error404";
+
+/* =========================
+   Admin
+========================= */
 import LoginAdmin from "./pages/admin/LoginAdmin";
 import DashboardAdmin from "./pages/admin/DashboardAdmin";
 import SubirLibro from "./pages/admin/SubirLibro";
 import ConsultasAdmin from "./pages/admin/ConsultasAdmin";
 import PublicarArticulo from "./pages/admin/PublicarArticulo";
-import Error404 from "./pages/Error404";
-import Login from "./pages/Login";
-import MiCuenta from "./pages/MiCuenta";
-import HistorialArchivos from "./pages/HistorialArchivos";
-import BibliotecaDrive from "./components/BibliotecaDrive";
-import PoliticaPrivacidad from "@/pages/legal/politica-de-privacidad";
-import TerminosCondiciones from "@/pages/legal/terminos-y-condiciones";
-import AvisoCookies from "@/pages/legal/aviso-cookies";
-import CookiesBanner from "@/components/CookiesBanner";
-import PricingPage from "./pages/PricingPage";
-import LandingSaaS from "./pages/LandingSaaS";
-import ChatTest from "@/components/ChatTest";
-import ServicioDetalle from "@/pages/ServicioDetalle";
 import ServiciosAdmin from "@/pages/admin/ServiciosAdmin";
-import RecuperarPassword from "./components/RecuperarPassword";
-import PersonalizacionView from "./views/PersonalizacionView";
-import PruebaNoticias from "@/pages/PruebaNoticias";
 
-/* Contextos */
-import { LitisBotChatProvider } from "./context/LitisBotChatContext";
+/* =========================
+   Contextos / Providers
+========================= */
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LitisBotProvider } from "./context/LitisBotContext";
 import { ToastProvider } from "@/components/ui/use-toast";
-import { GoogleAuthRootProvider } from "@/context/GoogleAuthContext";
+import { CaseProvider } from "@/context/CaseContext";
 
-/* Componentes generales */
+/* =========================
+   Componentes generales
+========================= */
 import Navbar from "./components/ui/Navbar";
 import Footer from "./components/Footer";
 import RutaPrivada from "./components/RutaPrivada";
 import NoticiasSlider from "./components/NoticiasSlider";
 import ModalLogin from "./components/ModalLogin";
+import CookiesBanner from "@/components/CookiesBanner";
+import RequireAuth from "@/components/auth/RequireAuth";
 
-/* Oficina virtual */
+/* =========================
+   Oficina virtual
+========================= */
 import Sidebar from "./components/Sidebar";
 import Oficina from "@/oficinaVirtual/pages/Oficina";
 import CasillaExpedientes from "./oficinaVirtual/pages/CasillaExpedientes";
@@ -76,14 +91,17 @@ import NoticiasOficina from "./oficinaVirtual/pages/Noticias";
 import HazteConocido from "./oficinaVirtual/pages/HazteConocido";
 import FirmarEscrito from "./oficinaVirtual/pages/escritorio/FirmarEscrito";
 import CalculadoraLaboral from "@/oficinaVirtual/pages/CalculadoraLaboral";
-import ConfigurarAlertas from "@/oficinaVirtual/components/ConfigurarAlertas";
+import LitisBotChatProPage from "./oficinaVirtual/pages/escritorio/LitisBotChatProPage";
+import PersonalizacionView from "./views/PersonalizacionView";
 
-/* Chat IA pantalla completa */
-import SidebarChats from "@/components/SidebarChats";
+/* =========================
+   Chat IA pantalla completa
+========================= */
 import LitisBotChatBase from "@/components/LitisBotChatBase";
 
 /* Burbuja flotante IA global */
 import LitisBotBubbleChat from "@/components/ui/LitisBotBubbleChat";
+import { useMembership } from "@/hooks/useMembership";
 
 /* FCM hook */
 import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
@@ -91,37 +109,71 @@ import { useFirebaseMessaging } from "@/hooks/useFirebaseMessaging";
 /* Icono botón mobile */
 import { FolderKanban } from "lucide-react";
 
-/* ── Helper: render only on client ─────────────────────────────── */
+/* =========================
+   Helpers
+========================= */
 function ClientOnly({ children }) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   return ready ? <>{children}</> : null;
 }
 
-/* ── Layout OficinaVirtual: sidebar fijo escritorio ─────────────── */
-function OficinaVirtualLayout({ children }) {
+function isPathInAny(path = "", list = []) {
+  const p = (path || "").toLowerCase();
+  return list.some((x) => p === x || p.startsWith(`${x}/`));
+}
+
+/* =========================
+   Layouts
+========================= */
+function OficinaVirtualLayout() {
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 bg-gray-50 p-4 min-w-0">{children}</main>
+    <div className="w-full min-h-screen flex bg-[#F7F7FA]">
+      <aside className="flex-shrink-0">
+        <Sidebar />
+      </aside>
+
+      <main className="flex-1 min-w-0 py-6">
+        <Outlet />
+      </main>
     </div>
   );
 }
 
-/* ── Pantalla /litisbot: chat grande con sidebar de casos ───────── */
+function ChatProLayout() {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev || "";
+    };
+  }, []);
+
+  return (
+    <div className="w-full h-[100dvh] overflow-hidden bg-white">
+      <Outlet />
+    </div>
+  );
+}
+
+/* =========================
+   LitisBot Page Integrada
+========================= */
 function LitisBotPageIntegrada() {
-  const [casos, setCasos] = React.useState([]);
-  const [casoActivo, setCasoActivo] = React.useState(null);
-  const [showModalHerramientas, setShowModalHerramientas] = React.useState(false);
-  const [sidebarOpenMobile, setSidebarOpenMobile] = React.useState(false);
+  const [casos, setCasos] = useState([]);
+  const [casoActivo, setCasoActivo] = useState(null);
+  const [showModalHerramientas, setShowModalHerramientas] = useState(false);
+  const [sidebarOpenMobile, setSidebarOpenMobile] = useState(false);
 
   const { user } = useAuth() || {};
   const userInfo = user || { nombre: "Invitado", pro: false };
 
-  React.useEffect(() => {
+  useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = sidebarOpenMobile ? "hidden" : prev || "";
-    return () => { document.body.style.overflow = prev || ""; };
+    return () => {
+      document.body.style.overflow = prev || "";
+    };
   }, [sidebarOpenMobile]);
 
   return (
@@ -129,7 +181,7 @@ function LitisBotPageIntegrada() {
       className="flex w-full bg-white text-[#5C2E0B]"
       style={{ minHeight: "100dvh", maxHeight: "100dvh", overflow: "hidden" }}
     >
-      {/* Sidebar escritorio */}
+      {/* Desktop sidebar */}
       <aside
         className="hidden lg:flex flex-col flex-shrink-0 border-r border-[#f4e6c7] bg-white"
         style={{ width: "300px", height: "100dvh" }}
@@ -144,7 +196,7 @@ function LitisBotPageIntegrada() {
         />
       </aside>
 
-      {/* Botón flotante móvil para abrir casos */}
+      {/* Mobile button */}
       {!sidebarOpenMobile && (
         <button
           className="lg:hidden fixed left-4 z-[300] rounded-full shadow-xl active:scale-95 flex items-center justify-center text-white"
@@ -162,17 +214,16 @@ function LitisBotPageIntegrada() {
         </button>
       )}
 
-      {/* Drawer móvil */}
+      {/* Mobile drawer */}
       {sidebarOpenMobile && (
         <>
           <div
             className="fixed inset-0 bg-black/40 z-[200] lg:hidden"
-            style={{ pointerEvents: "auto" }}
             onClick={() => setSidebarOpenMobile(false)}
           />
           <aside
             className="fixed right-0 top-0 lg:hidden flex flex-col w-[80vw] max-w-[320px] h-[100dvh] bg-white shadow-2xl border-l border-[#f4e6c7] z-[210]"
-            style={{ pointerEvents: "auto", WebkitOverflowScrolling: "touch", overflowY: "auto" }}
+            style={{ WebkitOverflowScrolling: "touch", overflowY: "auto" }}
           >
             <SidebarChats
               casos={casos}
@@ -191,7 +242,7 @@ function LitisBotPageIntegrada() {
         </>
       )}
 
-      {/* Área principal del chat */}
+      {/* Main chat */}
       <main
         className="flex-1 flex flex-col items-stretch bg-white text-[#5C2E0B]"
         style={{
@@ -200,7 +251,6 @@ function LitisBotPageIntegrada() {
           maxHeight: "100dvh",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
-          backgroundColor: "#ffffff",
           position: "relative",
           zIndex: 10,
         }}
@@ -217,14 +267,18 @@ function LitisBotPageIntegrada() {
   );
 }
 
-/* Redirección legacy /oficina → /oficinaVirtual */
+/* =========================
+   Legacy redirect /oficina → /oficinaVirtual
+========================= */
 function LegacyOficinaRedirect() {
   const loc = useLocation();
-  const rest = loc.pathname.replace(/^\/oficina/, "");
+  const rest = loc.pathname.replace(/^\/oficina/i, "");
   return <Navigate to={`/oficinaVirtual${rest}${loc.search}${loc.hash}`} replace />;
 }
 
-/* ── AppContent: rutas + navbar/footer + sliders ─────────────────── */
+/* =========================
+   AppContent
+========================= */
 function AppContent() {
   useFirebaseMessaging((payload) => {
     console.log("📩 Notificación vía FCM:", payload);
@@ -233,18 +287,25 @@ function AppContent() {
   const { user, loading, abrirLogin } = useAuth() || {};
   const location = useLocation();
 
-  const enOficinaVirtual = /^\/oficinaVirtual(\/|$)/.test(location.pathname);
-  const enLitisBotFull = location.pathname === "/litisbot";
+  const path = (location.pathname || "").toLowerCase();
+  const enOficinaVirtual = path.startsWith("/oficinavirtual");
+  const enLitisBotFull = path === "/litisbot";
 
   function BibliotecaProtegida() {
     if (loading) return <div className="text-center mt-16">Verificando acceso...</div>;
+
     if (!user) {
       return (
         <div className="text-center p-10">
           <p>Inicia sesión para acceder a la Biblioteca Jurídica.</p>
-          <button onClick={abrirLogin} className="bg-[#a52e00] text-white px-4 py-2 rounded shadow">
+
+          <button
+            onClick={abrirLogin}
+            className="bg-[#a52e00] text-white px-4 py-2 rounded shadow"
+          >
             Iniciar sesión
           </button>
+
           <div className="mt-2 text-sm text-center">
             <button onClick={() => abrirLogin("recuperar")} className="text-blue-700 underline">
               ¿Olvidaste tu contraseña?
@@ -253,162 +314,217 @@ function AppContent() {
         </div>
       );
     }
+
     return <BibliotecaJ />;
   }
 
   return (
     <div className="relative min-h-screen w-full text-[#5C2E0B]" style={{ backgroundColor: "#fff" }}>
-      {/* BLOQUE PÚBLICO */}
-      {!enOficinaVirtual && (
-        <>
-          {/* Navbar global (oculto en /litisbot) */}
-          {!enLitisBotFull && <Navbar />}
+      {/* Top chrome */}
+      {!enOficinaVirtual && !enLitisBotFull && <Navbar />}
 
-          <div className={`flex ${!enLitisBotFull ? "pt-20" : ""}`}>
-            {/* Contenido principal */}
-            <main className={`flex-1 w-full min-w-0 ${!enLitisBotFull ? "lg:pr-80" : ""}`}>
-              <Routes>
-                <Route path="/" element={<Home />} />
-
-                {/* Redirecciones legacy */}
-                <Route path="/oficina" element={<Navigate to="/oficinaVirtual" replace />} />
-                <Route path="/oficina/*" element={<LegacyOficinaRedirect />} />
-
-                <Route path="/servicios" element={<Servicios />} />
-                <Route path="/contacto" element={<Contacto />} />
-
-                <Route path="/biblioteca" element={<BibliotecaProtegida />} />
-                <Route path="/biblioteca-drive" element={<BibliotecaDrive />} />
-
-                <Route path="/recuperar" element={<RecuperarPassword />} />
-                <Route path="/blog" element={<Blog />} />
-                <Route path="/blog/:id" element={<ArticuloBlog />} />
-
-                <Route path="/jurisprudencia" element={<Jurisprudencia />} />
-                <Route path="/jurisprudencia/visor/:id" element={<JurisprudenciaVisorModal />} />
-
-                <Route path="/codigos" element={<Codigos />} />
-                <Route path="/codigos/:id" element={<CodigoDetalle />} />
-
-                <Route path="/noticias" element={<NoticiasHome />} />
-
-                {/* Chat IA fullscreen */}
-                <Route path="/litisbot" element={<LitisBotPageIntegrada />} />
-
-                <Route path="/nosotros" element={<Nosotros />} />
-                <Route path="/login" element={<Login />} />
-
-                <Route path="/historial-archivos" element={<HistorialArchivos />} />
-                <Route path="/perfil" element={<RutaPrivada><Perfil /></RutaPrivada>} />
-                <Route path="/mi-cuenta" element={<RutaPrivada><MiCuenta /></RutaPrivada>} />
-
-                {/* Admin */}
-                <Route path="/admin/login" element={<LoginAdmin />} />
-                <Route path="/admin" element={<RutaPrivada redir="/admin/login"><DashboardAdmin /></RutaPrivada>} />
-                <Route path="/admin/libros" element={<RutaPrivada><SubirLibro /></RutaPrivada>} />
-                <Route path="/admin/consultas" element={<RutaPrivada><ConsultasAdmin /></RutaPrivada>} />
-                <Route path="/admin/publicar-articulo" element={<RutaPrivada><PublicarArticulo /></RutaPrivada>} />
-                <Route path="/admin/servicios" element={<RutaPrivada><ServiciosAdmin /></RutaPrivada>} />
-
-                {/* OficinaVirtual config pública */}
-                <Route path="/oficinaVirtual/personalizacion" element={<PersonalizacionView />} />
-
-                {/* Legal */}
-                <Route path="/legal/politica-de-privacidad" element={<PoliticaPrivacidad />} />
-                <Route path="/legal/terminos-y-condiciones" element={<TerminosCondiciones />} />
-                <Route path="/legal/aviso-cookies" element={<AvisoCookies />} />
-
-                {/* Planes / landing */}
-                <Route path="/planes" element={<PricingPage />} />
-                <Route path="/saas" element={<LandingSaaS />} />
-
-                {/* Otros */}
-                <Route path="/chat-test" element={<ChatTest />} />
-                <Route path="/servicios/:slug" element={<ServicioDetalle />} />
-                <Route path="/seed-branding" element={<SeedBrandingPage />} />
-                <Route path="/prueba-noticias" element={<PruebaNoticias />} />
-
-                {/* 404 */}
-                <Route path="*" element={<Error404 />} />
-              </Routes>
-            </main>
-
-            {/* Columna de noticias en escritorio (oculta en /litisbot) */}
-            {!enLitisBotFull && (
-              <div className="hidden lg:flex flex-col w-80 h-[calc(100vh-80px)] fixed top-20 right-0 z-40 overflow-y-auto bg-white/0">
-                <ClientOnly>
-                  <NoticiasSlider />
-                </ClientOnly>
-              </div>
-            )}
-          </div>
-
-          {/* Footer + modales globales (ocultos en /litisbot) */}
-          {!enLitisBotFull && <Footer />}
-          <ClientOnly>
-            <CookiesBanner />
-            <ModalLogin />
-          </ClientOnly>
-        </>
-      )}
-
-      {/* BLOQUE OFICINA VIRTUAL */}
-      {enOficinaVirtual && (
-        <OficinaVirtualLayout>
+      <div className={`flex ${!enOficinaVirtual && !enLitisBotFull ? "pt-20" : ""}`}>
+        <main className={`flex-1 w-full min-w-0 ${!enOficinaVirtual && !enLitisBotFull ? "lg:pr-80" : ""}`}>
           <Routes>
-            <Route path="/oficinaVirtual" element={<Oficina />} />
-            <Route path="/oficinaVirtual/casilla-expedientes" element={<CasillaExpedientes />} />
-            <Route path="/oficinaVirtual/expediente-jud/:id" element={<ExpedienteJudicialDetalle />} />
-            <Route path="/oficinaVirtual/expediente-adm/:id" element={<ExpedienteAdministrativoDetalle />} />
-            <Route path="/oficinaVirtual/expedientes/:expedienteId" element={<ExpedienteDetalle />} />
-            <Route path="/oficinaVirtual/biblioteca" element={<Biblioteca />} />
-            <Route path="/oficinaVirtual/agenda" element={<Agenda />} />
-            <Route path="/oficinaVirtual/litisbot" element={<LitisBotAudienciaPage />} />
-            <Route path="/oficinaVirtual/firmar-escrito" element={<FirmarEscrito />} />
-            <Route path="/oficinaVirtual/notificaciones" element={<Notificaciones />} />
-            <Route path="/oficinaVirtual/noticias" element={<NoticiasOficina />} />
-            <Route path="/oficinaVirtual/perfil" element={<Perfil />} />
-            <Route path="/oficinaVirtual/hazte-conocido" element={<HazteConocido />} />
-            <Route path="/oficinaVirtual/calculadora-laboral" element={<CalculadoraLaboral />} />
-            <Route path="/oficinaVirtual/*" element={<OficinaVirtualRoutes />} />
-            <Route path="*" element={<Oficina />} />
+            {/* ================= PUBLICO ================= */}
+            <Route path="/" element={<Home />} />
+
+            {/* Legacy */}
+            <Route path="/oficina" element={<Navigate to="/oficinaVirtual" replace />} />
+            <Route path="/oficina/*" element={<LegacyOficinaRedirect />} />
+
+            {/* Site */}
+            <Route path="/servicios" element={<Servicios />} />
+            <Route path="/servicios/:slug" element={<ServicioDetalle />} />
+            <Route path="/contacto" element={<Contacto />} />
+            <Route path="/nosotros" element={<Nosotros />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:id" element={<ArticuloBlog />} />
+
+            {/* Biblioteca pública protegida */}
+            <Route path="/biblioteca" element={<BibliotecaProtegida />} />
+            <Route path="/biblioteca-drive" element={<BibliotecaDrive />} />
+            <Route path="/recuperar" element={<RecuperarPassword />} />
+
+            {/* Jurisprudencia */}
+            <Route path="/jurisprudencia" element={<Jurisprudencia />} />
+            <Route path="/jurisprudencia/visor/:id" element={<JurisprudenciaVisorModal />} />
+
+            {/* Códigos / noticias */}
+            <Route path="/codigos" element={<Codigos />} />
+            <Route path="/codigos/:id" element={<CodigoDetalle />} />
+            <Route path="/noticias" element={<NoticiasHome />} />
+            <Route path="/prueba-noticias" element={<PruebaNoticias />} />
+
+            {/* Auth / cuenta */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/historial-archivos" element={<HistorialArchivos />} />
+
+            <Route
+              path="/perfil"
+              element={
+                <RutaPrivada>
+                  <Perfil />
+                </RutaPrivada>
+              }
+            />
+
+            <Route
+              path="/mi-cuenta"
+              element={
+                <RutaPrivada>
+                  <MiCuenta />
+                </RutaPrivada>
+              }
+            />
+
+            {/* IA */}
+            <Route path="/litisbot" element={<LitisBotPageIntegrada />} />
+
+            {/* Legal */}
+            <Route path="/legal/politica-de-privacidad" element={<PoliticaPrivacidad />} />
+            <Route path="/legal/terminos-y-condiciones" element={<TerminosCondiciones />} />
+            <Route path="/legal/aviso-cookies" element={<AvisoCookies />} />
+
+            {/* Planes / landing */}
+            <Route path="/planes" element={<PricingPage />} />
+            <Route path="/saas" element={<LandingSaaS />} />
+            <Route path="/seed-branding" element={<SeedBrandingPage />} />
+
+            {/* ================= ADMIN ================= */}
+            <Route path="/admin/login" element={<LoginAdmin />} />
+            <Route
+              path="/admin"
+              element={
+                <RutaPrivada redir="/admin/login">
+                  <DashboardAdmin />
+                </RutaPrivada>
+              }
+            />
+            <Route path="/admin/libros" element={<RutaPrivada><SubirLibro /></RutaPrivada>} />
+            <Route path="/admin/consultas" element={<RutaPrivada><ConsultasAdmin /></RutaPrivada>} />
+            <Route path="/admin/publicar-articulo" element={<RutaPrivada><PublicarArticulo /></RutaPrivada>} />
+            <Route path="/admin/servicios" element={<RutaPrivada><ServiciosAdmin /></RutaPrivada>} />
+
+            {/* ================= OFICINA VIRTUAL ================= */}
+            {/* Config pública */}
+            <Route path="/oficinaVirtual/personalizacion" element={<PersonalizacionView />} />
+
+            {/* ChatPro standalone */}
+            <Route
+              path="/oficinaVirtual/chat-pro"
+              element={
+                <RequireAuth>
+                  <ChatProLayout />
+                </RequireAuth>
+              }
+            >
+              <Route index element={<LitisBotChatProPage />} />
+            </Route>
+
+            {/* OficinaVirtual nested */}
+            <Route
+              path="/oficinaVirtual"
+              element={
+                <RequireAuth>
+                  <OficinaVirtualLayout />
+                </RequireAuth>
+              }
+            >
+              <Route index element={<Oficina />} />
+              <Route path="casilla-expedientes" element={<CasillaExpedientes />} />
+              <Route path="expediente-jud/:id" element={<ExpedienteJudicialDetalle />} />
+              <Route path="expediente-adm/:id" element={<ExpedienteAdministrativoDetalle />} />
+              <Route path="expedientes/:expedienteId" element={<ExpedienteDetalle />} />
+              <Route path="biblioteca" element={<Biblioteca />} />
+              <Route path="agenda" element={<Agenda />} />
+              <Route path="litisbot" element={<LitisBotAudienciaPage />} />
+              <Route path="firmar-escrito" element={<FirmarEscrito />} />
+              <Route path="notificaciones" element={<Notificaciones />} />
+              <Route path="noticias" element={<NoticiasOficina />} />
+              <Route path="perfil" element={<Perfil />} />
+              <Route path="hazte-conocido" element={<HazteConocido />} />
+              <Route path="calculadora-laboral" element={<CalculadoraLaboral />} />
+              <Route path="*" element={<OficinaVirtualRoutes />} />
+            </Route>
+
+            {/* 404 */}
+            <Route path="*" element={<Error404 />} />
           </Routes>
-        </OficinaVirtualLayout>
+        </main>
+
+        {/* Right rail */}
+        {!enOficinaVirtual && !enLitisBotFull && (
+          <div className="hidden lg:flex flex-col w-80 h-[calc(100vh-80px)] fixed top-20 right-0 z-40 overflow-y-auto bg-white/0">
+            <ClientOnly>
+              <NoticiasSlider />
+            </ClientOnly>
+          </div>
+        )}
+      </div>
+
+      {/* Footer + global modals */}
+      {!enOficinaVirtual && !enLitisBotFull && <Footer />}
+
+      {!enOficinaVirtual && (
+        <ClientOnly>
+          <CookiesBanner />
+          <ModalLogin />
+        </ClientOnly>
       )}
     </div>
   );
 }
 
-/* ── Burbuja flotante global de LitisBot ─────────────────────────── */
+/* =========================
+   Burbuja flotante global
+========================= */
 function BubbleWithUser() {
   const { user } = useAuth() || {};
+  const { isPro } = useMembership() || {};
   const location = useLocation();
-  const ocultar =
-    /^\/litisbot(\/|$)/.test(location.pathname) ||
-    /^\/oficinaVirtual\/litisbot(\/|$)/.test(location.pathname);
-  if (ocultar) return null;
-  return <LitisBotBubbleChat usuarioId={user?.uid || "invitado"} pro={!!user?.pro} />;
+
+  const blockedRoots = useMemo(
+    () => [
+      "/litisbot",
+      "/oficinavirtual/chat-pro",
+      "/oficinavirtual/litisbot",
+      "/chat-test",
+    ],
+    []
+  );
+
+  const hideBubble = isPathInAny(location.pathname, blockedRoots);
+  if (hideBubble) return null;
+
+  const usuarioId = user?.uid || "invitado";
+  const pro = !!isPro;
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[9999] pointer-events-auto">
+      <LitisBotBubbleChat usuarioId={usuarioId} pro={pro} jurisSeleccionada={null} onClearJuris={() => {}} />
+    </div>
+  );
 }
 
-/* ── App root con providers y router ─────────────────────────────── */
+/* =========================
+   App Root (sin Google)
+========================= */
 export default function App() {
   return (
-    <GoogleAuthRootProvider>
-      <LitisBotChatProvider>
-          <AuthProvider>
-            <LitisBotProvider>
-              <ToastProvider>
-                <Router>
-                  <AppContent />
-                  {/* Burbujas IA globales (no en /litisbot) */}
-                  <ClientOnly>
-                    <BubbleWithUser />
-                  </ClientOnly>
-                </Router>
-              </ToastProvider>
-            </LitisBotProvider>
-          </AuthProvider>
-      </LitisBotChatProvider>
-    </GoogleAuthRootProvider>
+    <AuthProvider>
+      <CaseProvider>
+      <LitisBotProvider>
+        <ToastProvider>
+          <Router>
+            <AppContent />
+            <ClientOnly>
+              <BubbleWithUser />
+            </ClientOnly>
+          </Router>
+        </ToastProvider>
+      </LitisBotProvider>
+      </CaseProvider>
+    </AuthProvider>
   );
 }

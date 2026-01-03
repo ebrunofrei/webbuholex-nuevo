@@ -1,10 +1,10 @@
 // ============================================================
-// ?? BúhoLex | Provider Legis.pe
+// ?? Bï¿½hoLex | Provider Legis.pe
 // Contrato unificado: fetchNoticias({ q, page, limit, lang, since, especialidad })
-// - Scraping estático con cheerio (sin Puppeteer).
+// - Scraping estï¿½tico con cheerio (sin Puppeteer).
 // - Tolerante a cambios de layout (selectores amplios del theme JNews).
 // - Normaliza salida con normalizeItem (url/enlace/fecha/imagen/fuente/tipo/lang).
-// - Filtra por since (= 48h en jurídicas), q, lang y pagina.
+// - Filtra por since (= 48h en jurï¿½dicas), q, lang y pagina.
 // ============================================================
 
 import * as cheerio from "cheerio";
@@ -18,7 +18,7 @@ import {
 } from "./_helpers.js";
 
 const BASE = "https://legis.pe";
-// Páginas más estables del theme para noticias
+// Pï¿½ginas mï¿½s estables del theme para noticias
 const CANDIDATES = [
   `${BASE}/categorias/noticias/`,
   `${BASE}/categoria/noticias/`,
@@ -52,7 +52,7 @@ function pickImage($img, baseHref) {
 
 /** Parseo de una tarjeta de JNews (jeg_*) ? {titulo,resumen,enlace,imagen,fecha} */
 function parseCard($el, $, baseHref) {
-  // Título + enlace
+  // Tï¿½tulo + enlace
   const $a = $el
     .find(".jeg_post_title a, .entry-title a, h3 a, h2 a, a.jeg_readmore, a[href]")
     .filter((i, a) => {
@@ -89,7 +89,7 @@ function parseCard($el, $, baseHref) {
   return { titulo: rawTitle, resumen, enlace, imagen, fecha };
 }
 
-/** Clasificador rápido de especialidad por keywords (fallback) */
+/** Clasificador rï¿½pido de especialidad por keywords (fallback) */
 function detectEspecialidad(texto = "") {
   const t = texto.toLowerCase();
   if (/\bpenal\b|delit|fiscal|mp\b/.test(t)) return "penal";
@@ -154,10 +154,10 @@ async function fetchNoticias({
     const html = await fetchHTML(CANDIDATES, { timeout: 20000 });
     if (!html) return [];
 
-    const baseHref = BASE; // estático; si fetchHTML retorna URL final, úsala aquí
+    const baseHref = BASE; // estï¿½tico; si fetchHTML retorna URL final, ï¿½sala aquï¿½
     let items = parseLegisList(html, baseHref);
 
-    // Filtro since (= 48h recomendado para jurídicas)
+    // Filtro since (= 48h recomendado para jurï¿½dicas)
     if (since) {
       const d = new Date(since);
       if (!Number.isNaN(+d)) {
@@ -168,7 +168,7 @@ async function fetchNoticias({
       }
     }
 
-    // Filtro q (basta con título/resumen)
+    // Filtro q (basta con tï¿½tulo/resumen)
     if (q && q.trim()) {
       const tok = q.toLowerCase();
       items = items.filter(
@@ -178,7 +178,7 @@ async function fetchNoticias({
       );
     }
 
-    // Filtro lang (Legis es “es”, pero mantenemos coherencia)
+    // Filtro lang (Legis es ï¿½esï¿½, pero mantenemos coherencia)
     if (lang && lang !== "all") {
       const l = String(lang).toLowerCase();
       items = items.filter((n) => String(n.lang || "es").toLowerCase().startsWith(l));
@@ -187,7 +187,7 @@ async function fetchNoticias({
     // Orden por fecha desc (si no hay fecha, lo empuja al final)
     items.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
 
-    // Paginación segura
+    // Paginaciï¿½n segura
     const L = Math.max(1, Math.min(50, Number(limit) || 12));
     const P = Math.max(1, Number(page) || 1);
     const start = (P - 1) * L;

@@ -7,7 +7,7 @@
    - Evita duplicados por enlace / título
    ============================================================ */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import ReaderModal from "@/components/ui/ReaderModal";
+import ReaderModal from "@components/common/ReaderModal.jsx";
 import {
   API_BASE,
   getNoticiasRobust,

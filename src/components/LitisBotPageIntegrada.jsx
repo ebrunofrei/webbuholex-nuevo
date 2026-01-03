@@ -71,30 +71,35 @@ export default function LitisBotPageIntegrada() {
         <div className="w-9 h-9" />
       </header>
 
-      {/* SIDEBAR DESKTOP (fijo a la izquierda) */}
-      <SidebarChats
-        // desktop siempre visible
-        isOpen={true}
-        onCloseSidebar={() => {}}
-        user={userInfo}
-        setCasos={setCasos}
-        setCasoActivo={setCasoActivo}
-        onOpenHerramientas={() => setShowModalHerramientas(true)}
-      />
+      {/* SOLO UNA VEZ */}
+<div className="hidden lg:block w-[340px] border-l border-[#E2E2E8] bg-white">
+  <LitisToolsPanel
+    open
+    onClose={() => {}}
+    pro={pro}
+    onAnalisisPDF={handleAnalisisPDF}
+    onJurisprudencia={handleJurisprudencia}
+    onRedaccion={handleRedaccion}
+    onEstrategia={handleEstrategia}
+    onHistorial={handleHistorial}
+    onConfigVoz={handleConfigVoz}
+  />
+</div>
 
-      {/* SHEET MÓVIL A PANTALLA COMPLETA */}
-      <SidebarChats
-        // en móvil solo mostramos si sidebarOpenMobile === true
-        isOpen={sidebarOpenMobile}
-        onCloseSidebar={() => setSidebarOpenMobile(false)}
-        user={userInfo}
-        setCasos={setCasos}
-        setCasoActivo={setCasoActivo}
-        onOpenHerramientas={() => {
-          setShowModalHerramientas(true);
-          setSidebarOpenMobile(false);
-        }}
-      />
+{/* SOLO MÓVIL */}
+<div className="lg:hidden">
+  <LitisToolsPanel
+    open={toolsPanelOpen}
+    onClose={() => setToolsPanelOpen(false)}
+    pro={pro}
+    onAnalisisPDF={handleAnalisisPDF}
+    onJurisprudencia={handleJurisprudencia}
+    onRedaccion={handleRedaccion}
+    onEstrategia={handleEstrategia}
+    onHistorial={handleHistorial}
+    onConfigVoz={handleConfigVoz}
+  />
+</div>
 
       {/* ÁREA PRINCIPAL DEL CHAT */}
       <main

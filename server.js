@@ -32,7 +32,22 @@ import researchRoutes from "./backend/routes/research.js";
 import jurisprudenciaRoutes from "./backend/routes/jurisprudencia.js";
 import jurisprudenciaEmbedRoutes from "./backend/routes/jurisprudenciaEmbed.js";
 import { startCronJurisprudencia } from "./backend/jobs/cronJurisprudencia.js";
-
+import exportRouter from "./backend/routes/export.js";
+import uploadRouter from "./backend/routes/uploads.js";
+import pdfContextRouter from "./backend/routes/pdfContext.js";
+import fuentesLegalesRouter from "./backend/routes/fuentesLegales.js";
+import knowledgeRoutes from "./backend/routes/knowledge.js";
+import timeRoutes from "./backend/routes/time.js";
+import plazosRoutes from "./backend/routes/plazos.js";
+import agendaRoutes from "./backend/routes/agenda.js";
+import agendaEventosRouter from "./backend/routes/agendaEventos.js";
+import agendaAlertsRouter from "./backend/routes/agendaAlerts.js";
+import whatsappRoutes from "./backend/routes/whatsapp.js";
+import casesRouter from "./backend/routes/cases.js";
+import casesAuditRoutes from "./backend/routes/casesAudit.js";
+import casesExportRoutes from "./backend/routes/casesExport.js";
+import actionsRoutes from "./backend/routes/actions.js";
+import draftsRoutes from "./backend/routes/drafts.js";
 
 // ============================================================
 // ⚙️ Carga temprana del entorno (.env)
@@ -87,6 +102,12 @@ app.use(morgan("dev"));
 // Alive rápido
 app.get("/alive", (_req, res) => res.type("text/plain").send("ok"));
 
+// Servir DOCX / PDF generados
+app.use(
+  "/exports",
+  express.static(path.join(__dirname, "backend", "tmp_exports"))
+);
+
 // ============================================================
 // 🔒 CORS (antes de montar rutas)
 // ============================================================
@@ -135,6 +156,32 @@ app.use("/api", (req, res, next) => {
   };
   next();
 });
+// ===============================
+// 🧪 RUTAS TEST (blindadas por flag)
+// ===============================
+
+const ENABLE_TEST_ROUTES = process.env.ENABLE_TEST_ROUTES === "true";
+
+if (ENABLE_TEST_ROUTES && NODE_ENV !== "production") {
+  (async () => {
+    try {
+      const { default: casesAuditTestRoutes } = await import(
+        "./backend/routes/test/casesAudit.test.js"
+      );
+
+      app.use("/api/test", casesAuditTestRoutes);
+
+      console.log("🧪 Rutas TEST de auditoría ACTIVADAS");
+    } catch (err) {
+      console.warn(
+        "⚠️ No se cargaron rutas TEST:",
+        err.message
+      );
+    }
+  })();
+} else {
+  console.log("🛡️ Rutas TEST deshabilitadas (entorno protegido)");
+}
 
 // Salud
 app.get("/api/health", (_req, res) => {
@@ -177,6 +224,22 @@ app.use("/api/voz", vozRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/research", researchRoutes);
 app.use("/api/jurisprudencia", jurisprudenciaRoutes);
+app.use("/api", exportRouter);
+app.use("/api", uploadRouter);
+app.use("/api/pdf", pdfContextRouter);
+app.use("/api/fuentes-legales", fuentesLegalesRouter);
+app.use("/api/knowledge", knowledgeRoutes);
+app.use("/api/time", timeRoutes);
+app.use("/api/plazos", plazosRoutes);
+app.use("/api/agenda", agendaRoutes);
+app.use("/api/agenda-eventos", agendaEventosRouter);
+app.use("/api/agenda", agendaAlertsRouter);
+app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/cases", casesRouter);
+app.use("/api/cases", casesAuditRoutes);
+app.use("/api/cases", casesExportRoutes);
+app.use("/api/actions", actionsRoutes);
+app.use("/api/drafts", draftsRoutes);
 
 // 404 JSON solo /api
 app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));
@@ -200,15 +263,6 @@ async function cargarTareasOpcionales() {
     console.warn(chalk.yellow("⚠️ No se pudieron cargar cleanupLogs/cronNoticias (ok en prod):"), err.message);
   }
 
-  try {
-    const { maintainIndexes } = await import("./scripts/maintain-indexes.js");
-    if (typeof maintainIndexes === "function") {
-      console.log(chalk.gray("🛠 Ejecutando maintainIndexes() en entorno no productivo..."));
-      await maintainIndexes();
-    }
-  } catch (err) {
-    console.warn(chalk.yellow("⚠️ maintain-indexes.js no disponible (ok si estás en prod):"), err.message);
-  }
 }
 
 // ============================================================

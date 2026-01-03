@@ -1,10 +1,10 @@
 // ============================================================
-// ?? BúhoLex | Provider ONU Noticias (RSS)
+// ?? Bï¿½hoLex | Provider ONU Noticias (RSS)
 // Contrato: fetchNoticias({ q, page, limit, lang, since, especialidad })
-// - Lee el feed temático "Law and Crime Prevention" en español.
+// - Lee el feed temï¿½tico "Law and Crime Prevention" en espaï¿½ol.
 // - Parser RSS ligero (sin dependencias), tolerante a CDATA.
 // - Normaliza con normalizeItem (o normalizeNoticia si prefieres).
-// - Soporta filtros q/lang/since y paginación.
+// - Soporta filtros q/lang/since y paginaciï¿½n.
 // ============================================================
 
 import {
@@ -49,7 +49,7 @@ function parseRSSItem(block) {
     imagen: enclosure ? proxifyMedia(enclosure) : "",
     fecha: toISODate(pub),
     fuente: "ONU Noticias",
-    tipo: "general",             // ONU Noticias es más “general”; tu front aún puede filtrar por “jurídica”
+    tipo: "general",             // ONU Noticias es mï¿½s ï¿½generalï¿½; tu front aï¿½n puede filtrar por ï¿½jurï¿½dicaï¿½
     especialidad: "internacional",
     lang: "es",
   };
@@ -96,7 +96,7 @@ async function fetchNoticias({
   limit = 12,
   lang = "all",
   since = null,
-  // especialidad: no filtramos duro aquí (el feed ya es de “law & crime prevention”)
+  // especialidad: no filtramos duro aquï¿½ (el feed ya es de ï¿½law & crime preventionï¿½)
 } = {}) {
   try {
     const xml = await fetchHTML(FEED, { timeout: 15000 });
@@ -126,7 +126,7 @@ async function fetchNoticias({
     // orden (fecha desc)
     items.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
 
-    // paginación
+    // paginaciï¿½n
     const L = Math.max(1, Math.min(50, Number(limit) || 12));
     const P = Math.max(1, Number(page) || 1);
     const start = (P - 1) * L;

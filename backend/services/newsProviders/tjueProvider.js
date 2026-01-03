@@ -1,5 +1,5 @@
 // ============================================================
-// ?? BúhoLex | Provider TJUE (Tribunal de Justicia de la UE)
+// ?? Bï¿½hoLex | Provider TJUE (Tribunal de Justicia de la UE)
 // Contrato: fetchNoticias({ max=10, q="", since=null })
 // - Prueba varias rutas "Sala de prensa / Noticias" (cambian a menudo)
 // - Selectores tolerantes a layout
@@ -99,7 +99,7 @@ async function fetchNoticias({ max = 10, q = "", since = null } = {}) {
 
     const $ = cheerio.load(html);
 
-    // Bloques típicos: .actualites .article, .news-item, article
+    // Bloques tï¿½picos: .actualites .article, .news-item, article
     const $cards = $(".actualites .article, .news-item, article, .actu-item");
 
     const out = [];
@@ -124,7 +124,7 @@ async function fetchNoticias({ max = 10, q = "", since = null } = {}) {
           fuente: "TJUE",
           tipo: "juridica",
           especialidad: "internacional", // puedes cambiar a "derecho de la UE" si lo manejas en chips
-          lang: "es", // la versión enlazada arriba está en español
+          lang: "es", // la versiï¿½n enlazada arriba estï¿½ en espaï¿½ol
         })
       );
     });

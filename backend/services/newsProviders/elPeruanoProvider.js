@@ -1,5 +1,5 @@
 // ============================================================
-// ?? BúhoLex | Provider El Peruano (buscador)
+// ?? Bï¿½hoLex | Provider El Peruano (buscador)
 // - Contrato: export function fetchNoticias({ q, page, limit, lang, since, especialidad })
 // - Sin puppeteer. Tolerante a cambios menores de layout.
 // ============================================================
@@ -16,12 +16,12 @@ import {
 const BASE = "https://busquedas.elperuano.pe";
 
 /**
- * Construye URL de búsqueda. El sitio soporta `?s=<termino>` y a veces `&page=N`.
+ * Construye URL de bï¿½squeda. El sitio soporta `?s=<termino>` y a veces `&page=N`.
  */
 function buildSearchUrl({ q = "", page = 1 }) {
   const qs = new URLSearchParams();
   if (q) qs.set("s", q);
-  // muchas veces `page` funciona como 2,3... si hay paginación server-side
+  // muchas veces `page` funciona como 2,3... si hay paginaciï¿½n server-side
   if (page && Number(page) > 1) qs.set("page", String(page));
   const path = qs.toString() ? `/?${qs.toString()}` : "/";
   return `${BASE}${path}`;
@@ -38,7 +38,7 @@ function parseList($) {
   blocks.each((_, el) => {
     const $el = $(el);
 
-    // título + enlace
+    // tï¿½tulo + enlace
     const $a = $el
       .find("h3 a, h2 a, .titulo a, a[href]")
       .filter((i, a) => {
@@ -63,7 +63,7 @@ function parseList($) {
     const rawFecha =
       $el.find("time").attr("datetime") ||
       normalizeText($el.find(".fecha, .date").first().text() || "");
-    const fecha = toISODate(rawFecha); // tolera formatos “12/10/2025”, “2025-10-12”, etc.
+    const fecha = toISODate(rawFecha); // tolera formatos ï¿½12/10/2025ï¿½, ï¿½2025-10-12ï¿½, etc.
 
     // imagen (rara vez presente en resultados)
     const rawImg =
@@ -75,7 +75,7 @@ function parseList($) {
       normalizeItem({
         titulo,
         resumen,
-        enlace,               // nuestro campo estándar
+        enlace,               // nuestro campo estï¿½ndar
         imagen,
         fecha,
         fuente: "El Peruano",
@@ -94,7 +94,7 @@ async function fetchNoticias({
   page = 1,
   limit = 12,
   lang = "all",     // no filtra por idioma en fuente; lo dejamos para el agregador
-  since = null,     // Date o ISO; filtramos aquí si llega
+  since = null,     // Date o ISO; filtramos aquï¿½ si llega
   // especialidad = "administrativo",  // opcional; el cliente puede filtrar por texto
 } = {}) {
   try {
@@ -119,7 +119,7 @@ async function fetchNoticias({
     // Orden: fecha desc (si no hay, queda al final)
     items.sort((a, b) => (new Date(b.fecha || 0) - new Date(a.fecha || 0)));
 
-    // Limita tamaño (defensivo)
+    // Limita tamaï¿½o (defensivo)
     const L = Math.max(1, Math.min(50, Number(limit) || 12));
     return items.slice(0, L);
   } catch (e) {

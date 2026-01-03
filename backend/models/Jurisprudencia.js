@@ -1,170 +1,199 @@
 // backend/models/Jurisprudencia.js
 // ============================================================
-// 🦉 BúhoLex | Modelo unificado de Jurisprudencia
+// 🦉 BúhoLex | Modelo unificado de Jurisprudencia (ENTERPRISE)
 // ------------------------------------------------------------
-// - Diseñado para JNS (Poder Judicial) y futuras fuentes (TC, Plenos, etc.)
-// - Guarda listado + ficha completa en un solo documento
-// - Pensado para filtros clásicos + búsqueda semántica / contexto IA
-// - Distingue PDF oficial y texto de trabajo para LitisBot
+// - Un solo documento (listado + detalle)
+// - Normalización canónica en pre-validate
+// - Dedupe: hash único + índice único parcial por (fuente,titulo,fechaResolucion)
+// - Embeddings y trazabilidad de origen
 // ============================================================
 
 import mongoose from "mongoose";
+import { normalizeJurisprudencia } from "../services/jurisprudenciaNormalizer.js";
 
 const { Schema } = mongoose;
 
-/* ----------------------------- helpers básicos ---------------------------- */
+/* ----------------------------- helpers ----------------------------- */
 
-/**
- * Normaliza un valor a string recortado.
- * Devuelve "" si viene null/undefined.
- */
 function cleanString(v) {
   if (v === null || v === undefined) return "";
-  const s = String(v);
-  return s.trim();
+  return String(v).replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
 }
 
-/**
- * Normaliza arrays de strings:
- * - Convierte todo a string
- * - Hace trim
- * - Elimina vacíos
- * - Elimina duplicados
- */
 function cleanArrayStrings(arr) {
   if (!Array.isArray(arr)) return [];
-  return Array.from(
-    new Set(
-      arr
-        .map((s) => (s === null || s === undefined ? "" : String(s).trim()))
-        .filter((s) => s.length > 0)
-    )
-  );
+  const out = [];
+  const seen = new Set();
+  for (const it of arr) {
+    const s = cleanString(it);
+    if (!s) continue;
+    const k = s.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+  }
+  return out;
 }
 
-/* --------------------------------- schema -------------------------------- */
+function safeDate(d) {
+  if (!d) return null;
+  try {
+    const x = new Date(d);
+    return Number.isNaN(x.getTime()) ? null : x;
+  } catch {
+    return null;
+  }
+}
+
+function safeSet(doc, key, value) {
+  // evita setear undefined y evita tocar _id
+  if (key === "_id") return;
+  if (value === undefined) return;
+  doc.set(key, value, { strict: true });
+}
+
+/* ----------------------------- schema ----------------------------- */
 
 const JurisprudenciaSchema = new Schema(
   {
-    // --------------------------- Identificadores base ---------------------- //
-    uuid: { type: String, index: true }, // ej. id interno de JNS si lo tenemos
-    recurso: { type: String, default: "" }, // "Casación", "Recurso de Nulidad", etc.
-    numeroExpediente: { type: String, index: true }, // "702-2019", "1234-2020-LIMA", etc.
-    numeroProceso: { type: String, default: "" }, // si la fuente lo distingue
-    tipoResolucion: { type: String, index: true }, // "Sentencia", "Auto", etc.
-
-    // ---------------------- Órgano / estructura judicial ------------------- //
-    salaSuprema: { type: String, default: "" },
-    organo: { type: String, index: true }, // usado también en el frontend
-    instancia: { type: String, default: "" }, // "Suprema", "Superior", etc.
-    especialidad: { type: String, index: true }, // Civil, Penal, Const., etc.
-    materia: { type: String, index: true },
-    tema: { type: String, index: true },
-    subtema: { type: String, index: true },
-
-    // ----------------------------- Datos de tiempo ------------------------- //
-    fechaResolucion: { type: Date, index: true },
-    fechaPublicacion: { type: Date },
-    fechaScraping: { type: Date, default: Date.now, index: true },
-
-    // --------------------------- Contenido jurídico ------------------------ //
-    titulo: { type: String, index: true }, // título human-readable
-    sumilla: { type: String },
-    resumen: { type: String }, // síntesis general (para tarjetas / TTS)
-    pretensionDelito: { type: String, index: true }, // pretensión o delito principal
-    normaDerechoInterno: { type: String },
-    palabrasClave: { type: [String], default: [] }, // array limpio
-    fundamentos: { type: String }, // fundamentos destacados, si se extraen
-    parteResolutiva: { type: String },
-    baseLegal: { type: String },
-
-    // --------------- Contenido bruto / HTML / texto completo --------------- //
-    contenidoHTML: { type: String }, // ficha completa en HTML limpio
-    texto: { type: String }, // versión "plain text" general
-
-    // 🔥 Capa IA: texto de trabajo para LitisBot (no probatorio)
-    textoIA: { type: String, default: "" }, // texto plano extraído de PDF / fuentes
-    esTextoOficial: { type: Boolean, default: false }, // casi siempre false en scrapers
-
-    // Fase B: control de versión del contexto que construimos para LitisBot
-    contextVersion: {
-      type: Number,
-      default: 1,
-    },
-
-    // --------------------------- Recursos externos ------------------------- //
-    urlResolucion: { type: String }, // enlace directo al PDF o servletdescarga (legacy)
-    pdfUrl: { type: String }, // puede diferir de urlResolucion en futuras fuentes
-
-    // Canon: dónde está el PDF que el usuario considera “oficial”
-    pdfOficialUrl: { type: String }, // PJ o storage propio en el futuro
-
-    fuente: {
-      type: String,
-      default: "Poder Judicial",
-      index: true,
-    }, // "PJ - JNS", "TC", etc.
-    fuenteUrl: { type: String }, // url pública de la ficha original
-
-    // Opcional, pero muy útil para distinguir origen interno
-    origen: {
-      type: String,
-      default: "JNS",
-      index: true,
-    }, // "JNS", "TC", "dummy", etc.
-
-    // ----------------------------- Estado / flags -------------------------- //
-    estado: {
-      type: String,
-      default: "Vigente",
-      index: true,
-    }, // "Vigente", "No vigente", etc.
-    destacado: { type: Boolean, default: false, index: true },
-    masCitada: { type: Boolean, default: false, index: true },
-    tags: { type: [String], default: [] }, // internos: ["interno", "jns", "pro"] etc.
-
-    // ------------------ Hash antifraude / control duplicados --------------- //
+    // =========================
+    // 1) IDENTIFICADORES
+    // =========================
+    uuid: { type: String, default: "", index: true },
     hash: { type: String, unique: true, sparse: true, index: true },
 
-    // -------------------- Campo libre para extras del scraper -------------- //
-    extra: { type: Schema.Types.Mixed },
+    // =========================
+    // 2) REFERENCIAS JUDICIALES
+    // =========================
+    numeroExpediente: { type: String, default: "", index: true },
+    numeroProceso: { type: String, default: "" },
 
-    // (Opcional) vector embeddings para búsquedas semánticas
-    // embedVector: { type: [Number], index: "vector" | "2dsphere" según motor },
+    recurso: { type: String, default: "", index: true },
+    tipoResolucion: { type: String, default: "", index: true },
+
+    // =========================
+    // 3) ÓRGANO / CLASIFICACIÓN
+    // =========================
+    organo: { type: String, default: "", index: true },
+    salaSuprema: { type: String, default: "" },
+    instancia: { type: String, default: "" },
+
+    especialidad: { type: String, default: "", index: true },
+    materia: { type: String, default: "", index: true },
+    tema: { type: String, default: "", index: true },
+    subtema: { type: String, default: "", index: true },
+
+    // =========================
+    // 4) FECHAS
+    // =========================
+    fechaResolucion: { type: Date, default: null, index: true },
+    fechaPublicacion: { type: Date, default: null },
+    fechaScraping: { type: Date, default: Date.now, index: true },
+
+    // =========================
+    // 5) CONTENIDO (UI / LEGAL)
+    // =========================
+    titulo: { type: String, default: "", index: true },
+    sumilla: { type: String, default: "" },
+    resumen: { type: String, default: "" },
+    resumenCorto: { type: String, default: "" },
+
+    pretensionDelito: { type: String, default: "", index: true },
+    normaDerechoInterno: { type: String, default: "" },
+
+    palabrasClave: { type: [String], default: [] },
+
+    fundamentos: { type: String, default: "" },
+    parteResolutiva: { type: String, default: "" },
+    baseLegal: { type: String, default: "" },
+
+    // =========================
+    // 6) CONTENIDO COMPLETO
+    // =========================
+    contenidoHTML: { type: String, default: "" },
+
+    // Texto legacy / repositorio
+    texto: { type: String, default: "" },
+
+    // Texto de trabajo IA (no probatorio)
+    textoIA: { type: String, default: "" },
+
+    // Texto oficial (si lo guardas explícito)
+    textoOficial: { type: String, default: "" },
+
+    textQuality: {
+      type: String,
+      default: "sin_texto",
+      enum: ["oficial", "extraccion_ia", "repositorio_general", "sin_texto"],
+      index: true,
+    },
+    esTextoOficial: { type: Boolean, default: false },
+    contextVersion: { type: Number, default: 2 },
+
+    // =========================
+    // 7) RECURSOS / FUENTES
+    // =========================
+    urlResolucion: { type: String, default: "" },
+    pdfUrl: { type: String, default: "" },
+    pdfOficialUrl: { type: String, default: "" },
+
+    // para carga manual local (solo backend)
+    pdfLocalPath: { type: String, default: "" },
+
+    fuente: { type: String, default: "Poder Judicial", index: true },
+    fuenteUrl: { type: String, default: "" },
+    origen: { type: String, default: "JNS", index: true },
+
+    // =========================
+    // 8) ESTADO / FLAGS
+    // =========================
+    estado: { type: String, default: "Vigente", index: true },
+    destacado: { type: Boolean, default: false, index: true },
+    masCitada: { type: Boolean, default: false, index: true },
+    citadaCount: { type: Number, default: 0, index: true },
+    tags: { type: [String], default: [], index: true },
+
+    // =========================
+    // 9) EMBEDDINGS
+    // =========================
+    embedding: { type: [Number], default: undefined }, // undefined => “pendiente”
+    embeddingModel: { type: String, default: "" },
+    embeddingUpdatedAt: { type: Date, default: null },
+
+    // =========================
+    // 10) EXTRAS (SCRAPER)
+    // =========================
+    extra: { type: Schema.Types.Mixed, default: {} },
   },
   {
-    timestamps: true, // createdAt / updatedAt
+    timestamps: true,
+    minimize: false,
+    strict: true,
   }
 );
 
-/* ----------------------------- virtuales útiles --------------------------- */
+/* ----------------------------- virtuals ----------------------------- */
 
-// Alias "expediente" para evitar disparidades en frontend/servicios
 JurisprudenciaSchema.virtual("expediente").get(function () {
   return this.numeroExpediente;
 });
 
-// Alias "pretension" para prompts / builder de contexto
 JurisprudenciaSchema.virtual("pretension").get(function () {
   return this.pretensionDelito;
 });
 
-// Alias "organoJurisdiccional" para mantener naming neutro
 JurisprudenciaSchema.virtual("organoJurisdiccional").get(function () {
   return this.organo;
 });
 
-// Virtual rápido para saber si tenemos texto completo “general”
 JurisprudenciaSchema.virtual("tieneTextoCompleto").get(function () {
   return !!(this.texto && this.texto.trim().length > 0);
 });
 
-// Virtual para saber si tenemos texto IA (para contexto de LitisBot)
 JurisprudenciaSchema.virtual("tieneTextoIA").get(function () {
   return !!(this.textoIA && this.textoIA.trim().length > 0);
 });
 
-// Virtual para resolver cuál es el PDF “efectivo” a mostrar
 JurisprudenciaSchema.virtual("pdfUrlEfectivo").get(function () {
   return (
     (this.pdfOficialUrl && this.pdfOficialUrl.trim()) ||
@@ -174,113 +203,101 @@ JurisprudenciaSchema.virtual("pdfUrlEfectivo").get(function () {
   );
 });
 
-/* ---------------------------- normalización hook -------------------------- */
+JurisprudenciaSchema.methods.getSafePdfUrl = function () {
+  return this.pdfUrlEfectivo || "";
+};
 
-JurisprudenciaSchema.pre("save", function (next) {
-  // Identificadores
-  this.recurso = cleanString(this.recurso);
-  this.numeroExpediente = cleanString(this.numeroExpediente);
-  this.numeroProceso = cleanString(this.numeroProceso);
-  this.tipoResolucion = cleanString(this.tipoResolucion);
+/* ------------------------ normalización hook ------------------------ */
 
-  // Órgano / estructura judicial
-  this.salaSuprema = cleanString(this.salaSuprema);
-  this.organo = cleanString(this.organo);
-  this.instancia = cleanString(this.instancia);
-  this.especialidad = cleanString(this.especialidad);
-  this.materia = cleanString(this.materia);
-  this.tema = cleanString(this.tema);
-  this.subtema = cleanString(this.subtema);
+JurisprudenciaSchema.pre("validate", function (next) {
+  try {
+    const plain = this.toObject({ depopulate: true, virtuals: false });
 
-  // Contenido jurídico
-  this.titulo = cleanString(this.titulo);
-  this.sumilla = cleanString(this.sumilla);
-  this.resumen = cleanString(this.resumen);
-  this.pretensionDelito = cleanString(this.pretensionDelito);
-  this.normaDerechoInterno = cleanString(this.normaDerechoInterno);
-  this.fundamentos = cleanString(this.fundamentos);
-  this.parteResolutiva = cleanString(this.parteResolutiva);
-  this.baseLegal = cleanString(this.baseLegal);
+    // Limpieza mínima ANTES del normalizador
+    plain.titulo = cleanString(plain.titulo);
+    plain.fuente = cleanString(plain.fuente);
+    plain.origen = cleanString(plain.origen);
 
-  // Contenido bruto
-  this.contenidoHTML = cleanString(this.contenidoHTML);
-  this.texto = cleanString(this.texto);
-  this.textoIA = cleanString(this.textoIA);
+    plain.fechaResolucion = safeDate(plain.fechaResolucion);
+    plain.fechaPublicacion = safeDate(plain.fechaPublicacion);
+    plain.fechaScraping = safeDate(plain.fechaScraping) || new Date();
 
-  // Recursos externos
-  this.urlResolucion = cleanString(this.urlResolucion);
-  this.pdfUrl = cleanString(this.pdfUrl || this.urlResolucion);
-  this.pdfOficialUrl = cleanString(
-    this.pdfOficialUrl || this.pdfUrl || this.urlResolucion
-  );
+    plain.tags = cleanArrayStrings(plain.tags);
+    plain.palabrasClave = cleanArrayStrings(plain.palabrasClave);
 
-  this.fuente = cleanString(this.fuente || "Poder Judicial");
-  this.fuenteUrl = cleanString(this.fuenteUrl);
+    const { normalized } = normalizeJurisprudencia(plain);
 
-  // Origen interno del registro (JNS, TC, dummy, etc.)
-  this.origen = cleanString(this.origen || "JNS");
+    // Set seguro (no rompe strict / no toca _id)
+    for (const [k, v] of Object.entries(normalized || {})) {
+      safeSet(this, k, v);
+    }
 
-  // Estado / tags
-  this.estado = cleanString(this.estado || "Vigente");
-
-  this.palabrasClave = cleanArrayStrings(this.palabrasClave);
-  this.tags = cleanArrayStrings(this.tags);
-
-  // contextVersion mínimo 1
-  if (typeof this.contextVersion !== "number" || this.contextVersion <= 0) {
-    this.contextVersion = 1;
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  next();
 });
 
-/* ------------------------------- índices ---------------------------------- */
+/* ----------------------------- índices ----------------------------- */
 
-// Texto completo básico (para búsquedas y futuros embeddings)
+// Índice compuesto para listados
 JurisprudenciaSchema.index(
   {
-    titulo: "text",
-    sumilla: "text",
-    resumen: "text",
-    pretensionDelito: "text",
-    normaDerechoInterno: "text",
-    palabrasClave: "text",
-    materia: "text",
-    texto: "text",
-    textoIA: "text", // IA trabaja principalmente sobre este campo
+    origen: 1,
+    especialidad: 1,
+    materia: 1,
+    tema: 1,
+    fechaResolucion: -1,
+    createdAt: -1,
   },
+  { name: "juris_list_index" }
+);
+
+JurisprudenciaSchema.index(
+  { citadaCount: -1, createdAt: -1 },
+  { name: "juris_citada_index" }
+);
+
+JurisprudenciaSchema.index(
+  { destacado: 1, fechaResolucion: -1 },
+  { name: "juris_destacado_index" }
+);
+
+JurisprudenciaSchema.index(
+  { createdAt: -1 },
+  { name: "juris_created_index" }
+);
+
+// ✅ DEDUPE enterprise por (fuente,titulo,fechaResolucion) SOLO cuando hay fecha válida
+JurisprudenciaSchema.index(
+  { fuente: 1, titulo: 1, fechaResolucion: 1 },
   {
-    name: "juris_text_index",
-    default_language: "spanish",
+    name: "juris_dedupe_fuente_titulo_fecha",
+    unique: true,
+    partialFilterExpression: {
+      fuente: { $type: "string", $ne: "" },
+      titulo: { $type: "string", $ne: "" },
+      fechaResolucion: { $type: "date" },
+    },
   }
 );
 
-// Los campos más usados ya tienen index: numeroExpediente, organo, especialidad,
-// materia, tema, subtema, fechaResolucion, fechaScraping, fuente, estado, etc.
+/* --------------------------- toJSON / toObject --------------------------- */
 
-/* --------------------------- toJSON / toObject ---------------------------- */
+function transformOut(_doc, ret) {
+  ret.id = String(ret._id || "");
+  delete ret._id;
+  delete ret.__v;
+  return ret;
+}
 
-JurisprudenciaSchema.set("toJSON", {
-  virtuals: true,
-  versionKey: false,
-  transform(_doc, ret) {
-    ret.id = ret._id;
-    delete ret._id;
-    return ret;
-  },
-});
-
+JurisprudenciaSchema.set("toJSON", { virtuals: true, transform: transformOut });
 JurisprudenciaSchema.set("toObject", {
   virtuals: true,
-  versionKey: false,
-  transform(_doc, ret) {
-    ret.id = ret._id;
-    delete ret._id;
-    return ret;
-  },
+  transform: transformOut,
 });
 
-/* --------------------------------- export -------------------------------- */
+/* -------------------------------- export -------------------------------- */
 
 const Jurisprudencia =
   mongoose.models.Jurisprudencia ||

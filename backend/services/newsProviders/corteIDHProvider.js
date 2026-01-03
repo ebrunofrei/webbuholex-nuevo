@@ -1,8 +1,8 @@
 // ============================================================
-// ?? BúhoLex | Provider Corte IDH
+// ?? Bï¿½hoLex | Provider Corte IDH
 // - Fuentes candidatas: Jurisprudencia (docs), Comunicados, Noticias
 // - Contrato: export function fetchNoticias({ q, limit, since, lang, especialidad })
-// - Normaliza a tu formato estándar del agregador
+// - Normaliza a tu formato estï¿½ndar del agregador
 // ============================================================
 import * as cheerio from "cheerio";
 import {
@@ -25,7 +25,7 @@ function mediaScore(n) {
   return n?.video ? 2 : n?.imagen ? 1 : 0;
 }
 
-// -------- parsers específicos por tipo de página ----------
+// -------- parsers especï¿½ficos por tipo de pï¿½gina ----------
 function parseJurisprudencia($) {
   const out = [];
   // En "jurisprudencia.cfm" suele haber enlaces directos a /docs/...
@@ -39,10 +39,10 @@ function parseJurisprudencia($) {
     out.push(
       normalizeItem({
         titulo,
-        resumen: "Documento jurídico / fallo reciente",
+        resumen: "Documento jurï¿½dico / fallo reciente",
         enlace,
-        fecha: null, // no siempre está en el listado
-        imagen: "",  // no aplicaría; PDF/Doc
+        fecha: null, // no siempre estï¿½ en el listado
+        imagen: "",  // no aplicarï¿½a; PDF/Doc
         fuente: "Corte IDH",
         tipo: "juridica",
         especialidad: "derechos humanos",
@@ -55,14 +55,14 @@ function parseJurisprudencia($) {
 
 function parseComunicadosONoticias($) {
   const out = [];
-  // Bloques comunes (varían por versión del CMS)
+  // Bloques comunes (varï¿½an por versiï¿½n del CMS)
   const cards = $(
     "article, .views-row, .noticia, .news__item, .item, .lista a, .listado a"
   );
   cards.each((_, el) => {
     const $el = $(el);
 
-    // título + enlace
+    // tï¿½tulo + enlace
     const $a = $el
       .find("h3 a, h2 a, .title a, a[href]")
       .filter((i, a) => {
@@ -120,17 +120,17 @@ async function fetchNoticias({
   especialidad = "derechos humanos",
 } = {}) {
   try {
-    // Trae la primera página que responda entre las candidatas
+    // Trae la primera pï¿½gina que responda entre las candidatas
     const html = await fetchHTML(CANDIDATES, { timeout: 15000 });
     if (!html) return [];
 
     const $ = cheerio.load(html);
-    // Heurística: si hay docs -> jurisprudencia; si no, comunicados/noticias
+    // Heurï¿½stica: si hay docs -> jurisprudencia; si no, comunicados/noticias
     const isDocs = $("a[href*='/docs/']").length > 3;
 
     let items = isDocs ? parseJurisprudencia($) : parseComunicadosONoticias($);
 
-    // Filtro por since (límite temporal)
+    // Filtro por since (lï¿½mite temporal)
     if (since) {
       const d = new Date(since);
       if (!Number.isNaN(+d)) {
@@ -170,7 +170,7 @@ async function fetchNoticias({
   }
 }
 
-// Compat (si lo estabas llamando así en algún sitio viejo)
+// Compat (si lo estabas llamando asï¿½ en algï¿½n sitio viejo)
 export async function fetchCorteIDH(opts = {}) {
   return fetchNoticias({ limit: 10, ...opts });
 }

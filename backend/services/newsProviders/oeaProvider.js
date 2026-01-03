@@ -1,10 +1,10 @@
 // ============================================================
-// ?? BúhoLex | Provider OEA (RSS)
+// ?? Bï¿½hoLex | Provider OEA (RSS)
 // Contrato: fetchNoticias({ q, page, limit, lang, since, especialidad })
 // - Lee RSS oficiales de la OEA (dos endpoints).
 // - Parser RSS ligero (sin dependencias).
 // - Normaliza con normalizeItem para encajar con el resto.
-// - Soporta filtros q/lang/since y paginación.
+// - Soporta filtros q/lang/since y paginaciï¿½n.
 // ============================================================
 
 import {
@@ -45,7 +45,7 @@ function parseRSSItem(block) {
     fecha: toISODate(pub),
     fuente: "OEA",
     tipo: "juridica",
-    especialidad: "internacional", // OEA ? DDHH / internacional público (si quieres: clasificar por keywords)
+    especialidad: "internacional", // OEA ? DDHH / internacional pï¿½blico (si quieres: clasificar por keywords)
     lang: "es",
   };
 }
@@ -91,7 +91,7 @@ async function fetchNoticias({
   limit = 12,
   lang = "all",
   since = null,
-  // especialidad (opcional, no filtramos duro aquí)
+  // especialidad (opcional, no filtramos duro aquï¿½)
 } = {}) {
   try {
     let raw = [];
@@ -132,7 +132,7 @@ async function fetchNoticias({
     // orden (fecha desc)
     items.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
 
-    // paginación
+    // paginaciï¿½n
     const L = Math.max(1, Math.min(50, Number(limit) || 12));
     const P = Math.max(1, Number(page) || 1);
     const start = (P - 1) * L;

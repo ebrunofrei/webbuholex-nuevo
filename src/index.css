@@ -1,19 +1,40 @@
+/* ============================================================
+   🦉 BÚHOLEX — INDEX.CSS OPTIMIZADO v4.0
+   Limpio · Sin duplicados · Estable · 100% compatible
+============================================================ */
+
 /* ===== Tailwind ===== */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Reset global mínimo ===== */
+/* ============================================================
+   RESET GLOBAL + IDENTIDAD VISUAL
+============================================================ */
 html, body, #root {
-  height: 100%;
   margin: 0;
   padding: 0;
-  font-family: 'Inter', system-ui, sans-serif;
-  background: #fff;     /* Blanco institucional */
-  color: #2b1107;       /* Marrón institucional */
+  height: 100%;                /* ← evita scroll lock */
+  overflow-x: hidden;
+  overflow-y: auto;            /* ← scroll global seguro */
+  font-family: "Inter", system-ui, sans-serif;
+  background: #ffffff;         /* Blanco institucional */
+  color: #2b1107;
 }
 
-/* ===== Scrollbar (1 sola definición) ===== */
+/* Links */
+a { color: #a52e00; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Inputs */
+input, textarea, button, select { font-family: inherit; }
+
+/* Safe bottom (iPhone notch) */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+/* ============================================================
+   CUSTOM SCROLLBAR — elegante y sobrio
+============================================================ */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: #fff; }
 ::-webkit-scrollbar-thumb {
@@ -23,61 +44,59 @@ html, body, #root {
 }
 ::-webkit-scrollbar-thumb:hover { background-color: #a52e00; }
 
-/* ===== Helpers ===== */
+/* Scrollbar oculto para contenedores específicos */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
-input, textarea, button, select { font-family: inherit; }
-a { color: #a52e00; text-decoration: none; }
-a:hover { text-decoration: underline; }
 
-/* ===== Estilos institucionales reutilizables (provenían de App.css) ===== */
+/* ============================================================
+   COMPONENTES BÚHOLEX — Layout institucional
+============================================================ */
+
 .layout-buholex {
   display: flex;
   min-height: 100vh;
   width: 100vw;
   background: #fff;
 }
+
 .sidebar-buholex {
   width: 230px;
   min-width: 200px;
   background: linear-gradient(180deg, #a42409 0%, #fff7f0 100%);
   color: #5b2300;
   min-height: 100vh;
+  box-shadow: 2px 0 16px #a4240933;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  box-shadow: 2px 0 16px 0 #a4240933;
   z-index: 10;
 }
+
 .main-content-buholex {
   flex: 1;
-  min-height: 100vh;
   background: #f3f7fe;
-  padding: 0 1.5rem 1.5rem 1.5rem;
-  text-align: left;
+  padding: 0 1.5rem 1.5rem;
   overflow-x: auto;
   position: relative;
+  text-align: left;
 }
+
 .navbar-buholex {
-  width: 100%;
   background: #fff;
   box-shadow: 0 4px 18px -8px #c14e1699;
   padding: 0.6rem 1.6rem;
   position: sticky; top: 0; z-index: 20;
 }
+
 .footer-buholex {
-  width: 100%;
-  padding: 1.1rem 1rem 0.9rem 1rem;
-  text-align: center;
   background: #a42409;
-  color: #fff;
-  font-size: 0.93rem;
+  color: white;
+  padding: 1rem;
+  text-align: center;
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
-  margin-top: 18px;
-  box-shadow: 0 -4px 12px 0 #a4240933;
+  box-shadow: 0 -4px 12px #a4240933;
 }
+
 .card-buholex {
   background: #fff;
   border-radius: 18px;
@@ -86,65 +105,138 @@ a:hover { text-decoration: underline; }
   margin-bottom: 1.6rem;
 }
 
-h1, h2, h3 { color: #a42409; font-weight: 700; margin-top: 0; }
+/* ============================================================
+   HEADINGS
+============================================================ */
+h1, h2, h3 {
+  color: #a42409;
+  font-weight: 700;
+  margin-top: 0;
+}
 
-/* ===== Responsive ===== */
+/* ============================================================
+   RESPONSIVE
+============================================================ */
 @media (max-width: 900px) {
-  .sidebar-buholex { width: 72px; min-width: 56px; padding: 0; font-size: 13px; }
+  .sidebar-buholex { width: 72px; min-width: 56px; }
   .main-content-buholex { padding: 0.5rem; }
 }
 @media (max-width: 650px) {
   .layout-buholex { flex-direction: column; }
   .sidebar-buholex {
-    width: 100vw; min-width: 100vw; min-height: unset;
-    box-shadow: none; border-bottom: 3px solid #a42409;
-    flex-direction: row; overflow-x: auto;
+    width: 100vw;
+    min-height: unset;
+    flex-direction: row;
+    overflow-x: auto;
+    border-bottom: 3px solid #a42409;
   }
   .main-content-buholex { padding: 0.4rem; }
 }
 
-/* ===== Print limpio ===== */
+/* ============================================================
+   PRINT MODE
+============================================================ */
 @media print {
-  .sidebar-buholex, .navbar-buholex, .footer-buholex { display: none !important; }
-  .main-content-buholex { background: #fff !important; padding: 0 !important; }
+  .sidebar-buholex,
+  .navbar-buholex,
+  .footer-buholex {
+    display: none !important;
+  }
+  .main-content-buholex {
+    background: white !important;
+    padding: 0 !important;
+  }
 }
 
+/* ============================================================
+   ANIMACIONES LITISBOT — bubble pulse · typing dots
+============================================================ */
+
+/* Bubble heartbeat lento */
 @keyframes litis-bubble-pulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(92, 46, 11, 0.3);
-    background-color: #ffffff;
-  }
-  50% {
-    transform: scale(1.06);
-    box-shadow: 0 0 18px 0 rgba(92, 46, 11, 0.45);
-    background-color: #5C2E0B;
-  }
+  0%, 70%, 100% { transform: scale(1); }
+  8%, 18% { transform: scale(1.06); }
+  12%, 22% { transform: scale(1); }
+}
+.litis-bubble-pulse { animation: litis-bubble-pulse 3s infinite ease-in-out; }
+
+/* Typing dots */
+.litis-typing-dot {
+  width: 6px; height: 6px;
+  background: #5c2e0b;
+  border-radius: 9999px;
+  opacity: .25;
+  animation: litisDot 1s infinite ease-in-out;
+}
+.litis-typing-dot-delay-1 { animation-delay: .15s; }
+.litis-typing-dot-delay-2 { animation-delay: .3s; }
+
+@keyframes litisDot {
+  0% { transform: translateY(0); opacity: .25; }
+  30% { transform: translateY(-3px); opacity: .9; }
+  60% { transform: translateY(0); opacity: .5; }
+  100% { transform: translateY(0); opacity: .25; }
 }
 
-.litis-bubble-pulse {
-  animation: litis-bubble-pulse 3s ease-in-out infinite;
+/* Fade-in suavizado */
+@keyframes fadeInSlow { from { opacity:0; } to { opacity:1; } }
+.animate-fadeInSlow { animation: fadeInSlow .6s ease-out; }
+
+/* ============================================================
+   CHAT — Botón “bajar al final” estilo ChatGPT
+============================================================ */
+.litis-scroll-chatgpt {
+  position: absolute;
+  left: 50%; bottom: 5.5rem;
+  transform: translateX(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  animation: scrollBtnFadeIn .18s ease-out;
+}
+.litis-scroll-chatgpt-icon {
+  width: 40px; height: 40px; border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(0,0,0,.18);
+  display: flex; align-items: center; justify-content: center;
+  transition: .18s ease-out;
+}
+.litis-scroll-chatgpt:hover .litis-scroll-chatgpt-icon {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(0,0,0,.22);
+}
+@keyframes scrollBtnFadeIn {
+  0% { opacity:0; transform:translate(-50%,6px); }
+  100% { opacity:1; transform:translate(-50%,0); }
 }
 
-@keyframes litis-bubble-pulse {
-  /* normal */
-  0%, 70%, 100% {
-    transform: scale(1);
-  }
-
-  /* primer latido */
-  8% {
-    transform: scale(1.06);
-  }
-  12% {
-    transform: scale(1);
-  }
-
-  /* segundo latido */
-  18% {
-    transform: scale(1.06);
-  }
-  22% {
-    transform: scale(1);
-  }
+/* Input del chat siempre encima */
+.litisbot-input-zone {
+  position: relative !important;
+  z-index: 999999 !important;
 }
+
+/* Panel TTS */
+.litisbot-tts-panel {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* ============================================================
+   REACT BIG CALENDAR — efectos
+============================================================ */
+.rbc-event {
+  transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+}
+.rbc-event:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 8px 18px rgba(0,0,0,.18);
+}
+.rbc-month-view .rbc-day-bg:hover {
+  background: rgba(176, 58, 26, 0.06);
+}
+
+/* ============================================================
+   FIN
+============================================================ */

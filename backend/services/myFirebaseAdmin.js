@@ -1,35 +1,59 @@
-import { initializeApp, cert, applicationDefault, getApps } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getAuth } from "firebase-admin/auth";
-import { getStorage } from "firebase-admin/storage";
+// ============================================================================
+// 🔐 Firebase Admin — Inicialización Canónica (BúhoLex)
+// ----------------------------------------------------------------------------
+// - SOLO autenticación y servicios auxiliares
+// - MongoDB sigue siendo la base de dominio
+// - Inicialización única (singleton)
+// ============================================================================
+
+import admin from "firebase-admin";
 import fs from "fs";
 import path from "path";
 
-// --- Cargar credenciales desde archivo o fallback a applicationDefault ---
-let serviceAccount = null;
+// ---------------------------------------------------------------------------
+// 📌 Cargar credenciales (archivo local → fallback ADC)
+// ---------------------------------------------------------------------------
+
+let credentialConfig = null;
 
 try {
   const filePath = path.resolve("backend/firebase-service-account.json");
+
   if (fs.existsSync(filePath)) {
-    serviceAccount = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    console.log("✅ Credenciales Firebase cargadas desde archivo JSON");
+    const serviceAccount = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    credentialConfig = admin.credential.cert(serviceAccount);
+    console.log("✅ Firebase Admin: credenciales cargadas desde JSON");
+  } else {
+    console.warn("⚠️ Firebase Admin: usando Application Default Credentials");
+    credentialConfig = admin.credential.applicationDefault();
   }
 } catch (err) {
-  console.error("⚠️ Error leyendo archivo de credenciales Firebase:", err.message);
+  console.error("❌ Error cargando credenciales Firebase:", err.message);
+  credentialConfig = admin.credential.applicationDefault();
 }
 
-const adminApp =
-  getApps().length === 0
-    ? initializeApp(
-        serviceAccount
-          ? { credential: cert(serviceAccount), storageBucket: process.env.FIREBASE_STORAGE_BUCKET }
-          : { credential: applicationDefault(), storageBucket: process.env.FIREBASE_STORAGE_BUCKET }
-      )
-    : getApps()[0];
+// ---------------------------------------------------------------------------
+// 🚀 Inicializar app (singleton real)
+// ---------------------------------------------------------------------------
 
-// --- Exporta servicios ---
-const db = getFirestore(adminApp);
-const auth = getAuth(adminApp);
-const storage = getStorage(adminApp);
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: credentialConfig,
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  });
+}
 
+// ---------------------------------------------------------------------------
+// 🧩 Servicios derivados
+// ---------------------------------------------------------------------------
+
+const db = admin.firestore();
+const auth = admin.auth();
+const storage = admin.storage();
+
+// ---------------------------------------------------------------------------
+// ✅ Exportaciones canónicas
+// ---------------------------------------------------------------------------
+
+export default admin;
 export { db, auth, storage };

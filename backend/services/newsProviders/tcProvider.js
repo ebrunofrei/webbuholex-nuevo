@@ -1,11 +1,11 @@
 // backend/services/newsProviders/tcProvider.js
 // ============================================================
-// ?? BúhoLex | Provider Tribunal Constitucional (TC)
+// ?? Bï¿½hoLex | Provider Tribunal Constitucional (TC)
 // Contrato: fetchNoticias({ max=10, q="", since=null })
 // - Intenta varias rutas conocidas del TC (cambian a veces)
 // - Selectores tolerantes a layout (article, .post, .noticia, etc.)
-// - Normaliza título, resumen, enlace, imagen, fecha, fuente, tipo, especialidad
-// - Filtros locales: since (ISO o Date) y q (búsqueda simple)
+// - Normaliza tï¿½tulo, resumen, enlace, imagen, fecha, fuente, tipo, especialidad
+// - Filtros locales: since (ISO o Date) y q (bï¿½squeda simple)
 // ============================================================
 
 import * as cheerio from "cheerio";
@@ -89,7 +89,7 @@ function pickFecha($el) {
 /* ---------- Provider principal ---------- */
 async function fetchNoticias({ max = 10, q = "", since = null } = {}) {
   const base = "https://www.tc.gob.pe";
-  // El TC ha usado /noticias, /noticias_tc, e incluso categorías
+  // El TC ha usado /noticias, /noticias_tc, e incluso categorï¿½as
   const candidates = [
     `${base}/noticias_tc/`,
     `${base}/noticias/`,
@@ -102,7 +102,7 @@ async function fetchNoticias({ max = 10, q = "", since = null } = {}) {
     if (!html) return [];
 
     const $ = cheerio.load(html);
-    // Conjuntos típicos de listados
+    // Conjuntos tï¿½picos de listados
     const $cards = $(
       "article, .post, .noticia, .news-item, .entry, .listado-noticias article"
     );

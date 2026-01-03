@@ -1,8 +1,8 @@
 // ============================================================
-// ?? BúhoLex | Provider CIJ (Corte Internacional de Justicia)
+// ?? Bï¿½hoLex | Provider CIJ (Corte Internacional de Justicia)
 // - Rutas candidatas: /news, /press-releases, /home
 // - Soporta: q, limit, since, lang, especialidad, page (ignorado)
-// - Devuelve array de ítems normalizados (para aggregator)
+// - Devuelve array de ï¿½tems normalizados (para aggregator)
 // ============================================================
 import * as cheerio from "cheerio";
 import {
@@ -27,7 +27,7 @@ async function fetchNoticias({
   since = null,         // Date o ISO; el aggregator ya lo manda si aplica
   lang = "all",
   especialidad = "internacional",
-  // page se ignora: el listado de CIJ es estático (paginación JS)
+  // page se ignora: el listado de CIJ es estï¿½tico (paginaciï¿½n JS)
 } = {}) {
   try {
     const html = await fetchHTML(CANDIDATES, { timeout: 15000 });
@@ -42,7 +42,7 @@ async function fetchNoticias({
     $cards.each((_, el) => {
       const $el = $(el);
 
-      // Título + enlace (evitar href "#")
+      // Tï¿½tulo + enlace (evitar href "#")
       const $a = $el
         .find("h3 a, h2 a, .node__title a, .title a, a[href]")
         .filter((i, a) => {
@@ -88,7 +88,7 @@ async function fetchNoticias({
         lang, // el helper infiere si no coincide, pero no molesta
       });
 
-      // Garantías mínimas
+      // Garantï¿½as mï¿½nimas
       if (!item.url) item.url = enlace;
       if (!item.id) item.id = enlace;
       if (!item.fuenteNorm) item.fuenteNorm = "cij";
@@ -96,7 +96,7 @@ async function fetchNoticias({
       out.push(item);
     });
 
-    // Filtro temporal (por si el aggregator no lo aplicó)
+    // Filtro temporal (por si el aggregator no lo aplicï¿½)
     let items = out;
     if (since) {
       const d = new Date(since);
@@ -108,7 +108,7 @@ async function fetchNoticias({
       }
     }
 
-    // Filtro por q (tópicos simples, coma separada)
+    // Filtro por q (tï¿½picos simples, coma separada)
     if (q && q.trim()) {
       const toks = q
         .split(",")

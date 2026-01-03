@@ -13,12 +13,12 @@ import { joinApi } from "@/services/apiBase";
 /* =========================
  *  Estado global (módulo)
  * ========================= */
-let _audio;                // <audio> único
-let _muted = false;        // silencio global (on-demand)
-let _lastText = "";        // último texto reproducible
-let _lastOpts = null;      // últimas opciones normalizadas ({voz, rate, pitch})
-let _repeatRemaining = 0;  // repeticiones pendientes (x veces)
-let _loopEnabled = false;  // bucle infinito del último
+let _audio; // <audio> único
+let _muted = false; // silencio global (on-demand)
+let _lastText = ""; // último texto reproducible
+let _lastOpts = null; // últimas opciones normalizadas ({voz, rate, pitch})
+let _repeatRemaining = 0; // repeticiones pendientes (x veces)
+let _loopEnabled = false; // bucle infinito del último
 let _hiddenPaused = false; // se pausó por visibilitychange
 let _playInFlight = false; // guardrail para evitar triggers simultáneos
 let _isUserStopped = false; // bandera: el usuario cortó manualmente
@@ -30,13 +30,13 @@ const IS_BROWSER = typeof window !== "undefined";
 
 // Límite máximo de caracteres a leer en una sola pasada.
 // No queremos lecturas eternas de 20 minutos; mejor en bloques “humanos”.
-const MAX_TTS_CHARS = 1600;
+const MAX_TTS_CHARS = 900;
 
 const VOICE_ALIASES = {
   masculina_profesional: "es-ES-AlvaroNeural",
   masculina_alvaro: "es-ES-AlvaroNeural",
   femenina_profesional: "es-ES-ElviraNeural",
-  // agrega aquí más alias si los uses en la UI
+  // agrega aquí más alias si los usas en la UI
 };
 
 function normalizarVoz(voz) {
@@ -288,12 +288,7 @@ export async function reproducirVoz(
  * Reinicia lectura de un texto arbitrario N veces (times≥1).
  * - stopCurrent=true detiene lo que esté sonando antes de reiniciar
  */
-export async function replayText(
-  texto,
-  opts = {},
-  times = 1,
-  stopCurrent = true
-) {
+export async function replayText(texto, opts = {}, times = 1, stopCurrent = true) {
   if (_muted) return;
 
   const clean = sanitizarTexto(texto);
@@ -335,30 +330,44 @@ export async function loopLast(enable = true) {
  *  Internals de reproducción
  * ========================= */
 async function _play(texto, opts, interrupt = true, signal) {
+  // Abort temprano si ya cancelaron
+  if (signal?.aborted) return;
+
   if (_playInFlight) return; // guardrail simple vs doble click rápido
   _playInFlight = true;
+
   try {
+    if (_muted) return;
+
     if (interrupt) {
       stopVoz();
     }
 
     _isUserStopped = false; // nueva reproducción: onended vuelve a estar activo
 
+    // 🔹 Re-normalizar por seguridad (sin re-truncar: ya viene de sanitizarTexto)
+    let limpio = (texto ?? "").toString().replace(/\s+/g, " ").trim();
+    if (!limpio) return;
+
     const a = getAudio();
 
     // 1) Intento GET (streaming directo)
     try {
       const qs = new URLSearchParams({
-        say: texto,
+        say: limpio,
         voice: opts.voz,
         rate: String(opts.rate),
         pitch: String(opts.pitch),
       });
+
+      a.onended = handleEnded;
+      a.onerror = handleEnded;
       a.src = `${joinApi("/voz")}?${qs.toString()}`;
+
       await withTimeout(a.play(), 8000, "Timeout al reproducir (GET)");
       return "GET";
     } catch {
-      // cae a POST
+      // si falla GET, cae a POST
     }
 
     // 2) Fallback POST (blob)
@@ -370,7 +379,7 @@ async function _play(texto, opts, interrupt = true, signal) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            texto,
+            texto: limpio,
             voz: opts.voz,
             rate: opts.rate,
             pitch: opts.pitch,
@@ -379,12 +388,16 @@ async function _play(texto, opts, interrupt = true, signal) {
         },
         10000
       );
+
       if (!resp.ok) {
         const msg = await resp.text().catch(() => "");
+        // Log de ayuda para debug Azure 400
+        console.error("[vozService] TTS POST fallo:", resp.status, msg);
         throw new Error(
           `TTS POST ${resp.status}: ${msg || "Error al generar audio"}`
         );
       }
+
       const blob = await resp.blob();
       objectURL = URL.createObjectURL(blob);
       a.src = objectURL;
@@ -405,8 +418,9 @@ async function _play(texto, opts, interrupt = true, signal) {
     } finally {
       // si falló play() antes de onended, intenta revocar por seguridad
       try {
-        // si objectURL sigue vivo aquí, lo revocamos
-        // (si se reprodujo y terminó, onended ya lo habrá revocado)
+        if (objectURL) {
+          URL.revokeObjectURL(objectURL);
+        }
       } catch {
         // silencioso
       }

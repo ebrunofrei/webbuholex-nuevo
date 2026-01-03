@@ -1,7 +1,7 @@
 // ============================================================
-// ?? BúhoLex | Provider Gaceta Jurídica
+// ?? Bï¿½hoLex | Provider Gaceta Jurï¿½dica
 // Contrato: async function fetchNoticias({ q, page, limit, lang, since, especialidad })
-// - Intenta primero scrape estático (cheerio).
+// - Intenta primero scrape estï¿½tico (cheerio).
 // - Si falla (cero items) y ENABLE_PUPPETEER=1 ? usa Puppeteer con flags Railway.
 // - Devuelve items normalizados (normalizeItem).
 // ============================================================
@@ -33,7 +33,7 @@ function parseStaticList(html) {
   cards.each((_, el) => {
     const $el = $(el);
 
-    // título + enlace (evita anchors vacíos)
+    // tï¿½tulo + enlace (evita anchors vacï¿½os)
     const $a = $el
       .find("h3 a, h2 a, .titulo a, a[href]")
       .filter((i, a) => {
@@ -73,7 +73,7 @@ function parseStaticList(html) {
         enlace,
         imagen,
         fecha,
-        fuente: "Gaceta Jurídica",
+        fuente: "Gaceta Jurï¿½dica",
         tipo: "juridica",
         // la especialidad la determinamos por texto en el backend/cliente
         lang: "es",
@@ -153,7 +153,7 @@ async function parseWithPuppeteer({ page = 1, limit = 12 } = {}) {
               ? new URL(r.rawImg, LIST_URL).href
               : "",
           fecha: r.rawFecha || "",
-          fuente: "Gaceta Jurídica",
+          fuente: "Gaceta Jurï¿½dica",
           tipo: "juridica",
           lang: "es",
         })
@@ -180,7 +180,7 @@ async function fetchNoticias({
   // especialidad = "", // lo podemos inferir por texto en otra capa
 } = {}) {
   try {
-    // 1) intento estático
+    // 1) intento estï¿½tico
     const html = await fetchHTML(LIST_URL, { timeout: 20000 });
     let items = html ? parseStaticList(html) : [];
 
@@ -201,7 +201,7 @@ async function fetchNoticias({
       }
     }
 
-    // 4) búsqueda simple por q (título/resumen)
+    // 4) bï¿½squeda simple por q (tï¿½tulo/resumen)
     if (q && q.trim()) {
       const tok = q.toLowerCase();
       items = items.filter(
@@ -216,7 +216,7 @@ async function fetchNoticias({
     const L = Math.max(1, Math.min(50, Number(limit) || 12));
     return items.slice(0, L);
   } catch (err) {
-    console.error("? Gaceta Jurídica:", err?.message || err);
+    console.error("? Gaceta Jurï¿½dica:", err?.message || err);
     return [];
   }
 }

@@ -1,16 +1,25 @@
 // src/pages/Home.jsx
 import React from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import logoBuho from "../assets/buho-institucional.png";
+import { useAuth } from "@/context/AuthContext";
 
 // ✅ Usa solo el panel unificado (incluye FAB + lector + lógica completa)
 import NoticiasPanel from "@/features/noticias/NoticiasPanel";
 
 export default function Home() {
+  const navigate = useNavigate();
+  const { user, abrirModalLogin } = useAuth() || {};
+
   const handleOficina = () => {
-    if (window.location.pathname === "/oficina") return;
-    window.location.href = "/oficina";
+    if (user) {
+      // Abogado ya logueado → directo al chat pro
+      navigate("/oficinaVirtual");
+    } else {
+      // Invitado → abrimos modal de login/registro
+      abrirModalLogin("login");
+    }
   };
 
   return (

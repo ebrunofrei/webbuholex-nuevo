@@ -1,7 +1,7 @@
 // ============================================================
-// ?? BúhoLex | Provider JNJ (Junta Nacional de Justicia)
+// ?? Bï¿½hoLex | Provider JNJ (Junta Nacional de Justicia)
 // Contrato: fetchNoticias({ q, page, limit, lang, since, especialidad })
-// - Scrape estático con cheerio (sin navegador).
+// - Scrape estï¿½tico con cheerio (sin navegador).
 // - Tolerante a cambios de layout (selectores amplios).
 // - Normaliza salida con normalizeItem (url/enlace/fecha/imagen/fuente/tipo/lang).
 // ============================================================
@@ -30,7 +30,7 @@ function parseJNJList(html, baseHref) {
   cards.each((_, el) => {
     const $el = $(el);
 
-    // Anchor válido
+    // Anchor vï¿½lido
     const $a = $el
       .find("h3 a, h2 a, .entry-title a, .title a, a[href]")
       .filter((i, a) => {
@@ -47,7 +47,7 @@ function parseJNJList(html, baseHref) {
 
     if (!rawTitle || !enlace) return;
 
-    // Resumen (primer párrafo razonable)
+    // Resumen (primer pï¿½rrafo razonable)
     const rawResumen =
       $el.find(".entry-summary p, .summary p, .excerpt p, p").first().text() ||
       $el.find(".entry-summary, .summary, .excerpt").first().text() ||
@@ -106,13 +106,13 @@ async function fetchNoticias({
     if (!html) return [];
 
     // Determinar baseHref consistente (tomamos la primera base candidata por simplicidad)
-    // Si tu fetchHTML te puede devolver la URL final, úsala. Si no, usamos BASES[0].
+    // Si tu fetchHTML te puede devolver la URL final, ï¿½sala. Si no, usamos BASES[0].
     const baseHref = BASES.find((b) => html.includes("jnj")) || BASES[0];
 
     // 2) Parseo
     let items = parseJNJList(html, baseHref);
 
-    // 3) Filtrado por since (si llega). Tu política es = 2 días para jurídicas.
+    // 3) Filtrado por since (si llega). Tu polï¿½tica es = 2 dï¿½as para jurï¿½dicas.
     if (since) {
       const d = new Date(since);
       if (!Number.isNaN(+d)) {
@@ -123,7 +123,7 @@ async function fetchNoticias({
       }
     }
 
-    // 4) Filtro por q (título/resumen simple)
+    // 4) Filtro por q (tï¿½tulo/resumen simple)
     if (q && q.trim()) {
       const tok = q.toLowerCase();
       items = items.filter(
@@ -133,7 +133,7 @@ async function fetchNoticias({
       );
     }
 
-    // 5) Filtro lang (casi siempre “es” en JNJ, pero lo dejamos por coherencia)
+    // 5) Filtro lang (casi siempre ï¿½esï¿½ en JNJ, pero lo dejamos por coherencia)
     if (lang && lang !== "all") {
       const langTok = lang.toLowerCase();
       items = items.filter((n) =>
@@ -144,7 +144,7 @@ async function fetchNoticias({
     // 6) Orden por fecha desc
     items.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
 
-    // 7) Paginación
+    // 7) Paginaciï¿½n
     const L = Math.max(1, Math.min(50, Number(limit) || 12));
     const P = Math.max(1, Number(page) || 1);
     const start = (P - 1) * L;

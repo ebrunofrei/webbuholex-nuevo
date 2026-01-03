@@ -1,0 +1,72 @@
+/* ============================================================
+   🦉 LitisBot Chat PRO — Theme Base
+   Accesibilidad • Baja visión • Claro / Oscuro
+============================================================ */
+
+/* ---------- TIPOGRAFÍA ---------- */
+:root {
+  --font-chat: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Desktop */
+  --text-chat-size: 18px;
+  --text-chat-line: 1.7;
+
+  /* Mobile */
+  --text-chat-size-mobile: 16.5px;
+}
+
+/* ---------- COLORES (CLARO) ---------- */
+:root {
+  --chat-bg: #ffffff;
+
+  --chat-text-primary: #111111;
+  --chat-text-secondary: #4b4b4b;
+
+  --chat-user-bg: #3a2a1a;      /* marrón sobrio */
+  --chat-user-text: #ffffff;
+
+  --chat-bot-bg: #f6f6f6;
+  --chat-bot-text: #111111;
+
+  --chat-border-soft: #e5e5e5;
+}
+
+/* ---------- COLORES (OSCURO) ---------- */
+[data-theme="dark"] {
+  --chat-bg: #0f0f0f;
+
+  --chat-text-primary: #f2f2f2;
+  --chat-text-secondary: #cfcfcf;
+
+  --chat-user-bg: #5a3b1f;
+  --chat-user-text: #ffffff;
+
+  --chat-bot-bg: #1c1c1c;
+  --chat-bot-text: #f2f2f2;
+
+  --chat-border-soft: #2a2a2a;
+}
+
+/* ---------- BASE CHAT ---------- */
+.litisbot-chat {
+  font-family: var(--font-chat);
+  background: var(--chat-bg);
+  color: var(--chat-text-primary);
+}
+
+/* Texto general del chat */
+.litisbot-chat p,
+.litisbot-chat span,
+.litisbot-chat div {
+  font-size: var(--text-chat-size);
+  line-height: var(--text-chat-line);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .litisbot-chat p,
+  .litisbot-chat span,
+  .litisbot-chat div {
+    font-size: var(--text-chat-size-mobile);
+  }
+}

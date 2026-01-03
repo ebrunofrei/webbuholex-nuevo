@@ -1,6 +1,7 @@
 /* eslint-disable react/no-danger */
 // src/components/LitisBotChatBase.jsx
-import React, { useState, useRef, useEffect } from "react";
+
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   FaMicrophone,
   FaVolumeUp,
@@ -13,9 +14,11 @@ import {
 import { MdSend } from "react-icons/md";
 
 // IA / backend
-import { reproducirVoz, stopVoz } from "@/services/vozService.js"; // ← voz centralizada (parar + reproducir)
+import { reproducirVoz, stopVoz } from "@/services/vozService.js"; // voz centralizada
 import { enviarMensajeIA } from "@/services/chatClient.js";
 import { buscarJurisprudencia } from "@/services/researchClient.js";
+import LitisBotToolsModal from "./litisbot/LitisBotToolsModal";
+
 // Herramientas
 import HerramientaTercioPena from "./Herramientas/HerramientaTercioPena";
 import HerramientaLiquidacionLaboral from "./Herramientas/HerramientaLiquidacionLaboral";
@@ -37,13 +40,10 @@ const INIT_MSG = {
   general: {
     role: "assistant",
     content:
-      "Hola 👋. Soy LitisBot. Estoy aquí para ayudarte con cualquier duda legal o situación personal que te preocupe. Puedes contarme qué pasó y te explico tus opciones con palabras claras.",
+      "¿Qué vemos hoy?"
+
   },
-  pro: {
-    role: "assistant",
-    content:
-      "Hola 👋. Soy LitisBot PRO. Puedo ayudarte con estrategia legal práctica, redacción de escritos y próximos pasos procesales. Cuéntame tu caso y avanzamos juntos.",
-  },
+  pro: null, // 👈 PRO NO TIENE MENSAJE INICIAL
 };
 
 /* ============================================================
@@ -286,8 +286,12 @@ function BotBubblePremium({ msg, onCopy, onEdit, onFeedback }) {
             className={baseBtnClass}
             style={{
               color: "#842029",
-              backgroundColor: dislikeActive ? "rgba(132,32,41,0.08)" : "transparent",
-              border: dislikeActive ? "1px solid #842029" : "1px solid transparent",
+              backgroundColor: dislikeActive
+                ? "rgba(132,32,41,0.08)"
+                : "transparent",
+              border: dislikeActive
+                ? "1px solid #842029"
+                : "1px solid transparent",
               borderRadius: "9999px",
               width: 36,
               height: 36,
@@ -329,7 +333,7 @@ function UserBubblePremium({ html }) {
 }
 
 /* ============================================================
-   Herramientas (mock) – sin cambios funcionales relevantes
+   Herramientas (mock)
 ============================================================ */
 function HerramientaMultilingue() {
   const [texto, setTexto] = useState("");
@@ -649,14 +653,54 @@ function ModalHerramientas({
   setError,
 }) {
   const HERRAMIENTAS = [
-    { label: "Multilingüe", key: "multilingue", pro: false, desc: "Haz tus consultas legales en cualquier idioma." },
-    { label: "Modo Audiencia", key: "audiencia", pro: true, desc: "Guía de objeciones y alegatos en vivo (PRO)." },
-    { label: "Analizar Archivo", key: "analizador", pro: true, desc: "Sube PDF, Word o audio para análisis legal (PRO)." },
-    { label: "Traducir", key: "traducir", pro: false, desc: "Traduce textos o documentos legales." },
-    { label: "Agenda", key: "agenda", pro: true, desc: "Gestiona plazos y audiencias (PRO)." },
-    { label: "Recordatorios", key: "recordatorios", pro: true, desc: "Configura alertas importantes (PRO)." },
-    { label: "Tercio de la Pena", key: "tercio_pena", pro: false, desc: "Calcula tercios, mitades y cuartos de pena." },
-    { label: "Liquidación Laboral", key: "liquidacion_laboral", pro: false, desc: "CTS, vacaciones, gratificaciones y beneficios." },
+    {
+      label: "Multilingüe",
+      key: "multilingue",
+      pro: false,
+      desc: "Haz tus consultas legales en cualquier idioma.",
+    },
+    {
+      label: "Modo Audiencia",
+      key: "audiencia",
+      pro: true,
+      desc: "Guía de objeciones y alegatos en vivo (PRO).",
+    },
+    {
+      label: "Analizar Archivo",
+      key: "analizador",
+      pro: true,
+      desc: "Sube PDF, Word o audio para análisis legal (PRO).",
+    },
+    {
+      label: "Traducir",
+      key: "traducir",
+      pro: false,
+      desc: "Traduce textos o documentos legales.",
+    },
+    {
+      label: "Agenda",
+      key: "agenda",
+      pro: true,
+      desc: "Gestiona plazos y audiencias (PRO).",
+    },
+    {
+      label: "Recordatorios",
+      key: "recordatorios",
+      pro: true,
+      desc: "Configura alertas importantes (PRO).",
+    },
+    {
+      label: "Tercio de la Pena",
+      key: "tercio_pena",
+      pro: false,
+      desc: "Calcula tercios, mitades y cuartos de pena.",
+    },
+    {
+      label: "Liquidación Laboral",
+      key: "liquidacion_laboral",
+      pro: false,
+      desc: "CTS, vacaciones, gratificaciones y beneficios.",
+    },
   ];
 
   useEffect(() => {
@@ -770,7 +814,7 @@ function ModalHerramientas({
 
 /* ============================================================
    🦉 Componente Principal: LitisBotChatBase
- ============================================================ */
+============================================================ */
 export default function LitisBotChatBase({
   user = {},
   pro = false,
@@ -789,6 +833,17 @@ export default function LitisBotChatBase({
     if (prev && prev.length) return prev;
     return []; // bienvenida en effect
   });
+
+  // 🔹 Prompt sugerido desde jurisprudencia (a futuro)
+  const activeJurisPrompt = useMemo(() => {
+    if (!jurisSeleccionada) return "";
+    const raw =
+      jurisSeleccionada.litisPrompt ||
+      jurisSeleccionada.promptInicial ||
+      "";
+    if (!raw || typeof raw !== "string") return "";
+    return raw.trim();
+  }, [jurisSeleccionada]);
 
   const [input, setInput] = useState("");
   const [herramienta, setHerramienta] = useState(null);
@@ -809,9 +864,12 @@ export default function LitisBotChatBase({
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Constantes
+  // Constantes de adjuntos
+  // 👉 cantidad máxima de archivos según plan
   const MAX_ADJUNTOS = pro ? 10 : 3;
-  const MAX_MB = 25;
+
+  // 👉 tamaño máximo POR ARCHIVO (MB)
+  const MAX_MB = pro ? 30 : 10;
 
   // ====== EFECTOS ======
   useEffect(() => {
@@ -820,9 +878,12 @@ export default function LitisBotChatBase({
     if (prev && prev.length) {
       setMensajes(prev);
     } else {
-      const bienvenida = pro ? INIT_MSG.pro : INIT_MSG.general;
-      setMensajes([bienvenida]);
-      saveMessage(casoActivo, bienvenida);
+      if (prev && prev.length) {
+      setMensajes(prev);
+    } else {
+      setMensajes([]);
+    }
+
     }
     setAdjuntos(getFiles(casoActivo) || []);
   }, [casoActivo, pro]);
@@ -895,7 +956,6 @@ export default function LitisBotChatBase({
   }
 
   function startDictado() {
-    // coherencia con BubbleChat: si el bot estaba leyendo, lo detenemos
     try {
       stopVoz();
     } catch {}
@@ -907,7 +967,7 @@ export default function LitisBotChatBase({
     try {
       rec.start();
     } catch {
-      // start puede lanzar si ya está corriendo
+      // puede lanzar si ya está corriendo
     }
   }
 
@@ -934,30 +994,69 @@ export default function LitisBotChatBase({
     };
   }, []);
 
-  // ====== ADJUNTOS ======
+           // ====== ADJUNTOS ======
   function handleFileChange(e) {
-    const files = Array.from(e.target.files || []);
-    const nuevos = [];
+    const files = Array.from(e.target?.files || []);
+    if (!files.length) return;
+
+    let nuevos = [];
+    let msgError = "";
+
     for (const f of files) {
-      if (adjuntos.length + nuevos.length >= MAX_ADJUNTOS) break;
-      if (f.size > MAX_MB * 1024 * 1024) {
-        setAlertaAdjuntos(`"${f.name}" supera ${MAX_MB} MB y no se adjuntará.`);
+      // 1) límite de cantidad total
+      if (adjuntos.length + nuevos.length >= MAX_ADJUNTOS) {
+        msgError = `Solo puedes adjuntar hasta ${MAX_ADJUNTOS} archivos.`;
+        break;
+      }
+
+      // 2) límite de tamaño por archivo
+      const sizeMb = f.size / (1024 * 1024);
+      if (sizeMb > MAX_MB) {
+        msgError = `El archivo "${f.name}" supera el límite de ${MAX_MB} MB y no se adjuntará.`;
         continue;
       }
+
       nuevos.push(f);
-      saveFile(casoActivo, { name: f.name, type: f.type, size: f.size });
+
+      // Guardamos metadatos ligeros por caso
+      saveFile(casoActivo, {
+        name: f.name,
+        type: f.type,
+        size: f.size,
+      });
     }
-    if (nuevos.length) setAdjuntos((prev) => [...prev, ...nuevos]);
+
+    // ✅ acumulamos, NO reemplazamos
+    if (nuevos.length) {
+      setAdjuntos((prev) => [...prev, ...nuevos]);
+    }
+
+    if (msgError) {
+      setAlertaAdjuntos(msgError);
+      setTimeout(() => setAlertaAdjuntos(""), 4000);
+    }
+
+    // permitir volver a seleccionar el mismo archivo si el usuario quiere
+    if (e.target) {
+      e.target.value = "";
+    }
   }
+
   function handleRemoveAdjunto(idx) {
     setAdjuntos((prev) => {
       const copia = [...prev];
       copia.splice(idx, 1);
-      deleteFile(casoActivo, idx);
       return copia;
     });
-  }
 
+    // si deleteFile recibe índice, lo usamos así; si no, adapta
+    try {
+      deleteFile(casoActivo, idx);
+    } catch {
+      // no romper el UI si la firma es distinta
+    }
+  }
+  
   // ====== HISTORIAL PARA IA ======
   function obtenerHistorial() {
     return mensajes
@@ -979,9 +1078,13 @@ export default function LitisBotChatBase({
 
     // placeholder
     setMensajes((prev) => [
-      ...prev,
-      { role: "assistant", content: "💬 Analizando tu consulta..." },
-    ]);
+    ...prev,
+    {
+      role: "assistant",
+      content: data.reply || data.respuesta || data.text || "",
+      meta: data.meta || null,       // ✅ CLAVE
+    },
+  ]);
 
     const controller = new AbortController();
 
@@ -998,7 +1101,6 @@ export default function LitisBotChatBase({
 
       setMensajes((prev) => {
         const copia = [...prev];
-        // sustituye el último (placeholder)
         for (let i = copia.length - 1; i >= 0; i--) {
           if (
             copia[i].role === "assistant" &&
@@ -1008,7 +1110,6 @@ export default function LitisBotChatBase({
             return copia;
           }
         }
-        // si no encontró placeholder, añade
         copia.push(msgFinal);
         return copia;
       });
@@ -1046,146 +1147,158 @@ export default function LitisBotChatBase({
     }
   }
 
-    // ====== INTENTOS IA SEGÚN CONTEXTO ======
-    async function handleConsultaGeneral(pregunta) {
-      await procesarConsulta(pregunta, (texto) => {
-        const payload = {
-          prompt: texto,
-          historial: obtenerHistorial(),
-          usuarioId: user?.uid || "invitado",
-          userEmail: user?.email || "",
-          modo: "general",
-          materia: "general",
-          idioma: "es",
-        };
+  // ====== INTENTOS IA SEGÚN CONTEXTO ======
+  async function handleConsultaGeneral(pregunta) {
+    await procesarConsulta(pregunta, (texto) => {
+      const payload = {
+        prompt: texto,
+        historial: obtenerHistorial(),
+        usuarioId: user?.uid || "invitado",
+        userEmail: user?.email || "",
+        modo: "general",
+        materia: "general",
+        idioma: "es",
+      };
 
-        // 👇 Si hay jurisprudencia seleccionada, se envía su ID al backend
-        if (jurisSeleccionada?._id) {
-          payload.jurisprudenciaId = jurisSeleccionada._id;
-        }
+      if (jurisSeleccionada?._id) {
+        payload.jurisprudenciaId = jurisSeleccionada._id;
+      }
 
-        return payload;
-      });
-    }
+      return payload;
+    });
+  }
 
-    async function handleConsultaLegal({ mensaje, materia = "general" }) {
-      await procesarConsulta(mensaje, (texto) => {
-        const payload = {
-          prompt: texto,
-          historial: obtenerHistorial(),
-          usuarioId: user?.uid || "invitado",
-          userEmail: user?.email || "",
-          modo: "juridico",
-          materia,
-          idioma: "es",
-        };
+  async function handleConsultaLegal({ mensaje, materia = "general" }) {
+    await procesarConsulta(mensaje, (texto) => {
+      const payload = {
+        prompt: texto,
+        historial: obtenerHistorial(),
+        usuarioId: user?.uid || "invitado",
+        userEmail: user?.email || "",
+        modo: "juridico",
+        materia,
+        idioma: "es",
+      };
 
-        // 👇 Igual: manda la sentencia activa si existe
-        if (jurisSeleccionada?._id) {
-          payload.jurisprudenciaId = jurisSeleccionada._id;
-        }
+      if (jurisSeleccionada?._id) {
+        payload.jurisprudenciaId = jurisSeleccionada._id;
+      }
 
-        return payload;
-      });
-    }
+      return payload;
+    });
+  }
 
   async function handleConsultaInvestigacion(pregunta) {
-  const texto = (pregunta || "").trim();
-  if (!texto) {
-    setError("⚠️ Escribe una consulta antes de enviar.");
-    return;
-  }
+    const texto = (pregunta || "").trim();
+    if (!texto) {
+      setError("⚠️ Escribe una consulta antes de enviar.");
+      return;
+    }
 
-  setCargando(true);
-  setIsSending(true);
-  setError("");
+    setCargando(true);
+    setIsSending(true);
+    setError("");
 
-  // placeholder visible
-  setMensajes((prev) => [
-    ...prev,
-    { role: "assistant", content: "🔎 Buscando jurisprudencia y material relevante…" },
-  ]);
+    setMensajes((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: "🔎 Buscando jurisprudencia y material relevante…",
+      },
+    ]);
 
-  try {
-    const data = await buscarJurisprudencia({ q: texto, num: 3, lang: "es" });
+    try {
+      const data = await buscarJurisprudencia({ q: texto, num: 3, lang: "es" });
 
-    // Estructuras tolerantes: usa lo que haya
-    const answer = data?.answer || data?.respuesta || "";
-    const items  = data?.items || data?.results || data?.citas || [];
+      const answer = data?.answer || data?.respuesta || "";
+      const items = data?.items || data?.results || data?.citas || [];
 
-    // Render HTML compacto con citas
-    const htmlFuentes = Array.isArray(items) && items.length
-      ? `<hr/><div style="margin-top:8px">
-           <b>📚 Fuentes:</b>
-           <ol style="margin:6px 0 0 18px">
-             ${items
-               .map((it) => {
-                 const t = (it.title || it.titulo || it.name || "Recurso").toString();
-                 const l = (it.link || it.url || "").toString();
-                 const s = (it.snippet || it.descripcion || it.extract || "").toString();
-                 return `<li style="margin-bottom:6px">
-                          <a href="${l}" target="_blank" rel="noopener noreferrer">${t}</a>
-                          ${s ? `<div style="color:#555">${s}</div>` : ""}
-                         </li>`;
-               })
-               .join("")}
-           </ol>
-         </div>`
-      : "";
+      const htmlFuentes =
+        Array.isArray(items) && items.length
+          ? `<hr/><div style="margin-top:8px">
+               <b>📚 Fuentes:</b>
+               <ol style="margin:6px 0 0 18px">
+                 ${items
+                   .map((it) => {
+                     const t = (
+                       it.title ||
+                       it.titulo ||
+                       it.name ||
+                       "Recurso"
+                     ).toString();
+                     const l = (it.link || it.url || "").toString();
+                     const s = (
+                       it.snippet ||
+                       it.descripcion ||
+                       it.extract ||
+                       ""
+                     ).toString();
+                     return `<li style="margin-bottom:6px">
+                              <a href="${l}" target="_blank" rel="noopener noreferrer">${t}</a>
+                              ${
+                                s
+                                  ? `<div style="color:#555">${s}</div>`
+                                  : ""
+                              }
+                             </li>`;
+                   })
+                   .join("")}
+               </ol>
+             </div>`
+          : "";
 
-    const htmlFinal =
-      (answer && sanitizeHtml(answer)) ||
-      "No se encontró una síntesis directa. Revisa las fuentes sugeridas más abajo.";
+      const htmlFinal =
+        (answer && sanitizeHtml(answer)) ||
+        "No se encontró una síntesis directa. Revisa las fuentes sugeridas más abajo.";
 
+      const msgFinal = {
+        role: "assistant",
+        content: `${htmlFinal}${htmlFuentes}`,
+      };
 
-    const msgFinal = {
-      role: "assistant",
-      content: `${htmlFinal}${htmlFuentes}`,
-    };
-
-    saveMessage(casoActivo, msgFinal);
-    setMensajes((prev) => {
-      const copia = [...prev];
-      for (let i = copia.length - 1; i >= 0; i--) {
-        if (
-          copia[i].role === "assistant" &&
-          /Buscando jurisprudencia/i.test(copia[i].content)
-        ) {
-          copia[i] = msgFinal;
-          return copia;
+      saveMessage(casoActivo, msgFinal);
+      setMensajes((prev) => {
+        const copia = [...prev];
+        for (let i = copia.length - 1; i >= 0; i--) {
+          if (
+            copia[i].role === "assistant" &&
+            /Buscando jurisprudencia/i.test(copia[i].content)
+          ) {
+            copia[i] = msgFinal;
+            return copia;
+          }
         }
-      }
-      copia.push(msgFinal);
-      return copia;
-    });
-  } catch (err) {
-    console.error("❌ Research error:", err);
-    const msgErr = {
-      role: "assistant",
-      content:
-        "❌ No pude cargar la jurisprudencia ahora mismo. Inténtalo de nuevo en unos minutos.",
-    };
-    saveMessage(casoActivo, msgErr);
-    setMensajes((prev) => {
-      const copia = [...prev];
-      for (let i = copia.length - 1; i >= 0; i--) {
-        if (
-          copia[i].role === "assistant" &&
-          /Buscando jurisprudencia/i.test(copia[i].content)
-        ) {
-          copia[i] = msgErr;
-          return copia;
+        copia.push(msgFinal);
+        return copia;
+      });
+    } catch (err) {
+      console.error("❌ Research error:", err);
+      const msgErr = {
+        role: "assistant",
+        content:
+          "❌ No pude cargar la jurisprudencia ahora mismo. Inténtalo de nuevo en unos minutos.",
+      };
+      saveMessage(casoActivo, msgErr);
+      setMensajes((prev) => {
+        const copia = [...prev];
+        for (let i = copia.length - 1; i >= 0; i--) {
+          if (
+            copia[i].role === "assistant" &&
+            /Buscando jurisprudencia/i.test(copia[i].content)
+          ) {
+            copia[i] = msgErr;
+            return copia;
+          }
         }
-      }
-      copia.push(msgErr);
-      return copia;
-    });
-  } finally {
-    setCargando(false);
-    setIsSending(false);
-    setInput("");
+        copia.push(msgErr);
+        return copia;
+      });
+    } finally {
+      setCargando(false);
+      setIsSending(false);
+      setInput("");
+    }
   }
-}
 
   // ====== ENVÍO MENSAJE DEL USUARIO ======
   async function handleSend(e) {
@@ -1194,7 +1307,7 @@ export default function LitisBotChatBase({
 
     setAlertaAdjuntos("");
 
-    // adjuntos
+    // adjuntos (solo registra, aún sin análisis IA aquí)
     if (adjuntos.length > 0) {
       const msgsParaGuardar = [];
       const msgsParaUI = [];
@@ -1230,13 +1343,29 @@ export default function LitisBotChatBase({
     saveMessage(casoActivo, nuevo);
     setInput("");
 
-    // detección de materia
+        // ✅ SOCIAL: responde local, corto y elegante (sin llamar a IA)
+    if (isSocialIntentFront(pregunta)) {
+      const nombre = (user?.displayName || user?.nombre || "colega").toString().trim() || "colega";
+
+      const respSocial = {
+        role: "assistant",
+        content: `Soy LitisBot, ${nombre}.`,
+      };
+
+      setMensajes((msgs) => [...msgs, respSocial]);
+      saveMessage(casoActivo, respSocial);
+      return;
+    }
+
     const textoLower = pregunta.toLowerCase();
-    const gatillosInvestigacion = /(jurisprudenc|casaci|precedent|ejecutori|tribunal constitucional|tc|r\.n\.|exp\.)/i;
+    const gatillosInvestigacion =
+      /(jurisprudenc|casaci|precedent|ejecutori|tribunal constitucional|tc|r\.n\.|exp\.)/i;
+
     if (gatillosInvestigacion.test(textoLower)) {
       await handleConsultaInvestigacion(pregunta);
       return;
     }
+
     const materias = {
       civil:
         /civil|contrato|obligaci(ón|on)|propiedad|posesi(ón|on)|familia|sucesi(ón|on)/i,
@@ -1273,7 +1402,33 @@ export default function LitisBotChatBase({
     const limpio = prepararTextoParaCopia(text || "");
     copyToClipboard(limpio);
   }
+  function isSocialIntentFront(texto = "") {
+  const t = String(texto || "").toLowerCase().trim();
+  if (!t) return false;
 
+  const identidad =
+    /\b(c[oó]mo\s+te\s+llamas|qui[eé]n\s+eres|tu\s+nombre|te\s+puedo\s+llamar|est[aá]\s+bien\s+si\s+te\s+llamo)\b/i.test(texto);
+
+  const saludo =
+    /\b(hola|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|hey|saludos)\b/i.test(texto);
+
+  const smalltalk =
+    /\b(gracias|ok|vale|perfecto|listo|genial|excelente|de\s+acuerdo|todo\s+bien|c[oó]mo\s+est[aá]s)\b/i.test(texto);
+
+  const legalSignals =
+    /(\bescrito\b|\bdemanda\b|\bapelaci[oó]n\b|\brecurso\b|\bdenuncia\b|\bquerella\b|\bcontrato\b|\bsentencia\b|\bresoluci[oó]n\b|\bagravio\b|\bexpediente\b|\bmedios?\s+probatorios\b|\bcasaci[oó]n\b|\bacuerdo\s+plenario\b|\bprecedente\b)/i.test(
+      texto
+    );
+
+  const wc = t.split(/\s+/).filter(Boolean).length;
+  const isShort = wc <= 12;
+
+  if (legalSignals) return false;
+  if (identidad) return true;
+  if (isShort && (saludo || smalltalk)) return true;
+
+  return false;
+}
   function handleEdit(idx, nuevoTexto) {
     setMensajes((ms) => {
       const copia = [...ms];
@@ -1295,7 +1450,7 @@ export default function LitisBotChatBase({
     setHerramienta(null);
   }
 
-  function handleKeyDown(e) {
+    function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if ((input.trim() || adjuntos.length) && !isSending) {
@@ -1384,228 +1539,189 @@ export default function LitisBotChatBase({
         </div>
       </div>
 
-      {/* ===== BARRA DE ENTRADA STICKY ===== */}
-      <form
-        onSubmit={handleSend}
-        className="
-          w-full mx-auto
-          flex items-end gap-3
-          px-4 py-4
-          max-w-full sm:max-w-3xl md:max-w-4xl
-          sticky bottom-0 z-50
-          bg-white
-          border-t
-        "
-        style={{
-          borderColor: "rgba(92,46,11,0.3)",
-          left: 0,
-          right: 0,
-        }}
-      >
-        {/* Botón Adjuntar */}
-        <label
-          className={`
-            cursor-pointer flex-shrink-0
-            rounded-full hover:opacity-90 transition
-            ${
-              adjuntos.length >= MAX_ADJUNTOS
-                ? "opacity-40 pointer-events-none"
-                : ""
-            }
-          `}
+           {/* ===== BARRA DE ENTRADA STICKY ===== */}
+        <form
+          onSubmit={handleSend}
+          className="
+            w-full mx-auto
+            max-w-full sm:max-w-3xl md:max-w-4xl
+            sticky bottom-0 z-50
+            bg-white border-t
+            px-4 py-3
+            flex flex-col md:flex-row md:items-end md:gap-3
+          "
           style={{
-            background: "#5C2E0B",
-            color: "#fff",
-            width: 44,
-            height: 44,
-            minWidth: 44,
-            minHeight: 44,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            borderColor: "rgba(92,46,11,0.3)",
+            left: 0,
+            right: 0,
           }}
-          title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
-          aria-label="Adjuntar archivo"
         >
-          <FaPaperclip size={20} />
-          <input
-            type="file"
-            className="hidden"
-            multiple
-            onChange={handleFileChange}
-            disabled={adjuntos.length >= MAX_ADJUNTOS}
-          />
-        </label>
 
-        {/* Previews adjuntos */}
-        {adjuntos.some((a) => a instanceof File || a instanceof Blob) && (
-          <div
-            className="
-              flex gap-2 py-1
-              overflow-x-auto no-scrollbar
-              max-w-[40%] sm:max-w-[50%]
-            "
-            style={{ minHeight: 60 }}
-          >
-            {adjuntos.map((adj, idx) => {
-              const isBlob = adj instanceof File || adj instanceof Blob;
+          {/* Columna izquierda: botón + chips */}
+          <div className="flex items-center gap-3 md:flex-col md:items-start md:justify-end">
 
-              return (
-                <div key={idx} className="relative flex-shrink-0">
-                  {isBlob && adj.type?.startsWith?.("image/") ? (
-                    <img
-                      src={URL.createObjectURL(adj)}
-                      alt={adj.name || `archivo-${idx}`}
-                      className="rounded-xl border-2 border-[#5C2E0B]/30 shadow object-cover"
-                      style={{
-                        width: 80,
-                        height: 60,
-                        objectFit: "cover",
-                      }}
-                    />
-                  ) : (
-                    <div
+            {/* Botón adjuntar */}
+            <label
+              className={`
+                cursor-pointer flex-shrink-0
+                rounded-full hover:opacity-90 transition
+                ${adjuntos.length >= MAX_ADJUNTOS ? "opacity-40 pointer-events-none" : ""}
+              `}
+              style={{
+                background: "#5C2E0B",
+                color: "#fff",
+                width: 44,
+                height: 44,
+                minWidth: 44,
+                minHeight: 44,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title={`Adjuntar (máx. ${MAX_ADJUNTOS}, hasta ${MAX_MB} MB c/u)`}
+              aria-label="Adjuntar archivo"
+            >
+              <FaPaperclip size={20} />
+              <input
+                type="file"
+                className="hidden"
+                multiple
+                onChange={handleFileChange}
+                disabled={adjuntos.length >= MAX_ADJUNTOS}
+              />
+            </label>
+
+            {/* Chips */}
+            {adjuntos.length > 0 && (
+              <div
+                className="
+                  flex flex-wrap md:flex-col gap-2 py-1
+                  max-w-[260px] md:max-w-[220px]
+                  overflow-x-auto no-scrollbar
+                "
+              >
+                {adjuntos.map((adj, idx) => {
+                  const name = String(adj.name || "archivo");
+                  const lower = name.toLowerCase();
+                  let icon = "📎";
+                  if (lower.endsWith(".pdf")) icon = "📄";
+                  else if (/\.(doc|docx)$/i.test(lower)) icon = "📝";
+                  else if (/\.(xls|xlsx)$/i.test(lower)) icon = "📊";
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleRemoveAdjunto(idx)}
                       className="
-                        bg-white border-2 rounded-xl
-                        flex flex-col items-center justify-center
-                        text-[#5C2E0B] font-semibold shadow text-[12px]
+                        inline-flex items-center justify-between
+                        rounded-full border px-3 py-[4px]
+                        text-xs md:text-[11px]
+                        bg-[#FFF7EF] border-[#E8C9A5] text-[#5C2E0B]
+                        max-w-[260px] md:max-w-[220px]
+                        hover:bg-[#FBE8D6] transition-colors
                       "
-                      style={{
-                        borderColor: "rgba(92,46,11,0.3)",
-                        width: 90,
-                        height: 60,
-                        padding: 4,
-                      }}
+                      title={name}
                     >
-                      <div style={{ fontSize: 22, marginBottom: 2 }}>
-                        {String(adj.name || "")
-                          .toLowerCase()
-                          .endsWith(".pdf")
-                          ? "📄"
-                          : /\.(doc|docx)$/i.test(String(adj.name || ""))
-                          ? "📝"
-                          : /\.(xls|xlsx)$/i.test(String(adj.name || ""))
-                          ? "📊"
-                          : "📎"}
-                      </div>
-                      <div
-                        className="truncate w-full text-center"
-                        title={adj.name || "archivo"}
-                      >
-                        {adj.name || "archivo"}
-                      </div>
-                    </div>
-                  )}
+                      <span className="flex items-center gap-2">
+                        <span className="text-base">{icon}</span>
+                        <span className="truncate max-w-[160px] md:max-w-[140px]">
+                          {name}
+                        </span>
+                      </span>
+                      <span className="ml-2 text-[11px] font-bold leading-none">×</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-                  {/* Quitar adjunto */}
-                  <button
-                    type="button"
-                    aria-label="Quitar archivo"
-                    className="
-                      absolute -top-1 -right-1
-                      bg-black/70 text-white rounded-full
-                      w-5 h-5 flex items-center justify-center
-                      text-[12px] leading-none
-                    "
-                    onClick={() => handleRemoveAdjunto(idx)}
-                    title="Eliminar archivo"
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
           </div>
-        )}
 
-        {/* Área de texto */}
-        <div className="flex-1">
-          <textarea
-            ref={textareaRef}
-            className="
-              w-full
-              outline-none resize-none
-              text-[16px] sm:text-[15px] md:text-[17px]
-              leading-relaxed text-[#5C2E0B]
-              placeholder:text-[#5C2E0B]/60
-              border rounded-lg px-3 py-2
-              max-h-[160px] overflow-y-auto
-            "
+          {/* Área de texto */}
+          <div className="flex-1">
+            <textarea
+              ref={textareaRef}
+              className="
+                w-full
+                outline-none resize-none
+                text-[16px] sm:text-[15px] md:text-[17px]
+                leading-relaxed text-[#5C2E0B]
+                placeholder:text-[#5C2E0B]/60
+                border rounded-lg px-3 py-2
+                max-h-[160px] overflow-y-auto
+              "
+              style={{
+                minHeight: 48,
+                backgroundColor: "#ffffff",
+                borderColor: "rgba(92,46,11,0.2)",
+                whiteSpace: "pre-wrap",
+              }}
+              placeholder="Escribe o dicta tu pregunta legal…"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+            />
+            {grabando && interim && (
+              <div className="w-full text-sm text-[#5C2E0B]/70 mt-1 px-1">
+                <em>[{interim}]</em>
+              </div>
+            )}
+          </div>
+
+          {/* Micrófono */}
+          <button
+            type="button"
+            aria-label={grabando ? "Detener dictado" : "Dictar voz"}
+            className="flex-shrink-0 rounded-full hover:opacity-90 transition"
             style={{
-              minHeight: 48,
-              backgroundColor: "#ffffff",
-              borderColor: "rgba(92,46,11,0.2)",
-              wordBreak: "break-word",
-              whiteSpace: "pre-wrap",
+              background: grabando ? "#b71c1c" : "#5C2E0B",
+              color: "#fff",
+              width: 44,
+              height: 44,
+              minWidth: 44,
+              minHeight: 44,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-            placeholder="Escribe o dicta tu pregunta legal…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={1}
-          />
-          {/* Texto provisional del dictado */}
-          {grabando && interim && (
-            <div className="w-full text-sm text-[#5C2E0B]/70 mt-1 px-1">
-              <em>[{interim}]</em>
-            </div>
-          )}
-        </div>
+            onClick={toggleDictado}
+          >
+            <FaMicrophone size={18} />
+          </button>
 
-        {/* Micrófono (start/stop) */}
-        <button
-          type="button"
-          aria-label={grabando ? "Detener dictado" : "Dictar voz"}
-          className="flex-shrink-0 rounded-full hover:opacity-90 transition"
-          style={{
-            background: grabando ? "#b71c1c" : "#5C2E0B",
-            color: "#fff",
-            width: 44,
-            height: 44,
-            minWidth: 44,
-            minHeight: 44,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={() => (grabando ? stopDictado() : startDictado())}
-          title={grabando ? "Detener dictado" : "Dictar voz"}
-        >
-          <FaMicrophone size={18} />
-        </button>
+          {/* Enviar */}
+          <button
+            type="submit"
+            aria-label="Enviar"
+            title="Enviar"
+            className={`
+              flex-shrink-0 rounded-full hover:opacity-90 transition
+              ${
+                (!input.trim() && adjuntos.length === 0) || isSending
+                  ? "opacity-50 cursor-not-allowed"
+                  : ""
+              }
+            `}
+            style={{
+              background: "#5C2E0B",
+              color: "#fff",
+              width: 48,
+              height: 48,
+              minWidth: 48,
+              minHeight: 48,
+              fontWeight: "bold",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            disabled={(!input.trim() && adjuntos.length === 0) || cargando || isSending}
+          >
+            <MdSend size={22} />
+          </button>
 
-        {/* Enviar */}
-        <button
-          type="submit"
-          aria-label="Enviar"
-          title="Enviar"
-          className={`
-            flex-shrink-0 rounded-full hover:opacity-90 transition
-            ${
-              (!input.trim() && adjuntos.length === 0) || isSending
-                ? "opacity-50 cursor-not-allowed"
-                : ""
-            }
-          `}
-          style={{
-            background: "#5C2E0B",
-            color: "#fff",
-            width: 48,
-            height: 48,
-            minWidth: 48,
-            minHeight: 48,
-            fontWeight: "bold",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          disabled={
-            (!input.trim() && adjuntos.length === 0) || cargando || isSending
-          }
-        >
-          <MdSend size={22} />
-        </button>
-      </form>
+        </form>
 
       {/* Alertas/errores debajo */}
       {alertaAdjuntos && (
@@ -1622,13 +1738,13 @@ export default function LitisBotChatBase({
 
       {/* MODAL HERRAMIENTAS */}
       {showModal && (
-        <ModalHerramientas
-          onClose={closeHerramientas}
-          herramienta={herramienta}
-          setHerramienta={setHerramienta}
-          pro={pro}
-          error={error}
-          setError={setError}
+        <LitisBotToolsModal
+        pro={pro}
+        herramienta={herramienta}
+        setHerramienta={setHerramienta}
+        error={error}
+        setError={setError}
+        onClose={closeHerramientas}
         />
       )}
 

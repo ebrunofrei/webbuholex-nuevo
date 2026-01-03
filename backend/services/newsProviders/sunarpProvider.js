@@ -1,6 +1,6 @@
 // backend/services/newsProviders/sunarpProvider.js
 // ============================================================
-// ?? BúhoLex | Provider SUNARP (RSS)
+// ?? Bï¿½hoLex | Provider SUNARP (RSS)
 // Contrato: fetchNoticias({ max=10, q="", since=null })
 // - Lee uno de varios feeds RSS
 // - Normaliza campos (titulo, resumen, enlace, fecha, imagen, fuente, tipo, especialidad)
@@ -8,14 +8,14 @@
 // ============================================================
 
 import {
-  fetchRSS,         // ? asegúrate de exportarlo en _helpers.js
+  fetchRSS,         // ? asegï¿½rate de exportarlo en _helpers.js
   toISODate,
   normalizeText,
   proxifyMedia,
 } from "./_helpers.js";
 import { normalizeNoticia } from "./normalizer.js";
 
-/** Filtro local por fecha mínima */
+/** Filtro local por fecha mï¿½nima */
 function applySince(items, since) {
   if (!since) return items;
   const d = new Date(since);
@@ -26,7 +26,7 @@ function applySince(items, since) {
   });
 }
 
-/** Filtro local por búsqueda simple */
+/** Filtro local por bï¿½squeda simple */
 function applyQ(items, q) {
   if (!q || !q.trim()) return items;
   const tok = q.toLowerCase();
@@ -96,7 +96,7 @@ async function fetchNoticias({ max = 10, q = "", since = null } = {}) {
       return items.slice(0, Math.max(1, Math.min(50, Number(max) || 10)));
     } catch (err) {
       // intenta siguiente feed
-      console.warn("SUNARP provider feed falló:", url, err?.message || err);
+      console.warn("SUNARP provider feed fallï¿½:", url, err?.message || err);
     }
   }
 

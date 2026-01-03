@@ -20,6 +20,7 @@ const HERRAMIENTAS = [
   { key: "traducir", label: "Traductor simple", desc: "Traducción directa de textos", pro: true },
   { key: "tercio_pena", label: "Cálculo Tercio Pena", desc: "Calculadora legal para condenas", pro: true },
   { key: "liquidacion_laboral", label: "Liquidación Laboral", desc: "Herramienta laboral avanzada", pro: true },
+  { key: "docente", label: "Modo Docente" }
 ];
 
 export default function ModalHerramientas({
@@ -29,6 +30,7 @@ export default function ModalHerramientas({
   pro,
   error,
   setError,
+  onSelectHerramienta,
 }) {
   function handleClick(key, proRequired) {
     if (proRequired && !pro) {
@@ -37,8 +39,11 @@ export default function ModalHerramientas({
       return;
     }
     setHerramienta(key);
+    // ✅ NUEVO: notificar al padre que se eligió una herramienta
+    if (onSelectHerramienta) {
+      onSelectHerramienta(key);
+    }
   }
-
   function renderHerramienta() {
     switch (herramienta) {
       case "multilingue":
