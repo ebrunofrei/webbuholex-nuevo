@@ -1,13 +1,3 @@
-// ============================================================================
-// 📁 CaseItem — Ítem de Caso (UX-3 Canónico)
-// ----------------------------------------------------------------------------
-// - Alta legibilidad (baja visión)
-// - Rail visual activo
-// - Acciones desacopladas
-// - Accesible y consistente
-// - ROOT ("Mis estados de análisis") sin menú ni fecha
-// ============================================================================
-
 import React, { useState } from "react";
 import { MoreVertical } from "lucide-react";
 import CaseActionsMenu from "./CaseActionsMenu.jsx";
@@ -22,19 +12,27 @@ export default function CaseItem({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // 🔑 Identificador canónico del ROOT de análisis
+  // 🔑 ROOT lógico: "Mis estados de análisis"
   const isRootAnalysis = caseData.role === "__ROOT_ANALYSIS__";
 
   return (
     <div className="relative">
-      <button
-        type="button"
+      {/* CONTENEDOR CLICKABLE (NO button) */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelect?.(caseData._id || caseData.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            onSelect?.(caseData._id || caseData.id);
+          }
+        }}
         className={`
           group w-full
           flex items-start gap-3
           px-4 py-3 mb-2
           rounded-xl text-left
+          cursor-pointer
           transition-colors
           focus:outline-none focus:ring-2 focus:ring-[#5C2E0B]/40
           ${
@@ -43,28 +41,27 @@ export default function CaseItem({
               : "hover:bg-[#F7F1EC]"
           }
         `}
+        aria-current={active ? "true" : "false"}
       >
-        {/* RAIL IZQUIERDO (SEÑAL COGNITIVA) */}
+        {/* RAIL */}
         <div
-          className={`
-            w-[4px] rounded-full mt-1
-            ${active ? "bg-[#5C2E0B]" : "bg-transparent"}
-          `}
+          className={`w-[4px] rounded-full mt-1 ${
+            active ? "bg-[#5C2E0B]" : "bg-transparent"
+          }`}
           aria-hidden
         />
 
-        {/* CONTENIDO */}
+        {/* TEXTO */}
         <div className="flex-1 min-w-0">
           <div
-            className={`
-              text-[18px] font-semibold truncate
-              ${active ? "text-black" : "text-[#3B1E0B]"}
-            `}
+            className={`text-[18px] font-semibold truncate ${
+              active ? "text-black" : "text-[#3B1E0B]"
+            }`}
           >
             {caseData.title || "Caso sin título"}
           </div>
 
-          {/* FECHA — NO se muestra en el ROOT */}
+          {/* FECHA — NO ROOT */}
           {!isRootAnalysis && (
             <div className="text-[15px] text-[#6B4A2D] mt-1">
               {caseData.updatedAt
@@ -78,30 +75,32 @@ export default function CaseItem({
           )}
         </div>
 
-        {/* ACCIONES — NO se muestran en el ROOT */}
+        {/* ACCIONES — SOLO NO ROOT */}
         {!isRootAnalysis && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen((v) => !v);
-            }}
-            className="
-              p-2 rounded-lg
-              text-[#5C2E0B]
-              hover:bg-[#E9DED4]
-              focus:outline-none focus:ring-2 focus:ring-[#5C2E0B]/40
-            "
-            title="Acciones del caso"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-          >
-            <MoreVertical size={20} />
-          </button>
+          <div className="flex-shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+              className="
+                p-2 rounded-lg
+                text-[#5C2E0B]
+                hover:bg-[#E9DED4]
+                focus:outline-none focus:ring-2 focus:ring-[#5C2E0B]/40
+              "
+              title="Acciones del caso"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              <MoreVertical size={20} />
+            </button>
+          </div>
         )}
-      </button>
+      </div>
 
-      {/* MENÚ CONTEXTUAL — SOLO SI NO ES ROOT */}
+      {/* MENÚ CONTEXTUAL */}
       {!isRootAnalysis && (
         <CaseActionsMenu
           open={menuOpen}

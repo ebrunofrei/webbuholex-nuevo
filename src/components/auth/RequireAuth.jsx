@@ -1,11 +1,18 @@
-// src/components/auth/RequireAuth.jsx
 import React, { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 
 export default function RequireAuth({ children }) {
-  const { user, loading, abrirModalLogin } = useAuth() || {};
+  const auth = useAuth() || {};
+  const { user, loading, abrirModalLogin } = auth;
 
-  // Si está cargando Firebase, esperamos
+  // ✅ EFECTOS SIEMPRE ARRIBA (regla de hooks)
+  useEffect(() => {
+    if (!loading && !user) {
+      abrirModalLogin?.("login");
+    }
+  }, [loading, user, abrirModalLogin]);
+
+  // ⏳ Cargando sesión
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center text-sm text-gray-600">
@@ -14,14 +21,7 @@ export default function RequireAuth({ children }) {
     );
   }
 
-  // Si NO hay usuario, abrimos el modal de login
-  useEffect(() => {
-    if (!loading && !user) {
-      abrirModalLogin("login");
-    }
-  }, [loading, user, abrirModalLogin]);
-
-  // Mientras no haya user, mostramos solo el fondo (el modal se encarga)
+  // 🔒 No autenticado (el modal ya fue disparado)
   if (!user) {
     return (
       <div className="w-full h-screen bg-gray-50 flex items-center justify-center text-sm text-gray-500">
@@ -30,6 +30,6 @@ export default function RequireAuth({ children }) {
     );
   }
 
-  // Usuario autenticado → renderizamos la Oficina normalmente
+  // ✅ Autenticado
   return <>{children}</>;
 }
