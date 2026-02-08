@@ -31,6 +31,7 @@ export function useGeneralChat() {
   const [messagesBySession, setMessagesBySession] = useState({});
   const [draft, setDraft] = useState("");
   const [isDispatching, setIsDispatching] = useState(false);
+  const isDispatchingRef = useRef(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const bottomRef = useRef(null);
@@ -77,15 +78,40 @@ export function useGeneralChat() {
   }, []);
 
   useEffect(() => {
-    if (activeSessionId) loadMessagesOf(activeSessionId);
-  }, [activeSessionId, loadMessagesOf]);
+  if (!activeSessionId) return;
+
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const data = await loadSession(activeSessionId);
+      if (cancelled) return;
+
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [activeSessionId]: Array.isArray(data) ? data : [],
+      }));
+    } catch {
+      // silencioso
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [activeSessionId]);
 
   // ============================================================================
   // AUTO SCROLL
   // ============================================================================
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isDispatching]);
+  if (!bottomRef.current) return;
+
+  bottomRef.current.scrollIntoView({
+    behavior: "smooth",
+    block: "end",
+  });
+}, [messages.length]);
 
   // ============================================================================
   // CREATE SESSION (SINGLE SOURCE OF TRUTH)
@@ -118,16 +144,18 @@ export function useGeneralChat() {
     return sessionId;
   }, []);
 
-  // ============================================================================
-  // DISPATCH MESSAGE (NO RESET, NO RACE)
-  // ============================================================================
-  const dispatchMessage = useCallback(async () => {
-    const text = draft.trim();
-    if (!text || isDispatching) return;
+ // ============================================================================
+// DISPATCH MESSAGE (NO RESET, NO RACE, MOBILE-SAFE)
+// ============================================================================
+const dispatchMessage = useCallback(async () => {
+  const text = draft.trim();
+  if (!text || isDispatchingRef.current) return;
 
-    setIsDispatching(true);
-    setDraft("");
+  isDispatchingRef.current = true;
+  setIsDispatching(true);
+  setDraft("");
 
+  try {
     let sid = activeSessionId;
 
     // 1️⃣ Create session if needed
@@ -143,6 +171,7 @@ export function useGeneralChat() {
 
     // 3️⃣ Send to backend
     let reply = "";
+
     try {
       const res = await sendChatMessage({
         channel: "home_chat",
@@ -163,23 +192,30 @@ export function useGeneralChat() {
       ...prev,
       [sid]: [
         ...(prev[sid] || []),
-        { role: "assistant", content: reply, meta: { protocol: "R7.7++" } },
+        {
+          role: "assistant",
+          content: reply,
+          meta: { protocol: "R7.7++" },
+        },
       ],
     }));
 
     // 5️⃣ Background sync (NO navigation side effects)
     loadMessagesOf(sid);
     refreshSessions();
-
+  } finally {
+    // 🔒 SIEMPRE se libera el lock (clave en móvil)
+    isDispatchingRef.current = false;
     setIsDispatching(false);
-  }, [
-    draft,
-    isDispatching,
-    activeSessionId,
-    createSession,
-    loadMessagesOf,
-    refreshSessions,
-  ]);
+  }
+}, [
+  draft,
+  activeSessionId,
+  createSession,
+  loadMessagesOf,
+  refreshSessions,
+]);
+
   // ============================================================================
   // SIDEBAR ACTIONS (CANONICAL — NO UX SIDE EFFECTS)
   // ============================================================================

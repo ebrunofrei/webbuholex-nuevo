@@ -26,8 +26,8 @@ export default function BubbleChatLayout({
             fixed inset-0 sm:inset-auto
             sm:bottom-4 sm:right-4
 
-            w-full sm:w-[420px]
-            h-full sm:h-[680px]
+            h-[100dvh] sm:h-[680px]
+            max-h-[100dvh] sm:max-h-[680px]
 
             bg-white
             rounded-none sm:rounded-3xl
@@ -35,7 +35,7 @@ export default function BubbleChatLayout({
 
             flex flex-col
             overflow-hidden
-            border-t sm:border border-slate-200/50
+            border border-slate-200/50
 
             animate-in fade-in slide-in-from-bottom-8 duration-500
         "
@@ -48,7 +48,7 @@ export default function BubbleChatLayout({
       />
 
       {/* MESSAGE FEED */}
-    <div className="flex-1 overflow-y-auto bg-white custom-scrollbar">
+    <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-white custom-scrollbar">
       <div className="h-full w-full py-4 sm:py-6 px-2 sm:px-0">
         <BubbleMessages messages={messages} />
       </div>
@@ -86,7 +86,7 @@ export default function BubbleChatLayout({
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 3px;
         }

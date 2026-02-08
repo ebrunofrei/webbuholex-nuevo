@@ -34,11 +34,32 @@ export default function BubbleProvider({
   // UX premium (countdown, optional)
   const [unlockExpiresIn, setUnlockExpiresIn] = useState(null);
 
-  const sessionIdRef = useRef(getOrCreateBubbleSessionId());
-  const lastJurisIdRef = useRef(null);
+ const sessionIdRef = useRef(getOrCreateBubbleSessionId());
+const lastJurisIdRef = useRef(null);
 
-  const handleOpen = useCallback(() => setOpen(true), []);
-  const handleClose = useCallback(() => setOpen(false), []);
+const handleOpen = useCallback(() => setOpen(true), []);
+const handleClose = useCallback(() => setOpen(false), []);
+
+/* ======================================================
+   🧠 BODY SCROLL LOCK (MOBILE / TABLET CANONICAL)
+   - Evita que el body se mueva
+   - Solo scrollea el bubble
+====================================================== */
+useEffect(() => {
+  if (!open) return;
+
+  const previousOverflow = document.body.style.overflow;
+  const previousTouchAction = document.body.style.touchAction;
+
+  document.body.style.overflow = "hidden";
+  document.body.style.touchAction = "none";
+
+  return () => {
+    document.body.style.overflow = previousOverflow || "";
+    document.body.style.touchAction = previousTouchAction || "";
+  };
+}, [open]);
+
 
   /* ======================================================
    💳 CULQI PAYMENT → BACKEND UNLOCK (CANONICAL)
@@ -203,7 +224,19 @@ const handlePaymentToken = useCallback(async (culqiToken) => {
       </div>
 
       {open && (
-        <div className="absolute bottom-0 right-0 pointer-events-auto animate-in fade-in slide-in-from-bottom-10 duration-500">
+        <div
+            className="
+            pointer-events-auto
+            animate-in fade-in slide-in-from-bottom-10 duration-500
+
+            /* MOBILE / TABLET */
+            fixed inset-0 z-[9999]
+
+            /* DESKTOP */
+            sm:absolute sm:inset-auto sm:bottom-0 sm:right-0
+            "
+        >
+        
           <BubbleChatLayout
             messages={messages}
             loading={loading}
