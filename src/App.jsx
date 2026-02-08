@@ -29,6 +29,20 @@ import JurisprudenciaVisorModal from "@/components/jurisprudencia/Jurisprudencia
 import { GeneralChatProvider } from "@/components/litisbot/chat/general/GeneralChatProvider";
 import GeneralChatLayout from "@/components/litisbot/chat/general/GeneralChatLayout";
 
+/* =========================
+   LitisBot público (SIN auth, SIN CaseContext)
+========================= */
+function PublicLitisbot() {
+  return (
+    <GeneralChatProvider
+      user={{ uid: "public", displayName: "Invitado" }}
+    >
+      <GeneralChatLayout />
+    </GeneralChatProvider>
+  );
+}
+
+
 import Login from "./pages/Login";
 import RecuperarPassword from "./components/RecuperarPassword";
 import MiCuenta from "./pages/MiCuenta";
@@ -345,13 +359,7 @@ function AppContent() {
             {/* ================= LITISBOT DEMO PUBLICO ================= */}
             <Route
               path="/litisbot"
-              element={
-                <GeneralChatProvider
-                  user={{ uid: "invitado", displayName: "Invitado" }}
-                >
-                  <GeneralChatLayout />
-                </GeneralChatProvider>
-              }
+              element={<PublicLitisbot />}
             />
 
             {/* Legacy */}
@@ -513,18 +521,16 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <CaseProvider>
-      <LitisBotProvider>
-        <ToastProvider>
-          <Router>
-            <AppContent />
-            <ClientOnly>
-              <ToastManager />
-            </ClientOnly>
-          </Router>
-        </ToastProvider>
-      </LitisBotProvider>
-      </CaseProvider>
-    </AuthProvider>
+    <LitisBotProvider>
+      <ToastProvider>
+        <Router>
+          <AppContent />
+          <ClientOnly>
+            <ToastManager />
+          </ClientOnly>
+        </Router>
+      </ToastProvider>
+    </LitisBotProvider>
+  </AuthProvider>
   );
 }
