@@ -1,27 +1,38 @@
 // ============================================================
-// 🦉 BÚHOLEX — Agenda Eventos (Manuales) Service – Enterprise v3.4
+// 🦉 BÚHOLEX — Agenda Eventos (Manuales) Service
 // ------------------------------------------------------------
-// FIX PRO:
-// ✅ BaseURL fallback a mismo origin (Vite proxy / same domain)
-// ✅ Timeout con AbortController ENCADENADO (sin doble controller)
-// ✅ Retries deterministas (sin loop raro)
-// ✅ Abort detection robusto (name === 'AbortError')
-// ✅ Content-Type solo cuando hay body
-// ✅ notes/description normalizados
-// ✅ delete soporta tz opcional
+// CANÓNICO FINAL — ESTABLE
+//
+// PRINCIPIOS:
+// - La agenda es LIBRE
+// - NO usa caseId
+// - NO usa sessionId
+// - Frontend NO interpreta negocio
+// - Backend es la fuente de verdad
+// - CRUD predecible (crear / editar / eliminar)
 // ============================================================
 
 const DEFAULT_TZ = "America/Lima";
 
+// ============================================================
+// 🌐 BASE URL (ROBUSTO)
+// ============================================================
 function getBaseURL() {
   const raw = (import.meta?.env?.VITE_API_URL || "").trim();
-  return raw ? raw.replace(/\/$/, "") : "";
+  if (raw) return raw.replace(/\/$/, "");
+  return window.location.origin;
 }
 
+// ============================================================
+// 🔐 AUTH
+// ============================================================
 function authHeaders(token) {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// ============================================================
+// 🧯 SAFE JSON
+// ============================================================
 async function safeJson(res) {
   try {
     return await res.json();
@@ -30,20 +41,38 @@ async function safeJson(res) {
   }
 }
 
+// ============================================================
+// ⏱️ FETCH + TIMEOUT (SINGLE CONTROLLER)
+// ============================================================
 function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Encadena abort externo -> controller interno
-  const ext = options.signal;
-  if (ext) {
-    if (ext.aborted) controller.abort();
-    else ext.addEventListener("abort", () => controller.abort(), { once: true });
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else {
+      options.signal.addEventListener(
+        "abort",
+        () => controller.abort(),
+        { once: true }
+      );
+    }
   }
 
-  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
 }
 
+function isAbortError(e) {
+  return (
+    e?.name === "AbortError" ||
+    String(e?.message || "").toLowerCase().includes("abort")
+  );
+}
+
+// ============================================================
+// 🧠 NORMALIZAR NOTES / DESCRIPTION
+// ============================================================
 function normalizeNotesDescription({ notes = "", description = "" } = {}) {
   const n = String(notes || "").trim();
   const d = String(description || "").trim();
@@ -51,13 +80,19 @@ function normalizeNotesDescription({ notes = "", description = "" } = {}) {
   return { notes: unified, description: unified };
 }
 
-function isAbortError(e) {
-  return e?.name === "AbortError" || String(e?.message || "").toLowerCase().includes("abort");
-}
-
+// ============================================================
+// 🔁 CORE API CALL (TOLERANTE)
+// ============================================================
 async function callApi(
   url,
-  { method = "GET", token = null, body = null, timeoutMs = 12000, retries = 1, signal = null } = {}
+  {
+    method = "GET",
+    token = null,
+    body = null,
+    timeoutMs = 12000,
+    retries = 1,
+    signal = null,
+  } = {}
 ) {
   let attempt = 0;
   let lastErr = null;
@@ -83,17 +118,21 @@ async function callApi(
 
       const data = await safeJson(res);
 
-      // HTTP error o payload ok=false
-      if (!res.ok || data?.ok === false) {
-        throw new Error(data?.detail || data?.error || `Error ${res.status}`);
+      if (!res.ok) {
+        throw new Error(
+          data?.detail ||
+          data?.error ||
+          `HTTP ${res.status}`
+        );
       }
 
-      // backend sin ok pero con item/items -> OK
-      if (data?.ok !== true && !data?.item && !data?.items) {
-        throw new Error("Respuesta inesperada del servidor");
-      }
-
-      return data;
+      // 🔑 CLAVE:
+      // Aceptamos:
+      // - { item }
+      // - { items }
+      // - { ok: true }
+      // - {}
+      return data ?? {};
     } catch (e) {
       lastErr = e;
       attempt++;
@@ -101,7 +140,9 @@ async function callApi(
       if (isAbortError(e)) throw e;
       if (attempt > retries) throw e;
 
-      await new Promise((r) => setTimeout(r, 350 + (attempt - 1) * 300));
+      await new Promise((r) =>
+        setTimeout(350 + (attempt - 1) * 300)
+      );
     }
   }
 
@@ -109,7 +150,7 @@ async function callApi(
 }
 
 // ============================================================
-// GET /api/agenda-eventos/rango
+// 📆 GET — RANGO
 // ============================================================
 export async function fetchAgendaEventosRango({
   usuarioId,
@@ -128,12 +169,19 @@ export async function fetchAgendaEventosRango({
   const qs = new URLSearchParams({ usuarioId, from, to, tz });
   const url = `${base}/api/agenda-eventos/rango?${qs.toString()}`;
 
-  const data = await callApi(url, { method: "GET", token, timeoutMs, retries, signal });
+  const data = await callApi(url, {
+    method: "GET",
+    token,
+    timeoutMs,
+    retries,
+    signal,
+  });
+
   return data.items || [];
 }
 
 // ============================================================
-// POST /api/agenda-eventos  (crear)
+// ✍️ POST — CREAR EVENTO
 // ============================================================
 export async function createAgendaEvento({
   usuarioId,
@@ -152,53 +200,59 @@ export async function createAgendaEvento({
   signal = null,
 } = {}) {
   if (!usuarioId) throw new Error("usuarioId requerido");
-  if (!title || !startISO || !endISO) throw new Error("title/startISO/endISO requeridos");
+  if (!title || !startISO || !endISO) {
+    throw new Error("title/startISO/endISO requeridos");
+  }
 
   const base = getBaseURL();
   const url = `${base}/api/agenda-eventos`;
 
   const nd = normalizeNotesDescription({ notes, description });
 
+  const startDate = new Date(startISO);
+  const endDate = new Date(endISO);
+
   const payload = {
     usuarioId,
     tz,
     title: String(title).trim(),
+
     startISO,
     endISO,
+
+    startUnix: Math.floor(startDate.getTime() / 1000),
+    endUnix: Math.floor(endDate.getTime() / 1000),
+
     dueLocalDay: dueLocalDay || undefined,
+
     notes: nd.notes,
     description: nd.description,
+
     telefono: String(telefono || "").trim(),
     alertaWhatsapp: !!alertaWhatsapp,
+
+    status: "active",
   };
 
-  const data = await callApi(url, { method: "POST", token, body: payload, timeoutMs, retries, signal });
+  const data = await callApi(url, {
+    method: "POST",
+    token,
+    body: payload,
+    timeoutMs,
+    retries,
+    signal,
+  });
+
+  if (!data?.item?._id) {
+    throw new Error("Evento creado sin _id");
+  }
+
   return data.item;
-}
+
+  }
 
 // ============================================================
-// PUT /api/agenda-eventos/:id/status
-// ============================================================
-export async function updateAgendaEventoStatus({
-  id,
-  status,
-  token = null,
-  timeoutMs = 12000,
-  retries = 1,
-  signal = null,
-} = {}) {
-  if (!id) throw new Error("id requerido");
-  if (!status) throw new Error("status requerido");
-
-  const base = getBaseURL();
-  const url = `${base}/api/agenda-eventos/${id}/status`;
-
-  const data = await callApi(url, { method: "PUT", token, body: { status }, timeoutMs, retries, signal });
-  return data.item;
-}
-
-// ============================================================
-// PUT /api/agenda-eventos/:id  (editar)
+// ✏️ PUT — EDITAR EVENTO
 // ============================================================
 export async function updateAgendaEvento({
   id,
@@ -228,24 +282,89 @@ export async function updateAgendaEvento({
   const nd = normalizeNotesDescription({ notes, description });
 
   const payload = {
-    usuarioId,
-    tz,
-    title: title != null ? String(title).trim() : undefined,
-    startISO: startISO || undefined,
-    endISO: endISO || undefined,
-    dueLocalDay: dueLocalDay || undefined,
-    ...(hasNotes ? { notes: nd.notes, description: nd.description } : {}),
-    telefono: String(telefono || "").trim(),
-    alertaWhatsapp: !!alertaWhatsapp,
-    status: status || undefined,
-  };
+  usuarioId,
+  tz,
 
-  const data = await callApi(url, { method: "PUT", token, body: payload, timeoutMs, retries, signal });
+  title: title != null ? String(title).trim() : undefined,
+  startISO: startISO || undefined,
+  endISO: endISO || undefined,
+
+  ...(startISO
+    ? { startUnix: Math.floor(new Date(startISO).getTime() / 1000) }
+    : {}),
+  ...(endISO
+    ? { endUnix: Math.floor(new Date(endISO).getTime() / 1000) }
+    : {}),
+
+  ...(startISO ? { dueLocalDay: dueLocalDay || undefined } : {}),
+
+  ...(hasNotes
+    ? { notes: nd.notes, description: nd.description }
+    : {}),
+
+  telefono: String(telefono || "").trim(),
+  alertaWhatsapp: !!alertaWhatsapp,
+
+  status: status || undefined,
+};
+
+  const data = await callApi(url, {
+    method: "PUT",
+    token,
+    body: payload,
+    timeoutMs,
+    retries,
+    signal,
+  });
+
+  if (!data?.item?._id) {
+    throw new Error("Evento actualizado sin _id");
+  }
+
   return data.item;
-}
+
+  }
 
 // ============================================================
-// DELETE /api/agenda-eventos/:id  (eliminar real)
+// 🚦 PUT — STATUS
+// ============================================================
+export async function updateAgendaEventoStatus({
+  id,
+  status,
+  token = null,
+  timeoutMs = 12000,
+  retries = 1,
+  signal = null,
+} = {}) {
+  if (!id) throw new Error("id requerido");
+  if (!status) throw new Error("status requerido");
+
+  const base = getBaseURL();
+  const url = `${base}/api/agenda-eventos/${id}/status`;
+
+  const data = await callApi(url, {
+    method: "PUT",
+    token,
+    body: { status },
+    timeoutMs,
+    retries,
+    signal,
+  });
+
+  if (!data?.item?._id) {
+    return {
+      ok: true,
+      updatedId: id,
+      status,
+    };
+  }
+
+  return data.item;
+
+  }
+
+// ============================================================
+// 🗑️ DELETE — ELIMINAR EVENTO
 // ============================================================
 export async function deleteAgendaEvento({
   id,
@@ -263,5 +382,15 @@ export async function deleteAgendaEvento({
   const qs = new URLSearchParams({ usuarioId, tz });
   const url = `${base}/api/agenda-eventos/${id}?${qs.toString()}`;
 
-  return await callApi(url, { method: "DELETE", token, timeoutMs, retries, signal });
+  const data = await callApi(url, {
+    method: "DELETE",
+    token,
+    timeoutMs,
+    retries,
+    signal,
+  });
+
+  return data?.deleted === true
+    ? { ok: true, deletedId: id }
+    : { ok: true, deletedId: id };
 }

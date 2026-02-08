@@ -115,3 +115,6 @@ tests/
 # === Audio TTS temporal ===
 backend/voz.mp3
 *.mp3
+
+ffmpeg.exe
+ffmpeg/

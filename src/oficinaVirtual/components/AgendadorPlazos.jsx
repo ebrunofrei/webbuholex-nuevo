@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { enviarMensajeIA } from "@/services/chatClient";
+import { sendChatMessage } from "@/services/chatClient.js";
 
 /**
  * 🗓️ AgendadorPlazos — FRONTEND CANÓNICO

@@ -1,14 +1,13 @@
-// ============================================================
-// 🧠 litisEngineCore.js – FRONTEND ENTERPRISE 2025 (FINAL)
-// ------------------------------------------------------------
-// - Payload limpio y compatible con backend
-// - Manejo real de adjuntos y contexto
-// - Normalizador universal de respuestas IA
-// - Zero confusión de agenda, plazos o expediente por saludos
-// ============================================================
+// ============================================================================
+// 🧠 litisEngineCore.js – FRONTEND ENTERPRISE 2026 (CANÓNICO)
+// ----------------------------------------------------------------------------
+// - Payload compatible con Backend Decisional
+// - Manejo de adjuntos y contexto mixto (Juris + PDF)
+// - Guardián de Integridad de Sesión
+// ============================================================================
 
 // ============================================================
-// CONFIG
+// CONFIGURACIÓN DE RUTAS
 // ============================================================
 
 const RAW_BASE =
@@ -24,162 +23,106 @@ const LITISBOT_PDF_ROUTE = String(
   import.meta.env.VITE_LITISBOT_PDF_ROUTE || "/api/pdf/juris-context"
 );
 
-
 // ============================================================
-// HELPERS DE URL
+// HELPERS DE RED (URL & FETCH)
 // ============================================================
-
-function joinUrl(base, path) {
-  const b = String(base || "").replace(/\/+$/, "");
-  let p = String(path || "");
-
-  if (!p) return b;
-  if (/^https?:\/\//i.test(p)) return p;
-  if (!p.startsWith("/")) p = "/" + p;
-
-  if (b.endsWith("/api") && p.startsWith("/api/")) {
-    p = p.replace(/^\/api/, "");
-    if (!p.startsWith("/")) p = "/" + p;
-  }
-
-  if (!b) return p;
-  return b + p;
-}
 
 function buildUrl(path) {
-  return joinUrl(API_BASE, path);
+  const base = API_BASE.replace(/\/+$/, "");
+  let p = String(path || "");
+  if (!p.startsWith("/") && !/^https?:\/\//i.test(p)) p = "/" + p;
+  return /^https?:\/\//i.test(p) ? p : base + p;
 }
-
-
-// ============================================================
-// SAFE FETCH
-// ============================================================
 
 async function safeFetchJson(url, options = {}, etiqueta = "request") {
   try {
-    const res = await fetch(url, options);
+    const res = await fetch(url, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...options.headers },
+    });
+    
     const rawText = await res.text().catch(() => "");
-
     let data = null;
     if (rawText) {
-      try {
-        data = JSON.parse(rawText);
-      } catch {}
+      try { data = JSON.parse(rawText); } catch { data = { raw: rawText }; }
     }
 
     if (!res.ok) {
-      const errMsg =
-        (data && (data.error || data.message)) ||
-        res.statusText ||
-        rawText ||
-        "HTTP_ERROR";
-
+      const errMsg = data?.error || data?.message || res.statusText || "HTTP_ERROR";
       console.error(`[litisEngineCore] HTTP ${res.status} en ${etiqueta}:`, errMsg);
       return { ok: false, data, status: res.status, error: errMsg };
     }
 
-    return { ok: true, data, status: res.status, error: null };
-
+    return { ok: true, data, status: res.status };
   } catch (err) {
-    if (err?.name === "AbortError") {
-      return { ok: false, data: null, status: 0, error: "AbortError" };
-    }
     console.error(`[litisEngineCore] Excepción en ${etiqueta}:`, err);
-    return { ok: false, data: null, status: 0, error: err?.message || String(err) };
+    return { ok: false, error: err?.message || String(err) };
   }
 }
 
-
 // ============================================================
-// NORMALIZADOR UNIVERSAL DE RESPUESTAS IA
+// NORMALIZADOR DE MENSAJES IA
 // ============================================================
-
-function nowISO() {
-  return new Date().toISOString();
-}
 
 export function normalizeAssistantMessage(raw) {
+  const now = new Date().toISOString();
   if (!raw || typeof raw !== "object") {
     return {
       role: "assistant",
-      content: "No pude procesar la respuesta.",
-      meta: { ok: false, createdAt: nowISO() },
+      content: "Error de comunicación con el Kernel.",
+      meta: { ok: false, createdAt: now },
     };
   }
 
-  const texto =
-    raw.reply ||
-    raw.respuesta ||
-    raw.text ||
-    raw.content ||
-    raw?.choices?.[0]?.message?.content ||
-    "";
+  const texto = raw.respuesta || raw.reply || raw.text || raw.content || "";
 
   return {
     role: "assistant",
-    content: String(texto || ""),
-    id:
-      raw.id ||
-      raw?.meta?.id ||
-      `a-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    content: String(texto),
+    id: raw.id || `a-${Date.now()}`,
     meta: {
       ...(raw.meta || {}),
       ok: raw.ok ?? true,
-      createdAt: raw?.meta?.createdAt || nowISO(),
+      createdAt: raw.meta?.createdAt || now,
+      intent: typeof raw.intent === "string" ? raw.intent : null,
+      payload: raw.intent && typeof raw.payload === "object" ? raw.payload : null,
     },
   };
 }
 
-
 // ============================================================
-// 1) PDF ANALYSIS
+// 1) ANÁLISIS DE DOCUMENTOS (PDF)
 // ============================================================
 
 export async function procesarPDFAdjunto(file, opts = {}) {
-  try {
-    if (!file) return { ok: false, error: "NO_FILE" };
+  if (!file) return { ok: false, error: "NO_FILE" };
 
-    const form = new FormData();
-    form.append("file", file);
+  const form = new FormData();
+  form.append("file", file);
 
-    const url = buildUrl(LITISBOT_PDF_ROUTE);
+  const { ok, data, error } = await safeFetchJson(
+    buildUrl(LITISBOT_PDF_ROUTE),
+    { method: "POST", body: form, headers: {}, signal: opts.signal }, // Headers vacíos para FormData
+    "analizar PDF"
+  );
 
-    const { ok, data, error } = await safeFetchJson(
-      url,
-      { method: "POST", body: form, signal: opts.signal },
-      "analizar PDF"
-    );
-
-    if (!ok || !data || data.ok === false) {
-      return {
-        ok: false,
-        error: data?.error || data?.message || error || "PDF_BACKEND_ERROR",
-      };
-    }
-
-    const jurisTextoBase = data.jurisTextoBase || data.resumen || "";
-    const meta = data.meta || {};
-
-    return {
-      ok: true,
-      data: {
-        tipo: "pdf",
-        nombreArchivo: file.name,
-        jurisTextoBase: String(jurisTextoBase || ""),
-        resumen: String(data.resumen || ""),
-        embeddingId: data.embeddingId || null,
-        meta,
-      },
-    };
-
-  } catch (e) {
-    return { ok: false, error: e?.message || String(e) };
+  if (!ok || !data?.ok) {
+    return { ok: false, error: data?.error || error || "PDF_BACKEND_ERROR" };
   }
+
+  return {
+    ok: true,
+    data: {
+      tipo: "pdf",
+      nombreArchivo: file.name,
+      jurisTextoBase: String(data.jurisTextoBase || data.resumen || ""),
+      meta: data.meta || {},
+    },
+  };
 }
 
-
 // ============================================================
-// 2) CONTEXTO JURIS + PDF
+// 2) CONSTRUCTOR DE CONTEXTO MIXTO
 // ============================================================
 
 export async function construirContextoJuris(jurisSeleccionada, pdfContext) {
@@ -188,143 +131,88 @@ export async function construirContextoJuris(jurisSeleccionada, pdfContext) {
   if (jurisSeleccionada) {
     partes.push({
       tipo: "jurisprudencia",
-      id: jurisSeleccionada._id || jurisSeleccionada.id || null,
+      id: jurisSeleccionada._id || jurisSeleccionada.id,
       titulo: jurisSeleccionada.titulo || "",
-      sala: jurisSeleccionada.sala || "",
       numero: jurisSeleccionada.numero || jurisSeleccionada.numeroExpediente || "",
       sumilla: jurisSeleccionada.sumilla || "",
-      tema: jurisSeleccionada.tema || "",
-      litisContext: jurisSeleccionada.litisContext || null,
-      litisMeta: jurisSeleccionada.litisMeta || null,
-      litisSource: jurisSeleccionada.litisSource || null,
-      litisContextId: jurisSeleccionada.litisContextId || null,
     });
   }
 
   if (pdfContext) {
-    const ctx = pdfContext?.ok && pdfContext?.data ? pdfContext.data : pdfContext;
-    partes.push({ ...ctx, tipo: ctx.tipo || "pdf" });
+    const ctx = pdfContext.data || pdfContext;
+    partes.push({ ...ctx, tipo: "pdf" });
   }
 
   return {
     tipo: "contexto-mixto",
     partes,
-    hasJuris: Boolean(jurisSeleccionada),
-    hasPdf: Boolean(pdfContext),
+    hasJuris: !!jurisSeleccionada,
+    hasPdf: !!pdfContext,
   };
 }
 
-
 // ============================================================
-// 3) ENVIAR PROMPT A LITISBRAIN
+// 3) ENGINE CORE: ENVÍO DE PROMPT
 // ============================================================
 
-function normalizeAdjuntosMeta(adjuntos = []) {
-  return (adjuntos || [])
-    .map((a) => ({
-      name: a.name || "",
-      size: a.size || 0,
-      type: a.type || "",
-      kind: a.kind || "file",
-      url: a.url || null,
-    }))
-    .filter(Boolean);
-}
+export async function enviarPromptLitis(params) {
+  const {
+    prompt,
+    usuarioId,
+    sessionId,      // 🔑 CRÍTICO
+    expedienteId,   // 📁 Contexto Pro
+    adjuntos = [],
+    contexto = null,
+    pro = false,
+    modoLitis = "litigante",
+    signal,
+  } = params;
 
-export async function enviarPromptLitis({
-  prompt,
-  usuarioId,
-  usuarioNombre = null,
-
-  expedienteId = null,
-  adjuntos = [],
-  contexto = null,
-
-  pro = false,
-  modoLitis = "litigante",
-  personalidad = null,
-  memoriaConfig = null,
-
-  toolMode = null,
-  materia = "general",
-  idioma = "es-PE",
-  pais = "Perú",
-  ratioEngine = false,
-
-  signal = undefined,
-}) {
-  // --------------------------------------------------------------------
-  // NO fabricar expedienteId artificial para mensajes sociales
-  // --------------------------------------------------------------------
-
-  const finalExpedienteId = expedienteId || null;
-
-  // --------------------------------------------------------------------
-  // PAYLOAD LIMPIO Y COMPATIBLE CON BACKEND ENTERPRISE
-  // --------------------------------------------------------------------
+  // 🛡️ GUARDIÁN DE INTEGRIDAD (Previene ReferenceError en el chat)
+  if (!sessionId) {
+    console.error("❌ Bloqueo Core: Intentando enviar sin sessionId");
+    return normalizeAssistantMessage({
+      ok: false,
+      reply: "Error de sesión: Reinicie el chat para obtener una identidad de consulta válida.",
+    });
+  }
 
   const payload = {
     prompt: String(prompt || ""),
     usuarioId: usuarioId || "Invitado",
-    usuarioNombre: usuarioNombre ? String(usuarioNombre) : undefined,
-
-    expedienteId: finalExpedienteId,
-
-    idioma: String(idioma),
-    pais: String(pais),
-    materia: String(materia),
-    ratioEngine: Boolean(ratioEngine),
-    toolMode: toolMode ?? null,
-
-    adjuntos: normalizeAdjuntosMeta(adjuntos),
+    sessionId: sessionId,
+    expedienteId: expedienteId || null,
+    adjuntos: adjuntos.map(a => ({ name: a.name, size: a.size, kind: "file" })),
     contexto,
-
     pro: Boolean(pro),
     modoLitis,
-    personalidad,
-    memoriaConfig,
+    pais: "Perú",
+    idioma: "es-PE"
   };
 
-  const url = buildUrl(LITISBOT_ROUTE);
-
   const { ok, data } = await safeFetchJson(
-    url,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal,
-    },
+    buildUrl(LITISBOT_ROUTE),
+    { method: "POST", body: JSON.stringify(payload), signal },
     "enviar prompt a IA"
   );
 
-  if (!ok || !data || data.ok === false) {
-    const msg =
-      data?.message ||
-      data?.error ||
-      "Hubo un problema procesando tu consulta.";
-
+  if (!ok || !data?.ok) {
     return normalizeAssistantMessage({
       ok: false,
-      reply: msg,
-      meta: {
-        ...(data?.meta || {}),
-        ok: false,
-        error: data?.error || data?.message || "IA_ERROR",
-      },
+      reply: data?.error || "Hubo un problema procesando tu consulta legal.",
     });
   }
 
   return normalizeAssistantMessage(data);
 }
 
-
 // ============================================================
-// EXPORT DEFAULT
+// EXPORT DEFAULT (ORQUESTACIÓN CANÓNICA)
 // ============================================================
 
 export default {
   procesarPDFAdjunto,
   construirContextoJuris,
   enviarPromptLitis,
+  normalizeAssistantMessage
 };

@@ -1,49 +1,39 @@
 // ============================================================================
-// 🦉 BúhoLex | ChatMessage — Memoria conversacional CANÓNICA
+// 📁 ChatMessage.js — CANONICAL R7.7++ (PUBLIC + PRO SAFE)
 // ----------------------------------------------------------------------------
-// - Fuente ÚNICA de verdad del chat
-// - 1 Caso = 1 SessionId derivado (case_<caseId>)
-// - NO depende de ChatSession
-// - Totalmente rehidratable
+// - Home Chat (PUBLIC): NO usuarioId
+// - Pro / Case Chat: usuarioId REQUIRED
+// - sessionId = única identidad universal
 // ============================================================================
 
 import mongoose from "mongoose";
 
 const ChatMessageSchema = new mongoose.Schema(
   {
-    // ===============================
-    // Identidad / Multi-tenant
-    // ===============================
+    // ❗️ SOLO requerido para Pro / Case Chat
     usuarioId: {
       type: String,
-      required: true,
+      required: false,
       index: true,
+      default: null,
     },
 
-    // Caso jurídico (fuente real)
-    caseId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Case",
-      required: true,
-      index: true,
-    },
-
-    // Session CANÓNICA (DERIVADA)
-    // case_<caseId>
     sessionId: {
       type: String,
       required: true,
       index: true,
     },
 
-    // ===============================
-    // Mensaje
-    // ===============================
+    caseId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
     role: {
       type: String,
       enum: ["user", "assistant", "system"],
       required: true,
-      index: true,
     },
 
     content: {
@@ -52,31 +42,26 @@ const ChatMessageSchema = new mongoose.Schema(
       trim: true,
     },
 
+    embedding: {
+      type: [Number],
+      default: null,
+    },
+
     meta: {
       type: Object,
       default: {},
     },
-
-    // ===============================
-    // Vector semántico (IA)
-    // ===============================
-    embedding: {
-      type: [Number], // vector
-      index: true,
-    },
   },
   {
     timestamps: true,
-    minimize: false,
+    collection: "chat_messages",
   }
 );
 
-// ===============================
-// Índices enterprise
-// ===============================
+// ---------------------------------------------------------------------------
+// ÍNDICES CANÓNICOS
+// ---------------------------------------------------------------------------
 ChatMessageSchema.index({ sessionId: 1, createdAt: 1 });
-ChatMessageSchema.index({ caseId: 1, createdAt: 1 });
-ChatMessageSchema.index({ usuarioId: 1, caseId: 1, createdAt: 1 });
+ChatMessageSchema.index({ usuarioId: 1, sessionId: 1 });
 
 export default mongoose.model("ChatMessage", ChatMessageSchema);
-

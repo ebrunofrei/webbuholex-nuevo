@@ -1,30 +1,50 @@
 // ======================================================================
-// ⚖️ MOTIVATION AUDIT – CONTROL DE MOTIVACIÓN APARENTE
+// ⚖️ MOTIVATION AUDIT – CONTROL DE MOTIVACIÓN APARENTE (R2 ENTERPRISE)
+// ----------------------------------------------------------------------
+// Evalúa si la decisión presenta insuficiencia, circularidad o
+// deficiencia lógica que comprometa su motivación.
 // ======================================================================
 
-export function auditMotivation({ analysis, decisionText = "" }) {
+export function auditMotivation({ analysis = {}, decisionText = "" }) {
   const issues = [];
 
-  if (!analysis) return { hasApparentMotivation: false, issues };
+  // Si no hay análisis previo, se asume imposible evaluar motivación.
+  if (!analysis || typeof analysis !== "object") {
+    return { hasApparentMotivation: false, issues };
+  }
 
-  if (analysis.score < 0.6) {
+  // -------------------------------------------------------------
+  // 1) Coherencia lógica global
+  // -------------------------------------------------------------
+  const score = typeof analysis.score === "number" ? analysis.score : 1;
+
+  if (score < 0.60) {
     issues.push(
-      "Bajo nivel de coherencia lógica entre premisas y conclusión."
+      "Existe un nivel reducido de coherencia lógica entre premisas y conclusión, lo cual debilita la motivación."
     );
   }
 
-  if (analysis.fallacies?.detected?.length) {
+  // -------------------------------------------------------------
+  // 2) Falacias lógicas detectadas
+  // -------------------------------------------------------------
+  if (analysis.fallacies?.detected?.length > 0) {
     issues.push(
-      "Se detectan falacias lógicas que comprometen la motivación de la decisión."
+      "Se identifican falacias lógicas que afectan la validez de la motivación judicial."
     );
   }
 
-  if (!decisionText || decisionText.length < 300) {
+  // -------------------------------------------------------------
+  // 3) Extensión mínima de motivación
+  // -------------------------------------------------------------
+  if (!decisionText || decisionText.trim().length < 300) {
     issues.push(
-      "La motivación es insuficiente o meramente enunciativa."
+      "La motivación es breve, insuficiente o meramente enunciativa, sin desarrollo argumentativo verificable."
     );
   }
 
+  // -------------------------------------------------------------
+  // RESULTADO FINAL
+  // -------------------------------------------------------------
   return {
     hasApparentMotivation: issues.length > 0,
     issues,

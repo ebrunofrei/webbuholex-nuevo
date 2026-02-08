@@ -1,98 +1,69 @@
-// ============================================================
-// 🧠 BúhoLex | SessionMemoryService (CANÓNICO)
-// ------------------------------------------------------------
-// - Memoria corta para IA (NO auditoría)
-// - Fuente: MongoDB / Conversacion
-// - Clave ÚNICA: usuarioId + sessionId (case_<caseId>)
-// - Usado exclusivamente por /ia/chat
-// ============================================================
+// ============================================================================
+// 🧠 SessionMemoryService — R5 (2026) — alineado con TurnContextResolver
+// ----------------------------------------------------------------------------
+// RESPONSABILIDAD:
+// - Mantener memoria corta *coherente con análisis semántico*
+// - Cortar historial cuando analysisReset=true
+// - Persistir tags para decisiones futuras
+// - NO es auditoría, NO es historial legalmente relevante
+// ============================================================================
 
 import Conversacion from "../models/Conversacion.js";
 
-// ===============================
-// Configuración
-// ===============================
-
-const MAX_MENSAJES = 40;   // 20 turnos
+// Config
+const MAX_MENSAJES = 40;
 const MAX_LEN_MSG = 6000;
 
-// ===============================
-// Helpers internos
-// ===============================
-
+// ============================================================================
+// Helpers
+// ============================================================================
 function safeStr(v, maxLen = MAX_LEN_MSG) {
-  if (v === null || v === undefined) return "";
+  if (!v) return "";
   const s = String(v).replace(/\r/g, "").trim();
   return s.length > maxLen ? s.slice(0, maxLen) : s;
 }
 
-function isCanonicalSessionId(sessionId) {
-  return typeof sessionId === "string" && sessionId.startsWith("case_");
+function isCanonicalSessionId(sid) {
+  return typeof sid === "string" && sid.startsWith("case_");
 }
 
-function normalizeRole(roleRaw) {
-  const r = String(roleRaw || "").toLowerCase();
-  if (r === "assistant" || r === "system" || r === "user") return r;
-  return "user";
+function normalizeRole(r) {
+  r = String(r || "").toLowerCase();
+  return ["user", "assistant"].includes(r) ? r : "user";
 }
 
-function normalizeMeta(meta = {}) {
-  return {
-    // --- core ---
-    intencion: meta.intencion,
-    materiaDetectada: meta.materiaDetectada,
-    idioma: meta.idioma || "es-PE",
-    pais: meta.pais || "Perú",
-    modo: meta.modo || "general",
-
-    // --- orquestación ---
-    toolMode: meta.toolMode,
-    modoLitis: meta.modoLitis,
-    ratioEngine: meta.ratioEngine,
-
-    // --- agenda ---
-    agendaHandled: meta.agendaHandled,
-    agendaDraft: meta.agendaDraft,
-    agendaEventPersisted: meta.agendaEventPersisted,
-    agendaFollowUp: meta.agendaFollowUp,
-
-    // --- jurisprudencia ---
-    jurisprudenciaIds: Array.isArray(meta.jurisprudenciaIds)
-      ? meta.jurisprudenciaIds.map(String)
-      : [],
-    jurisprudenciaMeta: Array.isArray(meta.jurisprudenciaMeta)
-      ? meta.jurisprudenciaMeta
-      : [],
-  };
-}
-
-// ============================================================
-// 🧠 OBTENER HISTORIAL DE SESIÓN (para LLM)
-// ============================================================
-
-export async function obtenerHistorialSesion(usuarioId, sessionId) {
+// ============================================================================
+// 🧠 OBTENER HISTORIAL → RESPETA RESET & TAGS (R5)
+// ============================================================================
+export async function obtenerHistorialSesion(usuarioId, sessionId, turnContext = null) {
   try {
-    if (!usuarioId || !isCanonicalSessionId(sessionId)) {
-      return [];
-    }
+    if (!usuarioId || !isCanonicalSessionId(sessionId)) return [];
 
     const convo = await Conversacion.findOne(
       { usuarioId, expedienteId: sessionId },
       { mensajes: 1 }
     ).lean();
 
-    const mensajes = Array.isArray(convo?.mensajes)
-      ? convo.mensajes
-      : [];
+    let msgs = Array.isArray(convo?.mensajes) ? convo.mensajes : [];
 
-    if (!mensajes.length) return [];
+    // 1. Cortar historial si este turno es un NEW_TOPIC o HARD_RESET
+    if (turnContext?.analysisReset) {
+      const lastResetIndex = [...msgs].reverse().findIndex(
+        (m) => m?.turnContext?.analysisReset === true
+      );
 
-    return mensajes
+      if (lastResetIndex !== -1) {
+        msgs = msgs.slice(msgs.length - lastResetIndex);
+      }
+    }
+
+    // 2. Normalizar salida
+    return msgs
       .slice(-MAX_MENSAJES)
-      .filter(m => m && m.content)
-      .map(m => ({
+      .map((m) => ({
         role: normalizeRole(m.role),
         content: safeStr(m.content),
+        turnContext: m.turnContext || null,
         fecha: m.fecha ? new Date(m.fecha).getTime() : 0,
       }))
       .sort((a, b) => a.fecha - b.fecha)
@@ -104,51 +75,46 @@ export async function obtenerHistorialSesion(usuarioId, sessionId) {
   }
 }
 
-// ============================================================
-// 🧾 GUARDAR TURNO DE SESIÓN (user + assistant)
-// ============================================================
-
+// ============================================================================
+// 🧾 GUARDAR TURNO → GUARDA turnContext & tags
+// ============================================================================
 export async function guardarTurnoSesion(
   usuarioId,
   sessionId,
   pregunta,
   respuesta,
-  meta = {}
+  meta = {},
+  turnContext = null
 ) {
   try {
-    if (!usuarioId || !isCanonicalSessionId(sessionId)) {
-      return false;
-    }
+    if (!usuarioId || !isCanonicalSessionId(sessionId)) return false;
 
     const p = safeStr(pregunta);
     const r = safeStr(respuesta);
-
     if (!p || !r) return false;
 
     const now = new Date();
-    const commonMeta = normalizeMeta(meta);
 
     const userMsg = {
       role: "user",
       content: p,
       fecha: now,
+      turnContext,
     };
 
     const botMsg = {
       role: "assistant",
       content: r,
       fecha: now,
-      ...commonMeta,
+      turnContext,
+      meta,
     };
 
     await Conversacion.findOneAndUpdate(
       { usuarioId, expedienteId: sessionId },
       {
         $push: {
-          mensajes: {
-            $each: [userMsg, botMsg],
-            $slice: -MAX_MENSAJES,
-          },
+          mensajes: { $each: [userMsg, botMsg], $slice: -MAX_MENSAJES },
         },
         $set: { updatedAt: now },
         $setOnInsert: { createdAt: now },
@@ -157,16 +123,16 @@ export async function guardarTurnoSesion(
     );
 
     return true;
+
   } catch (err) {
     console.error("❌ guardarTurnoSesion:", err);
     return false;
   }
 }
 
-// ============================================================
-// Export canónico
-// ============================================================
-
+// ============================================================================
+// Export
+// ============================================================================
 export default {
   obtenerHistorialSesion,
   guardarTurnoSesion,

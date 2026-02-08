@@ -1,45 +1,82 @@
-// backend/brain/analysis/coherenceChecks.js
-// ============================================================
-// D3.5 — Tests de coherencia interna (INTERNO)
-// Rebaja tono y alcance si detecta inconsistencias.
-// ============================================================
+// ============================================================================
+// ⚖️ COHERENCE CHECKS – D3.5 (R2 ENTERPRISE)
+// ----------------------------------------------------------------------------
+// Microtests de consistencia interna.
+//
+// Objetivo:
+//   - Detectar señales narrativas que inflan certeza o gravedad.
+//   - NO decide, NO clasifica el caso. Solo indica tensiones lógicas.
+//   - Compatible con computeCoherenceScore y el motor argumentativo R2.
+//
+// Salidas:
+//   • flags: mapa booleano de señales
+//   • tonedDown: si el texto fue suavizado
+//   • reasoning / conclusion: versiones ajustadas
+// ============================================================================
 
+/* ------------------------------------------------------------
+   Helpers
+------------------------------------------------------------ */
 function safeStr(v = "") {
   return String(v || "").trim();
 }
 
-function hasUnprovenPremise(facts = [], context = {}) {
-  return !facts || facts.length === 0 || context.pruebaInsuficiente === true;
+function concat(...xs) {
+  return xs.filter(Boolean).join(" ").trim().toLowerCase();
 }
 
+/* ------------------------------------------------------------
+   Checks semánticos
+------------------------------------------------------------ */
+
+// 1) Premisas sin sustento
+function hasUnprovenPremise(facts = [], ctx = {}) {
+  return !facts?.length || ctx?.pruebaInsuficiente === true;
+}
+
+// 2) Afirmaciones excesivas (“overclaiming”)
 function overclaims(text = "") {
-  return /\bes\b|\bdebe\b|\bcorresponde\b/i.test(text);
+  // Evita falsos positivos: detecta “es” solo como verbo copulativo
+  return /\b(es|debe|corresponde)\b/i.test(text);
 }
 
+// 3) Probabilidad narrada como certeza
 function probabilityAsCertainty(text = "") {
-  return /concluye|demuestra|queda acreditado/i.test(text);
+  return /\b(concluye|demuestra|queda acreditado)\b/i.test(text);
 }
 
-function weakAnalogy(context = {}) {
-  return context.usaAnalogía === true && context.identidadRelevante !== true;
+// 4) Analogía débil
+function weakAnalogy(ctx = {}) {
+  return ctx?.usaAnalogía === true && ctx?.identidadRelevante !== true;
 }
 
-function disproportionateGravity(gravity = {}, context = {}) {
+// 5) Gravedad desproporcionada respecto al hecho
+function disproportionateGravity(gravity = {}, ctx = {}) {
   if (!gravity?.label) return false;
-  if (gravity.label === "nulidad" && context.afectaDefensa !== true) return true;
+  if (gravity.label === "nulidad" && ctx?.afectaDefensa !== true) return true;
   return false;
 }
 
+/* ------------------------------------------------------------
+   Suavizador (rebaja automática)
+------------------------------------------------------------ */
+
 function soften(text = "") {
-  return text
-    .replace(/\bes\b/gi, "resulta")
-    .replace(/\bdebe\b/gi, "podría")
-    .replace(/\bcorresponde\b/gi, "sería pertinente");
+  return safeStr(
+    text
+      .replace(/\bes\b/gi, "resulta")
+      .replace(/\bdebe\b/gi, "podría")
+      .replace(/\bcorresponde\b/gi, "sería pertinente")
+      .replace(/\bconcluye\b/gi, "sugiere")
+      .replace(/\bdemuestra\b/gi, "indica")
+      .replace(/\bqueda acreditado\b/gi, "podría considerarse acreditado")
+  );
 }
 
-// ============================================================
-// API PRINCIPAL
-// ============================================================
+/* ------------------------------------------------------------
+   API PRINCIPAL
+------------------------------------------------------------ */
+
 export function runCoherenceChecks({
   reasoning = "",
   conclusion = "",
@@ -47,28 +84,38 @@ export function runCoherenceChecks({
   gravity = {},
   context = {},
 }) {
-  let flags = {
+  const baseText = concat(reasoning, conclusion);
+
+  const flags = {
     unprovenPremise: hasUnprovenPremise(facts, context),
-    overclaims: overclaims(reasoning + " " + conclusion),
-    probabilityAsCertainty: probabilityAsCertainty(reasoning + " " + conclusion),
+    overclaims: overclaims(baseText),
+    probabilityAsCertainty: probabilityAsCertainty(baseText),
     weakAnalogy: weakAnalogy(context),
     disproportionateGravity: disproportionateGravity(gravity, context),
   };
 
-  const failed = Object.values(flags).some(Boolean);
+  const hasIssue = Object.values(flags).some(Boolean);
 
-  if (!failed) {
-    return { reasoning, conclusion, flags, tonedDown: false };
+  if (!hasIssue) {
+    return {
+      reasoning: safeStr(reasoning),
+      conclusion: safeStr(conclusion),
+      flags,
+      tonedDown: false,
+    };
   }
 
-  // Rebaja automática
-  const newReasoning = soften(reasoning);
-  const newConclusion =
-    "Con la información disponible, " + soften(conclusion);
+  // ------------------------------------------------------------
+  // Rebaja automática elegante (NO cambia el sentido lógico)
+  // ------------------------------------------------------------
+  const softenedReasoning = soften(reasoning);
+  const softenedConclusion = safeStr(
+    "Con la información disponible, " + soften(conclusion)
+  );
 
   return {
-    reasoning: safeStr(newReasoning),
-    conclusion: safeStr(newConclusion),
+    reasoning: softenedReasoning,
+    conclusion: softenedConclusion,
     flags,
     tonedDown: true,
   };

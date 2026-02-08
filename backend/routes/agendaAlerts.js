@@ -1,10 +1,10 @@
 // ============================================================
-// 🦉 BÚHOLEX – AGENDA ALERTS (Fase A Enterprise)
+// 🦉 BÚHOLEX – AGENDA ALERTS (Fase A Enterprise · LIBRE)
 // ------------------------------------------------------------
-// - DOS endpoints: /alertas-live (flexible) y /alertas (producción).
-// - Coherente 100% con AlertsEngine + Repo refactorizados.
-// - Sin campos fantasmas, sin cálculos duplicados.
-// - Respuesta limpia, lista para app móvil y escritorio PRO.
+// - DOS endpoints: /alertas-live y /alertas
+// - Agenda LIBRE por defecto (sin expediente)
+// - Soporta expedienteId opcional (IA / casos)
+// - Sin persistencia, sin lógica duplicada
 // ============================================================
 
 import express from "express";
@@ -17,12 +17,9 @@ import { findAgendaAlertCandidates } from "../services/agenda/repo.js";
 const router = express.Router();
 
 /* ============================================================
-   🟢 1. ALERTAS LIVE (modo tiempo real)
+   🟢 1. ALERTAS LIVE (tiempo real)
    ------------------------------------------------------------
-   GET /api/agenda/alertas-live?usuarioId=...&horizonSeconds=...
-   - Uso flexible para UI reactiva
-   - No persiste nada
-   - Horizon configurable desde el frontend
+   GET /api/agenda/alertas-live?usuarioId=...&horizonSeconds=...&expedienteId=?
    ============================================================ */
 router.get("/alertas-live", async (req, res) => {
   try {
@@ -30,6 +27,11 @@ router.get("/alertas-live", async (req, res) => {
     if (!usuarioId) {
       return res.status(400).json({ ok: false, error: "Falta usuarioId" });
     }
+
+    // expedienteId ES OPCIONAL
+    const expedienteId = req.query.expedienteId
+      ? String(req.query.expedienteId).trim()
+      : null;
 
     const nowUnix = Math.floor(Date.now() / 1000);
     const horizonSeconds = req.query.horizonSeconds
@@ -43,6 +45,7 @@ router.get("/alertas-live", async (req, res) => {
 
     const candidates = await findAgendaAlertCandidates({
       usuarioId,
+      expedienteId,
       fromUnix: win.fromUnix,
       toUnix: win.toUnix,
     });
@@ -69,7 +72,7 @@ router.get("/alertas-live", async (req, res) => {
         },
 
         minutesBefore: ev.minutesBefore ?? null,
-        alert: info, // { kind, risk, remainingSeconds, triggers, endUnix }
+        alert: info,
       });
     }
 
@@ -81,17 +84,16 @@ router.get("/alertas-live", async (req, res) => {
       alerts,
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || String(err) });
+    return res
+      .status(500)
+      .json({ ok: false, error: err?.message || String(err) });
   }
 });
 
 /* ============================================================
-   🔵 2. ALERTAS PRODUCCIÓN (serio, estable, completo)
+   🔵 2. ALERTAS PRODUCCIÓN (estable)
    ------------------------------------------------------------
-   GET /api/agenda/alertas?usuarioId=...
-   - Horizon fijo (24h)
-   - Estándar enterprise
-   - Ideal para backend, móvil, cron futuro (Fase C)
+   GET /api/agenda/alertas?usuarioId=...&expedienteId=?
    ============================================================ */
 router.get("/alertas", async (req, res) => {
   try {
@@ -100,8 +102,13 @@ router.get("/alertas", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Falta usuarioId" });
     }
 
+    // expedienteId OPCIONAL
+    const expedienteId = req.query.expedienteId
+      ? String(req.query.expedienteId).trim()
+      : null;
+
     const nowUnix = Math.floor(Date.now() / 1000);
-    const DEFAULT_HORIZON = 24 * 60 * 60; // 24 horas
+    const DEFAULT_HORIZON = 24 * 60 * 60; // 24h
 
     const win = buildAlertWindow(nowUnix, DEFAULT_HORIZON);
     if (!win) {
@@ -110,6 +117,7 @@ router.get("/alertas", async (req, res) => {
 
     const candidates = await findAgendaAlertCandidates({
       usuarioId,
+      expedienteId,
       fromUnix: win.fromUnix,
       toUnix: win.toUnix,
     });
@@ -151,7 +159,9 @@ router.get("/alertas", async (req, res) => {
       alerts,
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || String(err) });
+    return res
+      .status(500)
+      .json({ ok: false, error: err?.message || String(err) });
   }
 });
 

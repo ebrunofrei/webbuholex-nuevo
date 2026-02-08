@@ -5,24 +5,32 @@ import endOfMonth from "date-fns/endOfMonth";
 // =========================
 // Fechas / TZ
 // =========================
-export function safeDate(d) {
-  if (d instanceof Date) return Number.isNaN(d.getTime()) ? new Date() : d;
-
-  if (typeof d === "string") {
-    const x = new Date(d);
-    if (!Number.isNaN(x.getTime())) return x;
-
-    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-    if (m) {
-      const [_, yy, mm, dd, hh, mi] = m;
-      const z = new Date(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), 0);
-      return Number.isNaN(z.getTime()) ? new Date() : z;
+  export function safeDate(d) {
+    if (d instanceof Date) {
+      return Number.isNaN(d.getTime()) ? null : d;
     }
-  }
 
-  const x = new Date(d);
-  return Number.isNaN(x.getTime()) ? new Date() : x;
-}
+    if (typeof d === "string") {
+      const x = new Date(d);
+      if (!Number.isNaN(x.getTime())) return x;
+
+      const m = d.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+      if (m) {
+        const [_, yy, mm, dd, hh, mi] = m;
+        const z = new Date(
+          Number(yy),
+          Number(mm) - 1,
+          Number(dd),
+          Number(hh),
+          Number(mi),
+          0
+        );
+        return Number.isNaN(z.getTime()) ? null : z;
+      }
+    }
+
+    return null; // 👈 CAMBIO CLAVE
+  }
 
 export function toYMD(dateLike, tz = "America/Lima") {
   return new Intl.DateTimeFormat("en-CA", {
@@ -35,6 +43,7 @@ export function toYMD(dateLike, tz = "America/Lima") {
 
 export function formatTimeHHmm(dateLike, locale = "es-PE") {
   const d = safeDate(dateLike);
+  if (!d) return "";
   return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 }
 
@@ -161,7 +170,14 @@ export function plazoToCalendarEvent(ev) {
     start: end,
     end,
     allDay: true,
-    resource: { type: "plazo", raw: { ...ev, endUnix } },
+    resource: {
+      type: "plazo",
+      raw: {
+        ...ev,
+        _id: ev._id || ev.id || null, // 👈 blindaje
+        endUnix,
+      },
+    },
   };
 }
 
@@ -177,13 +193,56 @@ export function manualToCalendarEvent(ev) {
     allDay: true,
     resource: {
       type: "manual",
-      raw: {
-        ...ev,
-        startISO: ev.startISO || start.toISOString(),
-        endISO: ev.endISO || end.toISOString(),
-        startUnix: ev.startUnix || Math.floor(start.getTime() / 1000),
-        endUnix: ev.endUnix || Math.floor(end.getTime() / 1000),
-      },
+     raw: {
+      ...ev,
+      _id: ev._id || ev.id || null, // 👈 clave
+      startISO: ev.startISO || start.toISOString(),
+      endISO: ev.endISO || end.toISOString(),
+      startUnix: ev.startUnix || Math.floor(start.getTime() / 1000),
+      endUnix: ev.endUnix || Math.floor(end.getTime() / 1000),
     },
+    },
+  };
+}
+// =========================
+// Canonical Event Builder
+// =========================
+export function buildAgendaEvento({
+  usuarioId,
+  tz,
+  title,
+  startDate,
+  notes = "",
+  telefono = "",
+  alertaWhatsapp = false,
+  status = "active",
+}) {
+  if (!usuarioId) throw new Error("usuarioId requerido");
+  if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) {
+    throw new Error("startDate inválido");
+  }
+
+  const startISO = startDate.toISOString();
+  const endISO = startISO;
+
+  const startUnix = Math.floor(startDate.getTime() / 1000);
+  const endUnix = startUnix;
+
+  const dueLocalDay = toYMD(startDate, tz);
+
+  return {
+    usuarioId,
+    tz,
+    title: String(title || "").trim(),
+    startISO,
+    endISO,
+    startUnix,
+    endUnix,
+    dueLocalDay,
+    notes: String(notes || ""),
+    description: String(notes || ""),
+    telefono: String(telefono || "").trim(),
+    alertaWhatsapp: !!alertaWhatsapp,
+    status,
   };
 }

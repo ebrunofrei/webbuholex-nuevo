@@ -1,6 +1,5 @@
 import React from "react";
 import { useAuth } from "@/context/AuthContext";
-import SidebarChats from "@/components/SidebarChats";
 import LitisBotChatBase from "@/components/LitisBotChatBase";
 import { FolderKanban } from "lucide-react";
 

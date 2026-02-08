@@ -54,13 +54,6 @@ export default function ChatLayout({
           </div>
         )}
 
-        {/* ---------- AVISO SUAVE: SIN CASO ---------- */}
-        {!loadingCase && !hasCase && (
-          <div className="px-4 py-2 text-sm bg-yellow-50 text-yellow-800 border-b border-yellow-200">
-            No hay un caso activo. Puedes conversar libremente o crear uno cuando lo desees.
-          </div>
-        )}
-
         {/* ---------- CHAT WINDOW (SIEMPRE) ---------- */}
         <section className="flex-1 min-h-0 flex flex-col">
           {window}

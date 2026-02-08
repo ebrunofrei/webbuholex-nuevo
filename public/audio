@@ -1,0 +1,4 @@
+/public/audio/
+  mic-on.mp3        (grave, 120ms)
+  processing.mp3    (pulso suave, 300ms)
+  error.mp3         (corte seco, 100ms)

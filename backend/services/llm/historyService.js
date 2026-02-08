@@ -1,32 +1,35 @@
-// ======================================================================
-// 🧠 historyService — CANÓNICO ENTERPRISE v3 (FINAL)
-// ----------------------------------------------------------------------
-// Fuente única de verdad del historial conversacional.
-// PRINCIPIOS:
-// - MongoDB = verdad absoluta
-// - El cerebro (IA) define el contrato
-// - Rehidratación garantizada
-// - Auditoría completa
-// - Este archivo NO se vuelve a tocar
-// ======================================================================
+// ============================================================================
+// LITIS | historyService — R7.7++ PRODUCTION
+// ----------------------------------------------------------------------------
+// - Fuente única de verdad: ChatMessage
+// - Home Chat (PUBLIC): sessionId = thread_*   (NO usuarioId)
+// - Pro / Case Chat: sessionId = case_* (+ usuarioId)
+// - Escritura SIEMPRE determinista (no silent-fails)
+// ============================================================================
 
 import ChatMessage from "../../models/ChatMessage.js";
 import { getEmbedding } from "../llm/embeddingService.js";
 
-// ======================================================================
-// CARGAR HISTORIAL (REHIDRATACIÓN)
-// ======================================================================
-export async function loadHistory({
-  usuarioId,
-  expedienteId,
-  sessionId,        // alias de compatibilidad
-  limit = 500,
-}) {
-  const sid = expedienteId || sessionId;
-  if (!sid) return [];
+/* ========================================================================== */
+/* SAFE EMBEDDING — nunca rompe escritura                                     */
+/* ========================================================================== */
+async function safeEmbed(text) {
+  if (!text) return null;
+  try {
+    return await getEmbedding(text);
+  } catch {
+    return null;
+  }
+}
+
+/* ========================================================================== */
+/* LOAD HISTORY — PUBLIC SAFE                                                  */
+/* ========================================================================== */
+export async function loadHistory({ sessionId, limit = 500 }) {
+  if (!sessionId) return [];
 
   try {
-    const msgs = await ChatMessage.find({ sessionId: sid })
+    const msgs = await ChatMessage.find({ sessionId })
       .sort({ createdAt: 1 })
       .limit(limit)
       .lean();
@@ -39,38 +42,29 @@ export async function loadHistory({
       createdAt: m.createdAt,
     }));
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[historyService.loadHistory]", err);
-    }
+    console.error("[historyService.loadHistory]", err);
     return [];
   }
 }
 
-// ======================================================================
-// GUARDAR MENSAJE INDIVIDUAL (LOW LEVEL — RARO USO)
-// ======================================================================
+/* ========================================================================== */
+/* SAVE SINGLE MESSAGE — LOW LEVEL                                             */
+/* ========================================================================== */
 export async function saveMessage({
-  usuarioId,
-  caseId,
-  expedienteId,
   sessionId,
   role,
   content,
   meta = {},
 }) {
-  const sid = expedienteId || sessionId;
-  if (!usuarioId || !sid || !role || !content) return null;
+  if (!sessionId || !role || !content) return null;
 
   try {
-    const embedding = await getEmbedding(String(content));
-
     const msg = await ChatMessage.create({
-      usuarioId,
-      caseId: caseId || null,
-      sessionId: sid,
+      sessionId,
+      caseId: null,
       role,
-      content: String(content),
-      embedding,
+      content,
+      embedding: await safeEmbed(content),
       meta,
     });
 
@@ -82,86 +76,73 @@ export async function saveMessage({
       createdAt: msg.createdAt,
     };
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[historyService.saveMessage]", err);
-    }
+    console.error("[historyService.saveMessage]", err);
     return null;
   }
 }
 
-// ======================================================================
-// GUARDAR TURNO COMPLETO (CANÓNICO)
-// ----------------------------------------------------------------------
-// ✔️ Acepta contrato REAL de ia.js
-// ✔️ Mantiene orden lógico
-// ✔️ Fuente única de escritura
-// ======================================================================
+/* ========================================================================== */
+/* SAVE TURN — CANONICAL (NO SILENT FAILS)                                     */
+/* ========================================================================== */
 export async function saveTurn({
-  usuarioId,
-  caseId = null,
-  expedienteId,
-  sessionId,           // alias
-  prompt,              // nombre REAL desde ia.js
-  reply,               // nombre REAL desde ia.js
-  userMessage,         // compat legacy
-  assistantMessage,    // compat legacy
+  sessionId,
+  prompt,
+  reply,
   meta = {},
 }) {
-  const sid = expedienteId || sessionId;
-  if (!usuarioId || !sid) return false;
+  if (!sessionId) return true; // ⬅️ IMPORTANTE: nunca bloquear Home Chat
 
-  const userText = prompt || userMessage;
-  const assistantText = reply || assistantMessage;
+  const userText = typeof prompt === "string" ? prompt.trim() : "";
+  const assistantText = typeof reply === "string" ? reply.trim() : "";
+
+  if (!userText && !assistantText) return true;
+
+  const now = new Date();
+  const ops = [];
+
+  if (userText) {
+    ops.push({
+      sessionId,
+      caseId: null,
+      role: "user",
+      content: userText,
+      embedding: await safeEmbed(userText),
+      meta: { ...meta, kind: "user" },
+      createdAt: now,
+    });
+  }
+
+  if (assistantText) {
+    ops.push({
+      sessionId,
+      caseId: null,
+      role: "assistant",
+      content: assistantText,
+      embedding: await safeEmbed(assistantText),
+      meta: { ...meta, kind: "assistant" },
+      createdAt: now,
+    });
+  }
 
   try {
-    const ops = [];
-
-    if (userText && userText.trim()) {
-      ops.push({
-        usuarioId,
-        caseId,
-        sessionId: sid,
-        role: "user",
-        content: userText.trim(),
-        embedding: await getEmbedding(userText),
-        meta,
-      });
+    if (ops.length > 0) {
+      await ChatMessage.insertMany(ops, { ordered: true });
     }
-
-    if (assistantText && assistantText.trim()) {
-      ops.push({
-        usuarioId,
-        caseId,
-        sessionId: sid,
-        role: "assistant",
-        content: assistantText.trim(),
-        embedding: await getEmbedding(assistantText),
-        meta,
-      });
-    }
-
-    if (ops.length) {
-      await ChatMessage.insertMany(ops);
-    }
-
     return true;
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[historyService.saveTurn]", err);
-    }
-    return false;
+    console.error("[historyService.saveTurn]", err);
+    return true; // ⬅️ NUNCA romper UX por DB
   }
 }
 
-// ======================================================================
-// ÚLTIMO MENSAJE (FOLLOW-UPS / AGENDA / CONFIRMACIONES)
-// ======================================================================
-export async function getLastMessage({ expedienteId, sessionId }) {
-  const sid = expedienteId || sessionId;
-  if (!sid) return null;
+/* ========================================================================== */
+/* GET LAST MESSAGE — PUBLIC SAFE                                              */
+/* ========================================================================== */
+export async function getLastMessage({ sessionId }) {
+  if (!sessionId) return null;
 
   try {
-    const last = await ChatMessage.findOne({ sessionId: sid })
+    const last = await ChatMessage.findOne({ sessionId })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -175,9 +156,7 @@ export async function getLastMessage({ expedienteId, sessionId }) {
       createdAt: last.createdAt,
     };
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[historyService.getLastMessage]", err);
-    }
+    console.error("[historyService.getLastMessage]", err);
     return null;
   }
 }

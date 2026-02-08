@@ -179,3 +179,8 @@ debug-jns.png
 
 /.backup-scripts/
 /vite.config_sample.js
+
+ffmpeg.exe
+ffmpeg/
+
+**/__snapshots__/

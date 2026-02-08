@@ -36,18 +36,22 @@ export default function AnalysisItem({
 
   return (
     <div
-      className={`
+    className={`
         relative group
         flex items-center justify-between
+        min-w-0
         px-3 py-2 rounded-md
         cursor-pointer
         text-[15px]
         ${active ? "bg-[#5C2E0B] text-white" : "hover:bg-black/5"}
-      `}
-      onClick={onSelect}
+    `}
+    onClick={onSelect}
     >
       {/* TÍTULO */}
-      <div className="truncate pr-6">
+      <div
+        className="min-w-0 truncate pr-6"
+        title={analysis?.title || "Análisis"}
+      >
         {analysis?.title || "Análisis"}
       </div>
 

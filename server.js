@@ -19,7 +19,8 @@ import { dbConnect, getMongoUri } from "./backend/services/db.js";
 import noticiasRoutes from "./backend/routes/noticias.js";
 import noticiasContenidoRoutes from "./backend/routes/noticiasContenido.js";
 import newsTopics from "./backend/routes/news-topics.js";
-import iaRoutes from "./backend/routes/ia.js";
+import iaRouter from "./backend/routes/ia/index.js";
+import chatSessionsRoutes from "./backend/routes/chatSessions.routes.js";
 import usuariosRoutes from "./backend/routes/usuarios.js";
 import culqiRoutes from "./backend/routes/culqi.js";
 import notificacionesRoutes from "./backend/routes/notificaciones.js";
@@ -48,7 +49,12 @@ import casesAuditRoutes from "./backend/routes/casesAudit.js";
 import casesExportRoutes from "./backend/routes/casesExport.js";
 import actionsRoutes from "./backend/routes/actions.js";
 import draftsRoutes from "./backend/routes/drafts.js";
-
+import analysesRouter from "./backend/routes/analyses.js";
+import analysisMessagesRouter from "./backend/routes/analysisMessages.js";
+import ocrRoutes from "./backend/routes/ocr.routes.js";
+import toolsRoutes from "./backend/routes/tools.js";
+import forenseRoutes from "./backend/routes/forense.routes.js";
+import chatMessagesRouter from "./backend/routes/chatMessages.js";
 // ============================================================
 // ⚙️ Carga temprana del entorno (.env)
 // ============================================================
@@ -72,6 +78,10 @@ if (fs.existsSync(envPath)) {
   dotenv.config();
   console.warn(chalk.yellow(`⚠️ No se encontró ${envFile}, usando .env por defecto.`));
 }
+console.log("Pinecone ENV:", {
+  apiKey: process.env.PINECONE_API_KEY ? true : false,
+  index: process.env.PINECONE_INDEX || "NO INDEX"
+});
 
 // ============================================================
 // 🔧 Variables base del servidor
@@ -140,7 +150,7 @@ const corsDelegate = (origin, cb) => {
 app.use(
   cors({
     origin: corsDelegate,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
     optionsSuccessStatus: 204,
@@ -206,43 +216,79 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ============================================================
-// 🧩 Rutas API principales (orden específico)
+// 🧩 RUTAS API PRINCIPALES (ORDEN CANÓNICO)
 // ============================================================
 
+/* ============================================================
+   📰 CONTENIDO / NOTICIAS (público)
+============================================================ */
 app.use("/api/noticias/contenido", noticiasContenidoRoutes); // específico primero
-app.use("/api/news", newsLiveRouter);                         // live primero
+app.use("/api/news", newsLiveRouter);                        // live primero
+app.use("/api/news", newsTopics);
 app.use("/api/noticias", noticiasRoutes);
 app.use("/api/noticias-guardadas", noticiasGuardadasRoutes);
-app.use("/api/news", newsTopics);
-app.use("/api/ia", iaRoutes);
-app.use("/api/usuarios", usuariosRoutes);
-app.use("/api/jurisprudencia", jurisprudenciaEmbedRoutes);
-app.use("/api/culqi", culqiRoutes);
-app.use("/api/notificaciones", notificacionesRoutes);
+
+/* ============================================================
+   🧠 IA / PROCESAMIENTO
+============================================================ */
+app.use("/api/ia", iaRouter);
+app.use("/api/chat-sessions", chatSessionsRoutes);
 app.use("/api/traducir", traducirRoutes);
 app.use("/api/voz", vozRoutes);
-app.use("/api/media", mediaRoutes);
 app.use("/api/research", researchRoutes);
+app.use("/api/ocr", ocrRoutes);
+app.use("/api/tools", toolsRoutes);
+app.use("/api/forense", forenseRoutes);
+app.use("/api/chat-messages", chatMessagesRouter);
+
+/* ============================================================
+   📚 CONOCIMIENTO JURÍDICO / DOCUMENTOS
+============================================================ */
 app.use("/api/jurisprudencia", jurisprudenciaRoutes);
-app.use("/api", exportRouter);
-app.use("/api", uploadRouter);
-app.use("/api/pdf", pdfContextRouter);
+app.use("/api/jurisprudencia/embed", jurisprudenciaEmbedRoutes);
 app.use("/api/fuentes-legales", fuentesLegalesRouter);
 app.use("/api/knowledge", knowledgeRoutes);
+app.use("/api/pdf", pdfContextRouter);
+app.use("/api", exportRouter);
+app.use("/api", uploadRouter);
+app.use("/api/media", mediaRoutes);
+
+/* ============================================================
+   ⏱️ TIEMPO / AGENDA / PLAZOS
+============================================================ */
 app.use("/api/time", timeRoutes);
 app.use("/api/plazos", plazosRoutes);
 app.use("/api/agenda", agendaRoutes);
 app.use("/api/agenda-eventos", agendaEventosRouter);
-app.use("/api/agenda", agendaAlertsRouter);
+app.use("/api/agenda/alerts", agendaAlertsRouter);
+
+/* ============================================================
+   💬 COMUNICACIONES
+============================================================ */
 app.use("/api/whatsapp", whatsappRoutes);
-app.use("/api/cases", casesRouter);
-app.use("/api/cases", casesAuditRoutes);
-app.use("/api/cases", casesExportRoutes);
+app.use("/api/notificaciones", notificacionesRoutes);
+
+/* ============================================================
+   🏛️ DOMINIO JURÍDICO NÚCLEO (CANÓNICO)
+============================================================ */
+app.use("/api/cases", casesRouter);                 // CONTEXTOS
+app.use("/api/analyses", analysesRouter);           // ANÁLISIS
+app.use("/api/analyses", analysisMessagesRouter);
+app.use("/api/cases/audit", casesAuditRoutes);      // AUDITORÍA
+app.use("/api/cases/export", casesExportRoutes);    // EXPORTACIONES
+
+/* ============================================================
+   🛠️ ACCIONES AUXILIARES
+============================================================ */
 app.use("/api/actions", actionsRoutes);
 app.use("/api/drafts", draftsRoutes);
 
-// 404 JSON solo /api
-app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));
+/* ============================================================
+   ❌ 404 SOLO PARA /api
+============================================================ */
+app.use("/api", (_req, res) =>
+  res.status(404).json({ ok: false, error: "Ruta no encontrada" })
+);
 
 // ============================================================
 // 🕒 Cargas opcionales SOLO en desarrollo/local

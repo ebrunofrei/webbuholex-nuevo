@@ -1,27 +1,46 @@
 // ============================================================================
-// 🦉 BúhoLex | chatService — Orquestador IA CANÓNICO (A3)
+// 🦉 BúhoLex | chatService — ORQUESTADOR LLM PURO (CANÓNICO FINAL)
 // ----------------------------------------------------------------------------
-// - NO genera lenguaje humano
-// - NO interpreta intención
-// - NO corrige al LLM
-// - SOLO orquesta y garantiza retorno
+// RESPONSABILIDAD ÚNICA:
+// - Armar mensajes
+// - Llamar al LLM con tools
+// - Normalizar la salida del modelo
+//
+// PROHIBIDO:
+// - Lenguaje humano
+// - Agenda
+// - Mongo
+// - Formatter
+// - Heurística
 // ============================================================================
 
 import chalk from "chalk";
 import { callOpenAI } from "../openaiService.js";
 
 // ---------------------------------------------------------------------------
-// Utilidades internas (NO cognitivas)
+// Utils
 // ---------------------------------------------------------------------------
 
-const safeString = (v) =>
-  typeof v === "string" ? v.trim() : "";
+const safeString = (v) => (typeof v === "string" ? v.trim() : "");
 
-function buildMessages({ system, history = [], userPrompt }) {
+function safeJSONParse(str) {
+  if (!str || typeof str !== "string") return null;
+  try {
+    return JSON.parse(str);
+  } catch {
+    return null;
+  }
+}
+
+function buildMessages({ systemPrompt, inlineSystem, history = [], userPrompt }) {
   const msgs = [];
 
-  if (system) {
-    msgs.push({ role: "system", content: system });
+  if (systemPrompt) {
+    msgs.push({ role: "system", content: systemPrompt });
+  }
+
+  if (inlineSystem) {
+    msgs.push({ role: "system", content: inlineSystem });
   }
 
   if (Array.isArray(history)) {
@@ -37,64 +56,126 @@ function buildMessages({ system, history = [], userPrompt }) {
   }
 
   msgs.push({ role: "user", content: userPrompt });
+
   return msgs;
 }
 
 // ---------------------------------------------------------------------------
-// API principal (LLM FIRST REAL)
+// NORMALIZADOR CANÓNICO DE RESPUESTA LLM
+// ---------------------------------------------------------------------------
+
+function normalizeLLMResponse(raw, modelName) {
+  const choice = raw?.choices?.[0];
+
+  if (!choice) {
+    return {
+      kind: "message",
+      text: "",
+      meta: { error: "empty_choice", model: modelName },
+    };
+  }
+
+  const { finish_reason, message } = choice;
+
+  // ---------------------------------------------------------
+  // TOOL CALL (ÚNICO CAMINO PARA ACCIONES)
+  // ---------------------------------------------------------
+  if (finish_reason === "tool_calls" && Array.isArray(message?.tool_calls)) {
+    const call = message.tool_calls[0]; // 1 acción por turno
+
+    const parsedArgs = safeJSONParse(call?.function?.arguments);
+
+    return {
+      kind: "action",
+      action: {
+        name: call?.function?.name || null,
+        arguments: parsedArgs,
+        rawArguments: call?.function?.arguments || null,
+        valid: Boolean(parsedArgs),
+      },
+      meta: {
+        model: modelName,
+        finishReason: "tool_calls",
+        parseError: !parsedArgs,
+      },
+    };
+  }
+
+  // ---------------------------------------------------------
+  // RESPUESTA NORMAL (TEXTO)
+  // ---------------------------------------------------------
+  const text =
+    typeof message?.content === "string"
+      ? message.content.trim()
+      : "";
+
+  return {
+    kind: "message",
+    text,
+    meta: {
+      model: modelName,
+      finishReason: finish_reason ?? "stop",
+      empty: text.length === 0,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// API PRINCIPAL
 // ---------------------------------------------------------------------------
 
 export async function runChatLLM({
   prompt,
   history = [],
   systemPrompt = "",
+  inlineSystem = "",
+  tools = [],
+  tool_choice = "auto",
   options = {},
 }) {
   const userPrompt = safeString(prompt);
 
-  // 🔒 Validación mínima (NO lenguaje humano)
   if (!userPrompt) {
     return {
-      reply: "",
+      kind: "message",
+      text: "",
       meta: { emptyPrompt: true },
     };
   }
 
   const messages = buildMessages({
-    system: systemPrompt,
+    systemPrompt,
+    inlineSystem,
     history,
     userPrompt,
   });
 
+  const modelName = options.model ?? "gpt-4o-mini";
+
   try {
-    const raw = await callOpenAI(messages, {
-      model: options.model ?? "gpt-4o-mini",
-      temperature: options.temperature ?? 0.7,
-      max_completion_tokens: options.max_completion_tokens ?? 800,
-    });
+    const raw = await callOpenAI(
+      { messages, tools, tool_choice },
+      {
+        model: modelName,
+        temperature: options.temperature ?? 0.7,
+        max_completion_tokens: options.max_completion_tokens ?? 800,
+      }
+    );
 
-    const reply =
-      typeof raw === "string"
-        ? raw.trim()
-        : raw?.reply || raw?.content || "";
-
-    return {
-      reply,
-      meta: {
-        model: options.model ?? "gpt-4o-mini",
-        empty: reply.length === 0,
-      },
-    };
+    return normalizeLLMResponse(raw, modelName);
 
   } catch (err) {
     console.error(
       chalk.red("❌ chatService.runChatLLM"),
-      err?.message ?? err
+      err?.message || err
     );
 
     return {
-      reply: "",
+      kind: "message",
+      text: "",
       meta: { error: true },
     };
   }
 }
+
+export default runChatLLM;

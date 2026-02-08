@@ -22,8 +22,8 @@ export default function TTSControls({ mensajes = [], ttsPrefs = {} }) {
 
   // Preferencias externas (Centro de Control)
   const enabled = ttsPrefs?.enabled !== false;
-  const rate = Number(ttsPrefs?.rate ?? 1);
-  const pitch = Number(ttsPrefs?.pitch ?? 1);
+  const rate = Number(ttsPrefs?.rate ?? 0.9);
+  const pitch = Number(ttsPrefs?.pitch ?? 0.95);
   const vozBrowserPref = ttsPrefs?.vozBrowser || "male";
   const vozAzure = ttsPrefs?.vozAzure || DEFAULT_AZURE_VOICE;
 

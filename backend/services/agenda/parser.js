@@ -243,7 +243,7 @@ function buildISO({ yyyy, mm, dd, hh, min }, offset) {
 
 export function extractAgendaDraftFromText(
   text,
-  { usuarioId, expedienteId, userTimeZone = "America/Lima", tzOffset = "-05:00" } = {}
+  { usuarioId, expedienteId = null, userTimeZone = "America/Lima", tzOffset = "-05:00" } = {}
 ) {
   const t = safeStr(text);
   if (!t) return null;
@@ -260,23 +260,12 @@ export function extractAgendaDraftFromText(
   const tm = parseHHMM(timeToken);
   if (!tm) return null;
 
-  const lower = t.toLowerCase();
-
-  let title = "Evento";
-  if (/\baudienci/.test(lower)) title = "Audiencia";
-  else if (/\bconciliaci[oó]n\b/.test(lower)) title = "Conciliación";
-  else if (/\bvencim|\bplazo\b/.test(lower)) title = "Vencimiento / Plazo";
-  else if (/\breuni[oó]n\b/.test(lower)) title = "Reunión";
-  else if (/\bcita\b/.test(lower)) title = "Cita";
-
   const startISO = buildISO({ ...d, ...tm }, tzOffset);
 
-  let endH = tm.hh;
-  let endM = tm.min + 60;
-  if (endM >= 60) {
-    endH += Math.floor(endM / 60);
-    endM %= 60;
-  }
+  // Duración por defecto: 1 hora
+  let endH = tm.hh + 1;
+  let endM = tm.min;
+
   if (endH >= 24) {
     endH = 23;
     endM = 59;
@@ -285,13 +274,14 @@ export function extractAgendaDraftFromText(
   const endISO = buildISO({ ...d, hh: endH, min: endM }, tzOffset);
 
   return {
-    title,
+    // 🔒 MINIMAL DRAFT CANÓNICO
+    title: "Evento",
     startISO,
     endISO,
-    description: "",
-    confidence: "high",
+
     usuarioId: usuarioId || null,
-    expedienteId: expedienteId || null,
+    expedienteId,
+
     userTimeZone,
   };
 }

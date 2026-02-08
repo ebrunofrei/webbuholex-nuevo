@@ -1,19 +1,36 @@
-// backend/brain/analysis/reasoningNormalizer.js
-// ============================================================
-// D3.1 — Normalización del razonamiento jurídico (INTERNO)
-// Impone orden lógico mínimo sin exponer estructura al usuario.
-// ============================================================
+// ============================================================================
+// 🧠 D3.1 — REASONING NORMALIZER (R2 ENTERPRISE)
+// ----------------------------------------------------------------------------
+// Propósito interno:
+//   - Ordenar mínimamente el razonamiento sin intervenir el estilo externo.
+//   - Detectar el issue jurídico central.
+//   - Identificar hechos relevantes (sin inventar).
+//   - Determinar norma/criterio aplicable.
+//   - Construir razonamiento + conclusión condicional ANTI-DOGMA.
+//
+// Este módulo:
+//   ❌ NO corrige al usuario
+//   ❌ NO inventa hechos
+//   ❌ NO cita normas inexistentes
+//   ❌ NO produce lenguaje final del asistente
+//
+// Produce un bloque estructural para C2–C5.
+// ============================================================================
 
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
 function safeStr(v = "") {
   return String(v || "").trim();
 }
 
-// --- Detecta el problema jurídico central (no conclusiones)
+// ------------------------------------------------------------
+// 1) ISSUE DETECTOR (heurística mínima, sin invención)
+// ------------------------------------------------------------
 function detectIssue(input = "") {
   const text = safeStr(input);
-  if (!text) return null;
+  if (!text) return "análisis jurídico general";
 
-  // Heurística mínima (se refina en D3.x)
   if (/nulidad|nulo/i.test(text)) return "validez procesal / nulidad";
   if (/prueba|perito|expediente/i.test(text)) return "valoración probatoria";
   if (/interpretar|norma/i.test(text)) return "interpretación normativa";
@@ -22,63 +39,66 @@ function detectIssue(input = "") {
   return "análisis jurídico general";
 }
 
-// --- Extrae hechos relevantes (solo los necesarios)
+// ------------------------------------------------------------
+// 2) FACTS EXTRACTOR — ultra conservador (R2)
+// ------------------------------------------------------------
 function extractRelevantFacts(input = "", context = {}) {
-  // D3.1: conservador por diseño (mejor pocos que inventar)
-  const facts = [];
+  // R2: No inventa NADA. Si backend provee hechos, se usan.
+  if (context?.hechosRelevantes) return context.hechosRelevantes;
 
-  if (context && context.hechosRelevantes) {
-    return context.hechosRelevantes;
-  }
-
-  // Heurística mínima: no inventar
-  return facts;
+  return []; // Si no existen hechos fiables, no se infiere nada.
 }
 
-// --- Resuelve norma / criterio aplicable (sin citar en falso)
+// ------------------------------------------------------------
+// 3) RULE RESOLVER — evita invención normativa
+// ------------------------------------------------------------
 function resolveRule(context = {}) {
-  if (context && context.normaAplicable) {
-    return context.normaAplicable;
-  }
+  if (context?.normaAplicable) return context.normaAplicable;
+
   return "criterios generales del ordenamiento y del debido proceso";
 }
 
-// --- Construye cadena de razonamiento (sin saltos)
+// ------------------------------------------------------------
+// 4) REASONING BUILDER — secuencia mínima, sin conclusiones duras
+// ------------------------------------------------------------
 function buildReasoning({ issue, facts, rule }) {
   const steps = [];
 
   steps.push(
-    `El análisis se centra en ${issue}, considerando los hechos disponibles y ${rule}.`
+    `El análisis se orienta a ${issue}, considerando los hechos disponibles y ${rule}.`
   );
 
   if (!facts || facts.length === 0) {
     steps.push(
-      "Con la información disponible, no se advierten hechos suficientes para afirmar conclusiones categóricas."
+      "A la fecha, no se identifican hechos suficientes que permitan sostener afirmaciones categóricas."
     );
   } else {
     steps.push(
-      "Los hechos relevantes deben ser evaluados de forma conjunta, evitando selecciones parciales."
+      "Los hechos relevantes deben valorarse en conjunto, evitando selecciones parciales o sesgos confirmatorios."
     );
   }
 
   return steps.join(" ");
 }
 
-// --- Conclusión condicionada (ANTI-DOGMA)
+// ------------------------------------------------------------
+// 5) CONDITIONAL CONCLUSION — anti dogmatismo total
+// ------------------------------------------------------------
 function buildConditionalConclusion({ issue }) {
   return (
-    `Cualquier conclusión sobre ${issue} ` +
-    "solo sería sostenible si se acreditan de manera concreta los presupuestos fácticos y jurídicos pertinentes."
+    `Una conclusión definitiva respecto a ${issue} ` +
+    "requiere la acreditación concreta de los presupuestos fácticos y jurídicos pertinentes."
   );
 }
 
-// ============================================================
-// API PRINCIPAL
-// ============================================================
+// ------------------------------------------------------------
+// 6) MAIN API — Normalize Reasoning (D3.1)
+// ------------------------------------------------------------
 export function normalizeReasoning(input = "", context = {}) {
   const issue = detectIssue(input);
   const facts = extractRelevantFacts(input, context);
   const rule = resolveRule(context);
+
   const reasoning = buildReasoning({ issue, facts, rule });
   const conclusion = buildConditionalConclusion({ issue });
 

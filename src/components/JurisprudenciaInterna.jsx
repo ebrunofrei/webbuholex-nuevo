@@ -539,24 +539,26 @@ export default function JurisprudenciaInterna({ onVer, onPreguntarConJuris }) {
                   {/* BOTÓN IA */}
                   {typeof onPreguntarConJuris === "function" && (
                     <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPreguntarConJuris(item);
-                      }}
-                      className="
-                        mt-3 inline-flex items-center gap-1 self-start
-                        rounded-full border border-[#5C2E0B]/40 
-                        bg-[#fdf4ec] px-3 py-1 
-                        text-[11px] font-semibold text-[#5C2E0B]
-                        hover:bg-[#fbe8d6] 
-                        active:scale-[0.97]
-                        transition
-                      "
-                    >
-                      <span aria-hidden="true">🦉</span>
-                      <span>Analizar con LitisBot</span>
-                    </button>
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPreguntarConJuris(item);
+                    }}
+                    className="
+                      mt-3 inline-flex items-center gap-2 self-start
+                      rounded-full
+                      bg-gradient-to-r from-[#5C2E0B] to-[#7a3a12]
+                      px-3.5 py-1.5
+                      text-[11px] font-semibold text-white
+                      shadow-[0_6px_18px_rgba(92,46,11,0.35)]
+                      hover:from-[#4a2308] hover:to-[#6b2f0f]
+                      active:scale-[0.96]
+                      transition
+                    "
+                  >
+                    <span className="text-[12px]">🦉</span>
+                    <span>Analizar con LitisBot</span>
+                  </button>
                   )}
                 </article>
               );

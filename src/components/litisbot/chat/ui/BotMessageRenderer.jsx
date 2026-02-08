@@ -86,10 +86,10 @@ export default function BotMessageRenderer({ content = "" }) {
                   mb-5
                   ${
                     isFirst
-                      ? "text-[17px] md:text-[18px] lg:text-[19px] font-medium"
+                      ? "text-[17px] md:text-[18px] lg:text-[19px]"
                       : "text-[16px] md:text-[17px] lg:text-[18px]"
                   }
-                  ${isConclusion ? "pt-3 border-t border-black/10 font-medium" : ""}
+                  ${isConclusion ? "pt-3 border-t border-black/10" : ""}
                   ${isWarn ? "bg-black/5 px-4 py-3 rounded-lg" : ""}
                   leading-[1.75]
                   text-black
@@ -110,7 +110,7 @@ export default function BotMessageRenderer({ content = "" }) {
           ),
 
           ol: ({ children }) => (
-            <ol className="mb-5 pl-7 list-decimal space-y-3 text-[16px] md:text-[17px] lg:text-[18px] font-medium">
+            <ol className="mb-5 pl-7 list-decimal space-y-3 text-[16px] md:text-[17px] lg:text-[18px]">
               {children}
             </ol>
           ),

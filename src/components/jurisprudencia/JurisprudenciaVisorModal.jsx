@@ -179,12 +179,10 @@ export default function JurisprudenciaVisorModal({
   const handlePreguntar = (promptExtra) => {
   if (!onPreguntarConJuris || isLoading) return;
 
-  const fullText = norm?.sumilla || norm?.titulo || "Analiza esta sentencia.";
-  const textoFinal = promptExtra
-    ? `${promptExtra}\n\n${fullText}`
-    : `Analiza esta sentencia:\n\n${fullText}`;
-
-  onPreguntarConJuris(norm._raw || safeDoc, textoFinal);
+  onPreguntarConJuris(
+    norm._raw || safeDoc,
+    promptExtra || ""
+  );
 };
 
   return (
@@ -435,7 +433,7 @@ export default function JurisprudenciaVisorModal({
               shrink-0
             "
           >
-            {/* IA LitisBot */}
+           {/* IA LitisBot */}
             {onPreguntarConJuris && (
               <div className="flex flex-col gap-3">
                 <div>
@@ -445,7 +443,12 @@ export default function JurisprudenciaVisorModal({
 
                   <button
                     type="button"
-                    onClick={() => !isLoading && handlePreguntar()}
+                    onClick={() =>
+                      !isLoading &&
+                      handlePreguntar(
+                        "Analiza esta sentencia y explícame su razonamiento jurídico central."
+                      )
+                    }
                     disabled={isLoading}
                     className={`w-full inline-flex items-center justify-center rounded-full px-3.5 py-1.75 text-[11px] font-semibold text-white shadow-sm transform transition ${
                       isLoading

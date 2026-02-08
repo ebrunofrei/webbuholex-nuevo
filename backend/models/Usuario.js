@@ -2,20 +2,25 @@ import mongoose from "mongoose";
 
 const UsuarioSchema = new mongoose.Schema(
   {
-    uid: { type: String, required: true, unique: true }, // UID de Auth
+    uid: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true },
     nombre: { type: String, default: "" },
 
-    // Noticias guardadas (referencias a la colección Noticia)
-    noticiasGuardadas: [{ type: mongoose.Schema.Types.ObjectId, ref: "Noticia" }],
+    noticiasGuardadas: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Noticia" }
+    ],
 
-    // Otros campos extensibles
     favoritos: [{ type: String }],
     roles: [{ type: String, default: ["user"] }],
+
+    // 🆕 Bubble Advanced Analysis Unlock
+    analysisUnlock: {
+      activeUntil: { type: Date, default: null },
+      source: { type: String, default: null }, // one_time_payment | plan | admin
+    },
   },
   { timestamps: true }
 );
 
-// 👇 Ya no definimos index duplicados: unique:true crea el índice automáticamente
-
-export default mongoose.models.Usuario || mongoose.model("Usuario", UsuarioSchema);
+export default mongoose.models.Usuario ||
+  mongoose.model("Usuario", UsuarioSchema);

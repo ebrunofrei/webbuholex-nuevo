@@ -2,10 +2,16 @@ import React from "react";
 import { formatTimeHHmm, maskDDMMYYYY, maskHHMM } from "./agenda.utils.js";
 
 export function EventChip({ event }) {
-  const raw = event?.resource?.raw || {};
-  const type = event?.resource?.type || "unknown";
-  const time = raw?.startISO ? formatTimeHHmm(raw.startISO) : "";
-  const label = String(event?.title || "").replace(/^⏳\s|^📌\s/, "").trim();
+  const resource = event?.resource || {};
+  const raw = resource.raw || event.raw || null;
+  const type = resource.type || "manual";
+
+  if (!raw) return null; // ⛔ no renderizar basura
+
+  const time = raw.startISO ? formatTimeHHmm(raw.startISO) : "";
+  const label = String(event?.title || "")
+    .replace(/^⏳\s|^📌\s/, "")
+    .trim();
 
   return (
     <div className="flex items-center gap-2 min-w-0" title={label} style={{ lineHeight: 1.2 }}>

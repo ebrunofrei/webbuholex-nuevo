@@ -4,29 +4,39 @@ const { Schema, model, Types } = mongoose;
 
 const CaseSessionSchema = new Schema(
   {
+    // 🔑 CONTEXTO PADRE
+    caseId: {
+      type: Types.ObjectId,
+      ref: "Case",
+      required: true,
+      index: true,
+    },
+
+    // 🔑 PROPIETARIO
     userId: {
       type: String,
       required: true,
       index: true,
     },
 
+    // 🧠 ANÁLISIS
     title: {
       type: String,
       trim: true,
       maxlength: 200,
-      default: "Caso jurídico",
+      default: "Análisis jurídico",
     },
 
     jurisdiction: {
       type: String,
       trim: true,
-      maxlength: 50, // PE, MX, ES, US, etc.
+      maxlength: 50,
     },
 
     area: {
       type: String,
       trim: true,
-      maxlength: 50, // civil, penal, adm, etc.
+      maxlength: 50,
     },
 
     status: {
@@ -37,12 +47,12 @@ const CaseSessionSchema = new Schema(
     },
   },
   {
-    timestamps: true, // createdAt, updatedAt
+    timestamps: true,
     versionKey: false,
   }
 );
 
-// Índices compuestos útiles
-CaseSessionSchema.index({ userId: 1, createdAt: -1 });
+// Índices útiles (performance + orden)
+CaseSessionSchema.index({ userId: 1, caseId: 1, createdAt: -1 });
 
 export default model("CaseSession", CaseSessionSchema);

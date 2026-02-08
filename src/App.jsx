@@ -26,6 +26,8 @@ import NoticiasHome from "./pages/Noticias";
 import PruebaNoticias from "@/pages/PruebaNoticias";
 import Jurisprudencia from "@/pages/Jurisprudencia";
 import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
+import { GeneralChatProvider } from "@/components/litisbot/chat/general/GeneralChatProvider";
+import GeneralChatLayout from "@/components/litisbot/chat/general/GeneralChatLayout";
 
 import Login from "./pages/Login";
 import RecuperarPassword from "./components/RecuperarPassword";
@@ -71,6 +73,7 @@ import NoticiasSlider from "./components/NoticiasSlider";
 import ModalLogin from "./components/ModalLogin";
 import CookiesBanner from "@/components/CookiesBanner";
 import RequireAuth from "@/components/auth/RequireAuth";
+import ToastManager from "@/components/ui/ToastManager";
 
 /* =========================
    Oficina virtual
@@ -100,7 +103,8 @@ import PersonalizacionView from "./views/PersonalizacionView";
 import LitisBotChatBase from "@/components/LitisBotChatBase";
 
 /* Burbuja flotante IA global */
-import LitisBotBubbleChat from "@/components/ui/LitisBotBubbleChat";
+import BubbleProvider from "@/components/litisbot/chat/bubble/BubbleProvider";
+
 import { useMembership } from "@/hooks/useMembership";
 
 /* FCM hook */
@@ -290,7 +294,16 @@ function AppContent() {
   const path = (location.pathname || "").toLowerCase();
   const enOficinaVirtual = path.startsWith("/oficinavirtual");
   const enLitisBotFull = path === "/litisbot";
+  const enChatPro = path.startsWith("/oficinavirtual/chat-pro");
 
+  // ✅ Hooks SIEMPRE arriba (no dentro del JSX)
+  const membership = useMembership();
+  const isProMember = Boolean(membership?.isPro);
+
+  // ✅ Gobernanza de la burbuja (no aparece en ChatPro ni en /litisbot)
+  const shouldShowBubble = Boolean(user) && !enLitisBotFull && !enChatPro;
+
+  
   function BibliotecaProtegida() {
     if (loading) return <div className="text-center mt-16">Verificando acceso...</div>;
 
@@ -328,6 +341,18 @@ function AppContent() {
           <Routes>
             {/* ================= PUBLICO ================= */}
             <Route path="/" element={<Home />} />
+
+            {/* ================= LITISBOT DEMO PUBLICO ================= */}
+            <Route
+              path="/litisbot"
+              element={
+                <GeneralChatProvider
+                  user={{ uid: "invitado", displayName: "Invitado" }}
+                >
+                  <GeneralChatLayout />
+                </GeneralChatProvider>
+              }
+            />
 
             {/* Legacy */}
             <Route path="/oficina" element={<Navigate to="/oficinaVirtual" replace />} />
@@ -377,9 +402,6 @@ function AppContent() {
                 </RutaPrivada>
               }
             />
-
-            {/* IA */}
-            <Route path="/litisbot" element={<LitisBotPageIntegrada />} />
 
             {/* Legal */}
             <Route path="/legal/politica-de-privacidad" element={<PoliticaPrivacidad />} />
@@ -472,37 +494,15 @@ function AppContent() {
           <ModalLogin />
         </ClientOnly>
       )}
-    </div>
-  );
-}
 
-/* =========================
-   Burbuja flotante global
-========================= */
-function BubbleWithUser() {
-  const { user } = useAuth() || {};
-  const { isPro } = useMembership() || {};
-  const location = useLocation();
-
-  const blockedRoots = useMemo(
-    () => [
-      "/litisbot",
-      "/oficinavirtual/chat-pro",
-      "/oficinavirtual/litisbot",
-      "/chat-test",
-    ],
-    []
-  );
-
-  const hideBubble = isPathInAny(location.pathname, blockedRoots);
-  if (hideBubble) return null;
-
-  const usuarioId = user?.uid || "invitado";
-  const pro = !!isPro;
-
-  return (
-    <div className="fixed bottom-6 right-6 z-[9999] pointer-events-auto">
-      <LitisBotBubbleChat usuarioId={usuarioId} pro={pro} jurisSeleccionada={null} onClearJuris={() => {}} />
+      {/* Burbuja flotante global (Bubble SaaS) */}
+      {shouldShowBubble && (
+        <BubbleProvider
+          usuarioId={user.uid}
+          pro={isProMember}
+          jurisSeleccionada={null}
+        />
+      )}
     </div>
   );
 }
@@ -519,7 +519,7 @@ export default function App() {
           <Router>
             <AppContent />
             <ClientOnly>
-              <BubbleWithUser />
+              <ToastManager />
             </ClientOnly>
           </Router>
         </ToastProvider>

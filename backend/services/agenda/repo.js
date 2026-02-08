@@ -1,28 +1,29 @@
 // ============================================================
-// 🗂️ Repo Mongo – AGENDA (ENTERPRISE · CANÓNICO 2025)
+// 🗂️ Repo Mongo – AGENDA (ENTERPRISE · CANÓNICO 2026)
 // ------------------------------------------------------------
-// ✔ sessionId = expedienteId = case_<caseId> (FUENTE ÚNICA)
-// ✔ notes = fuente única de texto (description solo legacy)
+// ✔ Agenda LIBRE por defecto
+// ✔ usuarioId = identidad única
+// ✔ expedienteId = scope opcional (solo IA / casos)
+// ✔ SIN sessionId persistente
+// ✔ notes = fuente única
 // ✔ ISO / UNIX blindado
-// ✔ Dedupe real
-// ✔ Queries coherentes con sesión
+// ✔ Dedupe semántico + temporal
 // ============================================================
 
 import AgendaEvent from "../../models/AgendaEvent.js";
 
 const DEFAULT_TZ = "America/Lima";
-const DEFAULT_TZ_OFFSET = "-05:00";
 
 /* ============================================================
-   🧹 Sanitizers
-============================================================ */
+ * 🧹 Sanitizers
+ * ========================================================== */
 function cleanStr(v = "", maxLen = 300) {
   const s = String(v ?? "").replace(/\s+/g, " ").trim();
   return s.length > maxLen ? s.slice(0, maxLen) : s;
 }
 
 function cleanLong(v = "", maxLen = 2000) {
-  const s = String(v ?? "").replace(/\s+/g, " ").trim();
+  const s = String(v ?? "").trim();
   return s.length > maxLen ? s.slice(0, maxLen) : s;
 }
 
@@ -35,8 +36,8 @@ function isDayISO(day) {
 }
 
 /* ============================================================
-   ⏱ UNIX / ISO helpers
-============================================================ */
+ * ⏱ UNIX / ISO helpers
+ * ========================================================== */
 function normalizeUnix(x) {
   const n = Number(x);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -56,36 +57,40 @@ function toUnixSeconds(iso) {
 }
 
 function dueLocalDayFromISO(iso) {
-  return typeof iso === "string" && iso.length >= 10 ? iso.slice(0, 10) : null;
+  return typeof iso === "string" && iso.length >= 10
+    ? iso.slice(0, 10)
+    : null;
 }
 
 /* ============================================================
-   🔐 SCOPE CANÓNICO
-============================================================ */
-function buildScope({ usuarioId, sessionId }) {
-  if (
-    !usuarioId ||
-    typeof sessionId !== "string" ||
-    !sessionId.startsWith("case_")
-  ) {
-    return null;
-  }
+ * 🔐 Scope builder (LIBRE por defecto)
+ * ========================================================== */
+function buildScope({ usuarioId, expedienteId }) {
+  if (!usuarioId) return null;
 
-  return {
+  const scope = {
     usuarioId: cleanStr(usuarioId, 120),
-    expedienteId: sessionId,
     status: "active",
   };
+
+  // SOLO si hay expediente, se filtra por él
+  if (expedienteId) {
+    scope.expedienteId = cleanStr(expedienteId, 120);
+  }
+
+  return scope;
 }
 
 /* ============================================================
-   📌 Persistir evento desde draft (AGENDA IA)
-============================================================ */
+ * 📌 CREATE — Persistir evento desde draft IA
+ * ========================================================== */
 export async function persistAgendaEventFromDraft(draft = {}) {
   const usuarioId = cleanStr(draft.usuarioId, 120);
-  const sessionId = cleanStr(draft.sessionId, 120);
+  if (!usuarioId) return null;
 
-  if (!usuarioId || !sessionId || !sessionId.startsWith("case_")) return null;
+  const expedienteId = draft.expedienteId
+    ? cleanStr(draft.expedienteId, 120)
+    : null;
 
   const startISO = ensureISO(draft.startISO);
   const endISO = ensureISO(draft.endISO);
@@ -100,13 +105,13 @@ export async function persistAgendaEventFromDraft(draft = {}) {
 
   const title = cleanStr(draft.title, 160) || "Evento";
   const notes = cleanLong(draft.notes || draft.description || "", 2000);
-  const tz = normTZ(draft.userTimeZone);
+  const tz = normTZ(draft.userTimeZone || draft.tz);
 
-  const scope = buildScope({ usuarioId, sessionId });
+  const scope = buildScope({ usuarioId, expedienteId });
   if (!scope) return null;
 
   // ----------------------------------------------------------
-  // 🛡️ DEDUPE (fuerte)
+  // 🛡️ DEDUPE FUERTE (mismo día + ventana temporal)
   // ----------------------------------------------------------
   const exact = await AgendaEvent.findOne({
     ...scope,
@@ -131,7 +136,7 @@ export async function persistAgendaEventFromDraft(draft = {}) {
   // ----------------------------------------------------------
   const created = await AgendaEvent.create({
     usuarioId,
-    expedienteId: sessionId,
+    expedienteId, // puede ser null (agenda libre)
 
     title,
     notes,
@@ -151,19 +156,19 @@ export async function persistAgendaEventFromDraft(draft = {}) {
 }
 
 /* ============================================================
-   📅 Eventos por día
-============================================================ */
+ * 📅 Eventos por día
+ * ========================================================== */
 export async function findAgendaEventsByDay({
   usuarioId,
-  sessionId,
+  expedienteId = null,
   dayISO,
 }) {
   const uid = cleanStr(usuarioId, 120);
   const day = cleanStr(dayISO, 10);
 
-  if (!uid || !isDayISO(day) || !sessionId?.startsWith("case_")) return [];
+  if (!uid || !isDayISO(day)) return [];
 
-  const scope = buildScope({ usuarioId: uid, sessionId });
+  const scope = buildScope({ usuarioId: uid, expedienteId });
   if (!scope) return [];
 
   return (
@@ -177,11 +182,11 @@ export async function findAgendaEventsByDay({
 }
 
 /* ============================================================
-   📆 Eventos por rango de días
-============================================================ */
+ * 📆 Eventos por rango de días
+ * ========================================================== */
 export async function findAgendaEventsByRange({
   usuarioId,
-  sessionId,
+  expedienteId = null,
   startDayISO,
   endDayISO,
 }) {
@@ -189,14 +194,12 @@ export async function findAgendaEventsByRange({
   const a = cleanStr(startDayISO, 10);
   const b = cleanStr(endDayISO, 10);
 
-  if (!uid || !isDayISO(a) || !isDayISO(b) || !sessionId?.startsWith("case_")) {
-    return [];
-  }
+  if (!uid || !isDayISO(a) || !isDayISO(b)) return [];
 
   const start = a <= b ? a : b;
   const end = a <= b ? b : a;
 
-  const scope = buildScope({ usuarioId: uid, sessionId });
+  const scope = buildScope({ usuarioId: uid, expedienteId });
   if (!scope) return [];
 
   return (
@@ -210,13 +213,16 @@ export async function findAgendaEventsByRange({
 }
 
 /* ============================================================
-   🕗 Último evento creado
-============================================================ */
-export async function findLatestAgendaEvent({ usuarioId, sessionId }) {
+ * 🕗 Último evento creado
+ * ========================================================== */
+export async function findLatestAgendaEvent({
+  usuarioId,
+  expedienteId = null,
+}) {
   const uid = cleanStr(usuarioId, 120);
-  if (!uid || !sessionId?.startsWith("case_")) return null;
+  if (!uid) return null;
 
-  const scope = buildScope({ usuarioId: uid, sessionId });
+  const scope = buildScope({ usuarioId: uid, expedienteId });
   if (!scope) return null;
 
   return (
@@ -227,11 +233,11 @@ export async function findLatestAgendaEvent({ usuarioId, sessionId }) {
 }
 
 /* ============================================================
-   🚨 Candidatos a alerta (por endUnix)
-============================================================ */
+ * 🚨 Candidatos a alerta (por endUnix)
+ * ========================================================== */
 export async function findAgendaAlertCandidates({
   usuarioId,
-  sessionId,
+  expedienteId = null,
   fromUnix,
   toUnix,
 }) {
@@ -239,9 +245,9 @@ export async function findAgendaAlertCandidates({
   const f = normalizeUnix(fromUnix);
   const t = normalizeUnix(toUnix);
 
-  if (!uid || !f || !t || t < f || !sessionId?.startsWith("case_")) return [];
+  if (!uid || !f || !t || t < f) return [];
 
-  const scope = buildScope({ usuarioId: uid, sessionId });
+  const scope = buildScope({ usuarioId: uid, expedienteId });
   if (!scope) return [];
 
   return (
@@ -255,26 +261,8 @@ export async function findAgendaAlertCandidates({
 }
 
 /* ============================================================
-   🔔 Reminder toggle sobre último evento
-============================================================ */
-export async function setReminderOnLatestEvent({ usuarioId, sessionId, on = true }) {
-  const uid = cleanStr(usuarioId, 120);
-  if (!uid || !sessionId?.startsWith("case_")) return null;
-
-  const scope = buildScope({ usuarioId: uid, sessionId });
-  if (!scope) return null;
-
-  return (
-    (await AgendaEvent.findOneAndUpdate(
-      scope,
-      { $set: { alertaWhatsapp: Boolean(on) } },
-      { sort: { createdAt: -1 }, new: true }
-    ).lean()) || null
-  );
-}
-// ============================================================
-// 🔔 Reminder: set por ID (COMPAT / LEGACY)
-// ============================================================
+ * 🔔 Reminder toggle por ID (LEGACY / COMPAT)
+ * ========================================================== */
 export async function setReminderOnEventById({
   eventId,
   on = true,

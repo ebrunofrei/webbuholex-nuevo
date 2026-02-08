@@ -6,25 +6,16 @@
 // - NO auth
 // - NO backend
 // - NO lógica cognitiva
-// - Dispara callbacks
+// - Emite callbacks explícitos
 // ============================================================================
 
 import React from "react";
-import {
-  User,
-  Settings,
-  LogOut,
-  Home,
-  Building2,
-  Sliders,
-} from "lucide-react";
+import { User, Settings, LogOut, Home, Building2 } from "lucide-react";
 
 export default function UserMiniPanel({
-  onClose,
-
   onGoHome,
   onGoOffice,
-  onOpenControlCenter,
+  onOpenAccount,
   onLogout,
 }) {
   return (
@@ -36,10 +27,9 @@ export default function UserMiniPanel({
         px-4 py-3
         space-y-2
       "
+      aria-label="Panel de usuario"
     >
-      {/* ======================================================
-          IDENTIDAD (PLACEHOLDER)
-      ====================================================== */}
+      {/* IDENTIDAD (placeholder) */}
       <div className="flex items-center gap-3 px-2 py-2">
         <div
           className="
@@ -48,51 +38,32 @@ export default function UserMiniPanel({
             bg-black/10
             flex items-center justify-center
           "
+          aria-hidden="true"
         >
           <User size={20} />
         </div>
 
         <div className="leading-tight">
-          <div className="text-[15px] font-semibold">
-            Cuenta de usuario
-          </div>
-          <div className="text-[12px] opacity-60">
-            Preferencias y modos
-          </div>
+          <div className="text-[15px] font-semibold">Cuenta de usuario</div>
+          <div className="text-[12px] opacity-60">Preferencias y modos</div>
         </div>
       </div>
 
-      {/* ======================================================
-          ACCIONES
-      ====================================================== */}
+      {/* ACCIONES */}
       <div className="space-y-1">
-
+        <ActionButton icon={Home} label="Ir al Home" onClick={onGoHome} />
         <ActionButton
-          icon={<Home size={18} />}
-          label="Ir al Home"
-          onClick={onGoHome}
-        />
-
-        <ActionButton
-          icon={<Building2 size={18} />}
+          icon={Building2}
           label="Volver a la Oficina Virtual"
           onClick={onGoOffice}
         />
-
         <ActionButton
-          icon={<Sliders size={18} />}
-          label="Centro de control"
-          onClick={onOpenControlCenter}
-        />
-
-        <ActionButton
-          icon={<Settings size={18} />}
+          icon={Settings}
           label="Cuenta y configuración"
-          onClick={() => {}}
+          onClick={onOpenAccount}
         />
-
         <ActionButton
-          icon={<LogOut size={18} />}
+          icon={LogOut}
           label="Cerrar sesión"
           danger
           onClick={onLogout}
@@ -103,26 +74,23 @@ export default function UserMiniPanel({
 }
 
 /* ============================================================================
-   BOTÓN DE ACCIÓN — Sidebar
+   BOTÓN — Sidebar (reutilizable)
 ============================================================================ */
-function ActionButton({ icon, label, onClick, danger = false }) {
+function ActionButton({ icon: Icon, label, onClick, danger = false }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`
-        w-full
-        flex items-center gap-3
-        px-3 py-2 rounded-lg
-        text-[15px]
-        transition
-        ${
-          danger
-            ? "text-red-600 hover:bg-red-50"
-            : "hover:bg-black/5"
-        }
-      `}
+      aria-label={label}
+      className={[
+        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[15px] transition",
+        "focus:outline-none focus:ring-2 focus:ring-black/20",
+        danger ? "text-red-600 hover:bg-red-50" : "hover:bg-black/5",
+      ].join(" ")}
     >
-      <span className="opacity-70">{icon}</span>
+      <span className="opacity-70">
+        <Icon size={18} />
+      </span>
       <span>{label}</span>
     </button>
   );

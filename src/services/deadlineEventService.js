@@ -1,13 +1,68 @@
-function getBaseURL() {
-  return (import.meta?.env?.VITE_API_URL || "").replace(/\/$/, "");
+// ============================================================
+// 🗓️ deadlineEventService — CANONICAL PROXY
+// ------------------------------------------------------------
+// ⚠️ ARCHIVO LEGACY COMPAT
+// - NO lógica propia
+// - DELEGA 100% a agendaService
+// - Mantiene imports existentes sin romper UI
+// ============================================================
+
+import {
+  fetchAgendaRango,
+  fetchAgendaHoy,
+  normalizeAgendaEvent,
+} from "./agendaService.js";
+
+/**
+ * LEGACY API
+ * ------------------------------------------------------------
+ * Antes: Mongo directo
+ * Ahora: proxy canónico
+ */
+
+// ============================================================
+// 📆 RANGO (Mes / Semana / Vista)
+// ============================================================
+export async function fetchAgendaRangoMongo({
+  usuarioId,
+  sessionId,       // 🔑 OBLIGATORIO
+  from,
+  to,
+  tz = "America/Lima",
+  token = null,
+  signal = null,
+} = {}) {
+  const items = await fetchAgendaRango({
+    usuarioId,
+    sessionId,
+    from,
+    to,
+    tz,
+    token,
+    signal,
+  });
+
+  // Normalización para FullCalendar / UI
+  return items.map(normalizeAgendaEvent);
 }
 
-export async function fetchAgendaRangoMongo({ usuarioId, from, to, tz="America/Lima" }) {
-  const base = getBaseURL();
-  const qs = new URLSearchParams({ usuarioId, from, to, tz });
-  const url = `${base}/api/agenda/rango?${qs.toString()}`;
-  const res = await fetch(url, { cache: "no-store" });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data?.ok) throw new Error(data?.detail || "No se pudo cargar rango (Mongo)");
-  return data.items || [];
+// ============================================================
+// 📅 HOY
+// ============================================================
+export async function fetchAgendaHoyMongo({
+  usuarioId,
+  sessionId,       // 🔑 OBLIGATORIO
+  tz = "America/Lima",
+  token = null,
+  signal = null,
+} = {}) {
+  const items = await fetchAgendaHoy({
+    usuarioId,
+    sessionId,
+    tz,
+    token,
+    signal,
+  });
+
+  return items.map(normalizeAgendaEvent);
 }

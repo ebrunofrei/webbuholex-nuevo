@@ -294,7 +294,39 @@ export async function enviarPromptLitis(opts = {}) {
 
   // Envío del prompt
   const data = await enviarMensajeIA(payload);
-  return data;
+
+// ============================================================
+// 🎯 ACTION RESOLVER (CANÓNICO v1)
+// ============================================================
+
+const resolved = {
+  reply: safeStr(data?.reply || data?.content || ""),
+  intent: null,
+  payload: null,
+};
+
+// --- AGENDA.CREATE (detección controlada v1)
+if (
+  resolved.reply &&
+  /agenda|agendar|evento|cita|reunión/i.test(resolved.reply)
+) {
+  // ⚠️ v1: payload DEBE venir del modelo
+  if (data?.payload && typeof data.payload === "object") {
+    resolved.intent = "agenda.create";
+    resolved.payload = data.payload;
+  }
+}
+
+// ============================================================
+// RESPUESTA FINAL AL FRONTEND
+// ============================================================
+
+return {
+  ok: true,
+  reply: resolved.reply,
+  intent: resolved.intent,
+  payload: resolved.payload,
+};
 }
 
 export default {

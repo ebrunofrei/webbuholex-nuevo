@@ -1,224 +1,134 @@
-// ============================================================
-// 🦉 BúhoLex | Cliente del Chat (frontend) – CANÓNICO 2025
-// ------------------------------------------------------------
-// - sessionId OBLIGATORIO (case_<caseId>)
-// - Normalización estricta del payload
-// - Timeout robusto + retry controlado
-// - Sin cookies (CORS friendly)
-// - Última línea de defensa antes del backend
-// ============================================================
+// ============================================================================
+// LITIS | chatClient (R7.7++ FINAL — 2026)
+// ----------------------------------------------------------------------------
+// Compatible with:
+//   POST /api/ia/chat
+//   GET  /api/chat-sessions
+//   GET  /api/chat-messages?sessionId=xxx
+//
+// Zero-HTML, JSON-only, retry-safe.
+/**
+ * ⚠️ USO EXCLUSIVO:
+ * - Chat General / Home
+ * - Canal consultivo
+ * - Sin ratio legis
+ * - Sin PDFs
+ * - Sin análisis profundo
+ *
+ * ❌ NO usar en Bubble ni Chat Pro
+ */
+
+// ============================================================================
 
 import { joinApi } from "@/services/apiBase";
 
-const IS_BROWSER = typeof window !== "undefined";
-
-// Límites duros
+// ------------------------------------------------------------
+// CONSTANTS
+// ------------------------------------------------------------
 const PROMPT_MAX = 8000;
-const HIST_MAX_ITEMS = 12;
-const HIST_ITEM_MAX = 4000;
+const HISTORY_MAX = 10;
+const HISTORY_ITEM_MAX = 3000;
+const TIMEOUT = 45000;
 
-const HEALTH_TIMEOUT_MS = 3000;
-const REQUEST_TIMEOUT_MS = 45000;
+// ------------------------------------------------------------
+// HELPERS
+// ------------------------------------------------------------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const trim = (x) => String(x ?? "").trim();
+const cap = (v, m) => String(v ?? "").slice(0, m);
+const isHTML = (t) => /^<!DOCTYPE html>|<html/i.test(t || "");
 
-/* ============================================================
-   Utils base
-============================================================ */
+// Debug visible solo en dev
+const debug = (...a) => {
+  if (import.meta.env.DEV) console.log("💬[chat-client]", ...a);
+};
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+// ------------------------------------------------------------
+// RESOLVE SESSION — canonical
+// ------------------------------------------------------------
+function resolveSessionId({ sessionId }) {
+  if (typeof sessionId === "string" && sessionId.trim()) return sessionId.trim();
+  return "__invalid_session_id__"; // avoids crashes
 }
 
-function safeTrim(v) {
-  return String(v ?? "").trim();
-}
+// ------------------------------------------------------------
+// NORMALIZE PAYLOAD
+// ------------------------------------------------------------
+function normalizePayload(input) {
+  if (!input || typeof input !== "object")
+    throw new Error("Invalid chat payload.");
 
-function cap(v, max) {
-  const s = String(v ?? "");
-  return s.length > max ? s.slice(0, max) : s;
-}
+  const prompt = trim(input.prompt);
+  if (!prompt) throw new Error("Empty prompt.");
 
-/* ============================================================
-   sessionId CANÓNICO
-============================================================ */
-
-function resolveSessionId({ sessionId, caseId, expedienteId, chatId }) {
-  if (typeof sessionId === "string" && sessionId.startsWith("case_")) {
-    return sessionId;
-  }
-
-  const base = caseId || expedienteId || chatId;
-  if (!base) return null;
-
-  return `case_${String(base).slice(0, 96)}`;
-}
-
-/* ============================================================
-   fetch con timeout
-============================================================ */
-
-async function fetchWithTimeout(url, opts = {}, ms = 15000) {
-  const externalSignal = opts.signal;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-
-  let cleanupExternal = null;
-  if (externalSignal) {
-    const onAbort = () => ctrl.abort();
-    if (externalSignal.aborted) ctrl.abort();
-    else {
-      externalSignal.addEventListener("abort", onAbort, { once: true });
-      cleanupExternal = () =>
-        externalSignal.removeEventListener("abort", onAbort);
-    }
-  }
-
-  try {
-    const { signal: _ignored, ...rest } = opts;
-    return await fetch(url, {
-      ...rest,
-      signal: ctrl.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-    if (cleanupExternal) cleanupExternal();
-  }
-}
-
-/* ============================================================
-   Warm-up /health (1 vez por sesión)
-============================================================ */
-
-async function pingOnce({ signal } = {}) {
-  if (!IS_BROWSER) return;
-  if (window.__BUHOLEX_API_WARMED__) return;
-  window.__BUHOLEX_API_WARMED__ = true;
-
-  try {
-    await fetchWithTimeout(
-      joinApi("/health"),
-      {
-        method: "GET",
-        credentials: "omit",
-        cache: "no-store",
-        mode: "cors",
-        signal,
-      },
-      HEALTH_TIMEOUT_MS
-    );
-  } catch {
-    /* silencio */
-  }
-}
-
-/* ============================================================
-   Normalización CANÓNICA del payload
-============================================================ */
-
-function normalizeChatPayload(input) {
-  if (typeof input === "string") {
-    throw new Error("sessionId canónico requerido (string no permitido)");
-  }
-
-  const obj = input || {};
-
-  const rawPrompt = obj.prompt ?? obj.mensaje ?? "";
-  const prompt = safeTrim(rawPrompt);
-  if (!prompt) throw new Error("prompt vacío");
-
-  const sessionId = resolveSessionId({
-    sessionId: obj.sessionId,
-    caseId: obj.caseId,
-    expedienteId: obj.expedienteId,
-    chatId: obj.chatId,
-  });
-
-  if (!sessionId) {
-    throw new Error("sessionId canónico requerido (case_<caseId>)");
-  }
-
-  let historialNorm = [];
-  if (Array.isArray(obj.historial)) {
-    historialNorm = obj.historial
-      .slice(-HIST_MAX_ITEMS)
-      .map(m => ({
-        role: m?.role === "assistant" ? "assistant" : "user",
-        content: cap(String(m?.content || ""), HIST_ITEM_MAX),
-      }));
-  }
-
-  const {
-    mensaje,
-    prompt: _p,
-    historial: _h,
-    caseId,
-    chatId,
-    expedienteId,
-    sessionId: _s,
-    ...rest
-  } = obj;
+  const sessionId = resolveSessionId(input);
 
   return {
-    ...rest,
-    sessionId, // 🔒 FUENTE ÚNICA
+    channel: input.channel || "home_chat",
+    role: "consultive",
+    sessionId,
     prompt: cap(prompt, PROMPT_MAX),
-    historial: historialNorm,
+    history: Array.isArray(input.history)
+      ? input.history.slice(-HISTORY_MAX).map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: cap(m.content, HISTORY_ITEM_MAX),
+        }))
+      : [],
   };
 }
 
-/* ============================================================
-   API pública
-============================================================ */
+// ------------------------------------------------------------
+// NETWORK CALL
+// ------------------------------------------------------------
+export async function sendChatMessage(payload) {
+  const body = JSON.stringify(normalizePayload(payload));
 
-export async function enviarMensajeIA(payload, signal) {
-  await pingOnce({ signal });
-
-  const normalized = normalizeChatPayload(payload);
-  const body = JSON.stringify(normalized);
-  const url = joinApi("/ia/chat");
-
-  const doPost = () =>
-    fetchWithTimeout(
-      url,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        credentials: "omit",
-        cache: "no-store",
-        mode: "cors",
-        signal,
-      },
-      REQUEST_TIMEOUT_MS
-    );
+  async function doRequest() {
+    return fetch(joinApi("/ia/chat"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      cache: "no-store",
+    });
+  }
 
   let res;
+
   try {
-    res = await doPost();
+    // timeout protector
+    res = await Promise.race([
+      doRequest(),
+      sleep(TIMEOUT).then(() => {
+        throw new Error("Request timeout.");
+      }),
+    ]);
   } catch (err) {
-    if (err?.name === "AbortError") {
-      throw new Error(
-        "El servidor demoró demasiado en responder. Intenta nuevamente."
-      );
-    }
-    throw err;
+    debug("NETWORK FAIL:", err);
+    throw new Error("No se pudo contactar con el servidor.");
   }
 
-  // Retry único en errores típicos de gateway
+  // retry resiliente
   if ([502, 503, 504].includes(res.status)) {
-    await sleep(550);
-    res = await doPost();
+    await sleep(400);
+    res = await doRequest();
   }
 
-  const isJson =
-    (res.headers.get("content-type") || "").includes("application/json");
+  const ct = res.headers.get("content-type") || "";
+
+  if (!ct.includes("application/json")) {
+    const text = await res.text();
+    if (isHTML(text)) {
+      debug("❌ Backend devolvió HTML");
+      throw new Error("Respuesta inválida del servidor (HTML detectado).");
+    }
+    throw new Error(text || "Respuesta inválida del servidor.");
+  }
+
+  const data = await res.json();
 
   if (!res.ok) {
-    const msg = isJson
-      ? (await res.json())?.error || `Chat HTTP ${res.status}`
-      : await res.text();
-
-    throw new Error(msg || `Chat HTTP ${res.status}`);
+    throw new Error(data?.error || `HTTP ${res.status}`);
   }
 
-  return isJson ? await res.json() : { ok: true, text: await res.text() };
+  return data;
 }

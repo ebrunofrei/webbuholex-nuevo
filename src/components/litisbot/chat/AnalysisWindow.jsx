@@ -1,14 +1,16 @@
 // ============================================================================
-// 🧠 AnalysisWindow — Análisis jurídico dialogado (CANÓNICO)
+// 🧠 AnalysisWindow — Análisis jurídico dialogado (CANÓNICO · SENIOR)
 // ----------------------------------------------------------------------------
 // Rol:
 // - Orquestador UX del ANÁLISIS
-// - Combina razonamiento + diálogo
-// - Captura acciones cognitivas
-// - Gestiona confirmación explícita
-// - Emite eventos (NO ejecuta, NO muta)
+// - Renderiza mensajes (usuario / asistente)
+// - Controla scroll inteligente (tipo ChatGPT)
+// - Gestiona confirmación cognitiva (NO agenda)
+// - Emite eventos hacia el orquestador padre
+// ============================================================================
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { ChevronDown } from "lucide-react";
 
 import ConfirmActionModal from "@/components/litisbot/modals/ConfirmActionModal.jsx";
 
@@ -25,23 +27,42 @@ export default function AnalysisWindow({
   activeCaseId,
   activeChatId,
 
-  // 🔑 El padre decide: ejecutar, rehidratar, exportar, etc.
+  // 🔑 Callbacks externos
   onCognitiveAction,
+  onAgendaAction,
 }) {
-
   const feedRef = useRef(null);
 
   // ============================================================
-  // UX-6.1 — Acción pendiente de confirmación
+  // Confirmación cognitiva (NUNCA agenda)
   // ============================================================
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
   // ============================================================
-  // Auto-scroll estable
+  // Scroll inteligente (estilo ChatGPT)
   // ============================================================
+  const [isNearBottom, setIsNearBottom] = useState(true);
+
   useEffect(() => {
     const node = feedRef.current;
     if (!node) return;
+
+    const handleScroll = () => {
+      const threshold = 120;
+      const atBottom =
+        node.scrollHeight - node.scrollTop - node.clientHeight < threshold;
+      setIsNearBottom(atBottom);
+    };
+
+    node.addEventListener("scroll", handleScroll);
+    handleScroll();
+
+    return () => node.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const node = feedRef.current;
+    if (!node || !isNearBottom) return;
 
     requestAnimationFrame(() => {
       try {
@@ -50,64 +71,56 @@ export default function AnalysisWindow({
         node.scrollTop = node.scrollHeight;
       }
     });
-  }, [messages]);
+  }, [messages, isNearBottom]);
 
   // ============================================================
-  // Captura de acción cognitiva (NO ejecuta)
+  // Captura de acciones cognitivas (NO agenda)
   // ============================================================
-  const handleCognitiveAction = useCallback(
-  (action) => {
-    if (!action?.type) return;
+  const handleCognitiveUIAction = useCallback(
+    (action) => {
+      if (!action?.type) return;
 
-    // ============================================
-    // C.3.4 — ROLLBACK / REVERTIR A EVENTO
-    // ============================================
-    if (action.type === "ROLLBACK_EVENT") {
+      // Blindaje total: agenda jamás entra aquí
+      if (action.type.startsWith("AGENDA_")) return;
+
+      if (action.type === "ROLLBACK_EVENT") {
+        setPendingConfirm({
+          type: "ROLLBACK_EVENT",
+          title: "Revertir a un punto anterior",
+          description:
+            "Esta acción revertirá el estado del caso a un momento anterior. La historia posterior quedará invalidada.",
+          payload: { eventId: action.payload?.eventId },
+        });
+        return;
+      }
+
+      if (action.type === "LOAD_DRAFT") {
+        onCognitiveAction?.(action);
+        return;
+      }
+
       setPendingConfirm({
-        type: "ROLLBACK_EVENT",
-        title: "Revertir a un punto anterior",
+        type: action.type,
+        title: action.title || "Confirmar acción",
         description:
-          "Esta acción revertirá el estado del caso a un momento anterior. La historia posterior quedará invalidada.",
-        payload: {
-          eventId: action.payload?.eventId,
-        },
+          action.description ||
+          "Esta acción tendrá impacto en el sistema. ¿Deseas confirmarla?",
+        payload: action.payload || {},
       });
-      return;
-    }
+    },
+    [onCognitiveAction]
+  );
 
-    // ============================================
-    // C.2.2 — Rehidratación directa (sin confirm)
-    // ============================================
-    if (action.type === "LOAD_DRAFT") {
-      onCognitiveAction?.(action);
-      return;
-    }
+  // ============================================================
+  // Confirmación explícita
+  // ============================================================
+  const handleConfirm = () => {
+    if (!pendingConfirm) return;
 
-    // ============================================
-    // UX-6.1 — Cualquier otra acción
-    // ============================================
-    setPendingConfirm({
-      type: action.type,
-      title: action.title || "Confirmar acción",
-      description:
-        action.description ||
-        "Esta acción tendrá impacto en el sistema. ¿Deseas confirmarla?",
-      payload: action.payload || {},
-    });
-  },
-  [onCognitiveAction]
-);
-
-    // ============================================================
-    // UX-6.2 — Confirmación explícita (NO ejecuta, solo emite)
-    // ============================================================
-    const handleConfirm = async () => {
-      if (!pendingConfirm) return;
-
-      // 1) Arma un “evento confirmado” estandarizado
-      const confirmedAction = {
-        type: pendingConfirm.type,
-        payload: pendingConfirm.payload || {},
+    onCognitiveAction?.({
+      type: "CONFIRMED_ACTION",
+      payload: {
+        ...pendingConfirm,
         confirmation: {
           confirmedByUser: true,
           confirmedAt: new Date().toISOString(),
@@ -116,128 +129,79 @@ export default function AnalysisWindow({
           caseId: activeCaseId,
           chatId: activeChatId,
         },
-      };
+      },
+    });
 
-      // 2) Emite al padre (router/service decide qué hacer)
-      onCognitiveAction?.({
-        type: "CONFIRMED_ACTION",
-        payload: confirmedAction,
-      });
+    setPendingConfirm(null);
+  };
 
-      // 3) Limpia UI
-      setPendingConfirm(null);
-    };
-
+  // ============================================================
+  // RENDER
+  // ============================================================
   return (
-    <section className="flex-1 min-h-0 flex flex-col bg-white">
-      {/* ================= FEED ================= */}
-      <div ref={feedRef} className="flex-1 min-h-0 overflow-y-auto py-6">
-        <div
-          className="
-            mx-auto
-            w-full
-            max-w-[860px] xl:max-w-[1040px]
-            px-4 sm:px-6 xl:px-10
-            space-y-10 md:space-y-12
-            text-[17px] md:text-[18px]
-            leading-relaxed
-          "
-        >
-          {/* ================= ESTADO VACÍO ================= */}
-          {!loading && messages.length === 0 && (
-          <div className="mt-28 text-center max-w-[640px] mx-auto space-y-4">
-            
-            {/* Marca cognitiva */}
-            <div className="text-[13px] tracking-widest uppercase text-black/40">
-              Bienvenido a LitisBot
-            </div>
+    <section className="flex-1 min-h-0 flex flex-col bg-white relative">
+      <div ref={feedRef} className="flex-1 overflow-y-auto py-6">
+        <div className="mx-auto max-w-[1040px] px-4 space-y-12">
 
-            {/* Título */}
-            <div className="text-[22px] md:text-[24px] font-semibold text-black">
-              Análisis jurídico asistido
-            </div>
-
-            {/* Subtítulo */}
-            <div className="text-[16px] leading-relaxed text-black/60">
-              Estructuración de hechos, normas, criterios y escenarios jurídicos<br />
-              bajo control, trazabilidad y auditoría.
-            </div>
-
-            {/* Separador sutil */}
-            <div className="flex justify-center py-2">
-              <div className="w-12 h-[2px] bg-[#6b3f2a]/40 rounded-full" />
-            </div>
-
-            {/* Guía */}
-            <div className="text-[15px] text-black/50">
-              Describe el caso, adjunta documentos o plantea una consulta jurídica.
-            </div>
-
-            {/* Micro-señal */}
-            <div className="text-[13px] text-black/40">
-            </div>
-
-          </div>
-        )}
-
-          {/* ================= CARGANDO ================= */}
-          {loading && (
-            <div className="mt-20 text-center text-black/50 animate-pulse">
-              Cargando análisis…
-            </div>
-          )}
-
-          {/* ================= MENSAJES ================= */}
           {messages.map((m, i) => {
             const key = m.id || i;
 
-            if (m._placeholder && m.thinkingState) {
-              return <BotThinkingState key={key} state={m.thinkingState} />;
+            if (m._placeholder) {
+              return <BotThinkingState key={key} label="Analizando…" />;
             }
 
             if (m.role === "assistant") {
               return (
-                <div key={key} className="space-y-6 md:space-y-8">
-                  
-                  {/* Señal cognitiva — siempre arriba, discreta */}
+                <div key={key} className="space-y-8">
                   {m.cognitive && (
-                    <div className="pt-2">
-                      <CognitiveSignal signal={m.cognitive} />
-                    </div>
+                    <CognitiveSignal signal={m.cognitive} />
                   )}
 
-                  {/* Acciones sugeridas — separadas del texto */}
                   {Array.isArray(m.actions) && m.actions.length > 0 && (
-                    <div className="pt-1">
-                      <ActionHints
-                        actions={m.actions}
-                        onAction={handleCognitiveAction}
-                      />
-                    </div>
+                    <ActionHints
+                      actions={m.actions}
+                      onAction={handleCognitiveUIAction}
+                    />
                   )}
 
-                  {/* Texto principal — documento */}
-                  <div className="pt-2">
-                    <MensajeBotBubble msg={m} />
-                  </div>
-
+                  <MensajeBotBubble
+                    msg={m}
+                    modoSalida="word"
+                    onAgendaAction={onAgendaAction}
+                  />
                 </div>
               );
             }
 
             return (
-            <div key={key} className="flex justify-end pt-2">
               <MensajeUsuarioBubble
+                key={key}
                 texto={m.content}
                 adjuntos={m.meta?.adjuntos || []}
               />
-            </div>
-          );
+            );
           })}
         </div>
       </div>
 
-      {/* ================= CONFIRMACIÓN ================= */}
+      {/* Botón bajar al final */}
+      {!isNearBottom && (
+        <button
+          className="litis-scroll-chatgpt"
+          onClick={() => {
+            const node = feedRef.current;
+            if (!node) return;
+            node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+          }}
+          aria-label="Bajar al final"
+        >
+          <div className="litis-scroll-chatgpt-icon">
+            <ChevronDown size={22} />
+          </div>
+        </button>
+      )}
+
+      {/* Confirmación cognitiva */}
       <ConfirmActionModal
         open={!!pendingConfirm}
         confirmation={pendingConfirm}

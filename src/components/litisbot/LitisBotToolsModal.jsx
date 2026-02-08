@@ -1,20 +1,30 @@
-// ============================================================================
+// ============================================================================ 
 // 🦉 LitisBotToolsModal — Herramientas Jurídicas (Hardware puro)
 // ----------------------------------------------------------------------------
 // - NO contiene IA
 // - NO ejecuta lógica
 // - SOLO dispara eventos normalizados
-// - Las herramientas inyectan contexto al chat
+// - Herramientas = utilidades autónomas
 //
-// Evento:
+// Evento estándar:
 // window.dispatchEvent(
 //   new CustomEvent("litisbot:tool", { detail: { tool } })
 // )
 //
+// Herramientas activas:
+// • Transcriptor forense (audio / video → texto)
+// • OCR jurídico (documentos escaneados → texto)
+// • Multilingüe jurídico (idiomas → texto)
+//
 // ============================================================================
 
 import React from "react";
-import { X, Mic, Scale, Globe, Languages } from "lucide-react";
+import {
+  X,
+  FileAudio,
+  ScanText,
+  Languages,
+} from "lucide-react";
 
 export default function LitisBotToolsModal({ open, onClose }) {
   if (!open) return null;
@@ -54,6 +64,7 @@ export default function LitisBotToolsModal({ open, onClose }) {
           <button
             onClick={onClose}
             className="p-2 rounded-full hover:bg-gray-100"
+            aria-label="Cerrar"
           >
             <X size={20} />
           </button>
@@ -61,32 +72,26 @@ export default function LitisBotToolsModal({ open, onClose }) {
 
         {/* Grid */}
         <div className="grid grid-cols-2 gap-3">
+          {/* 🎙️ TRANSCRIPTOR FORENSE */}
           <ToolButton
-            label="Audiencia (modo juicio)"
-            icon={<Mic size={22} />}
-            onClick={() => trigger("audiencia")}
+            label="Transcriptor forense"
+            legend="Convierte audio o video en texto fiel"
+            icon={<FileAudio size={22} />}
+            onClick={() => trigger("transcriptor_forense")}
           />
 
+          {/* 📄 OCR JURÍDICO */}
           <ToolButton
-            label="Liquidación laboral"
-            icon={<Scale size={22} />}
-            onClick={() => trigger("liquidacion_laboral")}
+            label="OCR jurídico"
+            legend="Extrae texto de documentos escaneados"
+            icon={<ScanText size={22} />}
+            onClick={() => trigger("ocr_juridico")}
           />
 
-          <ToolButton
-            label="Tercio de la pena"
-            icon={<Scale size={22} />}
-            onClick={() => trigger("tercio_pena")}
-          />
-
-          <ToolButton
-            label="Traductor jurídico"
-            icon={<Globe size={22} />}
-            onClick={() => trigger("traductor_juridico")}
-          />
-
+          {/* 🌐 MULTILINGÜE JURÍDICO */}
           <ToolButton
             label="Multilingüe jurídico"
+            legend="Convierte contenido entre idiomas"
             icon={<Languages size={22} />}
             onClick={() => trigger("multilingue_juridico")}
           />
@@ -97,22 +102,31 @@ export default function LitisBotToolsModal({ open, onClose }) {
 }
 
 // ============================================================================
-// Botón herramienta — Minimal Pro
+// Botón herramienta — Minimal Pro (con leyenda)
 // ============================================================================
-function ToolButton({ label, icon, onClick }) {
+function ToolButton({ label, legend, icon, onClick }) {
   return (
     <button
       onClick={onClick}
       className="
-        flex flex-col items-center justify-center gap-2
+        flex flex-col items-center justify-center gap-1
         p-4 rounded-xl border border-[#EFEFEF]
-        hover:bg-[#FAFAFA] transition
+        hover:bg-[#FAFAFA] transition text-center
       "
     >
-      <div className="text-[#5C2E0B] opacity-80">{icon}</div>
-      <span className="text-sm text-[#3A2A1A] text-center">
+      <div className="text-[#5C2E0B] opacity-80">
+        {icon}
+      </div>
+
+      <span className="text-sm font-medium text-[#3A2A1A]">
         {label}
       </span>
+
+      {legend && (
+        <span className="text-[11px] leading-snug text-[#6B5B4A] opacity-80">
+          {legend}
+        </span>
+      )}
     </button>
   );
 }

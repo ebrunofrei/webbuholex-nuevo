@@ -1,11 +1,5 @@
 // ============================================================
-// 🗓️ Agenda Jurídica BúhoLex – v3.4 Enterprise (GLOBAL TZ)
-// ------------------------------------------------------------
-// - Fuente única: AgendaProfesional (Mongo/BúhoLex)
-// - Zona horaria REAL del usuario (no hardcode)
-// - Rango mensual determinista (YYYY-MM-DD)
-// - onMonthChange sincroniza mes visible
-// - Compatible LATAM / EU / GLOBAL
+// 🗓️ Agenda Jurídica BúhoLex – v4.0 (AGENDA LIBRE – JSX)
 // ============================================================
 
 import React, { useMemo, useState, useCallback } from "react";
@@ -39,63 +33,36 @@ function computeMonthRange(baseDate) {
 }
 
 // ============================================================
-// Agenda (Vista principal)
+// Agenda (Vista principal – LIBRE)
 // ============================================================
-export default function Agenda({ expedienteId = null }) {
+export default function Agenda() {
   const { user } = useAuth();
 
-  // ----------------------------------------------------------
-  // Identidad del usuario
-  // ----------------------------------------------------------
-  const usuarioId = user?.uid || null;
+  const usuarioId = user?.uid ?? null;
 
-  // ----------------------------------------------------------
-  // 🌍 Zona horaria GLOBAL (orden de prioridad)
-  // 1) user.timezone (si existe)
-  // 2) navegador
-  // 3) fallback UTC
-  // ----------------------------------------------------------
   const tz =
-    user?.timezone ||
-    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    user?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone ??
     "UTC";
 
-  // ----------------------------------------------------------
-  // Mes visible (controlado por AgendaProfesional)
-  // ----------------------------------------------------------
   const [visibleDate, setVisibleDate] = useState(() => new Date());
 
-  // ----------------------------------------------------------
-  // Rango mensual determinista
-  // ----------------------------------------------------------
   const { from, to } = useMemo(
     () => computeMonthRange(visibleDate),
     [visibleDate]
   );
 
-  // ----------------------------------------------------------
-  // Cambio de mes desde el calendario
-  // ----------------------------------------------------------
   const handleMonthChange = useCallback((dateObj) => {
     if (dateObj instanceof Date && !Number.isNaN(dateObj.getTime())) {
       setVisibleDate(dateObj);
     }
   }, []);
 
-  // ==========================================================
-  // Render
-  // ==========================================================
   return (
     <div className="flex flex-col md:flex-row gap-8 p-6">
       <div className="flex-1">
-        {/* ------------------------------------------------------
-            🟢 Agenda Profesional (Mongo / Enterprise)
-            - TZ real del usuario
-            - Rango mensual sincronizado
-        ------------------------------------------------------- */}
         <AgendaProfesional
           usuarioId={usuarioId}
-          expedienteId={expedienteId}
           tz={tz}
           from={from}
           to={to}

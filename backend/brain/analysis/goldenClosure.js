@@ -1,51 +1,82 @@
-// backend/brain/analysis/goldenClosure.js
-// ============================================================
-// D3.7 — Regla de oro del cierre (INTERNO)
-// Garantiza un cierre único, claro y útil.
-// ============================================================
+// ============================================================================
+// 🧠 D3.7 — GOLDEN CLOSURE (R2 ENTERPRISE)
+// ----------------------------------------------------------------------------
+// Regla estructural interna:
+//   • Garantiza que siempre exista UN ÚNICO cierre coherente.
+//   • No genera estilo humano.
+//   • No interpreta, no sugiere acciones reales.
+//
+// Produce:
+//   conclusion_final = conclusion + cierre_técnico
+//
+// Se usa después de:
+//   - normalizeReasoning
+//   - coherenceChecks
+//   - epistemicHumility
+//   - gravityScaler
+//   - conditionalConclusion
+// ============================================================================
 
 function chooseClosureType(gravity = {}, context = {}) {
-  if (gravity?.label === "observacion_argumentativa" || gravity?.label === "debilidad_razonativa") {
+  const g = gravity?.label || "";
+
+  if (g === "observacion_argumentativa" || g === "debilidad_razonativa") {
     return "recommendation";
   }
-  if (gravity?.label === "error_de_interpretacion" || gravity?.label === "infraccion_procedimental") {
+  if (
+    g === "error_de_interpretacion" ||
+    g === "infraccion_procedimental" ||
+    g === "vicio_relevante" ||
+    g === "vicio_grave"
+  ) {
     return "strategy";
   }
-  if (gravity?.label === "vicio_relevante" || gravity?.label === "vicio_grave") {
-    return "strategy";
-  }
-  if (gravity?.label === "nulidad") {
+  if (g === "nulidad") {
     return "warning";
   }
+
   return "strategy";
 }
 
+/* ------------------------------------------------------------
+   Construcción del cierre según tipo
+------------------------------------------------------------ */
 function buildClosure(type, context = {}) {
   switch (type) {
     case "recommendation":
-      return "Recomendación técnica: consolida la motivación incorporando los hechos relevantes y el criterio aplicable, evitando selecciones parciales.";
+      return (
+        "Recomendación técnica: consolidar la motivación integrando hechos relevantes y el criterio aplicable," +
+        " evitando selecciones parciales."
+      );
+
     case "warning":
-      return "Advertencia procesal: antes de accionar, verifica la concurrencia estricta de los presupuestos exigidos, pues una nulidad improcedente puede generar efectos adversos.";
+      return (
+        "Advertencia procesal: antes de accionar, verificar estrictamente la concurrencia de los presupuestos" +
+        " habilitantes, pues una nulidad improcedente puede generar efectos adversos."
+      );
+
     case "strategy":
     default:
       if (context?.plazoInminente === true) {
-        return "Siguiente paso estratégico: prioriza una actuación oportuna que preserve el plazo y deja la discusión de fondo para una impugnación delimitada.";
+        return (
+          "Siguiente paso estratégico: priorizar una actuación oportuna que preserve el plazo," +
+          " reservando el desarrollo de fondo para una impugnación delimitada."
+        );
       }
-      return "Siguiente paso estratégico: define una vía de actuación concreta (impugnación delimitada o refuerzo probatorio) alineada con el agravio identificado.";
+      return (
+        "Siguiente paso estratégico: definir una vía de actuación interna coherente con el agravio identificado" +
+        " (refuerzo probatorio o impugnación focalizada)."
+      );
   }
 }
 
-// ============================================================
-// API PRINCIPAL
-// ============================================================
-export function applyGoldenClosure({
-  conclusion = "",
-  gravity = {},
-  context = {},
-}) {
+/* ============================================================================
+   API PRINCIPAL
+============================================================================ */
+export function applyGoldenClosure({ conclusion = "", gravity = {}, context = {} }) {
   const type = chooseClosureType(gravity, context);
   const closure = buildClosure(type, context);
-  return `${conclusion} ${closure}`.trim();
+  return `${String(conclusion).trim()} ${closure}`.trim();
 }
 
 export default applyGoldenClosure;

@@ -1,4 +1,14 @@
-import React, { useState } from "react";
+// ============================================================================
+// 🗂️ CaseItem — Contexto / Proyecto (CANÓNICO FINAL)
+// ----------------------------------------------------------------------------
+// - Contexto = carpeta / proyecto
+// - ROOT lógico (__ROOT_ANALYSIS__) se muestra como "Hablemos"
+// - UI pura (hardware)
+// - NO storage
+// - NO backend
+// ============================================================================
+
+import React, { useState, useMemo } from "react";
 import { MoreVertical } from "lucide-react";
 import CaseActionsMenu from "./CaseActionsMenu.jsx";
 
@@ -12,15 +22,49 @@ export default function CaseItem({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // 🔑 ROOT lógico: "Mis estados de análisis"
+  // ======================================================
+  // 🔑 ROOT lógico (conversación general)
+  // ======================================================
   const isRootAnalysis = caseData.role === "__ROOT_ANALYSIS__";
 
+  // ======================================================
+  // 🏷️ TÍTULO VISUAL (UI ONLY)
+  // ======================================================
+  const displayTitle = useMemo(() => {
+    if (isRootAnalysis) return "Hablemos";
+    return caseData.title || "Contexto sin título";
+  }, [isRootAnalysis, caseData.title]);
+
+  // ======================================================
+  // 📅 FECHA (solo contextos reales)
+  // ======================================================
+  const displayDate = useMemo(() => {
+    if (isRootAnalysis) return null;
+    if (!caseData.updatedAt) return "—";
+
+    try {
+      return new Date(caseData.updatedAt).toLocaleDateString("es-PE", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "—";
+    }
+  }, [isRootAnalysis, caseData.updatedAt]);
+
+  // ======================================================
+  // 🧩 RENDER
+  // ======================================================
   return (
     <div className="relative">
-      {/* CONTENEDOR CLICKABLE (NO button) */}
+      {/* ==================================================
+          CONTENEDOR CLICKABLE
+      ================================================== */}
       <div
         role="button"
         tabIndex={0}
+        aria-current={active ? "true" : "false"}
         onClick={() => onSelect?.(caseData._id || caseData.id)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -41,9 +85,10 @@ export default function CaseItem({
               : "hover:bg-[#F7F1EC]"
           }
         `}
-        aria-current={active ? "true" : "false"}
       >
-        {/* RAIL */}
+        {/* ==================================================
+            RAIL LATERAL
+        ================================================== */}
         <div
           className={`w-[4px] rounded-full mt-1 ${
             active ? "bg-[#5C2E0B]" : "bg-transparent"
@@ -51,31 +96,30 @@ export default function CaseItem({
           aria-hidden
         />
 
-        {/* TEXTO */}
+        {/* ==================================================
+            TEXTO
+        ================================================== */}
         <div className="flex-1 min-w-0">
           <div
             className={`text-[18px] font-semibold truncate ${
               active ? "text-black" : "text-[#3B1E0B]"
             }`}
+            title={displayTitle}
           >
-            {caseData.title || "Caso sin título"}
+            {displayTitle}
           </div>
 
-          {/* FECHA — NO ROOT */}
-          {!isRootAnalysis && (
+          {/* FECHA — SOLO CONTEXTOS REALES */}
+          {displayDate && (
             <div className="text-[15px] text-[#6B4A2D] mt-1">
-              {caseData.updatedAt
-                ? new Date(caseData.updatedAt).toLocaleDateString("es-PE", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })
-                : "—"}
+              {displayDate}
             </div>
           )}
         </div>
 
-        {/* ACCIONES — SOLO NO ROOT */}
+        {/* ==================================================
+            ACCIONES — SOLO CONTEXTOS REALES
+        ================================================== */}
         {!isRootAnalysis && (
           <div className="flex-shrink-0">
             <button
@@ -90,7 +134,7 @@ export default function CaseItem({
                 hover:bg-[#E9DED4]
                 focus:outline-none focus:ring-2 focus:ring-[#5C2E0B]/40
               "
-              title="Acciones del caso"
+              title="Acciones del contexto"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
             >
@@ -100,7 +144,9 @@ export default function CaseItem({
         )}
       </div>
 
-      {/* MENÚ CONTEXTUAL */}
+      {/* ==================================================
+          MENÚ CONTEXTUAL — SOLO CONTEXTOS REALES
+      ================================================== */}
       {!isRootAnalysis && (
         <CaseActionsMenu
           open={menuOpen}

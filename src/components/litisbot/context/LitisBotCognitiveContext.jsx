@@ -69,6 +69,9 @@ export const LITIS_ROLE_LABELS = Object.freeze({
 export const DEFAULT_COGNITIVE_PROFILE = Object.freeze({
   _profileVersion: 1,
 
+  // Preset semántico (NO personalidad)
+  perfilAcademico: true,
+  
   // Estilo
   tonoHumano: true,
   brevedad: false,
@@ -110,9 +113,13 @@ function normalizeProfile(input = {}) {
       ? input.profundidad
       : DEFAULT_COGNITIVE_PROFILE.profundidad;
 
-  return {
+    return {
     ...DEFAULT_COGNITIVE_PROFILE,
     ...input,
+    perfilAcademico:
+      typeof input.perfilAcademico === "boolean"
+        ? input.perfilAcademico
+        : DEFAULT_COGNITIVE_PROFILE.perfilAcademico,
     profundidad,
     metodo: {
       ...DEFAULT_COGNITIVE_PROFILE.metodo,
@@ -193,55 +200,62 @@ export function LitisBotCognitiveProvider({
   }, [rolCognitivo, cognitiveProfile]);
 
   const value = useMemo(() => {
-    const updateProfile = (patch = {}) =>
-      setCognitiveProfile((prev) =>
-        normalizeProfile({
-          ...prev,
-          ...patch,
-          metodo: {
-            ...(prev.metodo || {}),
-            ...(patch.metodo || {}),
-          },
-        })
-      );
 
-    return {
-    // =====================
-    // estado cognitivo
-    // =====================
+  // =====================
+  // PATCHER BASE (genérico)
+  // =====================
+  const updateProfile = (patch = {}) => {
+    setCognitiveProfile((prev) =>
+      normalizeProfile({
+        ...prev,
+        ...patch,
+        metodo: {
+          ...(prev.metodo || {}),
+          ...(patch.metodo || {}),
+        },
+      })
+    );
+  };
+
+  // =====================
+  // PRESET: perfil académico
+  // =====================
+  const setAcademicProfile = (enabled) => {
+    updateProfile({
+      profundidad: enabled ? "alta" : "media",
+      rigor: true,
+      citasJuridicas: true,
+      logicaFormal: true,
+    });
+  };
+
+  return {
+  modoLitis,
+  rolCognitivo,
+  cognitiveProfile,
+
+  setRolCognitivo,
+  setCognitiveProfile,
+  updateProfile,
+  resetProfile: () =>
+    setCognitiveProfile({ ...DEFAULT_COGNITIVE_PROFILE }),
+
+  // 🎓 preset académico
+  setAcademicProfile,
+
+  getSnapshot: () => ({
     modoLitis,
     rolCognitivo,
     cognitiveProfile,
+  }),
 
-    // =====================
-    // setters controlados
-    // =====================
-    setRolCognitivo,
-    setCognitiveProfile,
-    updateProfile,
-    resetProfile: () =>
-      setCognitiveProfile({ ...DEFAULT_COGNITIVE_PROFILE }),
+  LITIS_MODE,
+  LITIS_ROLES,
+  LITIS_ROLE_LABELS,
+  DEFAULT_COGNITIVE_PROFILE,
+};
 
-    // =====================
-    // snapshot (PUENTE LIMPIO)
-    // hardware → router → service
-    // =====================
-    getSnapshot: () => ({
-      modoLitis,
-      rolCognitivo,
-      cognitiveProfile,
-    }),
-
-    // =====================
-    // exports estáticos
-    // =====================
-    LITIS_MODE,
-    LITIS_ROLES,
-    LITIS_ROLE_LABELS,
-    DEFAULT_COGNITIVE_PROFILE,
-  };
-
-  }, [rolCognitivo, cognitiveProfile]);
+}, [rolCognitivo, cognitiveProfile]);
 
   return (
     <LitisBotCognitiveContext.Provider value={value}>

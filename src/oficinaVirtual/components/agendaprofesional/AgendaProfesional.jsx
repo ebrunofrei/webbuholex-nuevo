@@ -16,7 +16,7 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 
 import { useAuth } from "@/context/AuthContext";
 
-import { fetchAgendaMongoRango } from "@/services/agendaMongoService";
+import { fetchAgendaMongoRango } from "@/services/agendaService";
 import {
   fetchAgendaEventosRango,
   createAgendaEvento,
@@ -41,6 +41,7 @@ import {
 
 // modals / components
 import { EventChip, DayModal, ActionModal, EventModal } from "./AgendaModals.jsx";
+import { buildAgendaEvento } from "./agenda.utils.js";
 
 // ======================================================================
 // Localizer
@@ -275,27 +276,25 @@ export default function AgendaProfesional({
   );
 
   const doDuplicate = useCallback(async () => {
-    if (!selectedRaw?._id) return;
+  if (!selectedRaw?._id) return;
 
-    const startD = safeDate(selectedRaw.startISO || new Date());
-    const dueLocalDay = toYMD(startD, tz);
+  const startDate = safeDate(selectedRaw.startISO || new Date());
 
-    await createAgendaEvento({
-      usuarioId,
-      tz,
-      title: `${selectedRaw.title || ""} (copia)`,
-      startISO: startD.toISOString(),
-      endISO: startD.toISOString(),
-      dueLocalDay,
-      notes: selectedRaw.notes || selectedRaw.description || "",
-      description: selectedRaw.notes || selectedRaw.description || "",
-      telefono: selectedRaw.telefono || "",
-      alertaWhatsapp: !!selectedRaw.alertaWhatsapp,
-    });
+  const payload = buildAgendaEvento({
+    usuarioId,
+    tz,
+    title: `${selectedRaw.title || ""} (copia)`,
+    startDate,
+    notes: selectedRaw.notes || selectedRaw.description || "",
+    telefono: selectedRaw.telefono,
+    alertaWhatsapp: selectedRaw.alertaWhatsapp,
+  });
 
-    closeActionModal();
-    await syncLoadForDate(startD, viewRef.current);
-  }, [selectedRaw, usuarioId, tz, closeActionModal, syncLoadForDate]);
+  await createAgendaEvento(payload);
+
+  closeActionModal();
+  await syncLoadForDate(startDate, viewRef.current);
+}, [selectedRaw, usuarioId, tz, closeActionModal, syncLoadForDate]);
 
   const doDone = useCallback(async () => {
     if (!selectedRaw?._id) return;
@@ -319,8 +318,14 @@ export default function AgendaProfesional({
 
   // ✅ 1) UI optimista: lo saco del calendario AL INSTANTE
   const deletedId = String(selectedRaw._id);
-  setEventos((prev) =>
-    (prev || []).filter((e) => String(e?.resource?.raw?._id) !== deletedId)
+    setEventos((prev) =>
+    (prev || []).filter((e) => {
+      const rid =
+        e?.resource?.raw?._id ||
+        e?.raw?._id ||
+        null;
+      return String(rid) !== deletedId;
+    })
   );
 
   try {
@@ -361,44 +366,44 @@ export default function AgendaProfesional({
   // Save (GUARDA REAL, UNA SOLA VEZ)
   // ======================================================================
   const guardar = useCallback(async () => {
-    if (!usuarioId) return;
+  if (!usuarioId) return;
 
-    const title = String(form.title || "").trim();
-    const dateISO = ddmmyyyyToISO(form.dateText);
-    const time = normalizeHHMM(form.timeText);
+  const title = String(form.title || "").trim();
+  const dateISO = ddmmyyyyToISO(form.dateText);
+  const time = normalizeHHMM(form.timeText);
 
-    if (!title) return setFormError("Escribe un título.");
-    if (!isValidISODate(dateISO)) return setFormError("Fecha inválida.");
-    if (!isValidTime(time)) return setFormError("Hora inválida.");
+  if (!title) return setFormError("Escribe un título.");
+  if (!isValidISODate(dateISO)) return setFormError("Fecha inválida.");
+  if (!isValidTime(time)) return setFormError("Hora inválida.");
 
-    const startDate = parseDateTimeLocal(dateISO, time);
-    if (!startDate || Number.isNaN(startDate.getTime())) {
-      return setFormError("No se pudo interpretar fecha/hora.");
-    }
+  const startDate = parseDateTimeLocal(dateISO, time);
+  if (!startDate) return setFormError("No se pudo interpretar fecha/hora.");
 
-    const dueLocalDay = toYMD(startDate, tz);
-
-    const payload = {
+  let payload;
+  try {
+    payload = buildAgendaEvento({
       usuarioId,
       tz,
       title,
-      startISO: startDate.toISOString(),
-      endISO: startDate.toISOString(),
-      dueLocalDay,
-      notes: String(form.notes || ""),
-      description: String(form.notes || ""),
-      telefono: String(form.telefono || "").trim(),
-      alertaWhatsapp: !!form.alertaWhatsapp,
-    };
+      startDate,
+      notes: form.notes,
+      telefono: form.telefono,
+      alertaWhatsapp: form.alertaWhatsapp,
+    });
+  } catch (e) {
+    return setFormError(e.message);
+  }
 
-    if (editingId) await updateAgendaEvento({ id: editingId, ...payload });
-    else await createAgendaEvento(payload);
+  if (editingId) {
+    await updateAgendaEvento({ id: editingId, ...payload });
+  } else {
+    await createAgendaEvento(payload);
+  }
 
-    setModalOpen(false);
-    resetForm(null);
-
-    await syncLoadForDate(startDate, viewRef.current);
-  }, [usuarioId, tz, form, editingId, resetForm, syncLoadForDate]);
+  setModalOpen(false);
+  resetForm(null);
+  await syncLoadForDate(startDate, viewRef.current);
+}, [usuarioId, tz, form, editingId, resetForm, syncLoadForDate]);
 
   // ======================================================================
   // Render
@@ -440,9 +445,12 @@ export default function AgendaProfesional({
         onNavigate={(d) => syncLoadForDate(d, viewRef.current)}
         onSelectSlot={onSelectSlot}
         onSelectEvent={(ev) => {
-          const raw = ev?.resource?.raw;
-          const type = ev?.resource?.type;
-          if (!raw) return;
+          const resource = ev?.resource || {};
+          const raw = resource.raw || ev.raw || null;
+          const type = resource.type || "manual";
+
+          if (!raw || !raw._id) return;
+
           setSelectedRaw(raw);
           setSelectedType(type);
           setActionOpen(true);
@@ -501,8 +509,10 @@ export default function AgendaProfesional({
         type={selectedType}
         onClose={closeActionModal}
         onEdit={() => {
+          const raw = selectedRaw;
+          const type = selectedType;
           closeActionModal();
-          if (selectedType === "manual") openEditFromRaw(selectedRaw);
+          if (type === "manual" && raw) openEditFromRaw(raw);
         }}
         onDuplicate={doDuplicate}
         onDone={doDone}
