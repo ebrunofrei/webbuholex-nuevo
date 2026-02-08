@@ -1,10 +1,11 @@
 // ============================================================================
-// LITIS | useGeneralChat — R7.7++ FINAL (HOME CHAT PUBLIC)
+// LITIS | useGeneralChat — R7.7+++ STABLE (HOME CHAT PUBLIC)
 // ----------------------------------------------------------------------------
-// - Home Chat = público (NO login)
-// - sessionId frontend-owned (thread_*)
-// - Sidebar sync sin tocar navegación
-// - Cero race conditions, cero resets
+// FIXES:
+// - ❌ No auto-reload por activeSessionId (zombie fix)
+// - ✅ Optimistic state is source of truth
+// - ✅ Backend hydrate SOLO cuando corresponde
+// - ✅ Mobile real safe
 // ============================================================================
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
@@ -16,7 +17,7 @@ import api from "@/services/apiClient";
 const DEFAULT_TITLE = "Nueva consulta jurídica";
 
 // ============================================================================
-// BACKEND: CREATE SESSION (canonical)
+// BACKEND: CREATE SESSION
 // ============================================================================
 async function apiCreateSession(sessionId, title) {
   await api.post("chat-sessions", { sessionId, title });
@@ -44,77 +45,66 @@ export function useGeneralChat() {
   }, [messagesBySession, activeSessionId]);
 
   // ============================================================================
-  // LOAD SESSIONS (SIDEBAR ONLY — NO NAVIGATION SIDE EFFECTS)
+  // LOAD SESSIONS (SIDEBAR ONLY)
   // ============================================================================
   const refreshSessions = useCallback(async () => {
-    const raw = await listSessions();
+    try {
+      const raw = await listSessions();
 
-    const normalized = (raw || []).map((s) => ({
-      id: s.id,
-      title: s.title || DEFAULT_TITLE,
-      archived: !!s.archived,
-      updatedAt: s.updatedAt,
-    }));
+      const normalized = (raw || []).map((s) => ({
+        id: s.id,
+        title: s.title || DEFAULT_TITLE,
+        archived: !!s.archived,
+        updatedAt: s.updatedAt,
+      }));
 
-    setSessions(normalized);
+      setSessions(normalized);
+    } catch {
+      // silencioso
+    }
   }, []);
 
   useEffect(() => {
-    refreshSessions().catch(() => {});
+    refreshSessions();
   }, [refreshSessions]);
 
   // ============================================================================
-  // LOAD HISTORY FOR ACTIVE SESSION
+  // LOAD HISTORY (MANUAL — SAFE)
   // ============================================================================
   const loadMessagesOf = useCallback(async (sid) => {
     if (!sid) return;
 
-    const data = await loadSession(sid);
-
-    setMessagesBySession((prev) => ({
-      ...prev,
-      [sid]: Array.isArray(data) ? data : [],
-    }));
-  }, []);
-
-  useEffect(() => {
-  if (!activeSessionId) return;
-
-  let cancelled = false;
-
-  (async () => {
     try {
-      const data = await loadSession(activeSessionId);
-      if (cancelled) return;
+      const data = await loadSession(sid);
 
-      setMessagesBySession((prev) => ({
-        ...prev,
-        [activeSessionId]: Array.isArray(data) ? data : [],
-      }));
+      setMessagesBySession((prev) => {
+        // 🛡️ BLINDAJE: no sobrescribir estado vivo
+        if ((prev[sid] || []).length > 0) return prev;
+
+        return {
+          ...prev,
+          [sid]: Array.isArray(data) ? data : [],
+        };
+      });
     } catch {
       // silencioso
     }
-  })();
-
-  return () => {
-    cancelled = true;
-  };
-}, [activeSessionId]);
+  }, []);
 
   // ============================================================================
   // AUTO SCROLL
   // ============================================================================
   useEffect(() => {
-  if (!bottomRef.current) return;
+    if (!bottomRef.current) return;
 
-  bottomRef.current.scrollIntoView({
-    behavior: "smooth",
-    block: "end",
-  });
-}, [messages.length]);
+    bottomRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [messages.length]);
 
   // ============================================================================
-  // CREATE SESSION (SINGLE SOURCE OF TRUTH)
+  // CREATE SESSION (FRONTEND OWNS TRUTH)
   // ============================================================================
   const createSession = useCallback(async (initialText) => {
     const sessionId = `thread_${crypto.randomUUID()}`;
@@ -144,82 +134,83 @@ export function useGeneralChat() {
     return sessionId;
   }, []);
 
- // ============================================================================
-// DISPATCH MESSAGE (NO RESET, NO RACE, MOBILE-SAFE)
-// ============================================================================
-const dispatchMessage = useCallback(async () => {
-  const text = draft.trim();
-  if (!text || isDispatchingRef.current) return;
+  // ============================================================================
+  // DISPATCH MESSAGE (ANTI-RACE, MOBILE SAFE)
+  // ============================================================================
+  const dispatchMessage = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || isDispatchingRef.current) return;
 
-  isDispatchingRef.current = true;
-  setIsDispatching(true);
-  setDraft("");
+    isDispatchingRef.current = true;
+    setIsDispatching(true);
+    setDraft("");
 
-  try {
     let sid = activeSessionId;
 
-    // 1️⃣ Create session if needed
-    if (!sid) {
-      sid = await createSession(text);
-    }
-
-    // 2️⃣ Optimistic USER message
-    setMessagesBySession((prev) => ({
-      ...prev,
-      [sid]: [...(prev[sid] || []), { role: "user", content: text }],
-    }));
-
-    // 3️⃣ Send to backend
-    let reply = "";
-
     try {
-      const res = await sendChatMessage({
-        channel: "home_chat",
-        sessionId: sid,
-        prompt: text,
-      });
+      // 1️⃣ Create session if needed
+      if (!sid) {
+        sid = await createSession(text);
+      }
 
-      reply =
-        typeof res?.message === "string" && res.message.trim()
-          ? res.message
-          : "He procesado tu consulta jurídica.";
-    } catch (err) {
-      reply = err?.message || "⚠️ Error de conexión.";
+      // 2️⃣ Optimistic USER message
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [sid]: [...(prev[sid] || []), { role: "user", content: text }],
+      }));
+
+      // 3️⃣ Send to backend
+      let reply = "";
+
+      try {
+        const res = await sendChatMessage({
+          channel: "home_chat",
+          sessionId: sid,
+          prompt: text,
+        });
+
+        reply =
+          typeof res?.message === "string" && res.message.trim()
+            ? res.message
+            : "He procesado tu consulta jurídica.";
+      } catch (err) {
+        reply = err?.message || "⚠️ Error de conexión.";
+      }
+
+      // 4️⃣ Optimistic ASSISTANT message
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [sid]: [
+          ...(prev[sid] || []),
+          {
+            role: "assistant",
+            content: reply,
+            meta: { protocol: "R7.7+++" },
+          },
+        ],
+      }));
+
+      // 5️⃣ Background sync (NO overwrite)
+      setTimeout(() => {
+        loadMessagesOf(sid);
+        refreshSessions();
+      }, 300);
+    } finally {
+      // 🔒 Release lock (CRÍTICO EN MÓVIL)
+      isDispatchingRef.current = false;
+      setIsDispatching(false);
     }
-
-    // 4️⃣ Optimistic ASSISTANT message
-    setMessagesBySession((prev) => ({
-      ...prev,
-      [sid]: [
-        ...(prev[sid] || []),
-        {
-          role: "assistant",
-          content: reply,
-          meta: { protocol: "R7.7++" },
-        },
-      ],
-    }));
-
-    // 5️⃣ Background sync (NO navigation side effects)
-    loadMessagesOf(sid);
-    refreshSessions();
-  } finally {
-    // 🔒 SIEMPRE se libera el lock (clave en móvil)
-    isDispatchingRef.current = false;
-    setIsDispatching(false);
-  }
-}, [
-  draft,
-  activeSessionId,
-  createSession,
-  loadMessagesOf,
-  refreshSessions,
-]);
+  }, [
+    draft,
+    activeSessionId,
+    createSession,
+    loadMessagesOf,
+    refreshSessions,
+  ]);
 
   // ============================================================================
-  // SIDEBAR ACTIONS (CANONICAL — NO UX SIDE EFFECTS)
+  // SIDEBAR ACTIONS
   // ============================================================================
-
   const renameSession = useCallback(async (sessionId, newTitle) => {
     if (!sessionId || !newTitle?.trim()) return;
 
@@ -231,69 +222,47 @@ const dispatchMessage = useCallback(async () => {
       setSessions((prev) =>
         prev.map((s) =>
           s.id === sessionId
-            ? {
-                ...s,
-                title: newTitle.trim(),
-                updatedAt: new Date().toISOString(),
-              }
+            ? { ...s, title: newTitle.trim(), updatedAt: new Date().toISOString() }
             : s
         )
       );
-    } catch {
-      // UX > persistencia (silencioso)
-    }
+    } catch {}
   }, []);
 
   const archiveSession = useCallback(async (sessionId) => {
     if (!sessionId) return;
 
     try {
-      await api.patch(`chat-sessions/${sessionId}`, {
-        archived: true,
-      });
+      await api.patch(`chat-sessions/${sessionId}`, { archived: true });
 
       setSessions((prev) =>
         prev.map((s) =>
           s.id === sessionId
-            ? {
-                ...s,
-                archived: true,
-                updatedAt: new Date().toISOString(),
-              }
+            ? { ...s, archived: true, updatedAt: new Date().toISOString() }
             : s
         )
       );
-      refreshSessions();
 
-    } catch {
-      // UX > persistencia
-    }
-    }, [refreshSessions]);
+      refreshSessions();
+    } catch {}
+  }, [refreshSessions]);
 
   const restoreSession = useCallback(async (sessionId) => {
     if (!sessionId) return;
 
     try {
-      await api.patch(`chat-sessions/${sessionId}`, {
-        archived: false,
-      });
+      await api.patch(`chat-sessions/${sessionId}`, { archived: false });
 
       setSessions((prev) =>
         prev.map((s) =>
           s.id === sessionId
-            ? {
-                ...s,
-                archived: false,
-                updatedAt: new Date().toISOString(),
-              }
+            ? { ...s, archived: false, updatedAt: new Date().toISOString() }
             : s
         )
       );
-      refreshSessions();
 
-    } catch {
-      // UX > persistencia
-    }
+      refreshSessions();
+    } catch {}
   }, [refreshSessions]);
 
   const deleteSession = useCallback(async (sessionId) => {
@@ -313,10 +282,9 @@ const dispatchMessage = useCallback(async () => {
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
       }
-    } catch {
-      // UX > persistencia
-    }
+    } catch {}
   }, [activeSessionId]);
+
   // ============================================================================
   // PUBLIC API
   // ============================================================================
@@ -337,5 +305,6 @@ const dispatchMessage = useCallback(async () => {
     archiveSession,
     restoreSession,
     deleteSession,
+    loadMessagesOf, // 👈 manual load (sidebar click)
   };
 }
