@@ -86,6 +86,12 @@ export const registerFcmServiceWorker = async () => {
 /** Inicializa Firebase Messaging */
 export const initMessaging = async () => {
   try {
+    // ❌ FCM DESACTIVADO EN PRODUCCIÓN WEB (no crítico para chat)
+    if (import.meta.env.PROD) {
+      console.info("🔕 FCM omitido en producción web");
+      return null;
+    }
+
     if (!app || !HAS_CORE) {
       console.warn("⚠️ FCM omitido: configuración Firebase incompleta.");
       return null;
@@ -118,6 +124,11 @@ export const initMessaging = async () => {
 /** Solicita token de FCM */
 export const getFcmToken = async () => {
   try {
+    // ❌ Nunca solicitar token FCM en producción web
+    if (import.meta.env.PROD) {
+      return null;
+    }
+
     if (!messaging) await initMessaging();
     if (!messaging || !swRegistration) return null;
 
@@ -147,6 +158,9 @@ export const getFcmToken = async () => {
 
 /** Listener de mensajes en foreground */
 export const onForegroundMessage = (cb) => {
+  if (import.meta.env.PROD) {
+    return () => {};
+  }
   if (!messaging) {
     console.warn("⚠️ Listener FCM ignorado: messaging no inicializado.");
     return () => {};

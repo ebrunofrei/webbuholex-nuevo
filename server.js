@@ -135,6 +135,7 @@ const envOrigins = (process.env.FRONTEND_ORIGIN || "")
 const defaultProdOrigins = [
   "https://buholex.com",
   "https://www.buholex.com",
+  "https://api.buholex.com",
   "https://webbuholex-nuevo.vercel.app",
 ];
 
