@@ -8,60 +8,70 @@ import GeneralChatFeed from "./GeneralChatFeed";
 import GeneralChatInput from "./GeneralChatInput";
 
 /* ============================================================================
-   R7.7 — GENERAL CHAT LAYOUT (CANONICAL)
-   - Resuelve el error de referencia unificando el contexto del chat.
-   - Establece la jerarquía de blanco puro y sobriedad estructural.
+   R7.7+++ — GENERAL CHAT LAYOUT (CANONICAL)
+   - El Layout decide Home vs Chat (autoridad única)
+   - El Feed es 100% presentacional
+   - Mobile-safe, race-safe
 ============================================================================ */
 
 export default function GeneralChatLayout() {
   const { user } = useAuth();
-  
-  // Consumimos el contexto unificado para evitar errores de prop-drilling
+
+  // Contexto unificado del chat
   const chat = useGeneralChatContext();
 
-  // Estado local para el Drawer en dispositivos móviles
+  // 🧠 FLAG CANÓNICO: el chat empezó
+  const hasStartedChat =
+    !!chat.activeSessionId || chat.messages.length > 0;
+
+  // Estado local para el Drawer (mobile)
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden font-sans text-slate-900">
       
-      {/* 📂 SIDEBAR: Implementación controlada */}
+      {/* 📂 SIDEBAR */}
       <GeneralChatSidebar
-        {...chat} // Pasa sessions, activeSessionId, createSession, etc.
+        {...chat}
         user={user}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
 
-      {/* 🏛️ COLUMNA PRINCIPAL DE TRABAJO */}
+      {/* 🏛️ COLUMNA PRINCIPAL */}
       <section className="flex-1 flex flex-col min-w-0 relative">
         
-        {/* HEADER: Identidad y Toggle */}
+        {/* HEADER */}
         <GeneralChatHeader
           onToggleSidebar={() => setSidebarOpen(true)}
         />
 
-        {/* 📜 ÁREA DE FEED: Scroll independiente y blanco puro */}
+        {/* 📜 FEED */}
         <main className="flex-1 overflow-y-auto bg-white custom-scrollbar relative">
-          {/* El Feed ahora recibe isLoading para el Skeleton de razonamiento */}
-          <GeneralChatFeed 
-            messages={chat.messages} 
-            isLoading={chat.isDispatching} 
-          />
-          
-          {/* Ancla para el autoscroll del Kernel */}
+          {hasStartedChat ? (
+            <GeneralChatFeed
+              messages={chat.messages}
+              isLoading={chat.isDispatching}
+            />
+          ) : (
+            <GeneralChatFeed
+              forceEmptyState
+            />
+          )}
+
+          {/* 🔽 Ancla de autoscroll */}
           <div ref={chat.bottomRef} className="h-2 w-full" />
         </main>
 
-        {/* ⌨️ INPUT: Zona de captura Enterprise */}
+        {/* ⌨️ INPUT */}
         <div className="flex-shrink-0 border-t border-slate-100 bg-white">
           <GeneralChatInput />
-          
-          {/* Marketing Cognitivo R7.7++ */}
+
+          {/* Marketing Cognitivo */}
           <div className="flex justify-center pb-2">
-             <span className="text-[8px] font-black text-slate-200 uppercase tracking-[0.4em]">
-               BúhoLex LegalTech 2026
-             </span>
+            <span className="text-[8px] font-black text-slate-200 uppercase tracking-[0.4em]">
+              BúhoLex LegalTech 2026
+            </span>
           </div>
         </div>
       </section>

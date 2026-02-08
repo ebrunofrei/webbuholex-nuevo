@@ -1,24 +1,29 @@
 import { useMemo } from "react";
 import { FaGavel, FaRegCopy, FaVolumeUp } from "react-icons/fa";
 
-// ✅ RUTAS REALES
+// RUTAS REALES
 import LegalMarkdown from "@/components/litisbot/chat/markdown/LegalMarkdown";
 import ChatEmptyState from "@/components/litisbot/chat/shared/ChatEmptyState";
 import ChatAvatar from "@/components/litisbot/chat/shared/ChatAvatar";
 
 /**
- * R7.7 — GENERAL CHAT FEED (SAFE)
- * ❌ No controla scroll
- * ❌ No controla layout
- * ✅ Solo renderiza mensajes
+ * R7.7+++ — GENERAL CHAT FEED (PRESENTATIONAL ONLY)
+ * ✅ NO decide Home vs Chat
+ * ✅ NO decide flujo
+ * ✅ SOLO renderiza lo que el Layout ordena
  */
-export default function GeneralChatFeed({ messages = [], isLoading = false }) {
+export default function GeneralChatFeed({
+  messages = [],
+  isLoading = false,
+  forceEmptyState = false,
+}) {
   const safeMessages = useMemo(
     () => (Array.isArray(messages) ? messages : []),
     [messages]
   );
 
-  if (safeMessages.length === 0 && !isLoading) {
+  // ⚠️ SOLO mostrar EmptyState si el Layout lo ordena
+  if (forceEmptyState) {
     return <ChatEmptyState />;
   }
 
@@ -35,8 +40,7 @@ export default function GeneralChatFeed({ messages = [], isLoading = false }) {
                 msg.role === "user" ? "justify-end" : "justify-start"
               }`}
             >
-              {/* Message */}
-              <div className={`flex flex-col gap-3 max-w-[88%]`}>
+              <div className="flex flex-col gap-3 max-w-[88%]">
                 <div
                   className={`px-6 py-5 text-[16px] leading-relaxed border shadow-sm
                     ${
@@ -54,7 +58,6 @@ export default function GeneralChatFeed({ messages = [], isLoading = false }) {
                   )}
                 </div>
 
-                {/* Meta IA */}
                 {isAi && (
                   <div className="flex items-center gap-4 px-2 text-slate-300">
                     <div className="flex gap-3">

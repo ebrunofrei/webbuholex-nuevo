@@ -17,6 +17,32 @@ import api from "@/services/apiClient";
 const DEFAULT_TITLE = "Nueva consulta jurídica";
 
 // ============================================================================
+// SAFE UUID (mobile/webview-proof)
+// ============================================================================
+function safeUUID() {
+  // Modern browsers
+  if (typeof crypto !== "undefined") {
+    if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+
+    // Fallback: RFC4122-ish using getRandomValues
+    if (typeof crypto.getRandomValues === "function") {
+      const buf = new Uint8Array(16);
+      crypto.getRandomValues(buf);
+
+      // Set version (4) and variant bits
+      buf[6] = (buf[6] & 0x0f) | 0x40;
+      buf[8] = (buf[8] & 0x3f) | 0x80;
+
+      const hex = [...buf].map((b) => b.toString(16).padStart(2, "0")).join("");
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+  }
+
+  // Last resort
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+}
+
+// ============================================================================
 // BACKEND: CREATE SESSION
 // ============================================================================
 async function apiCreateSession(sessionId, title) {
@@ -107,7 +133,7 @@ export function useGeneralChat() {
   // CREATE SESSION (FRONTEND OWNS TRUTH)
   // ============================================================================
   const createSession = useCallback(async (initialText) => {
-    const sessionId = `thread_${crypto.randomUUID()}`;
+    const sessionId = `thread_${safeUUID()}`;
 
     const title = initialText
       ? generateThreadTitle(initialText)
