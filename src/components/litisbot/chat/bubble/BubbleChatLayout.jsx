@@ -22,18 +22,24 @@ export default function BubbleChatLayout({
 }) {
   return (
     <div
-      className="
-        w-[420px] h-[680px]
-        bg-white
-        rounded-3xl
-        shadow-[0_40px_100px_-20px_rgba(0,0,0,0.3)]
-        flex flex-col
-        overflow-hidden
-        border border-slate-200/50
-        relative
-        animate-in fade-in slide-in-from-bottom-8 duration-700
-      "
-    >
+        className="
+            fixed inset-0 sm:inset-auto
+            sm:bottom-4 sm:right-4
+
+            w-full sm:w-[420px]
+            h-full sm:h-[680px]
+
+            bg-white
+            rounded-none sm:rounded-3xl
+            shadow-none sm:shadow-[0_40px_100px_-20px_rgba(0,0,0,0.3)]
+
+            flex flex-col
+            overflow-hidden
+            border-t sm:border border-slate-200/50
+
+            animate-in fade-in slide-in-from-bottom-8 duration-500
+        "
+        >
       {/* HEADER */}
       <BubbleHeader
         onClose={onClose}
@@ -42,20 +48,20 @@ export default function BubbleChatLayout({
       />
 
       {/* MESSAGE FEED */}
-      <div className="flex-1 overflow-y-auto bg-white custom-scrollbar">
-        <div className="h-full w-full py-6">
-          <BubbleMessages messages={messages} />
-        </div>
+    <div className="flex-1 overflow-y-auto bg-white custom-scrollbar">
+      <div className="h-full w-full py-4 sm:py-6 px-2 sm:px-0">
+        <BubbleMessages messages={messages} />
       </div>
+     </div>
 
       {/* INPUT */}
-      <div className="p-6 bg-white border-t border-slate-50">
-        <div className="bg-slate-50 rounded-2xl p-1.5 border border-slate-200/50 shadow-inner">
-          <BubbleInput onSend={onSend} loading={loading} />
-        </div>
+      <div className="p-3 sm:p-6 bg-white border-t border-slate-50">
+    < div className="bg-slate-50 rounded-2xl p-1.5 border border-slate-200/50 shadow-inner">
+        <BubbleInput onSend={onSend} loading={loading} />
+    </div>
 
         {/* TECH META */}
-        <div className="flex items-center justify-between mt-4 px-2">
+        <div className="flex items-center justify-between mt-3 sm:mt-4 px-2">
           <div className="flex items-center gap-3">
             <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded uppercase tracking-tighter">
               Ver: 7.7.02
