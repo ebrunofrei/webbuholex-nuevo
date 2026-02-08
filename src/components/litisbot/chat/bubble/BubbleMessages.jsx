@@ -128,17 +128,17 @@ export default function BubbleMessages({ messages = [], loading = false }) {
       <div ref={scrollRef} className="h-2" />
 
       {/* Keyframes de Escaneo Láser */}
-      <style jsx>{`
-        @keyframes scan {
-          0% { transform: translateY(0); opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { transform: translateY(80px); opacity: 0; }
-        }
-        .animate-scan {
-          animation: scan 2.5s ease-in-out infinite;
-        }
-      `}</style>
+    <style>{`
+    @keyframes scan {
+        0% { transform: translateY(0); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(80px); opacity: 0; }
+    }
+    .animate-scan {
+        animation: scan 2.5s ease-in-out infinite;
+    }
+    `}</style>
     </div>
   );
 }

@@ -179,13 +179,17 @@ export default function GeneralChatSidebar({
                   onMouseLeave={() => setHoveredSessionId(null)}
                   className="group"
                 >
-                  <button
+                  {/* ITEM DE SESIÓN (NO button) */}
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       setActiveSessionId(s.id);
                       onClose();
                     }}
                     className={`
-                      w-full flex flex-col px-3 py-2.5 rounded-lg text-left transition-all
+                      w-full flex flex-col px-3 py-2.5 rounded-lg text-left cursor-pointer
+                      transition-all outline-none
                       ${
                         active
                           ? "bg-slate-100 border border-slate-300 shadow-sm"
@@ -193,76 +197,68 @@ export default function GeneralChatSidebar({
                       }
                     `}
                   >
-                  {/* TOP LINE */}
-                  <div className="flex items-center justify-between w-full gap-2">
-                    {editingSessionId === s.id ? (
-                      <div className="flex flex-col gap-1">
-                        <input
-                          ref={editInputRef}
-                          autoFocus
-                          value={editingTitle}
-                          onChange={(e) => setEditingTitle(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              renameSession?.(s.id, editingTitle);
-
-                              // 🔒 cerrar teclado
-                              editInputRef.current?.blur();
-
-                              setEditingSessionId(null);
-                            }
-
-                            if (e.key === "Escape") {
-                              editInputRef.current?.blur();
-                              setEditingSessionId(null);
-                              setEditingTitle("");
-                            }
-                          }}
-                          className="
-                            w-full text-sm font-semibold
-                            bg-white border border-slate-300 rounded px-1
-                            focus:outline-none focus:ring-1 focus:ring-slate-400
-                          "
-                        />
-
-                        {/* MOBILE ACTIONS */}
-                        <div className="flex gap-2 md:hidden">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              renameSession?.(s.id, editingTitle);
-
-                              // 🔒 cerrar teclado móvil
-                              editInputRef.current?.blur();
-
-                              setEditingSessionId(null);
+                    {/* TOP LINE */}
+                    <div className="flex items-center justify-between w-full gap-2">
+                      {editingSessionId === s.id ? (
+                        <div className="flex flex-col gap-1">
+                          <input
+                            ref={editInputRef}
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                renameSession?.(s.id, editingTitle);
+                                editInputRef.current?.blur();
+                                setEditingSessionId(null);
+                              }
+                              if (e.key === "Escape") {
+                                editInputRef.current?.blur();
+                                setEditingSessionId(null);
+                                setEditingTitle("");
+                              }
                             }}
-                            className="flex-1 text-[11px] py-1 rounded bg-slate-900 text-white"
-                          >
-                            Guardar
-                          </button>
+                            className="
+                              w-full text-sm font-semibold
+                              bg-white border border-slate-300 rounded px-1
+                              focus:outline-none focus:ring-1 focus:ring-slate-400
+                            "
+                          />
 
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingSessionId(null);
-                              setEditingTitle("");
-                            }}
-                            className="flex-1 text-[11px] py-1 rounded bg-slate-100 text-slate-600"
-                          >
-                            Cancelar
-                          </button>
+                          {/* MOBILE ACTIONS */}
+                          <div className="flex gap-2 md:hidden">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                renameSession?.(s.id, editingTitle);
+                                editInputRef.current?.blur();
+                                setEditingSessionId(null);
+                              }}
+                              className="flex-1 text-[11px] py-1 rounded bg-slate-900 text-white"
+                            >
+                              Guardar
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingSessionId(null);
+                                setEditingTitle("");
+                              }}
+                              className="flex-1 text-[11px] py-1 rounded bg-slate-100 text-slate-600"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <span className="text-sm font-semibold truncate">
-                        {snippet(s.title)}
-                      </span>
-                    )}
+                      ) : (
+                        <span className="text-sm font-semibold truncate">
+                          {snippet(s.title)}
+                        </span>
+                      )}
 
-                    <div className="flex items-center gap-1">
+                      {/* ACTIONS */}
                       {hoveredSessionId === s.id && (
                         <div
                           className="flex items-center gap-1"
@@ -270,8 +266,7 @@ export default function GeneralChatSidebar({
                         >
                           <button
                             title="Renombrar"
-                            onClick={(e) => {
-                              e.stopPropagation();
+                            onClick={() => {
                               setEditingSessionId(s.id);
                               setEditingTitle(s.title);
                             }}
@@ -290,51 +285,13 @@ export default function GeneralChatSidebar({
                             </button>
                           )}
 
-                          {s.archived && (
-                            <button
-                              title="Restaurar"
-                              onClick={() => restoreSession?.(s.id)}
-                              className="p-1 rounded hover:bg-slate-200"
-                            >
-                              <MdRestore size={14} />
-                            </button>
-                          )}
-
-                          {confirmDeleteSessionId === s.id ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteSession?.(s.id);
-                                  setConfirmDeleteSessionId(null);
-                                }}
-                                className="px-2 py-0.5 text-[11px] rounded bg-red-600 text-white"
-                              >
-                                Eliminar
-                              </button>
-
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteSessionId(null);
-                                }}
-                                className="px-2 py-0.5 text-[11px] rounded bg-slate-100 text-slate-600"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              title="Eliminar"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmDeleteSessionId(s.id);
-                              }}
-                              className="p-1 rounded hover:bg-red-100 text-red-500"
-                            >
-                              <MdDelete size={14} />
-                            </button>
-                          )}
+                          <button
+                            title="Eliminar"
+                            onClick={() => setConfirmDeleteSessionId(s.id)}
+                            className="p-1 rounded hover:bg-red-100 text-red-500"
+                          >
+                            <MdDelete size={14} />
+                          </button>
                         </div>
                       )}
 
@@ -342,13 +299,12 @@ export default function GeneralChatSidebar({
                         {formatRelative(s.updatedAt)}
                       </span>
                     </div>
-                  </div>
 
-                  {/* SUBTEXT */}
-                  <div className="text-[12px] text-slate-500 mt-0.5">
-                    {snippet(s.lastMessage || s.title)}
+                    {/* SUBTEXT */}
+                    <div className="text-[12px] text-slate-500 mt-0.5">
+                      {snippet(s.lastMessage || s.title)}
+                    </div>
                   </div>
-                </button>
                 </div>
               );
             })}
@@ -392,16 +348,15 @@ export default function GeneralChatSidebar({
         </footer>
       </aside>
 
-      {/* SCROLLBAR */}
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
-        }
+      {/* SCROLLBAR (VITE SAFE) */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: #e2e8f0;
           border-radius: 10px;
         }
       `}</style>
+
     </>
   );
 }

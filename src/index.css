@@ -16,7 +16,7 @@ html, body, #root {
   padding: 0;
   height: 100%;                /* ← evita scroll lock */
   overflow-x: hidden;
-  overflow-y: auto;            /* ← scroll global seguro */
+  overflow-y: hidden;            /* ← scroll global seguro */
   font-family: "Inter", system-ui, sans-serif;
   background: #ffffff;         /* Blanco institucional */
   color: #2b1107;

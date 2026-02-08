@@ -51,19 +51,10 @@ export default function GeneralChatInput() {
               isComposingRef.current = false;
               setDraft(e.target.value);
             }}
+            enterKeyHint="send"
             placeholder="Introduce los hechos o fundamentos de tu consulta jurídica..."
             rows={1}
-            className="
-              flex-1 resize-none bg-transparent text-[16px]
-              leading-relaxed outline-none overflow-hidden
-              text-slate-800 placeholder:text-slate-300
-              placeholder:font-bold placeholder:uppercase
-              placeholder:text-[10px] placeholder:tracking-[0.2em]
-            "
-            onInput={(e) => {
-              e.currentTarget.style.height = "auto";
-              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-            }}
+            className="flex-1 resize-none bg-transparent text-[16px] leading-relaxed outline-none text-slate-800"
             onKeyDown={(e) => {
               if (
                 e.key === "Enter" &&

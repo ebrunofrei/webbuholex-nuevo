@@ -67,6 +67,7 @@ export function useGeneralChat() {
   // DERIVED: CURRENT MESSAGES
   // ============================================================================
   const messages = useMemo(() => {
+    if (!activeSessionId) return [];
     return messagesBySession[activeSessionId] || [];
   }, [messagesBySession, activeSessionId]);
 
@@ -124,7 +125,7 @@ export function useGeneralChat() {
     if (!bottomRef.current) return;
 
     bottomRef.current.scrollIntoView({
-      behavior: "smooth",
+      behavior: "auto",
       block: "end",
     });
   }, [messages.length]);
@@ -164,75 +165,72 @@ export function useGeneralChat() {
   // DISPATCH MESSAGE (ANTI-RACE, MOBILE SAFE)
   // ============================================================================
   const dispatchMessage = useCallback(async () => {
-    const text = draft.trim();
-    if (!text || isDispatchingRef.current) return;
+  const text = draft.trim();
+  if (!text || isDispatchingRef.current) return;
 
-    isDispatchingRef.current = true;
-    setIsDispatching(true);
-    setDraft("");
+  isDispatchingRef.current = true;
+  setIsDispatching(true);
 
-    let sid = activeSessionId;
+  let sid = activeSessionId;
+  if (!sid) {
+    sid = await createSession(text);
+  }
+
+  setDraft("");
+
+  try {
+    // 1️⃣ Optimistic USER message
+    setMessagesBySession((prev) => ({
+      ...prev,
+      [sid]: [...(prev[sid] || []), { role: "user", content: text }],
+    }));
+
+    // 2️⃣ Send to backend
+    let reply = "";
 
     try {
-      // 1️⃣ Create session if needed
-      if (!sid) {
-        sid = await createSession(text);
-      }
+      const res = await sendChatMessage({
+        channel: "home_chat",
+        sessionId: sid,
+        prompt: text,
+      });
 
-      // 2️⃣ Optimistic USER message
-      setMessagesBySession((prev) => ({
-        ...prev,
-        [sid]: [...(prev[sid] || []), { role: "user", content: text }],
-      }));
-
-      // 3️⃣ Send to backend
-      let reply = "";
-
-      try {
-        const res = await sendChatMessage({
-          channel: "home_chat",
-          sessionId: sid,
-          prompt: text,
-        });
-
-        reply =
-          typeof res?.message === "string" && res.message.trim()
-            ? res.message
-            : "He procesado tu consulta jurídica.";
-      } catch (err) {
-        reply = err?.message || "⚠️ Error de conexión.";
-      }
-
-      // 4️⃣ Optimistic ASSISTANT message
-      setMessagesBySession((prev) => ({
-        ...prev,
-        [sid]: [
-          ...(prev[sid] || []),
-          {
-            role: "assistant",
-            content: reply,
-            meta: { protocol: "R7.7+++" },
-          },
-        ],
-      }));
-
-      // 5️⃣ Background sync (NO overwrite)
-      setTimeout(() => {
-        loadMessagesOf(sid);
-        refreshSessions();
-      }, 300);
-    } finally {
-      // 🔒 Release lock (CRÍTICO EN MÓVIL)
-      isDispatchingRef.current = false;
-      setIsDispatching(false);
+      reply =
+        typeof res?.message === "string" && res.message.trim()
+          ? res.message
+          : "He procesado tu consulta jurídica.";
+    } catch (err) {
+      reply = err?.message || "⚠️ Error de conexión.";
     }
-  }, [
-    draft,
-    activeSessionId,
-    createSession,
-    loadMessagesOf,
-    refreshSessions,
-  ]);
+
+    // 3️⃣ Optimistic ASSISTANT message
+    setMessagesBySession((prev) => ({
+      ...prev,
+      [sid]: [
+        ...(prev[sid] || []),
+        {
+          role: "assistant",
+          content: reply,
+          meta: { protocol: "R7.7+++" },
+        },
+      ],
+    }));
+
+    // 4️⃣ Background sync (opcional en Home)
+    Promise.resolve().then(() => {
+      loadMessagesOf(sid);
+      // refreshSessions(); // ⛔ opcional
+    });
+  } finally {
+    isDispatchingRef.current = false;
+    setIsDispatching(false);
+  }
+}, [
+  draft,
+  activeSessionId,
+  createSession,
+  loadMessagesOf,
+]);
 
   // ============================================================================
   // SIDEBAR ACTIONS

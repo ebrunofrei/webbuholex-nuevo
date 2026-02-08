@@ -1,13 +1,4 @@
-// ============================================================================
-// 📁 GeneralChatProvider.jsx — HOME CHAT (PUBLIC) R7.7++
-// ----------------------------------------------------------------------------
-// - Chat 100% público (NO AUTH, NO USER)
-// - Estado estable: nunca se resetea al enviar mensajes
-// - Fuente única: useGeneralChat()
-// - Aislado del sistema de autenticación
-// ============================================================================
-
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext } from "react";
 import { useGeneralChat } from "./useGeneralChat";
 
 // ---------------------------------------------------------------------------
@@ -20,20 +11,13 @@ const GeneralChatContext = createContext(null);
 // ---------------------------------------------------------------------------
 export function GeneralChatProvider({ children }) {
   /**
-   * ⚠️ CLAVE ARQUITECTÓNICA
-   * Home Chat NO depende de usuario.
-   * Siempre es "public".
+   * Home Chat es 100% público.
+   * No depende de auth ni de usuario.
    */
-  const chat = useGeneralChat({ id: "public" });
-
-  /**
-   * useMemo para garantizar referencia estable
-   * (evita renders innecesarios en Layout / Sidebar)
-   */
-  const value = useMemo(() => chat, [chat]);
+  const chat = useGeneralChat();
 
   return (
-    <GeneralChatContext.Provider value={value}>
+    <GeneralChatContext.Provider value={chat}>
       {children}
     </GeneralChatContext.Provider>
   );
