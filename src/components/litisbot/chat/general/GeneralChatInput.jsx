@@ -1,60 +1,95 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { MdSend, MdAttachFile } from "react-icons/md";
 import { useGeneralChatContext } from "./GeneralChatProvider";
 
-export default function GeneralChatInput() {
-  const {
-    draft,
-    setDraft,
-    dispatchMessage,
-    isDispatching,
-  } = useGeneralChatContext();
+/* ============================================================================
+   R7.7+++ — GENERAL CHAT INPUT (MOBILE CANONICAL)
+   ----------------------------------------------------------------------------
+   GOALS:
+   - No zombie state
+   - No keyboard blur hacks
+   - Mobile IME safe
+   - Button NEVER depends on async network state
+============================================================================ */
 
-  // 🛡️ IME / Mobile composition guard
+export default function GeneralChatInput() {
+  const { dispatchMessage, isDispatching } = useGeneralChatContext();
+
+  // 🔑 Estado LOCAL del input (NO dependemos del provider)
+  const [value, setValue] = useState("");
+
+  const textareaRef = useRef(null);
   const isComposingRef = useRef(false);
 
-  // 🚫 NUNCA bloquear por draft en móvil (IME bug)
-  const disabled = isDispatching;
+  // ---------------------------------------------------------------------------
+  // Auto-resize estable (mobile safe)
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
+  // ---------------------------------------------------------------------------
+  // Envío CANÓNICO
+  // ---------------------------------------------------------------------------
+  const handleSend = () => {
+    const text = value.trim();
+    if (!text) return;
+
+    // 1️⃣ Limpieza inmediata → UX fluida
+    setValue("");
+
+    // 2️⃣ Envío desacoplado de la UI (NO await)
+    dispatchMessage(text);
+  };
+
+  // ⚠️ OJO: el botón NO depende de isDispatching
+  const canSend = value.trim().length > 0;
 
   return (
-    <div className="bg-white border-t border-slate-100 px-6 py-6 transition-all duration-300">
+    <div className="bg-white border-t border-slate-100 px-4 py-4 safe-bottom">
       <div className="mx-auto w-full max-w-4xl">
         <div
-          className={`
-            flex items-end gap-3 rounded-2xl border px-4 py-3.5
-            transition-all duration-300 ease-in-out
-            ${
-              disabled
-                ? "bg-slate-50 border-slate-200"
-                : "bg-white border-slate-300 shadow-xl shadow-slate-100/50 focus-within:border-slate-900"
-            }
-          `}
+          className="
+            flex items-end gap-3 rounded-2xl border px-4 py-3
+            bg-white border-slate-200
+            focus-within:border-slate-900
+            transition-all
+          "
         >
-          {/* BOTÓN TÁCTICO: ADJUNTOS (NO BLOQUEANTE) */}
+          {/* Adjuntar (pasivo) */}
           <button
             type="button"
-            className="text-slate-400 shrink-0 p-1 hover:text-slate-900 transition-colors"
             tabIndex={-1}
-            title="Adjuntar documentación jurídica (Próximamente)"
+            className="text-slate-400 p-1 mb-1"
           >
             <MdAttachFile size={22} />
           </button>
 
-          {/* ÁREA DE ESCRITURA */}
+          {/* TEXTAREA */}
           <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            ref={textareaRef}
+            value={value}
+            rows={1}
+            placeholder="Introduce los hechos o fundamentos de tu consulta…"
+            enterKeyHint="send"
+            className="
+              flex-1 resize-none bg-transparent
+              text-[16px] leading-relaxed
+              outline-none text-slate-800
+              placeholder:text-slate-400
+            "
+            onChange={(e) => setValue(e.target.value)}
             onCompositionStart={() => {
               isComposingRef.current = true;
             }}
             onCompositionEnd={(e) => {
               isComposingRef.current = false;
-              setDraft(e.target.value);
+              setValue(e.target.value);
             }}
-            enterKeyHint="send"
-            placeholder="Introduce los hechos o fundamentos de tu consulta jurídica..."
-            rows={1}
-            className="flex-1 resize-none bg-transparent text-[16px] leading-relaxed outline-none text-slate-800"
             onKeyDown={(e) => {
               if (
                 e.key === "Enter" &&
@@ -62,36 +97,41 @@ export default function GeneralChatInput() {
                 !isComposingRef.current
               ) {
                 e.preventDefault();
-                dispatchMessage();
+                handleSend();
               }
             }}
           />
 
-          {/* ACCIÓN: ENVIAR */}
+          {/* SEND */}
           <button
             type="button"
-            onClick={dispatchMessage}
-            disabled={disabled}
-            className="
-              h-12 w-12 shrink-0 flex items-center justify-center
-              rounded-xl bg-slate-900 text-white transition-all
-              shadow-lg shadow-slate-200
-              hover:bg-black hover:scale-105 active:scale-95
-              disabled:opacity-10 disabled:scale-100 disabled:shadow-none
-            "
+            onClick={handleSend}
+            disabled={!canSend}
+            className={`
+              h-11 w-11 flex items-center justify-center
+              rounded-xl transition-all
+              ${
+                canSend
+                  ? "bg-slate-900 text-white active:scale-95"
+                  : "bg-slate-100 text-slate-300"
+              }
+            `}
           >
-            <MdSend size={24} />
+            {isDispatching ? (
+              <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            ) : (
+              <MdSend size={22} />
+            )}
           </button>
         </div>
 
-        {/* METADATOS DE CANAL */}
-        <div className="flex justify-between items-center px-4 mt-4">
+        {/* META */}
+        <div className="flex justify-between items-center px-2 mt-3 select-none">
           <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">
-            BúhoLex LegalTech 2026
+            BúhoLex LegalTech
           </span>
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest italic flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            Canal Home Chat · Protocolo R7.7
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+            Home Chat · R7.7
           </span>
         </div>
       </div>

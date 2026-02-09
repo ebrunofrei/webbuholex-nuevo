@@ -3,13 +3,16 @@ import {
   MdClose,
   MdArrowBack,
   MdSettings,
+  MdEdit,
+  MdArchive,
+  MdRestore,
+  MdDelete,
 } from "react-icons/md";
-import { MdEdit, MdArchive, MdRestore, MdDelete } from "react-icons/md";
 import { FaPlus } from "react-icons/fa";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /* ============================================================
-   RELATIVE TIME — ChatGPT-like
+   HELPERS
 ============================================================ */
 function formatRelative(dateString) {
   if (!dateString) return "";
@@ -26,9 +29,6 @@ function formatRelative(dateString) {
   return `${Math.floor(diff / day)} d`;
 }
 
-/* ============================================================
-   SNIPPET — GPT-like
-============================================================ */
 function snippet(text) {
   if (!text) return "Mensaje sin contenido";
   return text.length > 42 ? text.slice(0, 42) + "…" : text;
@@ -50,50 +50,32 @@ export default function GeneralChatSidebar({
   isOpen,
   onClose,
 }) {
-  
   const [hoveredSessionId, setHoveredSessionId] = useState(null);
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
-  const editInputRef = useRef(null);
-  const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState(null);
 
-  /* Escape key closes sidebar */
+  /* Escape closes sidebar */
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [isOpen, onClose]);
-  /* Auto-select title on rename (mobile-safe) */
-  useEffect(() => {
-    if (!editingSessionId || !editInputRef.current) return;
 
-    // iOS / Android need a small delay after render + keyboard
-    const t = setTimeout(() => {
-      const input = editInputRef.current;
-      input.focus();
-      input.select();
-      input.setSelectionRange(0, input.value.length);
-    }, 60);
-
-    return () => clearTimeout(t);
-  }, [editingSessionId]);
-
-  /* Sort canonical: newest → oldest */
+  /* Sort sessions */
   const { activeSessions, archivedSessions } = useMemo(() => {
-  const sorted = [...sessions].sort(
-    (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-  );
-
-  return {
-    activeSessions: sorted.filter((s) => !s.archived),
-    archivedSessions: sorted.filter((s) => s.archived),
-  };
-}, [sessions]);
+    const sorted = [...sessions].sort(
+      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+    );
+    return {
+      activeSessions: sorted.filter((s) => !s.archived),
+      archivedSessions: sorted.filter((s) => s.archived),
+    };
+  }, [sessions]);
 
   return (
     <>
-      {/* Mobile overlay */}
+      {/* MOBILE OVERLAY */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 md:hidden"
@@ -101,7 +83,7 @@ export default function GeneralChatSidebar({
         />
       )}
 
-      {/* SIDEBAR PANEL */}
+      {/* SIDEBAR */}
       <aside
         className={`
           fixed md:static top-0 left-0 h-screen w-80 max-w-[85vw]
@@ -140,132 +122,100 @@ export default function GeneralChatSidebar({
             Historial
           </div>
 
-          {/* SESSION LIST */}
-          <div className="space-y-1">
-            {archivedSessions.length > 0 && (
-              <div className="mt-8 border-t border-slate-200 pt-4">
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                  Archivadas
-                </div>
-
-                <div className="space-y-1">
-                  {archivedSessions.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg
-                                text-[12px] text-slate-500 hover:bg-slate-50 transition"
-                    >
-                      <span className="truncate">{snippet(s.title)}</span>
-
-                      <button
-                        title="Restaurar"
-                        onClick={() => restoreSession?.(s.id)}
-                        className="p-1 rounded hover:bg-slate-200"
-                      >
-                        <MdRestore size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+          {/* ARCHIVED */}
+          {archivedSessions.length > 0 && (
+            <div className="mt-8 border-t border-slate-200 pt-4">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                Archivadas
               </div>
-            )}
+
+              <div className="space-y-1">
+                {archivedSessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg
+                               text-[12px] text-slate-500 hover:bg-slate-50 transition"
+                  >
+                    <span className="truncate">{snippet(s.title)}</span>
+                    <button
+                      onClick={() => restoreSession?.(s.id)}
+                      className="p-1 rounded hover:bg-slate-200"
+                    >
+                      <MdRestore size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ACTIVE SESSIONS */}
+          <div className="space-y-1 mt-2">
             {activeSessions.map((s) => {
               const active = activeSessionId === s.id;
 
               return (
                 <div
                   key={s.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setActiveSessionId(s.id);
+                    onClose();
+                  }}
                   onMouseEnter={() => setHoveredSessionId(s.id)}
                   onMouseLeave={() => setHoveredSessionId(null)}
-                  className="group"
+                  className={`
+                    w-full flex flex-col px-3 py-2.5 rounded-lg cursor-pointer
+                    transition-all
+                    ${
+                      active
+                        ? "bg-slate-100 border border-slate-300 shadow-sm"
+                        : "hover:bg-slate-50"
+                    }
+                  `}
                 >
-                  {/* ITEM DE SESIÓN (NO button) */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      setActiveSessionId(s.id);
-                      onClose();
-                    }}
-                    className={`
-                      w-full flex flex-col px-3 py-2.5 rounded-lg text-left cursor-pointer
-                      transition-all outline-none
-                      ${
-                        active
-                          ? "bg-slate-100 border border-slate-300 shadow-sm"
-                          : "hover:bg-slate-50"
-                      }
-                    `}
-                  >
-                    {/* TOP LINE */}
-                    <div className="flex items-center justify-between w-full gap-2">
-                      {editingSessionId === s.id ? (
-                        <div className="flex flex-col gap-1">
-                          <input
-                            ref={editInputRef}
-                            value={editingTitle}
-                            onChange={(e) => setEditingTitle(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                renameSession?.(s.id, editingTitle);
-                                editInputRef.current?.blur();
-                                setEditingSessionId(null);
-                              }
-                              if (e.key === "Escape") {
-                                editInputRef.current?.blur();
-                                setEditingSessionId(null);
-                                setEditingTitle("");
-                              }
-                            }}
-                            className="
-                              w-full text-sm font-semibold
-                              bg-white border border-slate-300 rounded px-1
-                              focus:outline-none focus:ring-1 focus:ring-slate-400
-                            "
-                          />
+                  {/* TOP LINE */}
+                  <div className="flex items-center justify-between gap-2">
+                    {editingSessionId === s.id ? (
+                      <input
+                        autoFocus
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => {
+                          renameSession?.(s.id, editingTitle);
+                          setEditingSessionId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            renameSession?.(s.id, editingTitle);
+                            setEditingSessionId(null);
+                          }
+                          if (e.key === "Escape") {
+                            setEditingSessionId(null);
+                            setEditingTitle("");
+                          }
+                        }}
+                        className="
+                          w-full text-sm font-semibold
+                          bg-white border border-slate-300 rounded px-1
+                          focus:outline-none focus:ring-1 focus:ring-slate-400
+                        "
+                      />
+                    ) : (
+                      <span className="text-sm font-semibold truncate">
+                        {snippet(s.title)}
+                      </span>
+                    )}
 
-                          {/* MOBILE ACTIONS */}
-                          <div className="flex gap-2 md:hidden">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                renameSession?.(s.id, editingTitle);
-                                editInputRef.current?.blur();
-                                setEditingSessionId(null);
-                              }}
-                              className="flex-1 text-[11px] py-1 rounded bg-slate-900 text-white"
-                            >
-                              Guardar
-                            </button>
-
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingSessionId(null);
-                                setEditingTitle("");
-                              }}
-                              className="flex-1 text-[11px] py-1 rounded bg-slate-100 text-slate-600"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-sm font-semibold truncate">
-                          {snippet(s.title)}
-                        </span>
-                      )}
-
-                      {/* ACTIONS */}
+                    <div className="flex items-center gap-1">
                       {hoveredSessionId === s.id && (
                         <div
                           className="flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
-                            title="Renombrar"
                             onClick={() => {
                               setEditingSessionId(s.id);
                               setEditingTitle(s.title);
@@ -277,7 +227,6 @@ export default function GeneralChatSidebar({
 
                           {!s.archived && (
                             <button
-                              title="Archivar"
                               onClick={() => archiveSession?.(s.id)}
                               className="p-1 rounded hover:bg-slate-200"
                             >
@@ -286,8 +235,7 @@ export default function GeneralChatSidebar({
                           )}
 
                           <button
-                            title="Eliminar"
-                            onClick={() => setConfirmDeleteSessionId(s.id)}
+                            onClick={() => deleteSession?.(s.id)}
                             className="p-1 rounded hover:bg-red-100 text-red-500"
                           >
                             <MdDelete size={14} />
@@ -299,11 +247,11 @@ export default function GeneralChatSidebar({
                         {formatRelative(s.updatedAt)}
                       </span>
                     </div>
+                  </div>
 
-                    {/* SUBTEXT */}
-                    <div className="text-[12px] text-slate-500 mt-0.5">
-                      {snippet(s.lastMessage || s.title)}
-                    </div>
+                  {/* SUBTEXT */}
+                  <div className="text-[12px] text-slate-500 mt-0.5 truncate">
+                    {snippet(s.lastMessage || s.title)}
                   </div>
                 </div>
               );
@@ -326,10 +274,7 @@ export default function GeneralChatSidebar({
             Ecosistema BúhoLex
           </a>
 
-          <div className="
-            flex items-center gap-3 mt-3 p-3 rounded-xl border border-slate-200
-            hover:border-slate-300 transition bg-white shadow-sm
-          ">
+          <div className="flex items-center gap-3 mt-3 p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
               {user?.name?.[0] || "U"}
             </div>
@@ -348,15 +293,16 @@ export default function GeneralChatSidebar({
         </footer>
       </aside>
 
-      {/* SCROLLBAR (VITE SAFE) */}
+      {/* SCROLLBAR */}
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: #e2e8f0;
           border-radius: 10px;
         }
       `}</style>
-
     </>
   );
 }

@@ -46,7 +46,7 @@ export default function GeneralChatLayout() {
         </div>
 
         {/* 📜 FEED (ÚNICO SCROLL) */}
-        <main className="flex-1 overflow-y-auto overscroll-contain bg-white relative">
+        <main className="flex-1 overflow-y-auto overscroll-contain bg-white relative touch-pan-y">
           {hasStartedChat ? (
             <GeneralChatFeed
               messages={chat.messages}

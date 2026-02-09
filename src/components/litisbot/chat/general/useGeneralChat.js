@@ -2,10 +2,11 @@
 // LITIS | useGeneralChat — R7.7+++ STABLE (HOME CHAT PUBLIC)
 // ----------------------------------------------------------------------------
 // FIXES:
-// - ❌ No auto-reload por activeSessionId (zombie fix)
-// - ✅ Optimistic state is source of truth
-// - ✅ Backend hydrate SOLO cuando corresponde
-// - ✅ Mobile real safe
+// - No zombie state (finally always releases)
+// - Optimistic state is source of truth
+// - Backend hydrate only when needed
+// - Mobile safe (no blur hacks, no draft dependency)
+// - Restores: rename / archive / restore / delete
 // ============================================================================
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
@@ -16,20 +17,16 @@ import api from "@/services/apiClient";
 
 const DEFAULT_TITLE = "Nueva consulta jurídica";
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // SAFE UUID (mobile/webview-proof)
-// ============================================================================
+// ----------------------------------------------------------------------------
 function safeUUID() {
-  // Modern browsers
   if (typeof crypto !== "undefined") {
     if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
 
-    // Fallback: RFC4122-ish using getRandomValues
     if (typeof crypto.getRandomValues === "function") {
       const buf = new Uint8Array(16);
       crypto.getRandomValues(buf);
-
-      // Set version (4) and variant bits
       buf[6] = (buf[6] & 0x0f) | 0x40;
       buf[8] = (buf[8] & 0x3f) | 0x80;
 
@@ -38,13 +35,12 @@ function safeUUID() {
     }
   }
 
-  // Last resort
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 }
 
-// ============================================================================
-// BACKEND: CREATE SESSION
-// ============================================================================
+// ----------------------------------------------------------------------------
+// BACKEND: CREATE SESSION (never breaks UI)
+// ----------------------------------------------------------------------------
 async function apiCreateSession(sessionId, title) {
   await api.post("chat-sessions", { sessionId, title });
 }
@@ -56,24 +52,22 @@ export function useGeneralChat() {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [messagesBySession, setMessagesBySession] = useState({});
-  const [draft, setDraft] = useState("");
   const [isDispatching, setIsDispatching] = useState(false);
-  const isDispatchingRef = useRef(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  const isDispatchingRef = useRef(false);
   const bottomRef = useRef(null);
 
-  // ============================================================================
-  // DERIVED: CURRENT MESSAGES
-  // ============================================================================
+  // ----------------------------------------------------------------------------
+  // DERIVED: current messages
+  // ----------------------------------------------------------------------------
   const messages = useMemo(() => {
     if (!activeSessionId) return [];
     return messagesBySession[activeSessionId] || [];
   }, [messagesBySession, activeSessionId]);
 
-  // ============================================================================
-  // LOAD SESSIONS (SIDEBAR ONLY)
-  // ============================================================================
+  // ----------------------------------------------------------------------------
+  // SESSIONS: refresh
+  // ----------------------------------------------------------------------------
   const refreshSessions = useCallback(async () => {
     try {
       const raw = await listSessions();
@@ -82,12 +76,13 @@ export function useGeneralChat() {
         id: s.id,
         title: s.title || DEFAULT_TITLE,
         archived: !!s.archived,
-        updatedAt: s.updatedAt,
+        updatedAt: s.updatedAt || new Date().toISOString(),
+        lastMessage: s.lastMessage || "", // optional if backend provides it
       }));
 
       setSessions(normalized);
     } catch {
-      // silencioso
+      // silent
     }
   }, []);
 
@@ -95,9 +90,9 @@ export function useGeneralChat() {
     refreshSessions();
   }, [refreshSessions]);
 
-  // ============================================================================
-  // LOAD HISTORY (MANUAL — SAFE)
-  // ============================================================================
+  // ----------------------------------------------------------------------------
+  // HISTORY: manual hydrate (does NOT overwrite live state)
+  // ----------------------------------------------------------------------------
   const loadMessagesOf = useCallback(async (sid) => {
     if (!sid) return;
 
@@ -105,160 +100,149 @@ export function useGeneralChat() {
       const data = await loadSession(sid);
 
       setMessagesBySession((prev) => {
-        // 🛡️ BLINDAJE: no sobrescribir estado vivo
-        if ((prev[sid] || []).length > 0) return prev;
-
-        return {
-          ...prev,
-          [sid]: Array.isArray(data) ? data : [],
-        };
+        if ((prev[sid] || []).length > 0) return prev; // do not overwrite live
+        return { ...prev, [sid]: Array.isArray(data) ? data : [] };
       });
     } catch {
-      // silencioso
+      // silent
     }
   }, []);
 
-  // ============================================================================
-  // AUTO SCROLL
-  // ============================================================================
+  // ----------------------------------------------------------------------------
+  // AUTO SCROLL (feed owns scroll)
+  // ----------------------------------------------------------------------------
   useEffect(() => {
-    if (!bottomRef.current) return;
-
-    bottomRef.current.scrollIntoView({
-      behavior: "auto",
-      block: "end",
-    });
+    bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [messages.length]);
 
-  // ============================================================================
-  // CREATE SESSION (FRONTEND OWNS TRUTH)
-  // ============================================================================
+  // ----------------------------------------------------------------------------
+  // CREATE SESSION (frontend owns truth)
+  // ----------------------------------------------------------------------------
   const createSession = useCallback(async (initialText) => {
     const sessionId = `thread_${safeUUID()}`;
 
-    const title = initialText
-      ? generateThreadTitle(initialText)
-      : DEFAULT_TITLE;
+    const title = initialText ? generateThreadTitle(initialText) : DEFAULT_TITLE;
 
-    await apiCreateSession(sessionId, title);
+    // ✅ Try backend, but never block UI
+    try {
+      await apiCreateSession(sessionId, title);
+    } catch {
+      // silent: session still exists locally
+    }
 
     setSessions((prev) => [
-      {
-        id: sessionId,
-        title,
-        updatedAt: new Date().toISOString(),
-      },
+      { id: sessionId, title, archived: false, updatedAt: new Date().toISOString() },
       ...prev,
     ]);
 
-    setMessagesBySession((prev) => ({
-      ...prev,
-      [sessionId]: [],
-    }));
-
+    setMessagesBySession((prev) => ({ ...prev, [sessionId]: [] }));
     setActiveSessionId(sessionId);
 
     return sessionId;
   }, []);
 
-  // ============================================================================
-  // DISPATCH MESSAGE (ANTI-RACE, MOBILE SAFE)
-  // ============================================================================
-  const dispatchMessage = useCallback(async () => {
-  const text = draft.trim();
-  if (!text || isDispatchingRef.current) return;
+  // ----------------------------------------------------------------------------
+  // DISPATCH MESSAGE (anti-race, mobile-safe, no draft dependency)
+  // ----------------------------------------------------------------------------
+  const dispatchMessage = useCallback(
+    async (rawText) => {
+      const text = String(rawText || "").trim();
+      if (!text || isDispatchingRef.current) return;
 
-  isDispatchingRef.current = true;
-  setIsDispatching(true);
+      isDispatchingRef.current = true;
+      setIsDispatching(true);
 
-  let sid = activeSessionId;
-  if (!sid) {
-    sid = await createSession(text);
-  }
+      let sid = activeSessionId;
 
-  setDraft("");
+      try {
+        if (!sid) {
+          sid = await createSession(text);
+        }
 
-  try {
-    // 1️⃣ Optimistic USER message
-    setMessagesBySession((prev) => ({
-      ...prev,
-      [sid]: [...(prev[sid] || []), { role: "user", content: text }],
-    }));
+        // 1) optimistic USER
+        setMessagesBySession((prev) => ({
+          ...prev,
+          [sid]: [...(prev[sid] || []), { role: "user", content: text }],
+        }));
 
-    // 2️⃣ Send to backend
-    let reply = "";
+        // 2) backend call (never breaks UI)
+        let reply = "";
+        let error = false;
+        let code = null;
 
-    try {
-      const res = await sendChatMessage({
-        channel: "home_chat",
-        sessionId: sid,
-        prompt: text,
-      });
+        try {
+          const data = await sendChatMessage({
+            channel: "home_chat",
+            sessionId: sid,
+            prompt: text,
+          });
 
-      reply =
-        typeof res?.message === "string" && res.message.trim()
-          ? res.message
-          : "He procesado tu consulta jurídica.";
-    } catch (err) {
-      reply = err?.message || "⚠️ Error de conexión.";
-    }
+          reply =
+            typeof data?.message === "string" && data.message.trim()
+              ? data.message
+              : "¿Deseas continuar con la consulta?";
 
-    // 3️⃣ Optimistic ASSISTANT message
-    setMessagesBySession((prev) => ({
-      ...prev,
-      [sid]: [
-        ...(prev[sid] || []),
-        {
-          role: "assistant",
-          content: reply,
-          meta: { protocol: "R7.7+++" },
-        },
-      ],
-    }));
+          code = data?.code ?? null;
+        } catch (err) {
+          error = true;
+          reply = err?.message || "⚠️ Error de conexión.";
+          code = err?.code ?? null;
+        }
 
-    // 4️⃣ Background sync (opcional en Home)
-    Promise.resolve().then(() => {
-      loadMessagesOf(sid);
-      // refreshSessions(); // ⛔ opcional
-    });
-  } finally {
-    isDispatchingRef.current = false;
-    setIsDispatching(false);
-  }
-}, [
-  draft,
-  activeSessionId,
-  createSession,
-  loadMessagesOf,
-]);
+        // 3) optimistic ASSISTANT
+        setMessagesBySession((prev) => ({
+          ...prev,
+          [sid]: [
+            ...(prev[sid] || []),
+            {
+              role: "assistant",
+              content: reply,
+              meta: { protocol: "R7.7+++" },
+              error,
+              code,
+            },
+          ],
+        }));
 
-  // ============================================================================
-  // SIDEBAR ACTIONS
-  // ============================================================================
+        // 4) background hydrate (optional)
+        Promise.resolve().then(() => {
+          loadMessagesOf(sid);
+          // refreshSessions(); // enable if your backend updates updatedAt/lastMessage
+        });
+      } finally {
+        isDispatchingRef.current = false;
+        setIsDispatching(false);
+      }
+    },
+    [activeSessionId, createSession, loadMessagesOf]
+  );
+
+  // ----------------------------------------------------------------------------
+  // SIDEBAR ACTIONS (RESTORED)
+  // ----------------------------------------------------------------------------
   const renameSession = useCallback(async (sessionId, newTitle) => {
-    if (!sessionId || !newTitle?.trim()) return;
+    const title = String(newTitle || "").trim();
+    if (!sessionId || !title) return;
+
+    // optimistic
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === sessionId ? { ...s, title, updatedAt: new Date().toISOString() } : s
+      )
+    );
 
     try {
-      await api.patch(`chat-sessions/${sessionId}`, {
-        title: newTitle.trim(),
-      });
-
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === sessionId
-            ? { ...s, title: newTitle.trim(), updatedAt: new Date().toISOString() }
-            : s
-        )
-      );
-    } catch {}
+      await api.patch(`chat-sessions/${sessionId}`, { title });
+    } catch {
+      // optional: rollback if you want
+    }
   }, []);
 
-  const archiveSession = useCallback(async (sessionId) => {
-    if (!sessionId) return;
+  const archiveSession = useCallback(
+    async (sessionId) => {
+      if (!sessionId) return;
 
-    try {
-      await api.patch(`chat-sessions/${sessionId}`, { archived: true });
-
+      // optimistic
       setSessions((prev) =>
         prev.map((s) =>
           s.id === sessionId
@@ -267,16 +251,21 @@ export function useGeneralChat() {
         )
       );
 
-      refreshSessions();
-    } catch {}
-  }, [refreshSessions]);
+      try {
+        await api.patch(`chat-sessions/${sessionId}`, { archived: true });
+        refreshSessions();
+      } catch {
+        // optional rollback
+      }
+    },
+    [refreshSessions]
+  );
 
-  const restoreSession = useCallback(async (sessionId) => {
-    if (!sessionId) return;
+  const restoreSession = useCallback(
+    async (sessionId) => {
+      if (!sessionId) return;
 
-    try {
-      await api.patch(`chat-sessions/${sessionId}`, { archived: false });
-
+      // optimistic
       setSessions((prev) =>
         prev.map((s) =>
           s.id === sessionId
@@ -285,50 +274,59 @@ export function useGeneralChat() {
         )
       );
 
-      refreshSessions();
-    } catch {}
-  }, [refreshSessions]);
+      try {
+        await api.patch(`chat-sessions/${sessionId}`, { archived: false });
+        refreshSessions();
+      } catch {
+        // optional rollback
+      }
+    },
+    [refreshSessions]
+  );
 
-  const deleteSession = useCallback(async (sessionId) => {
-    if (!sessionId) return;
+  const deleteSession = useCallback(
+    async (sessionId) => {
+      if (!sessionId) return;
 
-    try {
-      await api.delete(`chat-sessions/${sessionId}`);
-
+      // optimistic
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-
       setMessagesBySession((prev) => {
         const copy = { ...prev };
         delete copy[sessionId];
         return copy;
       });
 
-      if (activeSessionId === sessionId) {
-        setActiveSessionId(null);
-      }
-    } catch {}
-  }, [activeSessionId]);
+      if (activeSessionId === sessionId) setActiveSessionId(null);
 
-  // ============================================================================
+      try {
+        await api.delete(`chat-sessions/${sessionId}`);
+      } catch {
+        // optional rollback (usually not necessary)
+      }
+    },
+    [activeSessionId]
+  );
+
+  // ----------------------------------------------------------------------------
   // PUBLIC API
-  // ============================================================================
+  // ----------------------------------------------------------------------------
   return {
     sessions,
     activeSessionId,
     setActiveSessionId,
     messages,
-    draft,
-    setDraft,
     isDispatching,
-    isSidebarOpen,
-    setIsSidebarOpen,
     bottomRef,
+
     dispatchMessage,
     createSession,
+
     renameSession,
     archiveSession,
     restoreSession,
     deleteSession,
-    loadMessagesOf, // 👈 manual load (sidebar click)
+
+    loadMessagesOf,
+    refreshSessions,
   };
 }

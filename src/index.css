@@ -279,6 +279,125 @@ aside::-webkit-scrollbar-thumb:hover {
 .ui-compact .space-y-4 > * + * {
   margin-top: 0.75rem;
 }
+/* ============================================================
+   LITISBOT — LEGAL READING PANEL (DESKTOP PREMIUM)
+   Applied to assistant long-form responses
+============================================================ */
+
+/* Contenedor principal del mensaje del bot */
+.litis-legal-reading {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem 3rem;
+
+  background: #ffffff;
+  color: #0f172a; /* slate-900 */
+
+  font-size: 17px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  font-weight: 400;
+
+  /* Firma visual legal */
+  border-left: 3px solid rgba(15, 23, 42, 0.08);
+
+  /* Respiración */
+  animation: fadeInLegal 220ms ease-out;
+}
+
+/* Header contextual sutil */
+.litis-legal-reading::before {
+  content: "LEGAL ANALYSIS · LITISBOT  R7.7++";
+  display: block;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+
+  color: #94a3b8; /* slate-400 */
+  margin-bottom: 1.8rem;
+}
+
+/* Párrafos */
+.litis-legal-reading p {
+  margin-bottom: 1.25rem;
+}
+
+/* Listas */
+.litis-legal-reading ul,
+.litis-legal-reading ol {
+  margin: 1.2rem 0 1.4rem 1.4rem;
+}
+
+.litis-legal-reading li {
+  margin-bottom: 0.6rem;
+}
+
+/* Negritas doctrinales */
+.litis-legal-reading strong {
+  font-weight: 600;
+  color: #020617;
+}
+
+/* Títulos internos */
+.litis-legal-reading h2,
+.litis-legal-reading h3 {
+  margin-top: 2rem;
+  margin-bottom: 0.8rem;
+  font-weight: 700;
+  color: #020617;
+}
+
+/* Bloques destacados (definiciones, síntesis) */
+.litis-legal-reading blockquote {
+  margin: 1.8rem 0;
+  padding: 1rem 1.4rem;
+
+  background: #f8fafc;
+  border-left: 3px solid #cbd5f5;
+
+  font-style: normal;
+  color: #1e293b;
+}
+
+/* Código / citas legales */
+.litis-legal-reading code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: #f1f5f9;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* Animación de entrada */
+@keyframes fadeInLegal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+   MOBILE: vuelve a compacto automáticamente
+============================================================ */
+@media (max-width: 768px) {
+  .litis-legal-reading {
+    max-width: 100%;
+    padding: 1.4rem 1.2rem;
+    border-left: none;
+    font-size: 15.5px;
+  }
+
+  .litis-legal-reading::before {
+    margin-bottom: 1rem;
+    letter-spacing: 0.25em;
+  }
+}
 
 /* ============================================================
    FIN
