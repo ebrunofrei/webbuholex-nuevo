@@ -1,42 +1,70 @@
 // ============================================================================
 // LITIS | Unified IA Router — CANONICAL R7.7++
-// ----------------------------------------------------------------------------
-// - Always returns JSON
-// - Explicit non-chat IA actions
-// - Strict channel routing
 // ============================================================================
 
 import express from "express";
+import admin from "../../services/myFirebaseAdmin.js";
 
 import { handleHomeConsultive } from "./handleHomeConsultive.js";
 import { handleBubbleConsultive } from "./handleBubbleConsultive.js";
 import { handleProCognitive } from "./handleProCognitive.js";
-
-// 🆕 Bubble analysis unlock
 import { handleUnlockAnalysis } from "./unlock-analysis.js";
-
 import historyRouter from "./history.js";
 
 const router = express.Router();
 
-// ---------------------------------------------------------------------------
-// Always JSON
-// ---------------------------------------------------------------------------
+
+// ============================================================================
+// 1️⃣ AUTH MIDDLEWARE GLOBAL (OBLIGATORIO)
+// ----------------------------------------------------------------------------
+// - Decodifica Bearer token si existe
+// - NO bloquea si no hay token
+// - Solo agrega req.user cuando es válido
+// ============================================================================
+
+router.use(async (req, res, next) => {
+  try {
+    const h = req.headers.authorization || "";
+
+    if (h.startsWith("Bearer ")) {
+      const token = h.slice("Bearer ".length).trim();
+      const decoded = await admin.auth().verifyIdToken(token);
+
+      req.user = {
+        uid: decoded.uid,
+        email: decoded.email,
+        plan: decoded.plan || "pro", // opcional si lo usas
+      };
+    }
+  } catch (err) {
+    console.warn("⚠️ Token inválido o expirado");
+  }
+
+  next();
+});
+
+
+// ============================================================================
+// 2️⃣ Always JSON
+// ============================================================================
+
 router.use((req, res, next) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   next();
 });
 
-// ---------------------------------------------------------------------------
-// History (isolated)
-// ---------------------------------------------------------------------------
+
+// ============================================================================
+// 3️⃣ History
+// ============================================================================
+
 router.use("/history", historyRouter);
 
-// ---------------------------------------------------------------------------
-// NON-CHAT IA ACTIONS
-// ---------------------------------------------------------------------------
 
-// POST /api/ia/unlock-analysis
+// ============================================================================
+// 4️⃣ NON-CHAT IA ACTIONS
+// ============================================================================
+
 router.post("/unlock-analysis", async (req, res) => {
   try {
     return await handleUnlockAnalysis(req, res);
@@ -49,9 +77,11 @@ router.post("/unlock-analysis", async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// CHAT GATEWAY
-// ---------------------------------------------------------------------------
+
+// ============================================================================
+// 5️⃣ CHAT GATEWAY
+// ============================================================================
+
 router.post("/chat", async (req, res) => {
   try {
     const body = req.body || {};
@@ -80,7 +110,15 @@ router.post("/chat", async (req, res) => {
       });
     }
 
+    // 🔒 PRO requiere usuario autenticado real
     if (channel === "pro_chat") {
+      if (!req.user?.uid) {
+        return res.status(401).json({
+          ok: false,
+          error: "auth_required",
+        });
+      }
+
       return await handleProCognitive(req, res);
     }
 
@@ -89,6 +127,7 @@ router.post("/chat", async (req, res) => {
     }
 
     return await handleHomeConsultive(req, res);
+
   } catch (err) {
     console.error("🔥 [IA Router Fatal Error]", err);
     return res.status(500).json({

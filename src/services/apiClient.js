@@ -8,8 +8,11 @@
 // - Mobile-first + production hardened
 // ============================================================================
 
-const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:3000/api")
-  .replace(/\/+$/, ""); // trim trailing slash
+const isDev = import.meta.env.DEV;
+
+const API_BASE = isDev
+  ? "/api"
+  : (import.meta.env.VITE_API_BASE || "https://api.buholex.com/api");
 
 const REQUEST_TIMEOUT_MS = 45_000;
 

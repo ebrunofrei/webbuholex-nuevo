@@ -54,9 +54,8 @@ export function CaseProvider({ children }) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          title: title || "Caso inicial",
-          area: area || "general",
-          jurisdiction: jurisdiction || "general",
+          titulo: title || "Caso inicial",
+          descripcion: "",
         }),
       });
 
@@ -88,8 +87,8 @@ export function CaseProvider({ children }) {
     setLoadingCase(true);
 
     try {
-      const token = await user.getIdToken();
-
+      
+      const token = await user.getIdToken(true);
       const res = await fetch(joinApi("/cases"), {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -139,10 +138,9 @@ export function CaseProvider({ children }) {
     caseContext: caseActivo
       ? {
           caseId: caseActivo._id,
-          title: caseActivo.title,
-          area: caseActivo.area,
-          jurisdiction: caseActivo.jurisdiction,
-          status: caseActivo.status,
+          titulo: caseActivo.titulo,
+          descripcion: caseActivo.descripcion,
+          estado: caseActivo.estado,
         }
       : null,
     crearCaso,

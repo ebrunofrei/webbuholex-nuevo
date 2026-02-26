@@ -225,18 +225,24 @@ const handlePaymentToken = useCallback(async (culqiToken) => {
 
       {open && (
         <div
-            className="
+          className="
             pointer-events-auto
             animate-in fade-in slide-in-from-bottom-10 duration-500
 
-            /* MOBILE / TABLET */
+            /* MOBILE */
             fixed inset-0 z-[9999]
 
             /* DESKTOP */
-            sm:absolute sm:inset-auto sm:bottom-0 sm:right-0
-            "
+            sm:fixed
+            sm:inset-auto
+            sm:bottom-6
+            sm:right-6
+            sm:w-[420px]
+            sm:h-[720px]
+            sm:rounded-2xl
+            sm:shadow-[0_20px_60px_rgba(0,0,0,0.25)]
+          "
         >
-        
           <BubbleChatLayout
             messages={messages}
             loading={loading}
@@ -245,7 +251,7 @@ const handlePaymentToken = useCallback(async (culqiToken) => {
             sessionNote={sessionNote}
             unlockExpiresIn={unlockExpiresIn}
             onPaymentToken={handlePaymentToken}
-            />
+          />
         </div>
       )}
     </div>

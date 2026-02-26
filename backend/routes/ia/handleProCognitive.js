@@ -30,7 +30,7 @@ export async function handleProCognitive(req, res) {
       jurisdictionCode = null,
     } = req.body || {};
 
-    const usuarioId = req.user?.id || req.body?.usuarioId || null;
+    const usuarioId = req.user?.uid ?? req.body?.usuarioId ?? null;
     const userPlan = req.user?.plan || "pro";
 
     // --------------------------------------------------

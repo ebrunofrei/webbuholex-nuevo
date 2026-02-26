@@ -28,6 +28,8 @@ import Jurisprudencia from "@/pages/Jurisprudencia";
 import JurisprudenciaVisorModal from "@/components/jurisprudencia/JurisprudenciaVisorModal";
 import { GeneralChatProvider } from "@/components/litisbot/chat/general/GeneralChatProvider";
 import GeneralChatLayout from "@/components/litisbot/chat/general/GeneralChatLayout";
+import Footer from "@/components/layout/Footer";
+import LegalModal from "./components/legal/LegalModal";
 
 /* =========================
    LitisBot público (SIN auth, SIN CaseContext)
@@ -49,10 +51,6 @@ import MiCuenta from "./pages/MiCuenta";
 import HistorialArchivos from "./pages/HistorialArchivos";
 import BibliotecaJ from "./pages/Biblioteca";
 import BibliotecaDrive from "./components/BibliotecaDrive";
-
-import PoliticaPrivacidad from "@/pages/legal/politica-de-privacidad";
-import TerminosCondiciones from "@/pages/legal/terminos-y-condiciones";
-import AvisoCookies from "@/pages/legal/aviso-cookies";
 
 import PricingPage from "./pages/PricingPage";
 import LandingSaaS from "./pages/LandingSaaS";
@@ -81,7 +79,6 @@ import { CaseProvider } from "@/context/CaseContext";
    Componentes generales
 ========================= */
 import Navbar from "./components/ui/Navbar";
-import Footer from "./components/Footer";
 import RutaPrivada from "./components/RutaPrivada";
 import NoticiasSlider from "./components/NoticiasSlider";
 import ModalLogin from "./components/ModalLogin";
@@ -305,19 +302,64 @@ function AppContent() {
   const { user, loading, abrirLogin } = useAuth() || {};
   const location = useLocation();
 
-  const path = (location.pathname || "").toLowerCase();
-  const enOficinaVirtual = path.startsWith("/oficinavirtual");
-  const enLitisBotFull = path === "/litisbot";
-  const enChatPro = path.startsWith("/oficinavirtual/chat-pro");
+  // 1) Estado primero (no después de efectos)
+  const [legalSection, setLegalSection] = useState(null);
 
-  // ✅ Hooks SIEMPRE arriba (no dentro del JSX)
+  // 2) Flags de ruta (claros y consistentes)
+  const path = (location.pathname || "").toLowerCase();
+  const enHome = location.pathname === "/";
+  const enOficinaVirtual = path.startsWith("/oficinavirtual");
+  const enChatPro = path.startsWith("/oficinavirtual/chat-pro");
+  const enLitisBotFull = path === "/litisbot";
+
+  // ✅ Hooks arriba
   const membership = useMembership();
   const isProMember = Boolean(membership?.isPro);
 
-  // ✅ Gobernanza de la burbuja (no aparece en ChatPro ni en /litisbot)
+  // Burbuja: fuera de litisbot y chat-pro
   const shouldShowBubble = Boolean(user) && !enLitisBotFull && !enChatPro;
 
-  
+  // 3) Home sin scroll (resto sí)
+  useEffect(() => {
+    const isHome = location.pathname === "/";
+
+    // Guardamos el estado anterior para NO pisar otros layouts
+    const prev = {
+      htmlOverflow: document.documentElement.style.overflow,
+      bodyOverflow: document.body.style.overflow,
+      htmlHeight: document.documentElement.style.height,
+      bodyHeight: document.body.style.height,
+    };
+
+    if (isHome) {
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.height = "100dvh";
+      document.body.style.height = "100dvh";
+    } else {
+      // Restaurar lo que estaba antes (no dejar "" a lo loco)
+      document.documentElement.style.overflow = prev.htmlOverflow || "";
+      document.body.style.overflow = prev.bodyOverflow || "";
+      document.documentElement.style.height = prev.htmlHeight || "";
+      document.body.style.height = prev.bodyHeight || "";
+    }
+
+    return () => {
+      // Al desmontar: restaurar exactamente lo previo
+      document.documentElement.style.overflow = prev.htmlOverflow || "";
+      document.body.style.overflow = prev.bodyOverflow || "";
+      document.documentElement.style.height = prev.htmlHeight || "";
+      document.body.style.height = prev.bodyHeight || "";
+    };
+  }, [location.pathname]);
+
+  // 4) Legal modal por query param (?legal=...)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const section = params.get("legal");
+    setLegalSection(section || null);
+  }, [location.search]);
+
   function BibliotecaProtegida() {
     if (loading) return <div className="text-center mt-16">Verificando acceso...</div>;
 
@@ -334,7 +376,10 @@ function AppContent() {
           </button>
 
           <div className="mt-2 text-sm text-center">
-            <button onClick={() => abrirLogin("recuperar")} className="text-blue-700 underline">
+            <button
+              onClick={() => abrirLogin("recuperar")}
+              className="text-blue-700 underline"
+            >
               ¿Olvidaste tu contraseña?
             </button>
           </div>
@@ -346,12 +391,12 @@ function AppContent() {
   }
 
   return (
-    <div className="relative min-h-screen w-full text-[#5C2E0B]" style={{ backgroundColor: "#fff" }}>
+    <div className="w-full flex flex-col min-h-[100dvh] text-[#5C2E0B]" style={{ backgroundColor: "#fff" }}>
       {/* Top chrome */}
       {!enOficinaVirtual && !enLitisBotFull && <Navbar />}
 
-      <div className={`flex ${!enOficinaVirtual && !enLitisBotFull ? "pt-20" : ""}`}>
-        <main className={`flex-1 w-full min-w-0 ${!enOficinaVirtual && !enLitisBotFull ? "lg:pr-80" : ""}`}>
+      <div className={`${!enOficinaVirtual && !enLitisBotFull ? "pt-20" : ""}`}>
+        <main className={`w-full min-w-0 flex-grow ${!enOficinaVirtual && !enLitisBotFull ? "lg:pr-80" : ""}`}>
           <Routes>
             {/* ================= PUBLICO ================= */}
             <Route path="/" element={<Home />} />
@@ -411,11 +456,7 @@ function AppContent() {
               }
             />
 
-            {/* Legal */}
-            <Route path="/legal/politica-de-privacidad" element={<PoliticaPrivacidad />} />
-            <Route path="/legal/terminos-y-condiciones" element={<TerminosCondiciones />} />
-            <Route path="/legal/aviso-cookies" element={<AvisoCookies />} />
-
+            
             {/* Planes / landing */}
             <Route path="/planes" element={<PricingPage />} />
             <Route path="/saas" element={<LandingSaaS />} />
@@ -477,8 +518,9 @@ function AppContent() {
               <Route path="calculadora-laboral" element={<CalculadoraLaboral />} />
               <Route path="*" element={<OficinaVirtualRoutes />} />
             </Route>
-
+              
             {/* 404 */}
+            <Route path="/legal/*" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Error404 />} />
           </Routes>
         </main>
@@ -494,7 +536,14 @@ function AppContent() {
       </div>
 
       {/* Footer + global modals */}
-      {!enOficinaVirtual && !enLitisBotFull && <Footer />}
+      {!enOficinaVirtual && !enLitisBotFull && !enHome && (
+        <Footer
+          onOpenLegal={(section) => {
+            setLegalSection(section);
+            window.history.replaceState({}, "", `?legal=${section}`);
+          }}
+        />
+      )}
 
       {!enOficinaVirtual && (
         <ClientOnly>
@@ -503,6 +552,15 @@ function AppContent() {
         </ClientOnly>
       )}
 
+      {legalSection && (
+        <LegalModal
+          initialSection={legalSection}
+          onClose={() => {
+            setLegalSection(null);
+            window.history.replaceState({}, "", window.location.pathname);
+          }}
+        />
+      )}
       {/* Burbuja flotante global (Bubble SaaS) */}
       {shouldShowBubble && (
         <BubbleProvider
@@ -522,6 +580,7 @@ export default function App() {
   return (
     <AuthProvider>
     <LitisBotProvider>
+      <CaseProvider>
       <ToastProvider>
         <Router>
           <AppContent />
@@ -530,6 +589,7 @@ export default function App() {
           </ClientOnly>
         </Router>
       </ToastProvider>
+      </CaseProvider>
     </LitisBotProvider>
   </AuthProvider>
   );

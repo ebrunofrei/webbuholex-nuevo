@@ -3,15 +3,8 @@
 // LTM auxiliar · Nunca rompe el turno
 // ============================================================================
 
-import {
-  getEmbedding,
-  EMBEDDING_DIMENSION,
-} from "../../services/llm/embeddingService.js";
-
-import {
-  vectorSearch,
-  vectorUpsert,
-} from "./vectorStoreClient.js";
+import { getEmbedding } from "../../services/llm/embeddingService.js";
+import { vectorSearch } from "../../services/vector/vectorStoreClient.js";
 
 const SCORE_THRESHOLD = 0.83;
 

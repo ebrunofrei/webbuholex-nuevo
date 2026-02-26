@@ -74,7 +74,13 @@ export function normalizeAssistantMessage(raw) {
     };
   }
 
-  const texto = raw.respuesta || raw.reply || raw.text || raw.content || "";
+  const texto =
+    raw.respuesta ||
+    raw.reply ||
+    raw.text ||
+    raw.content ||
+    raw.message ||   // 🔥 ESTA ES LA CLAVE
+    "";
 
   return {
     role: "assistant",
@@ -180,16 +186,19 @@ export async function enviarPromptLitis(params) {
   const payload = {
     prompt: String(prompt || ""),
     usuarioId: usuarioId || "Invitado",
-    sessionId: sessionId,
+    sessionId,
     expedienteId: expedienteId || null,
     adjuntos: adjuntos.map(a => ({ name: a.name, size: a.size, kind: "file" })),
     contexto,
     pro: Boolean(pro),
     modoLitis,
     pais: "Perú",
-    idioma: "es-PE"
-  };
+    idioma: "es-PE",
 
+    // 🔥 CLAVE
+    channel: pro ? "pro_chat" : "home_chat",
+    role: pro ? "cognitive" : "consultive",
+  };
   const { ok, data } = await safeFetchJson(
     buildUrl(LITISBOT_ROUTE),
     { method: "POST", body: JSON.stringify(payload), signal },

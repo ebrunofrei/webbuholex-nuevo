@@ -1,20 +1,17 @@
 // ============================================================================
-// ✍️ ChatInputBar — Mesa de trabajo jurídica (CANÓNICO)
-// ----------------------------------------------------------------------------
-// - NO IA
-// - NO lógica jurídica
-// - Hardware puro de input
-// - UN solo botón de adjuntar (documento / imagen / foto)
-// - Dictado por voz como icono junto a ENVIAR
-// - Herramientas PRO se abren externamente
+// ✍️ ChatInputBar — Enterprise Legal Composer (FIXED)
 // ============================================================================
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import {
   Paperclip,
   Send,
   Mic,
   StopCircle,
+  Plus,
+  X,
+  FileText,
+  Image as ImageIcon,
 } from "lucide-react";
 
 import { useCognitiveInput } from "@/components/litisbot/chat/hooks/useCognitiveInput";
@@ -26,16 +23,12 @@ export default function ChatInputBar({
   value,
   onChange,
   onSend,
-
   adjuntos = [],
   onAttachFiles,
-
-  // 🔩 HARDWARE
-  onOpenTools, // abre LitisBotToolsModal (PRO)
-
+  onRemoveAttachment,
+  onOpenTools,
   cargando = false,
   disabledSend = false,
-
   cognitiveMode = "consulta",
   botState = "idle",
 }) {
@@ -43,44 +36,51 @@ export default function ChatInputBar({
   const fileRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  const [localValue, setLocalValue] = useState("");
-  const texto = value !== undefined ? value : localValue;
+  // 🔑 Soporte híbrido (controlado o interno)
+  const [internalValue, setInternalValue] = useState("");
+  const texto = value !== undefined ? value : internalValue;
 
   const [recording, setRecording] = useState(false);
+  const [focused, setFocused] = useState(false);
 
-  // 🧠 UX cognitiva (solo hints)
   const cognitive = useCognitiveInput({
     mode: cognitiveMode,
     botState,
   });
 
-  // ============================================================
-  // Auto resize textarea
-  // ============================================================
+  // ------------------------------------------------------------
+  // Auto resize
+  // ------------------------------------------------------------
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 220) + "px";
-  }, [texto]);
+    el.style.height = Math.min(el.scrollHeight, 180) + "px";
+  }, [texto, adjuntos]);
 
   const updateText = (v) => {
-    if (value === undefined) setLocalValue(v);
+    if (value === undefined) {
+      setInternalValue(v);
+    }
     onChange?.(v);
   };
 
-  // ============================================================
-  // 🚀 ENVIAR
-  // ============================================================
-  const handleSend = () => {
-    if (cargando) return;
-    if (disabledSend) return;
+  // ------------------------------------------------------------
+  // Enviar
+  // ------------------------------------------------------------
+  const handleSend = useCallback(() => {
+    if (cargando || disabledSend) return;
     if (!texto.trim() && adjuntos.length === 0) return;
 
     onSend?.(texto, adjuntos);
 
-    if (value === undefined) setLocalValue("");
-  };
+    // 🔑 limpiar correctamente
+    if (value === undefined) {
+      setInternalValue("");
+    } else {
+      onChange?.("");
+    }
+  }, [texto, adjuntos, cargando, disabledSend, onSend, value, onChange]);
 
   const handleKey = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -89,9 +89,9 @@ export default function ChatInputBar({
     }
   };
 
-  // ============================================================
-  // 📎 ADJUNTAR (documento / imagen / foto)
-  // ============================================================
+  // ------------------------------------------------------------
+  // Adjuntar
+  // ------------------------------------------------------------
   const attachFiles = (files) => {
     const valid = Array.from(files || []).filter(
       (f) => f.size <= MAX_MB * 1024 * 1024
@@ -99,9 +99,9 @@ export default function ChatInputBar({
     if (valid.length) onAttachFiles?.(valid);
   };
 
-  // ============================================================
-  // 🎙️ DICTADO POR VOZ
-  // ============================================================
+  // ------------------------------------------------------------
+  // Dictado
+  // ------------------------------------------------------------
   const startRecording = () => {
     if (!("webkitSpeechRecognition" in window)) return;
 
@@ -126,92 +126,127 @@ export default function ChatInputBar({
     setRecording(false);
   };
 
-  // ============================================================
-  // RENDER
-  // ============================================================
+  const AttachmentBadge = ({ file, index }) => (
+    <div className="flex items-center gap-2 border border-neutral-200 rounded-md px-2 py-1">
+      {file.type.includes("image") ? (
+        <ImageIcon size={14} />
+      ) : (
+        <FileText size={14} />
+      )}
+      <span className="text-xs text-neutral-600 truncate max-w-[140px]">
+        {file.name}
+      </span>
+      <button
+        onClick={() => onRemoveAttachment?.(index)}
+        className="text-neutral-400 hover:text-neutral-600 transition"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+
   return (
-    <div className="border-t border-black/10 dark:border-white/10 bg-white dark:bg-black">
-      <div className="mx-auto w-full max-w-[900px] px-4 pt-4 pb-3">
-        <div className="flex items-end gap-3 rounded-xl border border-black/20 dark:border-white/20 px-4 py-3">
+    <div className="border-t border-neutral-200 bg-white">
+      <div className="mx-auto w-full max-w-3xl px-6 py-6">
 
-          {/* 🧰 HERRAMIENTAS PRO */}
-          <button
-            onClick={() => onOpenTools?.()}
-            className="p-2 rounded-lg text-black/70 dark:text-white/70"
-            title="Herramientas PRO"
-          >
-            <span className="text-[18px]">+</span>
-          </button>
+        <div
+          className={`
+            flex flex-col
+            border border-neutral-300
+            rounded-lg
+            bg-white
+            ${focused ? "border-neutral-400" : ""}
+          `}
+        >
+          {adjuntos.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
+              {adjuntos.map((item, i) => (
+                <AttachmentBadge key={i} file={item} index={i} />
+              ))}
+            </div>
+          )}
 
-          {/* 📎 ADJUNTAR */}
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="p-2 rounded-lg text-black/70 dark:text-white/70"
-            title="Adjuntar documento o imagen"
-          >
-            <Paperclip size={20} />
-          </button>
+          <div className="flex items-end px-3 py-2">
 
-          {/* TEXTO */}
-          <textarea
-            ref={textareaRef}
-            rows={2}
-            value={texto}
-            onChange={(e) => updateText(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder={cognitive.placeholder}
-            className="
-              flex-1 resize-none bg-transparent outline-none
-              text-[16px] leading-relaxed
-            "
-          />
+            <div className="flex items-center">
+              <button
+                onClick={() => onOpenTools?.()}
+                className="p-2 text-neutral-500 hover:text-neutral-700 transition"
+              >
+                <Plus size={18} />
+              </button>
 
-          {/* 🎙️ DICTADO */}
-          <button
-            onClick={recording ? stopRecording : startRecording}
-            className="
-              p-2 rounded-lg
-              text-black/70 dark:text-white/70
-              hover:bg-black/5 dark:hover:bg-white/5
-            "
-            title={recording ? "Detener dictado" : "Dictar por voz"}
-          >
-            {recording ? <StopCircle size={18} /> : <Mic size={18} />}
-          </button>
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="p-2 text-neutral-500 hover:text-neutral-700 transition"
+              >
+                <Paperclip size={18} />
+              </button>
+            </div>
 
-          {/* 🚀 ENVIAR */}
-          <button
-            onClick={handleSend}
-            disabled={
-              cargando ||
-              disabledSend ||
-              (!texto.trim() && adjuntos.length === 0)
-            }
-            className="
-              p-2 rounded-lg
-              bg-black text-white
-              disabled:opacity-40
-            "
-            title="Enviar"
-          >
-            <Send size={18} />
-          </button>
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={texto}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onChange={(e) => updateText(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder={
+                cognitive.placeholder ||
+                "Formule su análisis jurídico con precisión conceptual…"
+              }
+              className="
+                flex-1 resize-none bg-transparent outline-none
+                px-3 py-2
+                text-[16px] leading-7 text-neutral-900
+                placeholder:text-neutral-400
+              "
+            />
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={recording ? stopRecording : startRecording}
+                className="p-2 text-neutral-500 hover:text-neutral-700 transition"
+              >
+                {recording ? (
+                  <StopCircle size={18} />
+                ) : (
+                  <Mic size={18} />
+                )}
+              </button>
+
+              <button
+                onClick={handleSend}
+                disabled={
+                  cargando ||
+                  disabledSend ||
+                  (!texto.trim() && adjuntos.length === 0)
+                }
+                className="
+                  p-2
+                  text-neutral-600
+                  hover:text-black
+                  disabled:opacity-30
+                  transition
+                "
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <InputCognitiveHint label={cognitive.hint} />
+        <div className="mt-3">
+          <InputCognitiveHint label={cognitive.hint} />
+        </div>
       </div>
 
-      {/* INPUT FILE ÚNICO */}
       <input
         ref={fileRef}
         type="file"
         multiple
-        accept="
-          application/pdf,
-          application/msword,
-          application/vnd.openxmlformats-officedocument.wordprocessingml.document,
-          text/plain,
-          image/*"
+        accept=".pdf,.doc,.docx,.txt,image/*"
         onChange={(e) => {
           attachFiles(e.target.files);
           e.target.value = "";

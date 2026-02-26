@@ -8,6 +8,8 @@
 // ============================================================================
 
 import { joinApi } from "@/services/apiBase";
+// src/services/chatClient.js
+import { secureApi } from "@/core/api/secureApi";
 
 // ------------------------------------------------------------
 // CONSTANTS
@@ -68,7 +70,8 @@ function normalizePayload(input) {
 // MAIN CALL — SAFE
 // ------------------------------------------------------------
 export async function sendChatMessage(payload) {
-  const body = normalizePayload(payload);
+  // devuelve { ok, message, code }
+  return secureApi.chat(payload);
 
   if (!body) {
     return {

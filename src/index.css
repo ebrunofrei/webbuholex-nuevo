@@ -1,404 +1,146 @@
 /* ============================================================
-   🦉 BÚHOLEX — INDEX.CSS OPTIMIZADO v4.0
-   Limpio · Sin duplicados · Estable · 100% compatible
+   🏛️ LITIS — INDEX.CSS CONSOLIDADO v5.0
+   Minimal · Institucional · Sin conflictos con Tailwind
 ============================================================ */
 
-/* ===== Tailwind ===== */
+/* ================= Tailwind ================= */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ============================================================
-   RESET GLOBAL + IDENTIDAD VISUAL
+   RESET BASE
 ============================================================ */
 html, body, #root {
   margin: 0;
   padding: 0;
-  height: 100%;                /* ← evita scroll lock */
+  min-height: 100%;
   overflow-x: hidden;
-  overflow-y: hidden;            /* ← scroll global seguro */
   font-family: "Inter", system-ui, sans-serif;
-  background: #ffffff;         /* Blanco institucional */
-  color: #2b1107;
+  background: #ffffff;
+  color: #1A1A1A;
 }
 
-/* Links */
-a { color: #a52e00; text-decoration: none; }
-a:hover { text-decoration: underline; }
-
-/* Inputs */
-input, textarea, button, select { font-family: inherit; }
-
-/* Safe bottom (iPhone notch) */
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
-
-/* ============================================================
-   CUSTOM SCROLLBAR — elegante y sobrio
-============================================================ */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: #fff; }
-::-webkit-scrollbar-thumb {
-  background-color: #5C2E0B;
-  border-radius: 10px;
-  border: 2px solid #fff;
-}
-::-webkit-scrollbar-thumb:hover { background-color: #a52e00; }
-
-/* Scrollbar oculto para contenedores específicos */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* ============================================================
-   COMPONENTES BÚHOLEX — Layout institucional
-============================================================ */
-
-.layout-buholex {
-  display: flex;
-  min-height: 100vh;
-  width: 100vw;
-  background: #fff;
+/* Inputs heredan tipografía */
+input, textarea, button, select {
+  font-family: inherit;
 }
 
-.sidebar-buholex {
-  width: 230px;
-  min-width: 200px;
-  background: linear-gradient(180deg, #a42409 0%, #fff7f0 100%);
-  color: #5b2300;
-  min-height: 100vh;
-  box-shadow: 2px 0 16px #a4240933;
-  display: flex;
-  flex-direction: column;
-  z-index: 10;
-}
-
-.main-content-buholex {
-  flex: 1;
-  background: #f3f7fe;
-  padding: 0 1.5rem 1.5rem;
-  overflow-x: auto;
-  position: relative;
-  text-align: left;
-}
-
-.navbar-buholex {
-  background: #fff;
-  box-shadow: 0 4px 18px -8px #c14e1699;
-  padding: 0.6rem 1.6rem;
-  position: sticky; top: 0; z-index: 20;
-}
-
-.footer-buholex {
-  background: #a42409;
-  color: white;
-  padding: 1rem;
-  text-align: center;
-  border-top-left-radius: 20px;
-  border-top-right-radius: 20px;
-  box-shadow: 0 -4px 12px #a4240933;
-}
-
-.card-buholex {
-  background: #fff;
-  border-radius: 18px;
-  box-shadow: 0 6px 32px #a4240915;
-  padding: 2rem 1.2rem;
-  margin-bottom: 1.6rem;
+/* Safe area mobile */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 /* ============================================================
-   HEADINGS
+   🎨 VARIABLES INSTITUCIONALES
 ============================================================ */
-h1, h2, h3 {
-  color: #a42409;
-  font-weight: 700;
-  margin-top: 0;
+:root {
+
+  /* 🔵 LITIS */
+  --litis-900: #1C3D73;
+  --litis-700: #274B8F;
+
+  /* ⚡ Cognitivo */
+  --cognitive-500: #00BFFF;
+  --cognitive-glow: #00E5FF;
+
+  /* 📚 Neutros */
+  --neutral-900: #1A1A1A;
+  --neutral-700: #4A4A4A;
+  --neutral-400: #9CA3AF;
+  --neutral-bg: #FAFAFA;
+
+  /* Estados */
+  --success: #0F766E;
+  --warning: #B45309;
+  --error: #991B1B;
 }
 
 /* ============================================================
-   RESPONSIVE
+   SCROLLBAR GLOBAL — elegante y neutra
 ============================================================ */
-@media (max-width: 900px) {
-  .sidebar-buholex { width: 72px; min-width: 56px; }
-  .main-content-buholex { padding: 0.5rem; }
-}
-@media (max-width: 650px) {
-  .layout-buholex { flex-direction: column; }
-  .sidebar-buholex {
-    width: 100vw;
-    min-height: unset;
-    flex-direction: row;
-    overflow-x: auto;
-    border-bottom: 3px solid #a42409;
-  }
-  .main-content-buholex { padding: 0.4rem; }
-}
-
-/* ============================================================
-   PRINT MODE
-============================================================ */
-@media print {
-  .sidebar-buholex,
-  .navbar-buholex,
-  .footer-buholex {
-    display: none !important;
-  }
-  .main-content-buholex {
-    background: white !important;
-    padding: 0 !important;
-  }
-}
-
-/* ============================================================
-   ANIMACIONES LITISBOT — bubble pulse · typing dots
-============================================================ */
-
-/* Bubble heartbeat lento */
-@keyframes litis-bubble-pulse {
-  0%, 70%, 100% { transform: scale(1); }
-  8%, 18% { transform: scale(1.06); }
-  12%, 22% { transform: scale(1); }
-}
-.litis-bubble-pulse { animation: litis-bubble-pulse 3s infinite ease-in-out; }
-
-/* Typing dots */
-.litis-typing-dot {
-  width: 6px; height: 6px;
-  background: #5c2e0b;
-  border-radius: 9999px;
-  opacity: .25;
-  animation: litisDot 1s infinite ease-in-out;
-}
-.litis-typing-dot-delay-1 { animation-delay: .15s; }
-.litis-typing-dot-delay-2 { animation-delay: .3s; }
-
-@keyframes litisDot {
-  0% { transform: translateY(0); opacity: .25; }
-  30% { transform: translateY(-3px); opacity: .9; }
-  60% { transform: translateY(0); opacity: .5; }
-  100% { transform: translateY(0); opacity: .25; }
-}
-
-/* Fade-in suavizado */
-@keyframes fadeInSlow { from { opacity:0; } to { opacity:1; } }
-.animate-fadeInSlow { animation: fadeInSlow .6s ease-out; }
-
-/* ============================================================
-   CHAT — Botón “bajar al final” estilo ChatGPT
-============================================================ */
-.litis-scroll-chatgpt {
-  position: absolute;
-  left: 50%; bottom: 5.5rem;
-  transform: translateX(-50%);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  animation: scrollBtnFadeIn .18s ease-out;
-}
-.litis-scroll-chatgpt-icon {
-  width: 40px; height: 40px; border-radius: 9999px;
-  background: #fff;
-  box-shadow: 0 8px 22px rgba(0,0,0,.18);
-  display: flex; align-items: center; justify-content: center;
-  transition: .18s ease-out;
-}
-.litis-scroll-chatgpt:hover .litis-scroll-chatgpt-icon {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(0,0,0,.22);
-}
-@keyframes scrollBtnFadeIn {
-  0% { opacity:0; transform:translate(-50%,6px); }
-  100% { opacity:1; transform:translate(-50%,0); }
-}
-
-/* Input del chat siempre encima */
-.litisbot-input-zone {
-  position: relative !important;
-  z-index: 999999 !important;
-}
-
-/* Panel TTS */
-.litisbot-tts-panel {
-  position: relative !important;
-  z-index: 1 !important;
-}
-
-/* ============================================================
-   REACT BIG CALENDAR — efectos
-============================================================ */
-.rbc-event {
-  transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
-}
-.rbc-event:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
-  box-shadow: 0 8px 18px rgba(0,0,0,.18);
-}
-.rbc-month-view .rbc-day-bg:hover {
-  background: rgba(176, 58, 26, 0.06);
-}
-/* ============================================================
-   🦉 Sidebar scrollbar — discreta y profesional
-============================================================ */
-aside::-webkit-scrollbar {
+::-webkit-scrollbar {
   width: 8px;
 }
 
-aside::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
 
-aside::-webkit-scrollbar-thumb {
-  background-color: rgba(90, 59, 31, 0.35); /* marrón sobrio */
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0,0,0,0.15);
   border-radius: 8px;
 }
 
-aside::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(90, 59, 31, 0.55);
-}
-@keyframes view-enter {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0,0,0,0.25);
 }
 
-.animate-view-enter {
-  animation: view-enter 140ms ease-out;
-}
-
-/* ================= UI TEXT SCALE ================= */
-.ui-text-large {
-  font-size: 1.05em;
-}
-
-/* ================= COMPACT MODE ================= */
-.ui-compact .space-y-4 > * + * {
-  margin-top: 0.75rem;
-}
 /* ============================================================
-   LITISBOT — LEGAL READING PANEL (DESKTOP PREMIUM)
-   Applied to assistant long-form responses
+   ANIMACIONES LITIS
 ============================================================ */
 
-/* Contenedor principal del mensaje del bot */
-.litis-legal-reading {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 2.5rem 3rem;
+@keyframes fade-in-soft {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
+.animate-fade-soft {
+  animation: fade-in-soft 180ms ease-out;
+}
+
+/* ============================================================
+   CHAT — Botón bajar al final
+============================================================ */
+.litis-scroll-button {
+  position: absolute;
+  left: 50%;
+  bottom: 5.5rem;
+  transform: translateX(-50%);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.litis-scroll-button-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
   background: #ffffff;
-  color: #0f172a; /* slate-900 */
-
-  font-size: 17px;
-  line-height: 1.7;
-  letter-spacing: 0.01em;
-  font-weight: 400;
-
-  /* Firma visual legal */
-  border-left: 3px solid rgba(15, 23, 42, 0.08);
-
-  /* Respiración */
-  animation: fadeInLegal 220ms ease-out;
+  box-shadow: 0 8px 22px rgba(0,0,0,.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 160ms ease;
 }
 
-/* Header contextual sutil */
-.litis-legal-reading::before {
-  content: "LEGAL ANALYSIS · LITISBOT  R7.7++";
-  display: block;
-
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-
-  color: #94a3b8; /* slate-400 */
-  margin-bottom: 1.8rem;
-}
-
-/* Párrafos */
-.litis-legal-reading p {
-  margin-bottom: 1.25rem;
-}
-
-/* Listas */
-.litis-legal-reading ul,
-.litis-legal-reading ol {
-  margin: 1.2rem 0 1.4rem 1.4rem;
-}
-
-.litis-legal-reading li {
-  margin-bottom: 0.6rem;
-}
-
-/* Negritas doctrinales */
-.litis-legal-reading strong {
-  font-weight: 600;
-  color: #020617;
-}
-
-/* Títulos internos */
-.litis-legal-reading h2,
-.litis-legal-reading h3 {
-  margin-top: 2rem;
-  margin-bottom: 0.8rem;
-  font-weight: 700;
-  color: #020617;
-}
-
-/* Bloques destacados (definiciones, síntesis) */
-.litis-legal-reading blockquote {
-  margin: 1.8rem 0;
-  padding: 1rem 1.4rem;
-
-  background: #f8fafc;
-  border-left: 3px solid #cbd5f5;
-
-  font-style: normal;
-  color: #1e293b;
-}
-
-/* Código / citas legales */
-.litis-legal-reading code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
-  background: #f1f5f9;
-  padding: 0.15rem 0.35rem;
-  border-radius: 4px;
-}
-
-/* Animación de entrada */
-@keyframes fadeInLegal {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.litis-scroll-button:hover .litis-scroll-button-icon {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(0,0,0,.2);
 }
 
 /* ============================================================
-   MOBILE: vuelve a compacto automáticamente
+   PROSE-LITIS — SOLO AJUSTES FINALES
+   (El grueso vive en tailwind.config.js)
 ============================================================ */
-@media (max-width: 768px) {
-  .litis-legal-reading {
-    max-width: 100%;
-    padding: 1.4rem 1.2rem;
-    border-left: none;
-    font-size: 15.5px;
-  }
 
-  .litis-legal-reading::before {
-    margin-bottom: 1rem;
-    letter-spacing: 0.25em;
-  }
+.prose-litis {
+  font-size: 1.05rem;
+}
+
+.prose-litis p {
+  line-height: 1.9;
+}
+
+.prose-litis hr {
+  opacity: 0.2;
 }
 
 /* ============================================================
-   FIN
+   MODO PRINT
 ============================================================ */
+@media print {
+  nav, aside, footer {
+    display: none !important;
+  }
+}

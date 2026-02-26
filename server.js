@@ -12,6 +12,11 @@ import cors from "cors";
 import morgan from "morgan";
 import mongoose from "mongoose";
 
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import hpp from "hpp";
+import mongoSanitize from "mongo-sanitize";
+
 // DB helper (nombres reales)
 import { dbConnect, getMongoUri } from "./backend/services/db.js";
 
@@ -55,6 +60,9 @@ import ocrRoutes from "./backend/routes/ocr.routes.js";
 import toolsRoutes from "./backend/routes/tools.js";
 import forenseRoutes from "./backend/routes/forense.routes.js";
 import chatMessagesRouter from "./backend/routes/chatMessages.js";
+import legalRouter from "./backend/routes/legal/index.js";
+import exportAnalysisDocx from "./backend/routes/exportAnalysisDocx.js";
+
 // ============================================================
 // ⚙️ Carga temprana del entorno (.env)
 // ============================================================
@@ -78,9 +86,10 @@ if (fs.existsSync(envPath)) {
   dotenv.config();
   console.warn(chalk.yellow(`⚠️ No se encontró ${envFile}, usando .env por defecto.`));
 }
+
 console.log("Pinecone ENV:", {
   apiKey: process.env.PINECONE_API_KEY ? true : false,
-  index: process.env.PINECONE_INDEX || "NO INDEX"
+  index: process.env.PINECONE_INDEX || "NO INDEX",
 });
 
 // ============================================================
@@ -104,22 +113,65 @@ console.log(
 
 const app = express();
 app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+// ============================================================
+// 🛡 HARDENING GLOBAL (Enterprise Layer)
+// ============================================================
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+
+app.use(hpp());
+
+app.use((req, _res, next) => {
+  try {
+    if (req.body && typeof req.body === "object") {
+      mongoSanitize(req.body);
+    }
+
+    if (req.query && typeof req.query === "object") {
+      mongoSanitize(req.query);
+    }
+
+    if (req.params && typeof req.params === "object") {
+      mongoSanitize(req.params);
+    }
+  } catch (err) {
+    console.error("Sanitize error:", err);
+  }
+
+  next();
+});
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(globalLimiter);
+
+// ============================================================
+// 📦 Body parsing + logging
+// ============================================================
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan("dev"));
+app.use(morgan(NODE_ENV === "production" ? "combined" : "dev"));
 
 // Alive rápido
 app.get("/alive", (_req, res) => res.type("text/plain").send("ok"));
 
 // Servir DOCX / PDF generados
-app.use(
-  "/exports",
-  express.static(path.join(__dirname, "backend", "tmp_exports"))
-);
+app.use("/exports", express.static(path.join(__dirname, "backend", "tmp_exports")));
 
 // ============================================================
-// 🔒 CORS (antes de montar rutas)
+// 🔒 CORS (CANÓNICO + EXPRESS 5 SAFE)
 // ============================================================
 
 const localOrigins = [
@@ -141,25 +193,38 @@ const defaultProdOrigins = [
 
 const allowedOrigins = Array.from(new Set([...localOrigins, ...envOrigins, ...defaultProdOrigins]));
 
-const corsDelegate = (origin, cb) => {
-  if (!origin) return cb(null, true);
-  if (allowedOrigins.includes(origin)) return cb(null, true);
-  console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
-  return cb(new Error(`CORS no permitido: ${origin}`));
+const corsOptions = {
+  origin: (origin, callback) => {
+    // requests sin origin (Postman / server-to-server)
+    if (!origin) return callback(null, true);
+
+    // localhost dinámico (dev)
+    if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+      return callback(null, true);
+    }
+
+    // allow-list explícita
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn(chalk.yellow(`⚠️ [CORS] Bloqueado: ${origin}`));
+    return callback(new Error("CORS no permitido"));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true,
+  optionsSuccessStatus: 204,
 };
 
-app.use(
-  cors({
-    origin: corsDelegate,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-    optionsSuccessStatus: 204,
-  })
-);
+app.use(cors(corsOptions));
+// ✅ NO app.options("*"...): Express 5 puede romper con "*"
 
+// ============================================================
 // Forzar charset UTF-8 en JSON bajo /api
-app.use("/api", (req, res, next) => {
+// ============================================================
+
+app.use("/api", (_req, res, next) => {
   const originalJson = res.json.bind(res);
   res.json = (body) => {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -167,6 +232,7 @@ app.use("/api", (req, res, next) => {
   };
   next();
 });
+
 // ===============================
 // 🧪 RUTAS TEST (blindadas por flag)
 // ===============================
@@ -176,18 +242,11 @@ const ENABLE_TEST_ROUTES = process.env.ENABLE_TEST_ROUTES === "true";
 if (ENABLE_TEST_ROUTES && NODE_ENV !== "production") {
   (async () => {
     try {
-      const { default: casesAuditTestRoutes } = await import(
-        "./backend/routes/test/casesAudit.test.js"
-      );
-
+      const { default: casesAuditTestRoutes } = await import("./backend/routes/test/casesAudit.test.js");
       app.use("/api/test", casesAuditTestRoutes);
-
       console.log("🧪 Rutas TEST de auditoría ACTIVADAS");
     } catch (err) {
-      console.warn(
-        "⚠️ No se cargaron rutas TEST:",
-        err.message
-      );
+      console.warn("⚠️ No se cargaron rutas TEST:", err.message);
     }
   })();
 } else {
@@ -210,7 +269,7 @@ app.get("/api/health", (_req, res) => {
     version: process.env.npm_package_version || "1.0.0",
     openai: openaiStatus,
     mongo: mongoStatus,
-    cors: allowedOrigins,
+    cors: NODE_ENV === "production" ? "restricted" : allowedOrigins,
     uptime: `${process.uptime().toFixed(0)}s`,
     startedAt: START_TIME.toISOString(),
   });
@@ -223,8 +282,8 @@ app.get("/api/health", (_req, res) => {
 /* ============================================================
    📰 CONTENIDO / NOTICIAS (público)
 ============================================================ */
-app.use("/api/noticias/contenido", noticiasContenidoRoutes); // específico primero
-app.use("/api/news", newsLiveRouter);                        // live primero
+app.use("/api/noticias/contenido", noticiasContenidoRoutes);
+app.use("/api/news", newsLiveRouter);
 app.use("/api/news", newsTopics);
 app.use("/api/noticias", noticiasRoutes);
 app.use("/api/noticias-guardadas", noticiasGuardadasRoutes);
@@ -253,6 +312,8 @@ app.use("/api/pdf", pdfContextRouter);
 app.use("/api", exportRouter);
 app.use("/api", uploadRouter);
 app.use("/api/media", mediaRoutes);
+app.use("/api/legal", legalRouter);
+app.use("/api/export", exportAnalysisDocx);
 
 /* ============================================================
    ⏱️ TIEMPO / AGENDA / PLAZOS
@@ -272,11 +333,11 @@ app.use("/api/notificaciones", notificacionesRoutes);
 /* ============================================================
    🏛️ DOMINIO JURÍDICO NÚCLEO (CANÓNICO)
 ============================================================ */
-app.use("/api/cases", casesRouter);                 // CONTEXTOS
-app.use("/api/analyses", analysesRouter);           // ANÁLISIS
+app.use("/api/cases", casesRouter);
+app.use("/api/analyses", analysesRouter);
 app.use("/api/analyses", analysisMessagesRouter);
-app.use("/api/cases/audit", casesAuditRoutes);      // AUDITORÍA
-app.use("/api/cases/export", casesExportRoutes);    // EXPORTACIONES
+app.use("/api/cases/audit", casesAuditRoutes);
+app.use("/api/cases/export", casesExportRoutes);
 
 /* ============================================================
    🛠️ ACCIONES AUXILIARES
@@ -287,9 +348,7 @@ app.use("/api/drafts", draftsRoutes);
 /* ============================================================
    ❌ 404 SOLO PARA /api
 ============================================================ */
-app.use("/api", (_req, res) =>
-  res.status(404).json({ ok: false, error: "Ruta no encontrada" })
-);
+app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Ruta no encontrada" }));
 
 // ============================================================
 // 🕒 Cargas opcionales SOLO en desarrollo/local
@@ -300,6 +359,7 @@ async function cargarTareasOpcionales() {
     console.log(chalk.gray("⏭ Saltando tareas internas (cron / maintain-indexes) en producción"));
     return;
   }
+
   try {
     const { cleanupLogs } = await import("./backend/jobs/cleanupLogs.js");
     const { jobNoticias } = await import("./backend/jobs/cronNoticias.js");
@@ -309,8 +369,43 @@ async function cargarTareasOpcionales() {
   } catch (err) {
     console.warn(chalk.yellow("⚠️ No se pudieron cargar cleanupLogs/cronNoticias (ok en prod):"), err.message);
   }
-
 }
+
+// ============================================================
+// 🧯 GLOBAL ERROR HANDLER (canónico)
+// ============================================================
+
+app.use((err, req, res, _next) => {
+  const status = err.statusCode || err.status || 500;
+
+  // Log completo en dev, mínimo en prod
+  const isProd = NODE_ENV === "production";
+
+  console.error("🔥 ERROR:", {
+    method: req.method,
+    url: req.originalUrl,
+    status,
+    message: err.message,
+    stack: isProd ? undefined : err.stack,
+  });
+
+  // Si ya se enviaron headers, delega a Express
+  if (res.headersSent) return;
+
+  // Fuerza JSON siempre
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+  // CORS errors
+  if (err.message?.includes("CORS")) {
+    return res.status(403).json({ ok: false, error: "Origen no permitido" });
+  }
+
+  return res.status(status).json({
+    ok: false,
+    error: isProd ? "Error interno del servidor" : err.message,
+    ...(isProd ? {} : { stack: err.stack }),
+  });
+});
 
 // ============================================================
 // 🚀 Arranque del servidor (una sola conexión a Mongo)
@@ -323,7 +418,7 @@ if (process.env.NODE_ENV !== "test") {
     try {
       console.log(chalk.yellowBright("\n⏳ Intentando conectar a MongoDB Atlas..."));
       const uri = process.env.MONGODB_URI || getMongoUri();
-      await dbConnect(uri);                       // ✅ usar dbConnect (nombre real)
+      await dbConnect(uri);
       console.log(chalk.greenBright("✅ Conexión establecida correctamente."));
 
       await cargarTareasOpcionales();
@@ -334,7 +429,6 @@ if (process.env.NODE_ENV !== "test") {
         allowedOrigins.forEach((o) => console.log("   ", chalk.gray("-", o)));
       });
 
-      // timeouts que NO rompen streaming (chat/SSE si lo activas luego)
       server.keepAliveTimeout = 75_000;
       server.headersTimeout = 80_000;
     } catch (err) {

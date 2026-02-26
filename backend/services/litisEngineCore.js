@@ -1,14 +1,17 @@
-// src/services/litisEngineCore.js
+// backend/services/litisEngineCore.js
 // ============================================================
-// 🧠 Núcleo de LitisBot (backend) – Refactor ENTERPRISE
+// 🧠 Núcleo de LitisBot (backend) – Enterprise Clean (v3)
 // ------------------------------------------------------------
 // - Procesa PDFs, combina contexto jurisprudencial, y arma payload para IA.
-// - Soporte completo de contexto, adjuntos, y análisis de resolución.
-// - Optimización de seguridad y robustez.
+// - Integra Semantic Pipeline (intents + ontología + latinismos + densidad).
+// - Resolver de intent canónico: modelo > pipeline (solo internos) > fallback controlado.
+// - Robusto, legible y mantenible.
 // ============================================================
-
 import { enviarMensajeIA } from "./chatClient.js";
 
+import { runSemanticPipeline } from "../semantic/pipeline/masterSemanticPipeline.js";
+import { isExternalIntent, isValidIntent } from "../semantic/intents/intentRegistry.js";
+console.log("🔥 LITIS ENGINE CORE CARGADO 🔥");
 /* ============================================================
    Helpers base (FUENTE ÚNICA)
 ============================================================ */
@@ -25,7 +28,11 @@ export function safeStr(v) {
 
 export function getNombreCorto(user) {
   if (!user) return "colega";
-  const nombre = user.nombre || user.displayName || user.name || (user.email ? user.email.split("@")[0] : "");
+  const nombre =
+    user.nombre ||
+    user.displayName ||
+    user.name ||
+    (user.email ? user.email.split("@")[0] : "");
   const limpio = (nombre || "").trim();
   if (!limpio) return "colega";
   if (limpio.length > 24) return limpio.slice(0, 24);
@@ -37,6 +44,97 @@ export function extractUrls(text = "") {
   const re = /(https?:\/\/[^\s)]+)\b/gi;
   const matches = t.match(re) || [];
   return Array.from(new Set(matches.map((x) => x.trim()))).filter(Boolean);
+}
+
+/* ============================================================
+   Helpers (Enterprise): adjuntos + intents
+============================================================ */
+
+function buildAdjuntosFinal({ prompt, adjuntos }) {
+  const urls = extractUrls(prompt);
+  const adjuntosNorm = Array.isArray(adjuntos) ? adjuntos : [];
+
+  const urlAdjuntos = urls.map((u) => ({
+    name: u,
+    kind: "url",
+    type: "text/url",
+    url: u,
+  }));
+
+  return [...adjuntosNorm, ...urlAdjuntos];
+}
+
+function safeSemanticRun({ rawText, adjuntos }) {
+  try {
+    return runSemanticPipeline({ rawText, adjuntos }) || {};
+  } catch (e) {
+    console.warn("[semantic] pipeline error:", e?.message || String(e));
+    return {};
+  }
+}
+
+function resolveIntentEnterprise({ modelData, semantic }) {
+  const reply = safeStr(
+    modelData?.reply ||
+      modelData?.content ||
+      modelData?.message || // por compatibilidad
+      ""
+  );
+
+  const resolved = {
+    reply,
+    intent: null,
+    payload: null,
+  };
+
+  // ------------------------------------------------------------
+  // 1) Intent del MODELO (si es válido)
+  // ------------------------------------------------------------
+  const modelIntent = typeof modelData?.intent === "string" ? modelData.intent : null;
+
+  if (modelIntent && isValidIntent(modelIntent)) {
+    // Externos: solo si vienen del modelo (ya están aquí)
+    resolved.intent = modelIntent;
+
+    resolved.payload =
+      modelData?.payload && typeof modelData.payload === "object"
+        ? modelData.payload
+        : null;
+
+    return resolved;
+  }
+
+  // ------------------------------------------------------------
+  // 2) Intent del PIPELINE (solo internos)
+  // ------------------------------------------------------------
+  const pipelineIntent = semantic?.intent?.intent || null;
+
+  if (
+    pipelineIntent &&
+    isValidIntent(pipelineIntent) &&
+    !isExternalIntent(pipelineIntent)
+  ) {
+    resolved.intent = pipelineIntent;
+    resolved.payload =
+      semantic?.intent?.payload && typeof semantic.intent.payload === "object"
+        ? semantic.intent.payload
+        : null;
+
+    return resolved;
+  }
+
+  // ------------------------------------------------------------
+  // 3) Fallback heurístico CONTROLADO (solo internos legacy)
+  //    Ej: agenda.create requiere payload del modelo (regla v1)
+  // ------------------------------------------------------------
+  if (reply && /agenda|agendar|evento|cita|reunión/i.test(reply)) {
+    if (modelData?.payload && typeof modelData.payload === "object") {
+      resolved.intent = "agenda.create";
+      resolved.payload = modelData.payload;
+    }
+  }
+
+  return resolved;
 }
 
 /* ============================================================
@@ -56,10 +154,17 @@ export async function procesarPDFAdjunto(file) {
     const fd = new FormData();
     fd.append("file", file);
 
-    const resp = await fetch("/api/pdf/juris-context", { method: "POST", body: fd });
+    const resp = await fetch("/api/pdf/juris-context", {
+      method: "POST",
+      body: fd,
+    });
 
     if (!resp.ok) {
-      return { ok: false, error: "Error HTTP al procesar PDF.", status: resp.status };
+      return {
+        ok: false,
+        error: "Error HTTP al procesar PDF.",
+        status: resp.status,
+      };
     }
 
     const data = await resp.json();
@@ -105,12 +210,16 @@ export async function procesarPDFAdjunto(file) {
 /**
  * Construye el contexto final que se enviará al modelo.
  *
- * @param {object} jurisSeleccionada - Objeto de la jurisprudencia seleccionada.
- * @param {object} pdfJurisContext - Contexto procesado de un PDF.
- * @param {object} contextPolicy - Política de contexto (si se permite jurisprudencia).
+ * @param {object} jurisSeleccionada
+ * @param {object} pdfJurisContext
+ * @param {object} contextPolicy
  * @returns {Promise<{hasJuris:boolean, jurisTextoBase:string, jurisMetas:array}>}
  */
-export async function construirContextoJuris(jurisSeleccionada, pdfJurisContext, contextPolicy = { allowJuris: true }) {
+export async function construirContextoJuris(
+  jurisSeleccionada,
+  pdfJurisContext,
+  contextPolicy = { allowJuris: true }
+) {
   const allowJuris = contextPolicy?.allowJuris !== false;
 
   const partes = [];
@@ -161,8 +270,10 @@ export async function construirContextoJuris(jurisSeleccionada, pdfJurisContext,
     // Si hay cuerpo local: arma bloque “humano”
     if (!jurisBlock && cuerpoLocal) {
       const header = [];
-      if (jurisSeleccionada.numeroExpediente)
+
+      if (jurisSeleccionada.numeroExpediente) {
         header.push(`EXPEDIENTE: ${jurisSeleccionada.numeroExpediente}`);
+      }
 
       const organo = jurisSeleccionada.organo || "";
       const sala = jurisSeleccionada.sala || jurisSeleccionada.salaSuprema || "";
@@ -195,20 +306,24 @@ export async function construirContextoJuris(jurisSeleccionada, pdfJurisContext,
 }
 
 /* ============================================================
-   3) ENVIAR PROMPT LITIS (HUMANO)
+   3) ENVIAR PROMPT LITIS (Enterprise + Semantic Pipeline)
 ============================================================ */
 
 /**
  * Envía un prompt al backend de LitisBot con contexto de jurisprudencia, PDF, y adjuntos.
  *
- * @param {object} opts - Opciones para la consulta, incluyendo el prompt, usuario, contexto, etc.
- * @returns {Promise<{role:"assistant", content:string, meta?:any}>}
+ * @param {object} opts
+ * @returns {Promise<{ok:boolean, reply:string, intent:null|string, payload:null|object}>}
  */
 export async function enviarPromptLitis(opts = {}) {
+  console.log("🚀 enviarPromptLitis EJECUTÁNDOSE");
+  // ------------------------------------------------------------
+  // 1) Destructuración segura
+  // ------------------------------------------------------------
   const {
     prompt = "",
     usuarioId = "invitado",
-    sessionId,          // 🔒
+    sessionId, // 🔒
     caseId = null,
     adjuntos = [],
     contexto = {},
@@ -224,14 +339,22 @@ export async function enviarPromptLitis(opts = {}) {
   if (!sessionId || !sessionId.startsWith("case_")) {
     throw new Error("sessionId canónico requerido");
   }
-  const urls = extractUrls(prompt);
-  const adjuntosNorm = Array.isArray(adjuntos) ? adjuntos : [];
 
-  const adjuntosFinal = [
-    ...adjuntosNorm,
-    ...urls.map((u) => ({ name: u, kind: "url", type: "text/url", url: u })),
-  ];
+  // ------------------------------------------------------------
+  // 2) Semantic Pipeline Maestro (robusto)
+  // ------------------------------------------------------------
+  const semantic = safeSemanticRun({ rawText: prompt, adjuntos });
+console.log("🧠 SEMANTIC RESULT ↓↓↓");
+console.log(JSON.stringify(semantic, null, 2));
+console.log("🧠 SEMANTIC RESULT ↑↑↑");
+  // ------------------------------------------------------------
+  // 3) Adjuntos final (incluye URLs)
+  // ------------------------------------------------------------
+  const adjuntosFinal = buildAdjuntosFinal({ prompt, adjuntos });
 
+  // ------------------------------------------------------------
+  // 4) Contexto Jurisprudencial
+  // ------------------------------------------------------------
   const { hasJuris, jurisTextoBase, jurisMetas } = contexto || {};
 
   const hasContext =
@@ -239,94 +362,110 @@ export async function enviarPromptLitis(opts = {}) {
     (Array.isArray(jurisMetas) && jurisMetas.length > 0) ||
     !!hasJuris;
 
-  // Decisión de modo y ratioEngine
+  // ------------------------------------------------------------
+  // 5) Decisión de modo de razonamiento
+  //    (asume que decideReasoningMode / inferMateria / buildVoiceProfile existen)
+  // ------------------------------------------------------------
   const decision = decideReasoningMode({
     prompt,
     toolMode,
     modoLitis,
     hasContext,
+    cognitiveDensity: semantic?.cognitiveDensity,
   });
 
-  // Perfil humano (para backend)
-  function buildHumanPreamble({ user }) {
-  return {
+  // ------------------------------------------------------------
+  // 6) Humanización
+  // ------------------------------------------------------------
+  const voiceProfile = buildVoiceProfile({ user, pro, toolMode });
+
+  const humanPreamble = {
     hasUser: Boolean(user),
     hasName: Boolean(user?.nombre || user?.displayName || user?.name),
     isAuthenticated: Boolean(user?.id || user?.uid),
   };
-}
 
-  const voiceProfile = buildVoiceProfile({ user, pro, toolMode });
-  const humanPreamble = buildHumanPreamble({ user });
   const usuarioNombre = getNombreCorto(user);
 
+  // ------------------------------------------------------------
+  // 7) ToolMode auto (solo si no está definido)
+  //    Importante: NO dispara análisis por defecto;
+  //    solo etiqueta modo si el usuario lo pidió (intent document.review).
+  // ------------------------------------------------------------
+  let finalToolMode = toolMode;
+  if (!finalToolMode && semantic?.intent?.intent === "document.review") {
+    finalToolMode = "document_review";
+  }
+
+  // ------------------------------------------------------------
+  // 8) Payload final
+  // ------------------------------------------------------------
   const payload = {
     prompt: safeStr(prompt),
     usuarioId,
-    expedienteId,
+    sessionId,
+    expedienteId: caseId || null,
 
     idioma: "es-PE",
     pais: "Perú",
 
-    modo: decision.modo,
+    modo: decision?.modo,
     materia: inferMateria(prompt),
-    ratioEngine: !!decision.ratioEngine,
+    ratioEngine: !!decision?.ratioEngine,
 
-    // Contexto
+    // Contexto jurídico
     jurisTextoBase: jurisTextoBase || null,
     jurisMeta: Array.isArray(jurisMetas) ? jurisMetas : [],
 
+    // Adjuntos
     adjuntos: adjuntosFinal,
 
+    // Flags
     pro: !!pro,
     modoLitis,
     personalidad,
     memoriaConfig,
-    toolMode,
+    toolMode: finalToolMode,
 
-    // Nueva clave para humanizar
+    // Perfil humano
     voiceProfile,
     humanPreamble,
     usuarioNombre,
 
+    // Política contextual
     contextPolicy: contextPolicy || null,
-  };
 
-  // Envío del prompt
+    // Metadata semántica (para observabilidad y decisiones downstream)
+    semanticMeta: {
+      intent: semantic?.intent || null,
+      ontology: semantic?.ontology || null,
+      ontologyScore: semantic?.ontologyScore ?? null,
+      latinScore: semantic?.latinScore ?? null,
+      cognitiveDensity: semantic?.cognitiveDensity ?? null,
+    },
+  };
+console.log("📌 sessionId recibido:", sessionId);
+  // ------------------------------------------------------------
+  // 9) Envío al modelo
+  // ------------------------------------------------------------
+  console.log("📦 PAYLOAD ENVIADO AL MODELO:");
+console.log(JSON.stringify(payload.semanticMeta, null, 2));
   const data = await enviarMensajeIA(payload);
 
-// ============================================================
-// 🎯 ACTION RESOLVER (CANÓNICO v1)
-// ============================================================
-
-const resolved = {
-  reply: safeStr(data?.reply || data?.content || ""),
-  intent: null,
-  payload: null,
-};
-
-// --- AGENDA.CREATE (detección controlada v1)
-if (
-  resolved.reply &&
-  /agenda|agendar|evento|cita|reunión/i.test(resolved.reply)
-) {
-  // ⚠️ v1: payload DEBE venir del modelo
-  if (data?.payload && typeof data.payload === "object") {
-    resolved.intent = "agenda.create";
-    resolved.payload = data.payload;
-  }
-}
-
-// ============================================================
-// RESPUESTA FINAL AL FRONTEND
-// ============================================================
-
-return {
-  ok: true,
-  reply: resolved.reply,
-  intent: resolved.intent,
-  payload: resolved.payload,
-};
+  // ------------------------------------------------------------
+  // 10) Intent Resolver Enterprise
+  // ------------------------------------------------------------
+  const resolved = resolveIntentEnterprise({ modelData: data, semantic });
+console.log("🎯 INTENT FINAL:", resolved.intent);
+  // ------------------------------------------------------------
+  // 11) Respuesta final (canónica)
+  // ------------------------------------------------------------
+  return {
+    ok: true,
+    reply: resolved.reply,
+    intent: resolved.intent,
+    payload: resolved.payload,
+  };
 }
 
 export default {

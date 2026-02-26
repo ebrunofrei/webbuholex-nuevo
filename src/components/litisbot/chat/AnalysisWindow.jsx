@@ -1,130 +1,91 @@
 // ============================================================================
-// 🧠 AnalysisWindow — Análisis jurídico dialogado (CANÓNICO · SENIOR)
+// 🧠 AnalysisWindow — Enterprise Legal Workspace (Canónico)
 // ----------------------------------------------------------------------------
-// Rol:
-// - Orquestador UX del ANÁLISIS
-// - Renderiza mensajes (usuario / asistente)
-// - Controla scroll inteligente (tipo ChatGPT)
-// - Gestiona confirmación cognitiva (NO agenda)
-// - Emite eventos hacia el orquestador padre
+// ✔ Layout puro (scroll, contenedor, densidad)
+// ✔ Delegación SOLO assistant a MensajeBotBubble (análisis/pesos viven ahí)
+// ✔ Usuario se pinta INLINE (sin burbuja) para respetar el input
+// ✔ StructuredAnalysis: por mensaje (preferido) + fallback global en último assistant
 // ============================================================================
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
-
 import ConfirmActionModal from "@/components/litisbot/modals/ConfirmActionModal.jsx";
 
 import MensajeBotBubble from "@/components/ui/MensajeBotBubble.jsx";
-import MensajeUsuarioBubble from "@/components/ui/MensajeUsuarioBubble.jsx";
 
-import BotThinkingState from "@/components/litisbot/chat/ui/BotThinkingState.jsx";
-import CognitiveSignal from "@/components/litisbot/chat/ui/CognitiveSignal.jsx";
-import ActionHints from "@/components/litisbot/chat/ui/ActionHints.jsx";
+const STYLES = {
+  container: "flex-1 min-h-0 flex flex-col bg-neutral-50 relative",
+  scrollArea: "flex-1 overflow-y-auto",
+  contentWrapper: "w-full max-w-3xl mx-auto px-6 py-14 space-y-14",
+  thinking: "text-neutral-400 text-sm animate-pulse",
+  scrollButton:
+    "fixed bottom-24 right-8 bg-white border border-neutral-200 rounded-full p-2 shadow-sm hover:bg-neutral-100 transition",
+  // Usuario (editorial, sin burbuja)
+  userBlock: "flex",
+  userText: "ml-auto max-w-[70%] text-[15px] leading-7 text-neutral-500",
+};
 
 export default function AnalysisWindow({
   messages = [],
-  loading = false,
   activeCaseId,
   activeChatId,
-
-  // 🔑 Callbacks externos
+  structuredAnalysis = null, // fallback global
   onCognitiveAction,
-  onAgendaAction,
 }) {
   const feedRef = useRef(null);
-
-  // ============================================================
-  // Confirmación cognitiva (NUNCA agenda)
-  // ============================================================
+  const [isNearBottom, setIsNearBottom] = useState(true);
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
-  // ============================================================
-  // Scroll inteligente (estilo ChatGPT)
-  // ============================================================
-  const [isNearBottom, setIsNearBottom] = useState(true);
+  // ---------------------------------------------------------------------------
+  // 📌 Índice del último mensaje assistant (para fallback de structuredAnalysis)
+  // ---------------------------------------------------------------------------
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === "assistant" && !messages[i]?._placeholder) {
+        return i;
+      }
+    }
+    return -1;
+  }, [messages]);
 
-  useEffect(() => {
+  // ---------------------------------------------------------------------------
+  // 📜 Scroll inteligente
+  // ---------------------------------------------------------------------------
+  const scrollToBottom = useCallback((behavior = "smooth") => {
     const node = feedRef.current;
     if (!node) return;
 
-    const handleScroll = () => {
-      const threshold = 120;
-      const atBottom =
-        node.scrollHeight - node.scrollTop - node.clientHeight < threshold;
-      setIsNearBottom(atBottom);
-    };
+    node.scrollTo({
+      top: node.scrollHeight,
+      behavior,
+    });
+  }, []);
 
-    node.addEventListener("scroll", handleScroll);
-    handleScroll();
+  const handleScroll = useCallback(() => {
+    const node = feedRef.current;
+    if (!node) return;
 
-    return () => node.removeEventListener("scroll", handleScroll);
+    const threshold = 140;
+    const atBottom =
+      node.scrollHeight - node.scrollTop - node.clientHeight < threshold;
+
+    setIsNearBottom(atBottom);
   }, []);
 
   useEffect(() => {
-    const node = feedRef.current;
-    if (!node || !isNearBottom) return;
+    if (isNearBottom) scrollToBottom();
+  }, [messages, isNearBottom, scrollToBottom]);
 
-    requestAnimationFrame(() => {
-      try {
-        node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
-      } catch {
-        node.scrollTop = node.scrollHeight;
-      }
-    });
-  }, [messages, isNearBottom]);
-
-  // ============================================================
-  // Captura de acciones cognitivas (NO agenda)
-  // ============================================================
-  const handleCognitiveUIAction = useCallback(
-    (action) => {
-      if (!action?.type) return;
-
-      // Blindaje total: agenda jamás entra aquí
-      if (action.type.startsWith("AGENDA_")) return;
-
-      if (action.type === "ROLLBACK_EVENT") {
-        setPendingConfirm({
-          type: "ROLLBACK_EVENT",
-          title: "Revertir a un punto anterior",
-          description:
-            "Esta acción revertirá el estado del caso a un momento anterior. La historia posterior quedará invalidada.",
-          payload: { eventId: action.payload?.eventId },
-        });
-        return;
-      }
-
-      if (action.type === "LOAD_DRAFT") {
-        onCognitiveAction?.(action);
-        return;
-      }
-
-      setPendingConfirm({
-        type: action.type,
-        title: action.title || "Confirmar acción",
-        description:
-          action.description ||
-          "Esta acción tendrá impacto en el sistema. ¿Deseas confirmarla?",
-        payload: action.payload || {},
-      });
-    },
-    [onCognitiveAction]
-  );
-
-  // ============================================================
-  // Confirmación explícita
-  // ============================================================
-  const handleConfirm = () => {
+  // ---------------------------------------------------------------------------
+  // 🧠 Confirmación cognitiva
+  // ---------------------------------------------------------------------------
+  const handleConfirm = useCallback(() => {
     if (!pendingConfirm) return;
 
     onCognitiveAction?.({
       type: "CONFIRMED_ACTION",
       payload: {
         ...pendingConfirm,
-        confirmation: {
-          confirmedByUser: true,
-          confirmedAt: new Date().toISOString(),
-        },
         context: {
           caseId: activeCaseId,
           chatId: activeChatId,
@@ -133,75 +94,75 @@ export default function AnalysisWindow({
     });
 
     setPendingConfirm(null);
-  };
+  }, [pendingConfirm, onCognitiveAction, activeCaseId, activeChatId]);
 
-  // ============================================================
-  // RENDER
-  // ============================================================
+  // ---------------------------------------------------------------------------
+  // 🏛 Render
+  // ---------------------------------------------------------------------------
   return (
-    <section className="flex-1 min-h-0 flex flex-col bg-white relative">
-      <div ref={feedRef} className="flex-1 overflow-y-auto py-6">
-        <div className="mx-auto max-w-[1040px] px-4 space-y-12">
-
+    <section className={STYLES.container}>
+      <div ref={feedRef} onScroll={handleScroll} className={STYLES.scrollArea}>
+        <div className={STYLES.contentWrapper}>
           {messages.map((m, i) => {
             const key = m.id || i;
 
+            // -----------------------------
+            // Placeholder / Thinking
+            // -----------------------------
             if (m._placeholder) {
-              return <BotThinkingState key={key} label="Analizando…" />;
-            }
-
-            if (m.role === "assistant") {
               return (
-                <div key={key} className="space-y-8">
-                  {m.cognitive && (
-                    <CognitiveSignal signal={m.cognitive} />
-                  )}
-
-                  {Array.isArray(m.actions) && m.actions.length > 0 && (
-                    <ActionHints
-                      actions={m.actions}
-                      onAction={handleCognitiveUIAction}
-                    />
-                  )}
-
-                  <MensajeBotBubble
-                    msg={m}
-                    modoSalida="word"
-                    onAgendaAction={onAgendaAction}
-                  />
+                <div key={key} className={STYLES.thinking}>
+                  Procesando análisis jurídico…
                 </div>
               );
             }
 
+            // -----------------------------
+            // Assistant -> delegación (aquí viven los "pesos"/panel)
+            // -----------------------------
+            if (m.role === "assistant") {
+              // 1) Preferir análisis por mensaje
+              // 2) Fallback global solo para el último assistant
+              const analysisForThisMessage =
+                m.structuredAnalysis ||
+                (structuredAnalysis && i === lastAssistantIndex
+                  ? structuredAnalysis
+                  : null);
+
+              return (
+                <MensajeBotBubble
+                  key={key}
+                  msg={m}
+                  activeChatId={activeChatId}
+                  structuredAnalysis={analysisForThisMessage}
+                />
+              );
+            }
+
+            // -----------------------------
+            // Usuario -> INLINE (sin burbuja)
+            // -----------------------------
             return (
-              <MensajeUsuarioBubble
-                key={key}
-                texto={m.content}
-                adjuntos={m.meta?.adjuntos || []}
-              />
+              <div key={key} className={STYLES.userBlock}>
+                <div className={STYLES.userText}>{m.content}</div>
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* Botón bajar al final */}
+      {/* Scroll Button */}
       {!isNearBottom && (
         <button
-          className="litis-scroll-chatgpt"
-          onClick={() => {
-            const node = feedRef.current;
-            if (!node) return;
-            node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
-          }}
+          onClick={() => scrollToBottom()}
+          className={STYLES.scrollButton}
           aria-label="Bajar al final"
         >
-          <div className="litis-scroll-chatgpt-icon">
-            <ChevronDown size={22} />
-          </div>
+          <ChevronDown size={18} />
         </button>
       )}
 
-      {/* Confirmación cognitiva */}
+      {/* Confirmación Cognitiva */}
       <ConfirmActionModal
         open={!!pendingConfirm}
         confirmation={pendingConfirm}

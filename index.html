@@ -23,35 +23,7 @@
     <!-- ✅ API base declarada para apiBase.js (Vite sustituye %VITE_*%) -->
     <!-- En producción: VITE_CHAT_API_BASE_URL = https://api.buholex.com/api -->
     <!-- En dev: p.ej. http://127.0.0.1:3000/api (si no usas proxy) -->
-    <meta name="api-base" content="%VITE_CHAT_API_BASE_URL%" />
-
-    <!-- Fallback duro por si la env viene vacía pero el dominio es buholex.com -->
-    <script>
-      (function () {
-        try {
-          var m = document.querySelector('meta[name="api-base"]');
-          var base = (m && m.content || "").trim();
-
-          if (!base && /\.(^|\.)(buholex\.com)$/i.test(location.hostname)) {
-            base = "https://api.buholex.com/api";
-            if (m) m.content = base;
-            else {
-              m = document.createElement("meta");
-              m.name = "api-base";
-              m.content = base;
-              document.head.appendChild(m);
-            }
-          }
-
-          // Exponer también como global para apiBase.js (fromGlobal)
-          if (base) {
-            window.__API_BASE__ = base;
-          }
-        } catch (e) {
-          // en el peor caso, apiBase.js caerá a su fallback origin/api
-        }
-      })();
-    </script>
+    <meta name="api-base" content="" />
 
     <!-- Open Graph / Twitter -->
     <meta property="og:title" content="BúhoLex | Soluciones Jurídicas" />

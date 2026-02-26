@@ -22,7 +22,7 @@ export default function BubbleMessages({ messages = [], loading = false }) {
   }, [messages, loading]);
 
   return (
-    <div className="flex flex-col gap-10 px-6 py-6 custom-scrollbar">
+    <div className="flex flex-col gap-12">
       {messages.map((msg, index) => {
         const isAI = msg.role === "assistant" || msg.role === "system";
         const hasFile = Boolean(msg.fileName);
@@ -58,26 +58,22 @@ export default function BubbleMessages({ messages = [], loading = false }) {
                   ${
                     isAI
                       ? `
-                        bg-white text-slate-800
-                        border-l-4 border-slate-900
-                        rounded-r-2xl rounded-bl-2xl
-                        shadow-[0_8px_40px_rgba(15,23,42,0.06)]
-                        w-full max-w-none lg:max-w-[72ch] xl:max-w-[78ch]
+                        bg-white
+                        rounded-none
+                        border-none
+                        shadow-none
+                        w-full
                       `
                       : `
                         bg-slate-900 text-white
-                        rounded-l-2xl rounded-br-2xl
-                        shadow-slate-900/10
+                        rounded-2xl
+                        shadow-md
                         w-full max-w-[85%] sm:max-w-[70%]
                       `
                   }
                 `}
               >
-                {/* Hairline (AI only) */}
-                {isAI && (
-                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-                )}
-
+                
                 {/* ───────── FILE (User only) ───────── */}
                 {hasFile && !isAI && (
                   <div className="mb-4 flex items-center gap-3 bg-white/10 border border-white/20 p-3 rounded-lg backdrop-blur-sm">
@@ -109,19 +105,6 @@ export default function BubbleMessages({ messages = [], loading = false }) {
                     msg.content || msg.text
                   )}
                 </div>
-
-                {/* ───────── AI FOOTER ───────── */}
-                {isAI && (
-                  <div className="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em]">
-                      Verified Jurisprudence · R7.7++
-                    </span>
-                    <div className="flex gap-3 text-slate-300">
-                      <button title="View Source">📄</button>
-                      <button title="Listen">🔊</button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 

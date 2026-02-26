@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
   const isProd = mode === "production";
 
   // Backend de desarrollo (no afecta a producción)
-  const DEV_BACKEND = env.VITE_DEV_BACKEND || "http://127.0.0.1:3000";
+  const DEV_BACKEND = env.VITE_DEV_BACKEND || "http://localhost:3000";
 
   return {
     plugins: [

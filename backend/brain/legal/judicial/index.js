@@ -1,0 +1,1 @@
+export { runJudicialDecisionSimulation } from "./JudicialDecisionSimulator.js";

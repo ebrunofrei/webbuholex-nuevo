@@ -17,7 +17,16 @@ export default function BubbleChatLayout({
   onOpenUnlock,
 }) {
   return (
-    <div className="relative w-full h-full bg-white flex flex-col">
+    <div
+      className="
+        relative w-full h-full flex flex-col
+        bg-white
+        border border-slate-200
+        shadow-2xl
+        rounded-2xl
+        overflow-hidden
+      "
+    >
 
       {/* HEADER */}
       <div className="sticky top-0 z-20 bg-white">
@@ -29,10 +38,8 @@ export default function BubbleChatLayout({
       </div>
 
       {/* FEED */}
-      <div className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="mx-auto max-w-[1100px] px-4 sm:px-10 py-8">
-          <BubbleMessages messages={messages} loading={loading} />
-        </div>
+      <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-8 bubble-scroll">
+        <BubbleMessages messages={messages} loading={loading} />
       </div>
 
       {/* INPUT — 🔥 BLOQUE ANCLA REAL */}
@@ -42,7 +49,8 @@ export default function BubbleChatLayout({
             bg-white
             border border-slate-200
             rounded-2xl
-            shadow-[0_-8px_40px_rgba(0,0,0,0.08)]
+            shadow-lg
+            border-t border-slate-200
           ">
             <BubbleInput onSend={onSend} loading={loading} />
           </div>
