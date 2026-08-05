@@ -1,1 +1,0 @@
-export { getJurisprudenceAlignment } from "./JurisprudenceAlignment.js";

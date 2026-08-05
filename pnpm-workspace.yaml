@@ -1,0 +1,10 @@
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - unrs-resolver
+confirmModulesPurge: false
+nodeLinker: hoisted
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true

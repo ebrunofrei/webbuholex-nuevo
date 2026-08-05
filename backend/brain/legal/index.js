@@ -1,1 +1,0 @@
-export { processLegalText } from "./pipeline/LegalProcessingPipeline.js";

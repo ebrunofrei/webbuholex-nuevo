@@ -1,0 +1,253 @@
+{
+  "caseNumber": "1417-2005-AA/TC",
+  "slug": "1417-2005-aa-tc-contenido-protegido-pension-amparo",
+  "officialTitle": "Manuel Anicama Hernández contra la Oficina de Normalización Previsional",
+  "editorialTitle": "No toda controversia pensionaria corresponde al proceso de amparo",
+  "processType": "Acción de amparo",
+  "court": "Tribunal Constitucional del Perú",
+  "chamber": "Pleno Jurisdiccional",
+  "decisionDate": "2005-07-08",
+  "publicationDate": "2005-07-12",
+  "jurisdiction": "Perú",
+  "specialty": "Derecho constitucional y previsional",
+  "matter": [
+    "Derecho fundamental a la pensión",
+    "Contenido constitucionalmente protegido",
+    "Procedencia del amparo",
+    "Jubilación adelantada",
+    "Aportaciones previsionales",
+    "Mínimo vital",
+    "Proceso contencioso-administrativo"
+  ],
+  "officialHtmlUrl": "https://www.tc.gob.pe/jurisprudencia/2005/01417-2005-AA.html",
+  "officialPdfUrl": "https://www.tc.gob.pe/jurisprudencia/2005/01417-2005-AA.pdf",
+  "sourceDocumentId": "9B0B8F171A825110C6C5FB23049731743639F436402FB1AF13D5B0A7102F2F48",
+  "sourceVerificationStatus": "official_source_verified",
+  "sourceVerifiedAt": "2026-08-02",
+  "relevantFacts": [
+    "El demandante solicitó una pensión de jubilación adelantada por reducción de personal.",
+    "La ONP desconoció las aportaciones efectuadas durante 1964 y 1965 y consideró que no alcanzaría el mínimo de veinte años.",
+    "El demandante sostuvo que las aportaciones no habían perdido validez y que, sumadas a su periodo laboral posterior, cumplía los requisitos legales.",
+    "La reducción de personal había sido autorizada por la autoridad administrativa de trabajo.",
+    "La denegación administrativa impidió el acceso a una pensión cuya titularidad fue finalmente acreditada."
+  ],
+  "proceduralBackground": [
+    "El demandante solicitó la nulidad de la Resolución N.° 0000041215-2002-ONP/DC/DL 19990.",
+    "El juzgado declaró fundada parcialmente la demanda y ordenó reconocer las aportaciones de 1964 y 1965 y verificar el periodo posterior.",
+    "La Sala Superior revocó la decisión y declaró improcedente la demanda por considerar necesaria una vía con estación probatoria.",
+    "El Tribunal Constitucional declaró fundada la demanda, anuló la resolución administrativa y ordenó reconocer la pensión."
+  ],
+  "publicCaseTitle": "Exp. N.° 1417-2005-AA/TC — Contenido constitucionalmente protegido del derecho a la pensión",
+  "publicProceduralBackground": [
+    "El demandante solicitó la nulidad de la Resolución N.° 0000041215-2002-ONP/DC/DL 19990.",
+    "El juzgado declaró fundada parcialmente la demanda y ordenó reconocer las aportaciones de 1964 y 1965 y verificar el periodo posterior.",
+    "La Sala Superior revocó la decisión y declaró improcedente la demanda por considerar necesaria una vía con estación probatoria.",
+    "El Tribunal Constitucional declaró fundada la demanda, anuló la resolución administrativa y ordenó reconocer la pensión."
+  ],
+  "legalIssue": "¿Qué pretensiones pensionarias integran el contenido constitucionalmente protegido del derecho fundamental a la pensión y pueden ser tuteladas mediante amparo, y cuáles constituyen controversias de mera legalidad que deben tramitarse en la vía contencioso-administrativa?",
+  "subIssues": [
+    "Protección de derechos fundamentales de configuración legal.",
+    "Acceso al sistema de seguridad social.",
+    "Reconocimiento de una pensión cuando se cumplen los requisitos legales.",
+    "Protección del mínimo vital.",
+    "Pensiones de sobrevivencia.",
+    "Igualdad y no discriminación pensionaria.",
+    "Acreditación suficiente de la titularidad del derecho pensionario.",
+    "Reajustes, topes, nivelación y pretensiones de legalidad ordinaria.",
+    "Reconducción de procesos hacia la vía contencioso-administrativa."
+  ],
+  "decision": "El Tribunal Constitucional declaró fundada la demanda, anuló la resolución de la ONP y ordenó reconocer la pensión de jubilación adelantada por reducción de personal, con pago de devengados, reintegros e intereses legales.",
+  "operativeOrders": [
+    "Declarar fundada la demanda.",
+    "Declarar nula la Resolución N.° 0000041215-2002-ONP/DC/DL 19990.",
+    "Ordenar a la ONP reconocer la pensión de jubilación adelantada por reducción de personal.",
+    "Ordenar el pago de pensiones devengadas, reintegros e intereses legales.",
+    "Declarar vinculantes los criterios de procedibilidad del fundamento 37.",
+    "Declarar vinculantes las reglas procesales de los fundamentos 54 a 58.",
+    "Exhortar al Poder Judicial a ampliar los órganos especializados en lo contencioso-administrativo."
+  ],
+  "caseSpecificRatio": "La denegación de una pensión vulnera el derecho fundamental a la pensión cuando el solicitante acredita la edad, los años de aportación y la contingencia laboral exigidos y la Administración desconoce aportaciones que legalmente conservan validez.",
+  "caseSpecificRatioSupportingParagraphs": [
+    38,
+    39,
+    40,
+    41,
+    42,
+    43
+  ],
+  "bindingJurisprudentialRule": "El amparo pensionario procede únicamente cuando la pretensión incide directamente en el contenido constitucionalmente protegido del derecho a la pensión o se encuentra estrechamente relacionada con él. Las controversias de contenido exclusivamente legal deben tramitarse, como regla, en el proceso contencioso-administrativo.",
+  "bindingRuleSupportingParagraphs": [
+    8,
+    9,
+    10,
+    11,
+    12,
+    20,
+    21,
+    35,
+    36,
+    37,
+    44,
+    46,
+    47,
+    49,
+    50
+  ],
+  "protectedPensionCategories": [
+    {
+      "category": "Acceso al sistema de seguridad social",
+      "officialReference": "Fundamento 37.a"
+    },
+    {
+      "category": "Reconocimiento de pensión cumplidos los requisitos legales",
+      "officialReference": "Fundamento 37.b"
+    },
+    {
+      "category": "Protección del mínimo vital pensionario",
+      "officialReference": "Fundamento 37.c"
+    },
+    {
+      "category": "Acceso a pensiones de sobrevivencia",
+      "officialReference": "Fundamento 37.d"
+    },
+    {
+      "category": "Afectación del derecho a la igualdad en materia pensionaria",
+      "officialReference": "Fundamento 37.e"
+    },
+    {
+      "category": "Acreditación suficiente de la titularidad del derecho pensionario invocado",
+      "officialReference": "Fundamento 37.f"
+    },
+    {
+      "category": "Reajustes, topes, nivelación y otras pretensiones ajenas prima facie al contenido esencial",
+      "officialReference": "Fundamento 37.g"
+    }
+  ],
+  "decisiveGrounds": [
+    {
+      "ground": "Los derechos fundamentales de configuración legal conservan un contenido constitucional directamente exigible.",
+      "officialParagraphs": [11, 12, 29],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "El derecho a la pensión está reconocido constitucionalmente y vinculado con dignidad, igualdad material y solidaridad.",
+      "officialParagraphs": [31, 32, 33, 34, 36],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "El fundamento 37 delimita las pretensiones pensionarias que pueden ser tuteladas mediante amparo.",
+      "officialParagraphs": [35, 36, 37],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "La pretensión del demandante correspondía al reconocimiento de una pensión cuyos requisitos alegaba haber cumplido.",
+      "officialParagraphs": [38, 39],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "Las aportaciones desconocidas no habían perdido validez y el demandante acreditó los requisitos de la jubilación adelantada.",
+      "officialParagraphs": [40, 41, 42, 43],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "Las pretensiones pensionarias sin protección constitucional directa deben tramitarse en el proceso contencioso-administrativo.",
+      "officialParagraphs": [49, 50, 51, 52, 53, 54],
+      "sourceType": "editorial_paraphrase"
+    }
+  ],
+  "interpretedRules": [
+    {
+      "rule": "El derecho a la pensión es un derecho fundamental de configuración legal cuyo contenido esencial limita al legislador y a la Administración.",
+      "article": "Artículos 10 y 11 de la Constitución",
+      "roleInDecision": "Base constitucional de la delimitación del contenido pensionario protegido.",
+      "officialParagraphs": [31, 32, 33, 34, 35, 36]
+    },
+    {
+      "rule": "El amparo protege únicamente pretensiones referidas directamente al contenido constitucionalmente protegido.",
+      "article": "Artículo 5.1 y artículo 38 del Código Procesal Constitucional",
+      "roleInDecision": "Criterio de procedencia del proceso constitucional.",
+      "officialParagraphs": [8, 9, 10, 29, 35, 37]
+    },
+    {
+      "rule": "Las aportaciones no pierden validez salvo declaración de caducidad consentida o ejecutoriada anterior al 1 de mayo de 1973.",
+      "article": "Artículo 57 del Decreto Supremo N.° 011-74-TR",
+      "roleInDecision": "Fundamento para reconocer los aportes de 1964 y 1965.",
+      "officialParagraphs": [41]
+    },
+    {
+      "rule": "La jubilación adelantada por reducción de personal exige edad, veinte años de aportación y autorización administrativa de la reducción.",
+      "article": "Artículo 44 del Decreto Ley N.° 19990, artículo 1 del Decreto Ley N.° 25967 y artículo 17 de la Ley N.° 24514",
+      "roleInDecision": "Configuración legal de la pensión reclamada.",
+      "officialParagraphs": [40, 42, 43]
+    }
+  ],
+  "citedPrecedents": [
+    {
+      "caseNumber": "0050-2004-AI/TC y acumulados",
+      "role": "Naturaleza fundamental y contenido del derecho a la pensión."
+    },
+    {
+      "caseNumber": "2945-2003-AA/TC",
+      "role": "Exigibilidad y progresividad de los derechos sociales."
+    },
+    {
+      "caseNumber": "0976-2001-AA/TC",
+      "role": "Derechos fundamentales de configuración legal."
+    },
+    {
+      "caseNumber": "0011-2002-AI/TC",
+      "role": "Eficacia de los derechos prestacionales."
+    },
+    {
+      "caseNumber": "2488-2002-HC/TC",
+      "role": "Reconocimiento y protección de derechos fundamentales implícitos."
+    }
+  ],
+  "dissentingOrSeparateOpinions": [],
+  "applicability": [
+    "Denegación del reconocimiento inicial de una pensión.",
+    "Desconocimiento de aportaciones previsionales.",
+    "Acceso al sistema de seguridad social.",
+    "Pensiones de invalidez o sobrevivencia.",
+    "Afectación del mínimo vital.",
+    "Discriminación en materia pensionaria.",
+    "Selección entre amparo y proceso contencioso-administrativo.",
+    "Reconducción de demandas pensionarias en trámite.",
+    "Alegaciones de prescripción o caducidad frente a vulneraciones continuadas."
+  ],
+  "limits": [
+    "No toda controversia pensionaria puede tramitarse mediante amparo.",
+    "Los reajustes y cálculos ordinarios corresponden normalmente a la vía contencioso-administrativa.",
+    "El compromiso del mínimo vital o las circunstancias excepcionales que justifiquen tutela urgente deben estar objetivamente acreditados.",
+    "El amparo no sustituye procesos que requieren actividad probatoria compleja.",
+    "La sentencia no exime del cumplimiento de los requisitos legales para obtener una pensión.",
+    "Las pensiones de sobrevivencia no forman automáticamente parte del contenido esencial, aunque su acceso puede ser protegido.",
+    "La aplicación actual requiere revisar modificaciones normativas y jurisprudencia posterior."
+  ],
+  "nonHoldingObservations": [
+    "El desarrollo general sobre derechos fundamentales, derechos sociales y estructura de las posiciones jurídicas cumple una función sistemática, pero no cada una de sus afirmaciones constituye por sí sola la ratio del caso individual.",
+    "Las referencias doctrinales y comparadas sirven para fundamentar la construcción constitucional del derecho a la pensión, pero deben distinguirse de las reglas vinculantes expresamente declaradas por el Tribunal."
+  ],
+  "editorialSummary": "El Tribunal Constitucional delimitó las controversias pensionarias que pueden ser conocidas mediante amparo. Esta vía procede cuando se niega el acceso al sistema, se desconoce una pensión pese al cumplimiento de sus requisitos, se afecta el mínimo vital, se deniega una pensión de sobrevivencia que legalmente corresponde, existe discriminación o concurre una urgencia excepcional. Las demás controversias de legalidad pensionaria deben tramitarse en el proceso contencioso-administrativo. En el caso concreto, la ONP desconoció aportaciones válidas y denegó una pensión de jubilación adelantada cuyos requisitos habían sido acreditados.",
+  "keywords": [
+    "derecho a la pensión",
+    "contenido constitucionalmente protegido",
+    "amparo pensionario",
+    "jubilación adelantada",
+    "aportaciones",
+    "mínimo vital",
+    "pensión de sobrevivencia",
+    "igualdad",
+    "contencioso administrativo",
+    "precedente vinculante"
+  ],
+  "publicWarning": "Interpretación editorial de BúhoLex. No sustituye la lectura integral de la sentencia ni constituye asesoría jurídica. La procedencia del amparo y la aplicabilidad del criterio deben verificarse conforme a los hechos, la normativa vigente y la jurisprudencia posterior.",
+  "legalReviewStatus": "human_reviewed",
+  "interpretationStatus": "approved_for_technical_ingestion",
+  "humanReviewed": true,
+  "reviewer": "Eduardo Frei Bruno Gómez",
+  "reviewedAt": "2026-08-02",
+  "approvedForPublication": true,
+  "privacyReviewStatus": "approved",
+  "isPublic": true
+}

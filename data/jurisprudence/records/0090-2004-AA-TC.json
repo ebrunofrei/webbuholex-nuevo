@@ -1,0 +1,187 @@
+{
+  "caseNumber": "0090-2004-AA/TC",
+  "slug": "0090-2004-aa-tc-discrecionalidad-motivacion-arbitrariedad",
+  "officialTitle": "Juan Carlos Callegari Herazo contra el Ministerio de Defensa",
+  "editorialTitle": "La discrecionalidad administrativa no autoriza decisiones arbitrarias",
+  "processType": "Acción de amparo",
+  "court": "Tribunal Constitucional del Perú",
+  "chamber": "Pleno Jurisdiccional",
+  "decisionDate": "2004-07-05",
+  "publicationDate": "2004-07-12",
+  "jurisdiction": "Perú",
+  "specialty": "Derecho administrativo",
+  "matter": [
+    "Discrecionalidad administrativa",
+    "Motivación del acto administrativo",
+    "Interdicción de la arbitrariedad",
+    "Debido proceso administrativo",
+    "Renovación de cuadros"
+  ],
+  "officialHtmlUrl": "https://www.tc.gob.pe/jurisprudencia/2004/00090-2004-AA.html",
+  "officialPdfUrl": "https://www.tc.gob.pe/jurisprudencia/2004/00090-2004-AA.pdf",
+  "sourceDocumentId": "E361DB04C0F61C23DB5759376F970F9DD761D6C38F4B13E42970AE634013BF3D",
+  "sourceVerificationStatus": "official_source_verified",
+  "sourceVerifiedAt": "2026-08-02",
+  "relevantFacts": [
+    "El demandante cuestionó la resolución que dispuso su pase de la situación de actividad a retiro por renovación de cuadros.",
+    "Alegó vulneración del debido proceso administrativo, del principio de legalidad y de los principios de razonabilidad y proporcionalidad.",
+    "Durante el proceso se verificó que había cobrado su compensación por tiempo de servicios.",
+    "El Tribunal consideró que dicho cobro implicaba consentimiento de la ruptura del vínculo y determinaba la sustracción de la materia.",
+    "Pese a ello, el Tribunal decidió modificar prospectivamente su jurisprudencia sobre el ejercicio de la potestad discrecional de renovación."
+  ],
+  "proceduralBackground": [
+    "La demanda solicitó la inaplicación de la Resolución Ministerial N.° 658-DE/FAP-CP y de la Resolución Suprema N.° 073-DE/SG.",
+    "El juzgado declaró improcedente la demanda.",
+    "La Sala Superior confirmó la improcedencia.",
+    "El Tribunal Constitucional declaró improcedente la acción de amparo y estableció un nuevo estándar aplicable a futuras decisiones."
+  ],
+  "publicCaseTitle": "Exp. N.° 0090-2004-AA/TC — Motivación de decisiones administrativas discrecionales",
+  "publicProceduralBackground": [
+    "La demanda solicitó la inaplicación de la Resolución Ministerial N.° 658-DE/FAP-CP y de la Resolución Suprema N.° 073-DE/SG.",
+    "El juzgado declaró improcedente la demanda.",
+    "La Sala Superior confirmó la improcedencia.",
+    "El Tribunal Constitucional declaró improcedente la acción de amparo y estableció un nuevo estándar aplicable a futuras decisiones."
+  ],
+  "legalIssue": "¿Puede la Administración disponer discrecionalmente el pase a retiro por renovación de cuadros sin expresar razones objetivas, concretas y vinculadas al interés público, o la decisión debe estar motivada y sometida al control de razonabilidad, proporcionalidad e interdicción de la arbitrariedad?",
+  "subIssues": [
+    "Alcance constitucional de la potestad discrecional.",
+    "Contenido jurídico del interés público.",
+    "Deber de motivación de las decisiones de renovación.",
+    "Diferencia entre discrecionalidad y arbitrariedad.",
+    "Aplicación temporal del cambio jurisprudencial."
+  ],
+  "decision": "El Tribunal Constitucional declaró improcedente la acción de amparo por sustracción de la materia y por la aplicación prospectiva del nuevo criterio jurisprudencial.",
+  "operativeOrders": [
+    "Declarar improcedente la acción de amparo.",
+    "Poner la sentencia en conocimiento del Ministerio de Defensa.",
+    "Poner la sentencia en conocimiento del Ministerio del Interior."
+  ],
+  "caseSpecificRatio": "Cuando el demandante ha consentido la ruptura del vínculo mediante el cobro de sus beneficios sociales y el nuevo criterio jurisprudencial ha sido establecido únicamente para hechos posteriores a la publicación de la sentencia, no corresponde aplicarlo retroactivamente para estimar la demanda.",
+  "caseSpecificRatioSupportingParagraphs": [
+    2,
+    5,
+    47,
+    48
+  ],
+  "prospectiveJurisprudentialRule": "La potestad de disponer el pase a retiro por renovación de cuadros no es absoluta ni está exenta del control constitucional. Debe sustentarse en razones objetivas, técnicas y jurídicamente suficientes, vinculadas al interés público y coherentes con los hechos determinantes. La ausencia de motivación convierte la discrecionalidad en arbitrariedad.",
+  "prospectiveRuleSupportingParagraphs": [
+    6,
+    7,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    18,
+    30,
+    47
+  ],
+  "decisiveGrounds": [
+    {
+      "ground": "La potestad discrecional está sometida a la Constitución y al respeto de los derechos fundamentales.",
+      "officialParagraphs": [6, 7],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "El interés público debe concretarse mediante razones específicas y no mediante una invocación abstracta.",
+      "officialParagraphs": [10, 11],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "La motivación debe mostrar coherencia entre hechos, finalidad pública y decisión.",
+      "officialParagraphs": [11, 13, 14, 15],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "La razonabilidad y la proporcionalidad excluyen la arbitrariedad en el ejercicio de potestades discrecionales.",
+      "officialParagraphs": [12, 13, 15],
+      "sourceType": "editorial_paraphrase"
+    },
+    {
+      "ground": "Las futuras decisiones de renovación deben sustentarse en procedimientos e indicadores objetivos.",
+      "officialParagraphs": [18, 47],
+      "sourceType": "editorial_paraphrase"
+    }
+  ],
+  "interpretedRules": [
+    {
+      "rule": "Toda potestad pública, incluso discrecional, está limitada por la Constitución y la ley.",
+      "article": "Artículos 3 y 45 de la Constitución",
+      "roleInDecision": "Fundamento del control constitucional de la discrecionalidad.",
+      "officialParagraphs": [7, 17]
+    },
+    {
+      "rule": "El debido procedimiento administrativo comprende el derecho a obtener una decisión motivada y fundada en derecho.",
+      "article": "Artículo IV, numeral 1.2, de la Ley N.° 27444",
+      "roleInDecision": "Sustento del deber de motivación.",
+      "officialParagraphs": [30]
+    },
+    {
+      "rule": "La potestad de renovación debe ejercerse conforme a la finalidad institucional y sin vulnerar derechos fundamentales.",
+      "article": "Artículos 167 y 168 de la Constitución y artículo 58 del Decreto Legislativo N.° 752",
+      "roleInDecision": "Base competencial y límite constitucional de la renovación.",
+      "officialParagraphs": [6, 7, 18]
+    }
+  ],
+  "citedPrecedents": [
+    {
+      "caseNumber": "1906-2002-AA/TC",
+      "role": "Criterio anterior sobre la naturaleza discrecional del pase a retiro."
+    },
+    {
+      "caseNumber": "3426-2003-AA/TC",
+      "role": "Criterio anterior según el cual la renovación no constituye sanción administrativa."
+    },
+    {
+      "caseNumber": "748-99-AA/TC",
+      "role": "Protección constitucional de miembros de la Policía Nacional."
+    },
+    {
+      "caseNumber": "2050-2002-AA/TC",
+      "role": "Extensión del debido proceso al ámbito administrativo."
+    }
+  ],
+  "dissentingOrSeparateOpinions": [],
+  "applicability": [
+    "Decisiones de pase a retiro por renovación de cuadros.",
+    "Actos administrativos discrecionales que afectan derechos o situaciones profesionales.",
+    "Decisiones sustentadas en conceptos jurídicos indeterminados como interés público o necesidad institucional.",
+    "Actuaciones técnicas o de personal que carezcan de indicadores objetivos.",
+    "Control judicial de motivación, razonabilidad, proporcionalidad o desviación de poder."
+  ],
+  "limits": [
+    "La sentencia no elimina la potestad administrativa de renovación.",
+    "La renovación no constituye automáticamente una sanción.",
+    "No exige necesariamente un procedimiento disciplinario ni descargos previos.",
+    "El nuevo criterio no fue aplicado retroactivamente al demandante.",
+    "La demanda concreta fue declarada improcedente.",
+    "El juez controla la juridicidad de la decisión, pero no sustituye sin fundamento la evaluación técnica de la Administración.",
+    "La aplicabilidad actual requiere verificar legislación y jurisprudencia posteriores."
+  ],
+  "nonHoldingObservations": [
+    "La clasificación doctrinal de los distintos grados y modalidades de discrecionalidad cumple una función explicativa, pero no toda ella constituye por sí sola la razón decisiva del fallo.",
+    "Las referencias doctrinales y comparadas refuerzan la argumentación, pero deben diferenciarse de la regla jurisprudencial adoptada por el Tribunal."
+  ],
+  "editorialSummary": "El Tribunal Constitucional estableció que la discrecionalidad administrativa no permite decidir sin razones. El pase a retiro por renovación debe sustentarse en hechos, indicadores objetivos y una motivación vinculada al interés público. La falta de justificación transforma la discrecionalidad en arbitrariedad. Sin embargo, la demanda concreta fue declarada improcedente porque el actor había consentido la ruptura del vínculo y el nuevo criterio fue establecido con efectos prospectivos.",
+  "keywords": [
+    "discrecionalidad administrativa",
+    "motivación",
+    "arbitrariedad",
+    "razonabilidad",
+    "proporcionalidad",
+    "interés público",
+    "debido proceso administrativo",
+    "renovación de cuadros",
+    "prospective overruling"
+  ],
+  "publicWarning": "Interpretación editorial de BúhoLex. No sustituye la lectura integral de la sentencia ni constituye asesoría jurídica. La aplicabilidad del criterio debe verificarse conforme a los hechos, la normativa vigente y la jurisprudencia posterior.",
+  "legalReviewStatus": "human_reviewed",
+  "interpretationStatus": "approved_for_technical_ingestion",
+  "humanReviewed": true,
+  "reviewer": "Eduardo Frei Bruno Gómez",
+  "reviewedAt": "2026-08-02",
+  "approvedForPublication": true,
+  "privacyReviewStatus": "approved",
+  "isPublic": true
+}

@@ -1,0 +1,118 @@
+.differenceSection {
+  padding: 4rem 0;
+}
+
+.differenceSection h2 {
+  font-size: 2rem;
+  margin-bottom: 3rem;
+  text-align: center;
+  color: var(--color-text-strong);
+}
+
+.differenceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.differenceGrid article {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.differenceGrid h3 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  color: var(--color-text-strong);
+}
+
+.differenceGrid p {
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+  flex-grow: 1;
+}
+
+.processSection {
+  padding: 4rem 0;
+}
+
+.processSection h2 {
+  font-size: 2rem;
+  margin-bottom: 3rem;
+  text-align: center;
+  color: var(--color-text-strong);
+}
+
+.processList {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 2rem;
+  counter-reset: process;
+}
+
+.processList li {
+  position: relative;
+}
+
+.processList span {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-border-strong);
+  margin-bottom: 1rem;
+}
+
+.processList strong {
+  display: block;
+  font-size: 1.125rem;
+  color: var(--color-text-strong);
+  margin-bottom: 0.5rem;
+}
+
+.processList p {
+  color: var(--color-text-muted);
+}
+
+.disclaimer {
+  margin-top: 3rem;
+  text-align: center;
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.faqSection {
+  padding: 4rem 0;
+}
+
+.faqSection h2 {
+  font-size: 2rem;
+  margin-bottom: 3rem;
+  text-align: center;
+  color: var(--color-text-strong);
+}
+
+.faqList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.faqList dt {
+  font-weight: 600;
+  color: var(--color-text-strong);
+  margin-bottom: 0.5rem;
+  font-size: 1.125rem;
+}
+
+.faqList dd {
+  color: var(--color-text-muted);
+  margin: 0;
+}
