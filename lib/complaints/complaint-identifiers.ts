@@ -1,4 +1,4 @@
-import { ComplaintSheetNumber, ComplaintPrivateToken } from "./complaint.types";
+import { ComplaintSheetNumber } from "./complaint.types";
 
 export function formatComplaintSheetNumber(params: { year: number; sequence: number }): ComplaintSheetNumber {
   if (params.year < 2000 || params.year > 2100 || !Number.isInteger(params.year)) {
@@ -12,23 +12,47 @@ export function formatComplaintSheetNumber(params: { year: number; sequence: num
   return `LR-${params.year}-${paddedSequence}`;
 }
 
-export function createComplaintPrivateToken(randomBytes: Uint8Array): ComplaintPrivateToken {
-  // Use a base-62 like alphabet avoiding ambiguous characters (0, O, I, l)
+export type RandomBytesSource = (size: number) => Uint8Array;
+
+export function createComplaintPrivateToken(randomBytes: RandomBytesSource): string {
+  if (typeof randomBytes !== "function") {
+    throw new Error("complaint_token_generation_failed");
+  }
+
   const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   const alphabetLength = alphabet.length;
   const acceptanceLimit = Math.floor(256 / alphabetLength) * alphabetLength;
+  const targetLength = 32;
+  const blockSize = 40;
+  const maxAttempts = 100;
 
   let token = "";
-  for (let i = 0; i < randomBytes.length; i++) {
-    if (token.length === 12) break;
-    const byte = randomBytes[i]!;
-    if (byte < acceptanceLimit) {
-      token += alphabet[byte % alphabetLength];
+  let attempts = 0;
+
+  while (token.length < targetLength && attempts < maxAttempts) {
+    attempts++;
+    let bytes: Uint8Array;
+    try {
+      bytes = randomBytes(blockSize);
+    } catch {
+      throw new Error("complaint_token_generation_failed");
+    }
+
+    if (!(bytes instanceof Uint8Array) || bytes.length !== blockSize) {
+      throw new Error("complaint_token_generation_failed");
+    }
+
+    for (let i = 0; i < bytes.length; i++) {
+      if (token.length === targetLength) break;
+      const byte = bytes[i]!;
+      if (byte < acceptanceLimit) {
+        token += alphabet[byte % alphabetLength];
+      }
     }
   }
 
-  if (token.length < 12) {
-    throw new Error("Entropía insuficiente para generar el token");
+  if (token.length < targetLength) {
+    throw new Error("complaint_token_generation_failed");
   }
 
   return token;

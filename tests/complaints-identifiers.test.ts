@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { formatComplaintSheetNumber, createComplaintPrivateToken } from "@/lib/complaints";
+import { describe, it, expect, vi } from "vitest";
+import { formatComplaintSheetNumber, createComplaintPrivateToken, RandomBytesSource } from "@/lib/complaints/complaint-identifiers";
 
 describe("Complaints Identifiers", () => {
   describe("Número de Hoja", () => {
@@ -27,75 +27,135 @@ describe("Complaints Identifiers", () => {
   });
 
   describe("Token Privado", () => {
-    it("genera un token de 12 caracteres usando inyección pura (sin Math.random)", () => {
-      const bytes = new Uint8Array([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]);
-      const token = createComplaintPrivateToken(bytes);
-      expect(token).toHaveLength(12);
+    it("longitud exacta 32 y solo caracteres Base58", () => {
+      const source = () => new Uint8Array(40).fill(0);
+      const token = createComplaintPrivateToken(source);
+      expect(token).toHaveLength(32);
+      expect(token).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32}$/);
     });
 
-    it("asegura que se excluyen caracteres ambiguos si usa el alfabeto configurado", () => {
-      const bytes = new Uint8Array(100).fill(0);
-      const token = createComplaintPrivateToken(bytes);
-      expect(token).toHaveLength(12);
-      expect(token).not.toMatch(/[0OIl]/);
+    it("determinismo con fuente inyectada", () => {
+      const source = () => new Uint8Array(40).fill(150);
+      expect(createComplaintPrivateToken(source)).toBe(createComplaintPrivateToken(source));
     });
 
-    it("lanza error si no hay suficientes bytes para generar el token", () => {
-      const bytes = new Uint8Array(5);
-      expect(() => createComplaintPrivateToken(bytes)).toThrow("Entropía insuficiente para generar el token");
+    it("múltiples bloques cuando existen bytes rechazados", () => {
+      let calls = 0;
+      const source = (size: number) => {
+        calls++;
+        const bytes = new Uint8Array(size);
+        if (calls === 1) {
+          bytes.fill(255); // rejected
+          bytes[0] = 0; // 1 accepted
+        } else {
+          bytes.fill(0); // all accepted
+        }
+        return bytes;
+      };
+      const token = createComplaintPrivateToken(source);
+      expect(token).toHaveLength(32);
+      expect(calls).toBeGreaterThan(1);
     });
 
-    describe("Rejection Sampling", () => {
-      it("acepta byte 0", () => {
-        const bytes = new Uint8Array(12).fill(0);
-        const token = createComplaintPrivateToken(bytes);
-        expect(token).toHaveLength(12);
-      });
+    it("rechazo de bytes desde acceptanceLimit", () => {
+      const source = () => {
+        const bytes = new Uint8Array(40);
+        bytes.fill(232); // 232 is acceptanceLimit (4 * 58)
+        return bytes;
+      };
+      expect(() => createComplaintPrivateToken(source)).toThrow("complaint_token_generation_failed");
+    });
 
-      it("acepta byte 231", () => {
-        const bytes = new Uint8Array(12).fill(231);
-        const token = createComplaintPrivateToken(bytes);
-        expect(token).toHaveLength(12);
-      });
-
-      it("descarta byte 232 y 255 (arroja error si solo quedan menos de 12)", () => {
-        const bytes = new Uint8Array(12);
-        bytes.fill(232, 0, 6);
-        bytes.fill(255, 6, 12);
-        expect(() => createComplaintPrivateToken(bytes)).toThrow("Entropía insuficiente para generar el token");
-      });
-
-      it("usa bytes válidos posteriores a los descartados (232, 255)", () => {
-        const bytes = new Uint8Array(14);
+    it("ausencia de sesgo por módulo (usa bytes válidos posteriores a los descartados)", () => {
+      const source = () => {
+        const bytes = new Uint8Array(40);
         bytes[0] = 232;
         bytes[1] = 255;
-        bytes.fill(0, 2, 14); // 12 ceros
-        const token = createComplaintPrivateToken(bytes);
-        expect(token).toHaveLength(12);
-      });
+        bytes.fill(0, 2, 40);
+        return bytes;
+      };
+      const token = createComplaintPrivateToken(source);
+      expect(token).toHaveLength(32);
+    });
 
-      it("lanza error de entropía si todos los bytes son >= 232", () => {
-        const bytes = new Uint8Array(100).fill(232);
-        expect(() => createComplaintPrivateToken(bytes)).toThrow("Entropía insuficiente para generar el token");
+    it("fuente recibe 40 y es invocada más de una vez cuando es necesario", () => {
+      const mockSource = vi.fn().mockImplementation((size: number) => {
+        expect(size).toBe(40);
+        const bytes = new Uint8Array(40);
+        bytes.fill(255); // all rejected
+        bytes[0] = 0; // 1 accepted per call
+        return bytes;
       });
+      const token = createComplaintPrivateToken(mockSource);
+      expect(token).toHaveLength(32);
+      expect(mockSource).toHaveBeenCalledTimes(32);
+    });
 
-      it("no devuelve token parcial", () => {
-        const bytes = new Uint8Array(11).fill(0);
-        expect(() => createComplaintPrivateToken(bytes)).toThrow();
-      });
+    it("fuente no es función", () => {
+      expect(() => createComplaintPrivateToken(null as unknown as RandomBytesSource)).toThrow("complaint_token_generation_failed");
+    });
 
-      it("misma entrada produce mismo token (determinismo)", () => {
-        const bytes = new Uint8Array(12).fill(150);
-        const token1 = createComplaintPrivateToken(bytes);
-        const token2 = createComplaintPrivateToken(bytes);
-        expect(token1).toBe(token2);
-      });
+    it("fuente lanza", () => {
+      const source = () => { throw new Error("Oops"); };
+      expect(() => createComplaintPrivateToken(source)).toThrow("complaint_token_generation_failed");
+    });
 
-      it("solo produce caracteres del alfabeto configurado", () => {
-        const bytes = new Uint8Array(12).fill(100);
-        const token = createComplaintPrivateToken(bytes);
-        expect(token).toMatch(/^[1-9A-HJ-NP-Za-km-z]{12}$/); // Base58 characters
-      });
+    it("retorno no Uint8Array", () => {
+      const source = () => [0] as unknown as Uint8Array;
+      expect(() => createComplaintPrivateToken(source)).toThrow("complaint_token_generation_failed");
+    });
+
+    it("retorno corto", () => {
+      const source = () => new Uint8Array(39);
+      expect(() => createComplaintPrivateToken(source)).toThrow("complaint_token_generation_failed");
+    });
+
+    it("retorno largo, según política congelada", () => {
+      const source = () => new Uint8Array(41);
+      expect(() => createComplaintPrivateToken(source)).toThrow("complaint_token_generation_failed");
+    });
+
+    it("agotamiento de 100 intentos", () => {
+      const source = () => new Uint8Array(40).fill(255); // always rejected
+      expect(() => createComplaintPrivateToken(source)).toThrow("complaint_token_generation_failed");
+    });
+
+    it("error opaco, sin contenido de bytes", () => {
+      try {
+        createComplaintPrivateToken(() => new Uint8Array(39));
+        expect.fail("Should throw");
+      } catch (e: unknown) {
+        if (e instanceof Error) {
+          expect(e.message).toBe("complaint_token_generation_failed");
+        }
+        expect(e).not.toHaveProperty("cause");
+        expect((e as Error).message).not.toContain("39");
+      }
+    });
+
+    it("no usa Math.random (inyectado)", () => {
+      const mathRandomSpy = vi.spyOn(Math, "random");
+      createComplaintPrivateToken(() => new Uint8Array(40).fill(0));
+      expect(mathRandomSpy).not.toHaveBeenCalled();
+      mathRandomSpy.mockRestore();
+    });
+
+    it("no muta el bloque", () => {
+      const block = new Uint8Array(40).fill(0);
+      const clone = new Uint8Array(40).fill(0);
+      createComplaintPrivateToken(() => block);
+      expect(block).toEqual(clone);
+    });
+
+    it("dos fuentes distintas pueden producir tokens distintos", () => {
+      const source1 = () => new Uint8Array(40).fill(0);
+      const source2 = () => new Uint8Array(40).fill(1);
+      expect(createComplaintPrivateToken(source1)).not.toBe(createComplaintPrivateToken(source2));
+    });
+
+    it("compatibilidad con HMAC mínimo de 32 caracteres", () => {
+      const token = createComplaintPrivateToken(() => new Uint8Array(40).fill(0));
+      expect(token.length).toBeGreaterThanOrEqual(32);
     });
   });
 });
