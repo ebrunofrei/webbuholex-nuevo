@@ -30,7 +30,7 @@ describe("ServicesPage - Contenido Comercial 12.B.2", () => {
     expect(formLinks[0]).toHaveAttribute("href", expect.stringContaining("/consulta-profesional"));
 
     // 7. Existe CTA a WhatsApp
-    const waLinks = screen.getAllByRole("link", { name: new RegExp(siteConfig.contact.whatsapp.display, "i") });
+    const waLinks = screen.getAllByRole("link", { name: new RegExp(siteConfig.contact.whatsapp.display.replace("+", "\\+"), "i") });
     expect(waLinks.length).toBeGreaterThan(0);
     expect(waLinks[0]).toHaveAttribute("href", buildWhatsAppUrl());
 

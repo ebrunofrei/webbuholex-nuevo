@@ -59,7 +59,7 @@ describe("fase 10.H: servicio web, responsive y consola", () => {
 
   it("mantiene centralizados los canales institucionales", () => {
     expect(siteConfig.contact.email).toBe("eduardo@buholex.com");
-    expect(siteConfig.contact.whatsapp.display).toBe("922 038 147");
+    expect(siteConfig.contact.whatsapp.display).toBe("+51 922 038 147");
     expect(siteConfig.contact.whatsapp.e164).toBe("51922038147");
   });
 });

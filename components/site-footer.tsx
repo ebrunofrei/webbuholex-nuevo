@@ -31,9 +31,14 @@ export function SiteFooter() {
         <div className="container">
           <div className="footer-grid">
             <div className="footer-intro">
-              <p className="footer-brand">BúhoLex</p>
+              <p className="footer-brand">{siteConfig.tradeName}</p>
               <p>Orientación jurídica, soluciones documentales y acceso responsable a atención profesional.</p>
-              <p className="footer-owner">Una plataforma de EMCCON.</p>
+              <div className="footer-owner" style={{ fontSize: "0.85rem", marginTop: "1rem", opacity: 0.8 }}>
+                <p><strong>Una plataforma de {siteConfig.institutionalIdentity}</strong></p>
+                <p>{siteConfig.legalName}</p>
+                <p>RUC N.° {siteConfig.ruc}</p>
+                <p>{siteConfig.legalAddress}</p>
+              </div>
             </div>
             {footerGroups.map((group) => (
               <nav key={group.title} aria-label={group.title}>
@@ -46,7 +51,7 @@ export function SiteFooter() {
           <div className="footer-consumer"><h2>Atención al consumidor</h2><p><strong>Libro de Reclamaciones</strong><span>Se habilitará antes del inicio de la atención comercial.</span></p></div>
         </div>
       </div>
-      <div className="footer-lower"><div className="container footer-bottom"><span>© {new Date().getFullYear()} EMCCON.</span><span>La información del sitio no sustituye asesoría jurídica individual.</span><span>BúhoLex LegalTech · Perú</span></div></div>
+      <div className="footer-lower"><div className="container footer-bottom"><span>© {new Date().getFullYear()} {siteConfig.institutionalIdentity}.</span><span>La información del sitio no sustituye asesoría jurídica individual.</span><span>BúhoLex LegalTech · Perú</span></div></div>
     </footer>
   );
 }

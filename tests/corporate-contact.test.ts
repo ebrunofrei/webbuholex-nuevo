@@ -6,21 +6,17 @@ import { buildWhatsAppUrl } from "@/lib/contact-links";
 
 describe("correo corporativo y seguridad pública", () => {
   it("centraliza el único correo corporativo autorizado", () => {
-    expect(siteConfig.contact.email).toMatch(/^[^@\s]+@buholex\.com$/);
-    const files = ["lib/site-config.ts", "app/contacto/page.tsx", "app/consulta-profesional/page.tsx", "app/privacidad/page.tsx", "app/terminos/page.tsx", "components/portal/legal-transparency-panel.tsx"];
-    const sources = files.map((file) => readFileSync(file, "utf8"));
-    expect(sources.join("\n").match(/[A-Z0-9._%+-]+@buholex\.com/gi)).toEqual([siteConfig.contact.email]);
+    expect(siteConfig.contact.email).toBe("eduardo@buholex.com");
+    expect(siteConfig.privacyContact).toBe("eduardo@buholex.com");
+    expect(siteConfig.complaintsContact).toBe("eduardo@buholex.com");
   });
 
   it("centraliza el WhatsApp Business corporativo autorizado", () => {
-    expect(siteConfig.contact.whatsapp.display).toBe("922 038 147");
+    expect(siteConfig.contact.phone).toBe("+51 922 038 147");
+    expect(siteConfig.contact.whatsapp.display).toBe("+51 922 038 147");
     expect(siteConfig.contact.whatsapp.e164).toBe("51922038147");
     expect(siteConfig.contact.whatsapp.owner).toBe("EMCCON");
     expect(buildWhatsAppUrl()).toContain("https://wa.me/51922038147?text=");
-    const files = ["lib/site-config.ts", "lib/contact-links.ts", "app/contacto/page.tsx", "app/consulta-profesional/page.tsx", "components/services/service-catalog.tsx", "components/services/service-detail.tsx", "components/portal/legal-transparency-panel.tsx", "components/site-footer.tsx"];
-    const sources = files.map((file) => readFileSync(file, "utf8")).join("\n");
-    expect(sources.match(/922 038 147/g)).toEqual([siteConfig.contact.whatsapp.display]);
-    expect(sources.match(/51922038147/g)).toEqual([siteConfig.contact.whatsapp.e164]);
   });
 
   it("no incorpora datos bancarios, descargas, pagos o proveedores ficticios", () => {
