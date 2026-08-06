@@ -12,10 +12,14 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "next": "15.5.9",
+    "postgres": "^3.4.9",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "server-only": "^0.0.1",
@@ -28,6 +32,7 @@
     "@types/node": "24.10.1",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
+    "drizzle-kit": "^0.31.10",
     "eslint": "9.39.1",
     "eslint-config-next": "15.5.9",
     "jsdom": "27.2.0",
