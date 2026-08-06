@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const publicEnvironmentSchema = z.object({
-  SITE_URL: z.string().url().default("https://buholex.com"),
+  SITE_URL: z.string().url().default("https://www.buholex.com"),
 });
 
 export const publicEnvironment = publicEnvironmentSchema.parse({
