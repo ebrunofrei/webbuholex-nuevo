@@ -19,7 +19,7 @@ import {
 import type { AuthenticationProviderAuthorizationInput } from "@/types/authentication-provider-authorization";
 
 const projectManifestSchema = z.object({
-  engines: z.object({ node: z.literal(">=22") }),
+  engines: z.object({ node: z.literal("22.x") }),
   dependencies: z.object({
     next: z.literal("15.5.9"),
     react: z.literal("19.1.1"),
@@ -109,7 +109,7 @@ describe("compatibilidad de Auth0 y resolución mínima no ejecutada", () => {
   it("confirma las versiones desde el manifiesto real", () => {
     const manifest = projectManifestSchema.parse(JSON.parse(readProjectFile("package.json")));
     expect(manifest.dependencies).toMatchObject({ next: "15.5.9", react: "19.1.1", "react-dom": "19.1.1" });
-    expect(manifest.engines.node).toBe(">=22");
+    expect(manifest.engines.node).toBe("22.x");
   });
 });
 
