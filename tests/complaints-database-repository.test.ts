@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createComplaintsRepository } from "@/database/repositories/complaints.repository";
 import { ComplaintsPersistenceAdapter, ComplaintTransactionExecutor, CreateComplaintRepositoryInput } from "@/database/repositories/complaints.types";
-import { ComplaintPersistenceError } from "@/database/repositories/complaints.errors";
+import { ComplaintPersistenceError, SanitizedDatabaseConstraintError } from "@/database/repositories/complaints.errors";
 
 describe("Complaints Database Repository", () => {
   let mockAdapter: ComplaintsPersistenceAdapter;
@@ -161,10 +161,9 @@ describe("Complaints Database Repository", () => {
 
   describe("conflicto 23505 y recuperación idempotente", () => {
     it("conflicto 23505 exacto y constraint exacta activa recuperación fuera de transacción", async () => {
-      mockTx.insertComplaint = vi.fn().mockRejectedValue({
-        code: "23505",
-        constraint_name: "complaints_idempotency_key_hash_unique"
-      });
+      mockTx.insertComplaint = vi.fn().mockRejectedValue(
+        new SanitizedDatabaseConstraintError("23505", "complaints_idempotency_key_hash_unique")
+      );
       mockAdapter.findByIdempotencyDigest = vi.fn()
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({
@@ -183,10 +182,9 @@ describe("Complaints Database Repository", () => {
     });
 
     it("recuperación ausente produce complaint_existing_record_incomplete", async () => {
-      mockTx.insertComplaint = vi.fn().mockRejectedValue({
-        code: "23505",
-        constraint: "complaints_idempotency_key_hash_unique"
-      });
+      mockTx.insertComplaint = vi.fn().mockRejectedValue(
+        new SanitizedDatabaseConstraintError("23505", "complaints_idempotency_key_hash_unique")
+      );
       mockAdapter.findByIdempotencyDigest = vi.fn().mockResolvedValue(null);
 
       const repo = createComplaintsRepository(mockAdapter);
@@ -194,22 +192,21 @@ describe("Complaints Database Repository", () => {
     });
 
     it("otro 23505 no se recupera", async () => {
-      mockTx.insertComplaint = vi.fn().mockRejectedValue({
-        code: "23505",
-        constraint: "other_unique"
-      });
+      mockTx.insertComplaint = vi.fn().mockRejectedValue(
+        new SanitizedDatabaseConstraintError("23505", "other_unique")
+      );
       const repo = createComplaintsRepository(mockAdapter);
       await expect(repo.createComplaint(defaultInput)).rejects.toThrowError("complaint_transaction_failed");
     });
 
     it("foreign key no se recupera", async () => {
-      mockTx.insertComplaint = vi.fn().mockRejectedValue({ code: "23503" });
+      mockTx.insertComplaint = vi.fn().mockRejectedValue(new SanitizedDatabaseConstraintError("23503", null));
       const repo = createComplaintsRepository(mockAdapter);
       await expect(repo.createComplaint(defaultInput)).rejects.toThrowError("complaint_transaction_failed");
     });
 
     it("check violation no se recupera", async () => {
-      mockTx.insertComplaint = vi.fn().mockRejectedValue({ code: "23514" });
+      mockTx.insertComplaint = vi.fn().mockRejectedValue(new SanitizedDatabaseConstraintError("23514", null));
       const repo = createComplaintsRepository(mockAdapter);
       await expect(repo.createComplaint(defaultInput)).rejects.toThrowError("complaint_transaction_failed");
     });

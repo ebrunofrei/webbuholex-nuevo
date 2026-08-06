@@ -1,5 +1,5 @@
 import { ComplaintsPersistenceAdapter, CreateComplaintRepositoryInput, CreateComplaintPersistenceResult } from "./complaints.types";
-import { createComplaintPersistenceError } from "./complaints.errors";
+import { createComplaintPersistenceError, SanitizedDatabaseConstraintError } from "./complaints.errors";
 import { mapComplaintDomainToInsert, mapInitialComplaintStatusHistoryToInsert, mapComplaintReceiptOutboxToInsert, mapComplaintCreatedAuditEventToInsert } from "../mappers/complaints";
 import { formatComplaintSheetNumber } from "@/lib/complaints/complaint-identifiers";
 
@@ -7,22 +7,7 @@ export interface ComplaintsRepository {
   createComplaint(input: CreateComplaintRepositoryInput): Promise<CreateComplaintPersistenceResult>;
 }
 
-interface DatabaseConstraintError {
-  readonly code?: unknown;
-  readonly constraint_name?: unknown;
-  readonly constraint?: unknown;
-}
 
-function isIdempotencyConflict(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const dbError = error as DatabaseConstraintError;
-  if (dbError.code === "23505") {
-    if (dbError.constraint_name === "complaints_idempotency_key_hash_unique" || dbError.constraint === "complaints_idempotency_key_hash_unique") {
-      return true;
-    }
-  }
-  return false;
-}
 
 export function createComplaintsRepository(adapter: ComplaintsPersistenceAdapter): ComplaintsRepository {
   return {
@@ -101,7 +86,7 @@ export function createComplaintsRepository(adapter: ComplaintsPersistenceAdapter
 
         return created;
       } catch (err) {
-        if (isIdempotencyConflict(err)) {
+        if (err instanceof SanitizedDatabaseConstraintError && err.code === "23505" && err.constraint === "complaints_idempotency_key_hash_unique") {
           const recovered = await adapter.findByIdempotencyDigest(input.idempotencyKeyHash, input.idempotencyHashKeyVersion);
           if (recovered) {
             return {
