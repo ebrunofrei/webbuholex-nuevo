@@ -12,9 +12,11 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude tests/integration/**",
+    "test:integration:complaints": "vitest run -c vitest.integration.config.ts",
     "db:generate": "drizzle-kit generate",
-    "db:check": "drizzle-kit check"
+    "db:check": "drizzle-kit check",
+    "db:migrate:staging": "node scripts/complaints-migrate-staging.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
