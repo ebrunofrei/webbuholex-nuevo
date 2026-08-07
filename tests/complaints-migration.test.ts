@@ -7,10 +7,11 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 2 migrations now
-    expect(sqlFiles.length).toBe(2);
+    // There must be exactly 3 migrations now
+    expect(sqlFiles.length).toBe(3);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
+    expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
 
     const metaFiles = readdirSync(
       join(process.cwd(), "database", "migrations", "meta"),
@@ -25,11 +26,12 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(2);
+    expect(journalContent.entries.length).toBe(3);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
     expect(journalContent.entries[1]?.tag).toBe("0001_complaints_security");
+    expect(journalContent.entries[2]?.tag).toBe("0002_complaints_role_assumption");
   });
 
   it("should contain exactly 7 CREATE TABLE statements in the private schema and no public tables", () => {
@@ -144,5 +146,34 @@ describe("Complaints Database Migration", () => {
       expect(content).not.toContain("DROP SCHEMA");
       expect(content).not.toContain("TRUNCATE");
     });
+  });
+
+  it("should have correct SET privileges for 0002 role assumption", () => {
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const sqlFile = files.find((f) => f.startsWith("0002"));
+    expect(sqlFile).toBeDefined();
+    const content = readFileSync(
+      join(process.cwd(), "database", "migrations", sqlFile!),
+      "utf8",
+    );
+
+    // roles siguen NOLOGIN (not changed in this file, but we check no LOGIN)
+    expect(content).not.toMatch(/LOGIN/i);
+    expect(content).not.toMatch(/PASSWORD/i);
+    expect(content).not.toMatch(/SUPERUSER/i);
+    expect(content).not.toMatch(/CREATEDB/i);
+    expect(content).not.toMatch(/CREATEROLE/i);
+    expect(content).not.toMatch(/REPLICATION/i);
+    expect(content).not.toMatch(/GRANT ALL/i);
+    expect(content).not.toMatch(/TO PUBLIC/i);
+
+    // capacidad SET concedida
+    expect(content).toContain("WITH SET TRUE");
+    expect(content).toContain("INHERIT FALSE");
+    expect(content).toContain("ADMIN FALSE");
+
+    // Explicit expectations as per request
+    expect(content).toContain("GRANT complaints_api_runtime TO postgres");
+    expect(content).toContain("GRANT complaints_outbox_worker TO postgres");
   });
 });

@@ -15,6 +15,13 @@
       "when": 1785989447559,
       "tag": "0001_complaints_security",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785989447560,
+      "tag": "0002_complaints_role_assumption",
+      "breakpoints": true
     }
   ]
 }
