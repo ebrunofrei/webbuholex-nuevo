@@ -7,11 +7,12 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 3 migrations now
-    expect(sqlFiles.length).toBe(3);
+    // There must be exactly 4 migrations now
+    expect(sqlFiles.length).toBe(4);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
+    expect(sqlFiles[3]).toBe("0003_complaints_role_admin_cleanup.sql");
 
     const metaFiles = readdirSync(
       join(process.cwd(), "database", "migrations", "meta"),
@@ -26,12 +27,13 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(3);
+    expect(journalContent.entries.length).toBe(4);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
     expect(journalContent.entries[1]?.tag).toBe("0001_complaints_security");
     expect(journalContent.entries[2]?.tag).toBe("0002_complaints_role_assumption");
+    expect(journalContent.entries[3]?.tag).toBe("0003_complaints_role_admin_cleanup");
   });
 
   it("should contain exactly 7 CREATE TABLE statements in the private schema and no public tables", () => {
@@ -175,5 +177,29 @@ describe("Complaints Database Migration", () => {
     // Explicit expectations as per request
     expect(content).toContain("GRANT complaints_api_runtime TO postgres");
     expect(content).toContain("GRANT complaints_outbox_worker TO postgres");
+  });
+
+  it("should have correct REVOKE ADMIN OPTION privileges for 0003 role cleanup", () => {
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const sqlFile = files.find((f) => f.startsWith("0003"));
+    expect(sqlFile).toBeDefined();
+    const content = readFileSync(
+      join(process.cwd(), "database", "migrations", sqlFile!),
+      "utf8",
+    );
+
+    expect(content).toContain("REVOKE ADMIN OPTION FOR complaints_api_runtime");
+    expect(content).toContain("REVOKE ADMIN OPTION FOR complaints_outbox_worker");
+    expect(content).toContain("GRANTED BY supabase_admin");
+
+    expect(content).not.toMatch(/REVOKE SET/i);
+    expect(content).not.toMatch(/REVOKE INHERIT/i);
+    expect(content).not.toMatch(/GRANT .* TO /i);
+    expect(content).not.toMatch(/GRANT .* ON /i);
+    expect(content).not.toMatch(/PASSWORD/i);
+    expect(content).not.toMatch(/LOGIN/i);
+    // ensure no explicit revoke of entire membership
+    expect(content).not.toMatch(/REVOKE complaints_api_runtime FROM postgres;/i);
+    expect(content).not.toMatch(/REVOKE complaints_outbox_worker FROM postgres;/i);
   });
 });
