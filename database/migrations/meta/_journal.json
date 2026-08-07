@@ -22,13 +22,6 @@
       "when": 1785989447560,
       "tag": "0002_complaints_role_assumption",
       "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1785989447561,
-      "tag": "0003_complaints_role_admin_cleanup",
-      "breakpoints": true
     }
   ]
 }
