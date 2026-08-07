@@ -7,11 +7,12 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 3 migrations now
-    expect(sqlFiles.length).toBe(3);
+    // There must be exactly 4 migrations now
+    expect(sqlFiles.length).toBe(4);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
+    expect(sqlFiles[3]).toBe("0003_complaints_runtime_logins.sql");
 
     const metaFiles = readdirSync(
       join(process.cwd(), "database", "migrations", "meta"),
@@ -26,12 +27,13 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(3);
+    expect(journalContent.entries.length).toBe(4);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
     expect(journalContent.entries[1]?.tag).toBe("0001_complaints_security");
     expect(journalContent.entries[2]?.tag).toBe("0002_complaints_role_assumption");
+    expect(journalContent.entries[3]?.tag).toBe("0003_complaints_runtime_logins");
   });
 
   it("should contain exactly 7 CREATE TABLE statements in the private schema and no public tables", () => {
@@ -175,5 +177,52 @@ describe("Complaints Database Migration", () => {
     // Explicit expectations as per request
     expect(content).toContain("GRANT complaints_api_runtime TO postgres");
     expect(content).toContain("GRANT complaints_outbox_worker TO postgres");
+  });
+
+  it("should have correct setup for 0003 runtime logins", () => {
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const sqlFile = files.find((f) => f.startsWith("0003"));
+    expect(sqlFile).toBeDefined();
+    const content = readFileSync(
+      join(process.cwd(), "database", "migrations", sqlFile!),
+      "utf8",
+    );
+
+    // Create physical roles
+    expect(content).toContain("CREATE ROLE complaints_api_login");
+    expect(content).toContain("CREATE ROLE complaints_worker_login");
+
+    // Check strict attributes
+    expect(content).toContain("LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT");
+    expect(content).not.toMatch(/PASSWORD/i);
+    expect(content).not.toMatch(/secret/i);
+    expect(content).not.toMatch(/credential/i);
+
+    // Ensure explicit strict memberships
+    expect(content).toContain("GRANT complaints_api_runtime TO complaints_api_login WITH SET TRUE, INHERIT FALSE, ADMIN FALSE");
+    expect(content).toContain("GRANT complaints_outbox_worker TO complaints_worker_login WITH SET TRUE, INHERIT FALSE, ADMIN FALSE");
+
+    // Cross membership should be absent
+    expect(content).not.toContain("GRANT complaints_outbox_worker TO complaints_api_login");
+    expect(content).not.toContain("GRANT complaints_api_runtime TO complaints_worker_login");
+
+    // No functional ACL directly
+    expect(content).not.toContain("GRANT USAGE ON SCHEMA");
+    expect(content).not.toContain("GRANT SELECT");
+    expect(content).not.toContain("GRANT INSERT");
+    expect(content).not.toContain("GRANT UPDATE");
+    expect(content).not.toContain("GRANT DELETE");
+    expect(content).not.toContain("GRANT TRUNCATE");
+    expect(content).not.toContain("GRANT REFERENCES");
+    expect(content).not.toContain("GRANT TRIGGER");
+    expect(content).not.toContain("GRANT EXECUTE");
+    expect(content).not.toContain("GRANT USAGE ON SEQUENCE");
+
+    // No GRANT to PUBLIC
+    expect(content).not.toMatch(/GRANT .* TO PUBLIC/i);
+
+    // Comment explaining CREATEROLE automatic membership
+    expect(content).toContain("A user with CREATEROLE (but not superuser) creating a new role may automatically");
+    expect(content).not.toContain("Supabase intercepta GRANT");
   });
 });
