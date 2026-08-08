@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readDatabaseRuntimeConfig, readDatabaseMigrationConfig } from "@/database/config";
+import { readDatabaseRuntimeConfig, readDatabaseMigrationConfig, readComplaintsApiDatabaseConfig, readComplaintsWorkerDatabaseConfig } from "@/database/config";
 
 describe("complaints-database-config (Runtime)", () => {
   it("accepts valid postgres:// URL", () => {
@@ -94,5 +94,41 @@ describe("complaints-database-config (Migration)", () => {
   it("is independent from runtime config", () => {
     const source = { DATABASE_URL: "postgres://user:pass@localhost:5432/db" };
     expect(() => readDatabaseMigrationConfig(source)).toThrow("database_migration_configuration_missing");
+  });
+});
+
+describe("complaints-database-config (Complaints API)", () => {
+  it("accepts valid URL from DATABASE_API_URL", () => {
+    const source = { DATABASE_API_URL: "postgres://user:pass@localhost:5432/db" };
+    const config = readComplaintsApiDatabaseConfig(source);
+    expect(config.url).toBe("postgres://user:pass@localhost:5432/db");
+  });
+
+  it("throws error if DATABASE_API_URL is missing, no fallback to DATABASE_URL", () => {
+    const source = { DATABASE_URL: "postgres://user:pass@localhost:5432/db" };
+    expect(() => readComplaintsApiDatabaseConfig(source)).toThrow("complaints_api_database_configuration_missing");
+  });
+
+  it("throws error for invalid URL without leaking", () => {
+    const source = { DATABASE_API_URL: "http://user:pass@localhost:5432/db" };
+    expect(() => readComplaintsApiDatabaseConfig(source)).toThrow("complaints_api_database_configuration_invalid");
+  });
+});
+
+describe("complaints-database-config (Complaints Worker)", () => {
+  it("accepts valid URL from DATABASE_WORKER_URL", () => {
+    const source = { DATABASE_WORKER_URL: "postgres://user:pass@localhost:5432/db" };
+    const config = readComplaintsWorkerDatabaseConfig(source);
+    expect(config.url).toBe("postgres://user:pass@localhost:5432/db");
+  });
+
+  it("throws error if DATABASE_WORKER_URL is missing, no fallback to DATABASE_URL", () => {
+    const source = { DATABASE_URL: "postgres://user:pass@localhost:5432/db" };
+    expect(() => readComplaintsWorkerDatabaseConfig(source)).toThrow("complaints_worker_database_configuration_missing");
+  });
+
+  it("throws error for invalid URL without leaking", () => {
+    const source = { DATABASE_WORKER_URL: "http://user:pass@localhost:5432/db" };
+    expect(() => readComplaintsWorkerDatabaseConfig(source)).toThrow("complaints_worker_database_configuration_invalid");
   });
 });

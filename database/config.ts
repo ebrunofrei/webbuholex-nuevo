@@ -79,3 +79,50 @@ export function readDatabaseMigrationConfig(
     url: result.data,
   };
 }
+
+export type ComplaintsApiDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+export type ComplaintsWorkerDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readComplaintsApiDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): ComplaintsApiDatabaseRuntimeConfig {
+  const url = source.DATABASE_API_URL;
+  if (!url) {
+    throw new Error("complaints_api_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("complaints_api_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}
+
+export function readComplaintsWorkerDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): ComplaintsWorkerDatabaseRuntimeConfig {
+  const url = source.DATABASE_WORKER_URL;
+  if (!url) {
+    throw new Error("complaints_worker_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("complaints_worker_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}

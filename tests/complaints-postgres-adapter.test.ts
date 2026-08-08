@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createDrizzleComplaintsPersistenceAdapter } from "@/database/adapters/complaints-postgres.adapter";
+import { createComplaintsApiPersistenceAdapter } from "@/database/adapters/complaints-postgres.adapter";
 import { SanitizedDatabaseConstraintError, ComplaintPersistenceError } from "@/database/repositories/complaints.errors";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/database/schema";
@@ -8,15 +8,15 @@ type DummyDb = PostgresJsDatabase<typeof schema>;
 
 describe("Complaints Postgres Adapter", () => {
   it("imports without environment variables", () => {
-    expect(createDrizzleComplaintsPersistenceAdapter).toBeDefined();
+    expect(createComplaintsApiPersistenceAdapter).toBeDefined();
   });
 
   it("factory accepts db correctly and validates it", () => {
-    const mockDb = { transaction: vi.fn(), select: vi.fn() } as unknown as DummyDb;
-    const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+    const mockDb = { transaction: vi.fn(async (cb) => cb({ select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })) })) })), execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+    const adapter = createComplaintsApiPersistenceAdapter(mockDb);
     expect(adapter).toBeDefined();
 
-    expect(() => createDrizzleComplaintsPersistenceAdapter({} as unknown as DummyDb)).toThrow();
+    expect(() => createComplaintsApiPersistenceAdapter({} as unknown as DummyDb)).toThrow();
   });
 
   describe("findByIdempotencyDigest", () => {
@@ -26,8 +26,8 @@ describe("Complaints Postgres Adapter", () => {
       const mockFrom = vi.fn(() => ({ where: mockWhere }));
       const mockSelect = vi.fn(() => ({ from: mockFrom }));
 
-      const mockDb = { transaction: vi.fn(), select: mockSelect } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ select: mockSelect, execute: vi.fn() })), select: mockSelect } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       const res = await adapter.findByIdempotencyDigest("digest-test", 1);
       expect(res).toBeNull();
@@ -46,11 +46,12 @@ describe("Complaints Postgres Adapter", () => {
     });
 
     it("resultado inexistente devuelve null", async () => {
+      const mockSelect = vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })) })) }));
       const mockDb = {
-        transaction: vi.fn(),
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })) })) }))
+        transaction: vi.fn(async (cb) => cb({ select: mockSelect, execute: vi.fn() })),
+        select: mockSelect
       } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
       const res = await adapter.findByIdempotencyDigest("digest", 1);
       expect(res).toBeNull();
     });
@@ -64,12 +65,13 @@ describe("Complaints Postgres Adapter", () => {
         submittedAt: mockDate,
         deadlineAt: "2026-08-06"
       };
+      const mockSelect = vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([mockRow]) })) })) }));
       const mockDb = {
-        transaction: vi.fn(),
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([mockRow]) })) })) }))
+        transaction: vi.fn(async (cb) => cb({ select: mockSelect, execute: vi.fn() })),
+        select: mockSelect
       } as unknown as DummyDb;
 
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
       const res = await adapter.findByIdempotencyDigest("digest", 1);
       expect(res).toEqual(mockRow);
     });
@@ -79,11 +81,11 @@ describe("Complaints Postgres Adapter", () => {
     it("transacción delegada exactamente una vez", async () => {
       const mockDb = {
         transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
-          return await cb({ insert: vi.fn() });
+          return await cb({ insert: vi.fn(), execute: vi.fn() });
         }),
         select: vi.fn()
       } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       let called = false;
       await adapter.transaction(async () => {
@@ -119,8 +121,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("secuencia realiza insert, returning, conflicto", async () => {
       const { tx, mockValues, mockOnConflictDoUpdate, mockReturning } = createMockTx([{ lastValue: 2 }]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await adapter.transaction(async (executor) => {
         const seq = await executor.reserveAnnualSequence(2026);
@@ -137,8 +139,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("ausencia de fila de secuencia falla de forma opaca", async () => {
       const { tx } = createMockTx([]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await expect(
         adapter.transaction(async (executor) => executor.reserveAnnualSequence(2026))
@@ -147,8 +149,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("fila inválida de secuencia falla", async () => {
       const { tx } = createMockTx([{ lastValue: "invalid" }]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await expect(
         adapter.transaction(async (executor) => executor.reserveAnnualSequence(2026))
@@ -157,8 +159,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("insert complaint usa input exacto y returning solo id y sheetNumber", async () => {
       const { tx, mockValues, mockReturning } = createMockTx([{ id: "c-123", sheetNumber: "LR-1" }]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       const input = { sheetYear: 2026 } as unknown as import("@/database/repositories/complaints.types").ComplaintInsertInput;
 
@@ -173,8 +175,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("ausencia de fila complaint falla", async () => {
       const { tx } = createMockTx([]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await expect(
         adapter.transaction(async (executor) => executor.insertComplaint({} as unknown as import("@/database/repositories/complaints.types").ComplaintInsertInput))
@@ -183,8 +185,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("insert history sin returning", async () => {
       const { tx, mockReturning } = createMockTx([]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await adapter.transaction(async (executor) => executor.insertInitialStatusHistory({} as unknown as import("@/database/repositories/complaints.types").ComplaintStatusHistoryInsertInput));
       expect(mockReturning).not.toHaveBeenCalled();
@@ -192,8 +194,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("insert audit sin returning", async () => {
       const { tx, mockReturning } = createMockTx([]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await adapter.transaction(async (executor) => executor.insertCreatedAuditEvent({} as unknown as import("@/database/repositories/complaints.types").ComplaintAuditInsertInput));
       expect(mockReturning).not.toHaveBeenCalled();
@@ -201,8 +203,8 @@ describe("Complaints Postgres Adapter", () => {
 
     it("insert outbox sin returning", async () => {
       const { tx, mockReturning } = createMockTx([]);
-      const mockDb = { transaction: vi.fn((cb: (t: unknown) => unknown) => cb(tx)), select: vi.fn() } as unknown as DummyDb;
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const mockDb = { transaction: vi.fn(async (cb) => cb({ ...tx, execute: vi.fn() })), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await adapter.transaction(async (executor) => executor.insertReceiptOutbox({} as unknown as import("@/database/repositories/complaints.types").ComplaintOutboxInsertInput));
       expect(mockReturning).not.toHaveBeenCalled();
@@ -212,7 +214,7 @@ describe("Complaints Postgres Adapter", () => {
   describe("Error mapping", () => {
     it("error 23505 es sanitizado con constraint_name, descarta query, parameters, detail, table, column", async () => {
       const mockDb = {
-        transaction: vi.fn().mockRejectedValue({
+        transaction: vi.fn(async (cb) => { await cb({ execute: vi.fn() }); }).mockRejectedValue({
           code: "23505",
           constraint_name: "complaints_idempotency_key_hash_unique",
           detail: "Key (idempotency_key_hash)=(hash) already exists.",
@@ -225,7 +227,7 @@ describe("Complaints Postgres Adapter", () => {
         select: vi.fn()
       } as unknown as DummyDb;
 
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       try {
         await adapter.transaction(async () => {});
@@ -249,24 +251,24 @@ describe("Complaints Postgres Adapter", () => {
     it("error no Postgre SQL no se falsea como constraint", async () => {
       const standardError = new Error("General error");
       const mockDb = {
-        transaction: vi.fn().mockRejectedValue(standardError),
+        transaction: vi.fn(async (cb) => { await cb({ execute: vi.fn() }); }).mockRejectedValue(standardError),
         select: vi.fn()
       } as unknown as DummyDb;
 
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       await expect(adapter.transaction(async () => {})).rejects.toThrow(standardError);
     });
 
     it("error 23505 sin constraint_name", async () => {
       const mockDb = {
-        transaction: vi.fn().mockRejectedValue({
+        transaction: vi.fn(async (cb) => { await cb({ execute: vi.fn() }); }).mockRejectedValue({
           code: "23505"
         }),
         select: vi.fn()
       } as unknown as DummyDb;
 
-      const adapter = createDrizzleComplaintsPersistenceAdapter(mockDb);
+      const adapter = createComplaintsApiPersistenceAdapter(mockDb);
 
       try {
         await adapter.transaction(async () => {});

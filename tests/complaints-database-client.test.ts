@@ -4,7 +4,7 @@ vi.mock("server-only", () => {
   return {};
 });
 
-import { createDatabaseClient, getDatabase } from "@/database/client";
+import { createDatabaseClient, getDatabase, getComplaintsApiDatabase, getComplaintsWorkerDatabase } from "@/database/client";
 import * as configModule from "@/database/config";
 import * as schema from "@/database/schema";
 
@@ -35,12 +35,16 @@ describe("complaints-database-client", () => {
     process.env = { ...originalEnv };
     // Clear global object
     delete (globalThis as unknown as Record<string, unknown>).__buholexDatabaseClient__;
+    delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsApiClient__;
+    delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsWorkerClient__;
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     process.env = originalEnv;
     delete (globalThis as unknown as Record<string, unknown>).__buholexDatabaseClient__;
+    delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsApiClient__;
+    delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsWorkerClient__;
     vi.restoreAllMocks();
   });
 
@@ -122,4 +126,40 @@ describe("complaints-database-client", () => {
     expect(clientContent).toMatch(/import\s+['"]server-only['"]/);
     expect(indexContent).toMatch(/import\s+['"]server-only['"]/);
   });
+
+  it("API and Worker clients are segregated and use respective URLs", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DATABASE_URL", "postgres://legacy:pass@localhost:5432/db");
+    vi.stubEnv("DATABASE_API_URL", "postgres://api:pass@localhost:5432/db");
+    vi.stubEnv("DATABASE_WORKER_URL", "postgres://worker:pass@localhost:5432/db");
+
+    const legacyDb = getDatabase();
+    const apiDb = getComplaintsApiDatabase();
+    const workerDb = getComplaintsWorkerDatabase();
+
+    expect(apiDb).not.toBe(legacyDb);
+    expect(workerDb).not.toBe(legacyDb);
+    expect(apiDb).not.toBe(workerDb);
+
+    expect(postgres).toHaveBeenCalledWith("postgres://legacy:pass@localhost:5432/db", expect.any(Object));
+    expect(postgres).toHaveBeenCalledWith("postgres://api:pass@localhost:5432/db", expect.objectContaining({ ssl: "require" }));
+    expect(postgres).toHaveBeenCalledWith("postgres://worker:pass@localhost:5432/db", expect.objectContaining({ ssl: "require" }));
+  });
+
+  it("API client throws if DATABASE_API_URL missing even if DATABASE_URL exists", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DATABASE_URL", "postgres://legacy:pass@localhost:5432/db");
+    vi.stubEnv("DATABASE_API_URL", "");
+
+    expect(() => getComplaintsApiDatabase()).toThrow("complaints_api_database_configuration_missing");
+  });
+
+  it("barrel public module does not export raw Complaints databases", async () => {
+    const indexExports = await import("@/database/index");
+    expect(indexExports).not.toHaveProperty("getComplaintsApiDatabase");
+    expect(indexExports).not.toHaveProperty("getComplaintsWorkerDatabase");
+    expect(indexExports).not.toHaveProperty("createComplaintsApiDatabaseClient");
+    expect(indexExports).not.toHaveProperty("createComplaintsWorkerDatabaseClient");
+  });
+
 });

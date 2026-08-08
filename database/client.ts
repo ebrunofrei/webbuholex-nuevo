@@ -2,7 +2,14 @@ import "server-only";
 import postgres from "postgres";
 import { drizzle, PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "./schema";
-import { DatabaseRuntimeConfig, readDatabaseRuntimeConfig } from "./config";
+import {
+  DatabaseRuntimeConfig,
+  readDatabaseRuntimeConfig,
+  ComplaintsApiDatabaseRuntimeConfig,
+  ComplaintsWorkerDatabaseRuntimeConfig,
+  readComplaintsApiDatabaseConfig,
+  readComplaintsWorkerDatabaseConfig,
+} from "./config";
 
 export interface DatabaseClientBundle {
   readonly sql: postgres.Sql;
@@ -24,6 +31,8 @@ export function createDatabaseClient(config: DatabaseRuntimeConfig): DatabaseCli
 
 type DatabaseGlobal = typeof globalThis & {
   __buholexDatabaseClient__?: DatabaseClientBundle;
+  __buholexComplaintsApiClient__?: DatabaseClientBundle;
+  __buholexComplaintsWorkerClient__?: DatabaseClientBundle;
 };
 
 export function getDatabase(): PostgresJsDatabase<typeof schema> {
@@ -52,4 +61,56 @@ export function getDatabaseClientBundle(): DatabaseClientBundle {
   }
 
   return createDatabaseClient(config);
+}
+
+export function createComplaintsApiDatabaseClient(config: ComplaintsApiDatabaseRuntimeConfig): DatabaseClientBundle {
+  const sql = postgres(config.url, {
+    max: config.maxConnections,
+    idle_timeout: config.idleTimeoutSeconds,
+    connect_timeout: config.connectTimeoutSeconds,
+    prepare: config.prepare,
+    ssl: "require",
+  });
+  const db = drizzle(sql, { schema });
+  return { sql, db };
+}
+
+export function createComplaintsWorkerDatabaseClient(config: ComplaintsWorkerDatabaseRuntimeConfig): DatabaseClientBundle {
+  const sql = postgres(config.url, {
+    max: config.maxConnections,
+    idle_timeout: config.idleTimeoutSeconds,
+    connect_timeout: config.connectTimeoutSeconds,
+    prepare: config.prepare,
+    ssl: "require",
+  });
+  const db = drizzle(sql, { schema });
+  return { sql, db };
+}
+
+export function getComplaintsApiDatabase(): PostgresJsDatabase<typeof schema> {
+  const config = readComplaintsApiDatabaseConfig();
+
+  if (process.env.NODE_ENV === "development") {
+    const g = globalThis as DatabaseGlobal;
+    if (!g.__buholexComplaintsApiClient__) {
+      g.__buholexComplaintsApiClient__ = createComplaintsApiDatabaseClient(config);
+    }
+    return g.__buholexComplaintsApiClient__.db;
+  }
+
+  return createComplaintsApiDatabaseClient(config).db;
+}
+
+export function getComplaintsWorkerDatabase(): PostgresJsDatabase<typeof schema> {
+  const config = readComplaintsWorkerDatabaseConfig();
+
+  if (process.env.NODE_ENV === "development") {
+    const g = globalThis as DatabaseGlobal;
+    if (!g.__buholexComplaintsWorkerClient__) {
+      g.__buholexComplaintsWorkerClient__ = createComplaintsWorkerDatabaseClient(config);
+    }
+    return g.__buholexComplaintsWorkerClient__.db;
+  }
+
+  return createComplaintsWorkerDatabaseClient(config).db;
 }

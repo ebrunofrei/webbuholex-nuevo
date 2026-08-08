@@ -10,8 +10,7 @@ import type {
   ComplaintAuditInsertInput
 } from "../repositories/complaints.types";
 import { SanitizedDatabaseConstraintError, createComplaintPersistenceError } from "../repositories/complaints.errors";
-
-type ComplaintsDrizzleDatabase = PostgresJsDatabase<typeof schema>;
+import { ComplaintsTransaction, withComplaintsApiRole, withComplaintsWorkerRole } from "../roles";
 
 function isPostgresError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
@@ -43,7 +42,7 @@ function translateDatabaseError(error: unknown): unknown {
 }
 
 class DrizzleComplaintTransactionExecutor implements ComplaintTransactionExecutor {
-  constructor(private readonly tx: Omit<ComplaintsDrizzleDatabase, "$client">) {}
+  constructor(private readonly tx: ComplaintsTransaction) {}
 
   async reserveAnnualSequence(year: number): Promise<number> {
     try {
@@ -133,53 +132,51 @@ class DrizzleComplaintTransactionExecutor implements ComplaintTransactionExecuto
   }
 }
 
-export function createDrizzleComplaintsPersistenceAdapter(
-  db: ComplaintsDrizzleDatabase,
+function createCoreAdapter(
+  runInRole: <T>(callback: (tx: ComplaintsTransaction) => Promise<T>) => Promise<T>
 ): ComplaintsPersistenceAdapter {
-  if (!db || typeof db.transaction !== "function" || typeof db.select !== "function") {
-    throw new Error("Invalid ComplaintsDrizzleDatabase dependency provided.");
-  }
-
   return {
     async findByIdempotencyDigest(
       digest: string,
       keyVersion: number
     ): Promise<{ id: string; sheetNumber: string; status: "received" | "under_review" | "awaiting_information" | "answered" | "closed"; submittedAt: Date; deadlineAt: string } | null> {
       try {
-        const rows = await db
-          .select({
-            id: schema.complaints.id,
-            sheetNumber: schema.complaints.sheetNumber,
-            status: schema.complaints.status,
-            submittedAt: schema.complaints.submittedAt,
-            deadlineAt: schema.complaints.deadlineAt,
-          })
-          .from(schema.complaints)
-          .where(
-            and(
-              eq(schema.complaints.idempotencyKeyHash, digest),
-              eq(schema.complaints.idempotencyHashKeyVersion, keyVersion)
+        return await runInRole(async (tx) => {
+          const rows = await tx
+            .select({
+              id: schema.complaints.id,
+              sheetNumber: schema.complaints.sheetNumber,
+              status: schema.complaints.status,
+              submittedAt: schema.complaints.submittedAt,
+              deadlineAt: schema.complaints.deadlineAt,
+            })
+            .from(schema.complaints)
+            .where(
+              and(
+                eq(schema.complaints.idempotencyKeyHash, digest),
+                eq(schema.complaints.idempotencyHashKeyVersion, keyVersion)
+              )
             )
-          )
-          .limit(1);
+            .limit(1);
 
-        if (rows.length === 0) {
-          return null;
-        }
+          if (rows.length === 0) {
+            return null;
+          }
 
-        const row = rows[0];
-        if (
-          !row ||
-          typeof row.id !== "string" ||
-          typeof row.sheetNumber !== "string" ||
-          typeof row.status !== "string" ||
-          !(row.submittedAt instanceof Date) ||
-          typeof row.deadlineAt !== "string"
-        ) {
-          return null;
-        }
+          const row = rows[0];
+          if (
+            !row ||
+            typeof row.id !== "string" ||
+            typeof row.sheetNumber !== "string" ||
+            typeof row.status !== "string" ||
+            !(row.submittedAt instanceof Date) ||
+            typeof row.deadlineAt !== "string"
+          ) {
+            return null;
+          }
 
-        return row as { id: string; sheetNumber: string; status: "received" | "under_review" | "awaiting_information" | "answered" | "closed"; submittedAt: Date; deadlineAt: string };
+          return row as { id: string; sheetNumber: string; status: "received" | "under_review" | "awaiting_information" | "answered" | "closed"; submittedAt: Date; deadlineAt: string };
+        });
       } catch (error) {
         throw translateDatabaseError(error);
       }
@@ -189,8 +186,10 @@ export function createDrizzleComplaintsPersistenceAdapter(
       executor: (tx: ComplaintTransactionExecutor) => Promise<T>
     ): Promise<T> {
       try {
-        return await db.transaction(async (drizzleTx) => {
-          const wrapper = new DrizzleComplaintTransactionExecutor(drizzleTx);
+        return await runInRole(async (tx) => {
+          // runInRole ya establece la transacción y el rol.
+          // Inyectamos el tx directamente al executor.
+          const wrapper = new DrizzleComplaintTransactionExecutor(tx);
           return await executor(wrapper);
         });
       } catch (error) {
@@ -198,4 +197,22 @@ export function createDrizzleComplaintsPersistenceAdapter(
       }
     }
   };
+}
+
+export function createComplaintsApiPersistenceAdapter(
+  db: PostgresJsDatabase<typeof schema>,
+): ComplaintsPersistenceAdapter {
+  if (!db || typeof db.transaction !== "function" || typeof db.select !== "function") {
+    throw new Error("Invalid database dependency provided.");
+  }
+  return createCoreAdapter((callback) => withComplaintsApiRole(db, callback));
+}
+
+export function createComplaintsWorkerPersistenceAdapter(
+  db: PostgresJsDatabase<typeof schema>,
+): ComplaintsPersistenceAdapter {
+  if (!db || typeof db.transaction !== "function" || typeof db.select !== "function") {
+    throw new Error("Invalid database dependency provided.");
+  }
+  return createCoreAdapter((callback) => withComplaintsWorkerRole(db, callback));
 }
