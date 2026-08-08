@@ -7,12 +7,13 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 4 migrations now
-    expect(sqlFiles.length).toBe(4);
+    // There must be exactly 5 migrations now
+    expect(sqlFiles.length).toBe(5);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
     expect(sqlFiles[3]).toBe("0003_complaints_runtime_logins.sql");
+    expect(sqlFiles[4]).toBe("0004_complaints_runtime_column_privileges.sql");
 
     const metaFiles = readdirSync(
       join(process.cwd(), "database", "migrations", "meta"),
@@ -27,13 +28,14 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(4);
+    expect(journalContent.entries.length).toBe(5);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
     expect(journalContent.entries[1]?.tag).toBe("0001_complaints_security");
     expect(journalContent.entries[2]?.tag).toBe("0002_complaints_role_assumption");
     expect(journalContent.entries[3]?.tag).toBe("0003_complaints_runtime_logins");
+    expect(journalContent.entries[4]?.tag).toBe("0004_complaints_runtime_column_privileges");
   });
 
   it("should contain exactly 7 CREATE TABLE statements in the private schema and no public tables", () => {
@@ -224,5 +226,49 @@ describe("Complaints Database Migration", () => {
     // Comment explaining CREATEROLE automatic membership
     expect(content).toContain("A user with CREATEROLE (but not superuser) creating a new role may automatically");
     expect(content).not.toContain("Supabase intercepta GRANT");
+  });
+
+  it("should have correct setup for 0004 runtime column privileges", () => {
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const sqlFile = files.find((f) => f.startsWith("0004"));
+    expect(sqlFile).toBeDefined();
+    const content = readFileSync(
+      join(process.cwd(), "database", "migrations", sqlFile!),
+      "utf8",
+    );
+    const normalizedContent = content.replace(/\s+/g, " ");
+
+    // A. complaint_sequences
+    expect(normalizedContent).toContain("GRANT INSERT (created_at, updated_at) ON complaints_private.complaint_sequences TO complaints_api_runtime;");
+    expect(normalizedContent).not.toMatch(/GRANT INSERT ON complaints_private\.complaint_sequences TO complaints_api_runtime;/);
+
+    // B. complaints
+    expect(normalizedContent).toContain("REVOKE INSERT ON complaints_private.complaints FROM complaints_api_runtime;");
+    expect(normalizedContent).toMatch(/GRANT INSERT\s*\([^)]*id,\s*schema_version,\s*sheet_year,\s*sheet_sequence,\s*sheet_number,\s*private_token_hash,\s*token_hash_key_version,\s*idempotency_key_hash,\s*idempotency_hash_key_version,\s*payload_hash,\s*status,\s*submitted_at,\s*deadline_at,\s*version,\s*payload_snapshot,\s*created_at,\s*updated_at[^)]*\)\s*ON complaints_private\.complaints TO complaints_api_runtime;/);
+    expect(normalizedContent).not.toMatch(/GRANT INSERT ON complaints_private\.complaints TO complaints_api_runtime;/);
+
+    // C. complaint_status_history
+    expect(normalizedContent).toContain("REVOKE INSERT ON complaints_private.complaint_status_history FROM complaints_api_runtime;");
+    expect(normalizedContent).toMatch(/GRANT INSERT\s*\([^)]*id,\s*complaint_id,\s*to_status,\s*changed_at,\s*changed_by[^)]*\)\s*ON complaints_private\.complaint_status_history TO complaints_api_runtime;/);
+    expect(normalizedContent).not.toMatch(/GRANT INSERT ON complaints_private\.complaint_status_history TO complaints_api_runtime;/);
+
+    // D. complaint_audit_events
+    expect(normalizedContent).toContain("REVOKE INSERT ON complaints_private.complaint_audit_events FROM complaints_api_runtime;");
+    expect(normalizedContent).toMatch(/GRANT INSERT\s*\([^)]*id,\s*complaint_id,\s*event_type,\s*created_at,\s*created_by[^)]*\)\s*ON complaints_private\.complaint_audit_events TO complaints_api_runtime;/);
+    expect(normalizedContent).not.toMatch(/GRANT INSERT ON complaints_private\.complaint_audit_events TO complaints_api_runtime;/);
+
+    // E. complaint_outbox
+    expect(normalizedContent).toContain("REVOKE INSERT ON complaints_private.complaint_outbox FROM complaints_api_runtime;");
+    expect(normalizedContent).toMatch(/GRANT INSERT\s*\([^)]*id,\s*complaint_id,\s*event_type,\s*payload,\s*status,\s*attempts,\s*available_at,\s*created_at,\s*updated_at[^)]*\)\s*ON complaints_private\.complaint_outbox TO complaints_api_runtime;/);
+    expect(normalizedContent).not.toMatch(/GRANT INSERT ON complaints_private\.complaint_outbox TO complaints_api_runtime;/);
+
+    // F. Negative Security Assertions
+    expect(normalizedContent).not.toContain("complaints_api_login");
+    expect(normalizedContent).not.toContain("complaints_worker_login");
+    expect(normalizedContent).not.toMatch(/TO PUBLIC/i);
+    expect(normalizedContent).not.toMatch(/GRANT ALL/i);
+    expect(normalizedContent).not.toMatch(/GRANT INSERT .* TO complaints_outbox_worker/i);
+    expect(normalizedContent).not.toMatch(/GRANT UPDATE .* TO complaints_outbox_worker/i);
+    expect(normalizedContent).not.toMatch(/GRANT SELECT .* TO complaints_outbox_worker/i);
   });
 });

@@ -29,6 +29,13 @@
       "when": 1785989447561,
       "tag": "0003_complaints_runtime_logins",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785989447562,
+      "tag": "0004_complaints_runtime_column_privileges",
+      "breakpoints": true
     }
   ]
 }

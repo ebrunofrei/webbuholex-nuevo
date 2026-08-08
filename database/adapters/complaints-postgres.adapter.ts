@@ -13,28 +13,31 @@ import type {
 import { SanitizedDatabaseConstraintError, createComplaintPersistenceError } from "../repositories/complaints.errors";
 import { ComplaintsTransaction, withComplaintsApiRole } from "../roles";
 
-function isPostgresError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
+function findPostgresError(error: unknown, depth: number = 0): Record<string, unknown> | null {
+  if (depth > 5 || typeof error !== "object" || error === null) return null;
 
-  if (error instanceof Error && error.name === "ComplaintPersistenceError") return false;
-  if (error instanceof SanitizedDatabaseConstraintError) return false;
+  if (error instanceof Error && error.name === "ComplaintPersistenceError") return null;
+  if (error instanceof SanitizedDatabaseConstraintError) return null;
 
-  // Use a closed property access approach
-  const descriptorCode = Object.getOwnPropertyDescriptor(error, "code");
-  if (descriptorCode && typeof descriptorCode.value === "string") {
-    return true;
+  const record = error as Record<string, unknown>;
+  // Postgres SQLSTATE codes are exactly 5 alphanumeric characters
+  if (typeof record.code === "string" && /^[0-9A-Z]{5}$/.test(record.code)) {
+    return record;
   }
 
-  // In some environments, properties might be on the prototype or direct assignment without descriptor
-  return "code" in error && typeof (error as Record<string, unknown>).code === "string";
+  if ("cause" in record && record.cause !== undefined) {
+    return findPostgresError(record.cause, depth + 1);
+  }
+
+  return null;
 }
 
 function translateDatabaseError(error: unknown): unknown {
-  if (isPostgresError(error)) {
-    const record = error as Record<string, unknown>;
-    const code = record.code as string;
-    const constraint = typeof record.constraint_name === "string" && record.constraint_name.trim() !== ""
-      ? record.constraint_name
+  const pgError = findPostgresError(error);
+  if (pgError) {
+    const code = pgError.code as string;
+    const constraint = typeof pgError.constraint_name === "string" && pgError.constraint_name.trim() !== ""
+      ? pgError.constraint_name
       : null;
 
     return new SanitizedDatabaseConstraintError(code, constraint);
