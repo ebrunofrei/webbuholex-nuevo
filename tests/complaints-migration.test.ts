@@ -7,13 +7,14 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 5 migrations now
-    expect(sqlFiles.length).toBe(5);
+    // There must be exactly 6 migrations now
+    expect(sqlFiles.length).toBe(6);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
     expect(sqlFiles[3]).toBe("0003_complaints_runtime_logins.sql");
     expect(sqlFiles[4]).toBe("0004_complaints_runtime_column_privileges.sql");
+    expect(sqlFiles[5]).toBe("0005_complaints_closed_at_insert_privilege.sql");
 
     const metaFiles = readdirSync(
       join(process.cwd(), "database", "migrations", "meta"),
@@ -28,7 +29,7 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(5);
+    expect(journalContent.entries.length).toBe(6);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
@@ -36,6 +37,7 @@ describe("Complaints Database Migration", () => {
     expect(journalContent.entries[2]?.tag).toBe("0002_complaints_role_assumption");
     expect(journalContent.entries[3]?.tag).toBe("0003_complaints_runtime_logins");
     expect(journalContent.entries[4]?.tag).toBe("0004_complaints_runtime_column_privileges");
+    expect(journalContent.entries[5]?.tag).toBe("0005_complaints_closed_at_insert_privilege");
   });
 
   it("should contain exactly 7 CREATE TABLE statements in the private schema and no public tables", () => {
@@ -270,5 +272,80 @@ describe("Complaints Database Migration", () => {
     expect(normalizedContent).not.toMatch(/GRANT INSERT .* TO complaints_outbox_worker/i);
     expect(normalizedContent).not.toMatch(/GRANT UPDATE .* TO complaints_outbox_worker/i);
     expect(normalizedContent).not.toMatch(/GRANT SELECT .* TO complaints_outbox_worker/i);
+  });
+  it("should have correct setup for 0005 closed_at insert privilege", () => {
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const sqlFile = files.find((f) => f.startsWith("0005"));
+    expect(sqlFile).toBeDefined();
+    const content = readFileSync(
+      join(process.cwd(), "database", "migrations", sqlFile!),
+      "utf8",
+    );
+    const normalizedContent = content.replace(/\s+/g, " ");
+
+    expect(normalizedContent).toContain("GRANT INSERT (closed_at) ON complaints_private.complaints TO complaints_api_runtime;");
+
+    // Should NOT have
+    expect(normalizedContent).not.toMatch(/GRANT INSERT ON TABLE/i);
+    expect(normalizedContent).not.toMatch(/GRANT ALL/i);
+    expect(normalizedContent).not.toMatch(/complaints_api_login/i);
+    expect(normalizedContent).not.toMatch(/complaints_worker_login/i);
+    expect(normalizedContent).not.toMatch(/TO PUBLIC/i);
+    expect(normalizedContent).not.toMatch(/complaints_outbox_worker/i);
+    expect(normalizedContent).not.toMatch(/password/i);
+    expect(normalizedContent).not.toMatch(/secret/i);
+  });
+});
+
+import { drizzle } from "drizzle-orm/postgres-js";
+import * as schema from "../database/schema";
+
+describe("ORM/ACL Contract Tests", () => {
+  it("Drizzle INSERT columns for complaints should exactly match 0004 + 0005 allowed columns", () => {
+    // Generamos localmente el SQL del INSERT real sin DML ni conexión
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dummyDb = drizzle({} as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const query = dummyDb.insert(schema.complaints).values({} as any).toSQL();
+
+    const insertMatch = query.sql.match(/insert into "complaints_private"\."complaints"\s*\(([^)]+)\)/i);
+    expect(insertMatch).not.toBeNull();
+
+    const columnsStr = insertMatch?.[1] ?? "";
+    const drizzleColumns = columnsStr
+      .split(",")
+      .map((c) => c.trim().replace(/"/g, ""))
+      .sort();
+
+    // Extraemos de los archivos SQL de migraciones (0004 y 0005)
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const file0004 = files.find((f) => f.startsWith("0004"));
+    const file0005 = files.find((f) => f.startsWith("0005"));
+
+    const content0004 = readFileSync(join(process.cwd(), "database", "migrations", file0004!), "utf8");
+    const content0005 = readFileSync(join(process.cwd(), "database", "migrations", file0005!), "utf8");
+
+    // Función auxiliar para extraer columnas de una sentencia GRANT INSERT
+    const extractGrantedColumns = (sql: string, tablePattern: string) => {
+      const regex = new RegExp(`GRANT INSERT\\s*\\(([^)]+)\\)\\s*ON\\s+${tablePattern}\\s+TO`, "i");
+      const match = sql.match(regex);
+      if (!match) return [];
+      return match[1]!
+        .split(",")
+        .map((c) => c.trim().toLowerCase())
+        .filter(Boolean);
+    };
+
+    const granted0004 = extractGrantedColumns(content0004, "complaints_private.complaints");
+    const granted0005 = extractGrantedColumns(content0005, "complaints_private.complaints");
+
+    const allGranted = [...granted0004, ...granted0005].sort();
+
+    // Calculamos las diferencias para loguear en caso de error
+    const missing = drizzleColumns.filter((c) => !allGranted.includes(c));
+    const excess = allGranted.filter((c) => !drizzleColumns.includes(c));
+
+    expect(missing, `Columns required by ORM but missing in ACL: ${missing.join(", ")}`).toEqual([]);
+    expect(excess, `Columns allowed by ACL but missing in ORM: ${excess.join(", ")}`).toEqual([]);
   });
 });
