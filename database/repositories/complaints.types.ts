@@ -86,6 +86,13 @@ export interface ComplaintsPersistenceAdapter {
   transaction<T>(operation: (tx: ComplaintTransactionExecutor) => Promise<T>): Promise<T>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface ComplaintsOutboxWorkerPersistenceAdapter {
+  // Interface segregated for Worker boundary.
+  // Currently empty as no outbox processing methods are implemented yet.
+  // Future methods must respect the SELECT and UPDATE (limited) capabilities on complaint_outbox.
+}
+
 export interface CreateComplaintRepositoryInput {
   readonly payloadSnapshot: ComplaintPayloadSnapshotV1;
   readonly payloadHash: string;

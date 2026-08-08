@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createComplaintsApiPersistenceAdapter } from "@/database/adapters/complaints-postgres.adapter";
+import { createComplaintsApiPersistenceAdapter, createComplaintsWorkerPersistenceAdapter } from "@/database/adapters/complaints-postgres.adapter";
 import { SanitizedDatabaseConstraintError, ComplaintPersistenceError } from "@/database/repositories/complaints.errors";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/database/schema";
@@ -279,6 +279,43 @@ describe("Complaints Postgres Adapter", () => {
         expect(err.code).toBe("23505");
         expect(err.constraint).toBeNull();
       }
+    });
+  });
+
+  describe("Worker Adapter Interface Segregation", () => {
+    it("factory accepts db correctly and validates it", () => {
+      const mockDb = { transaction: vi.fn(), select: vi.fn() } as unknown as DummyDb;
+      const adapter = createComplaintsWorkerPersistenceAdapter(mockDb);
+      expect(adapter).toBeDefined();
+
+      expect(() => createComplaintsWorkerPersistenceAdapter({} as unknown as DummyDb)).toThrow();
+    });
+
+    it("worker adapter does not expose API methods", () => {
+      const mockDb = { transaction: vi.fn(), select: vi.fn() } as unknown as DummyDb;
+      const workerAdapter = createComplaintsWorkerPersistenceAdapter(mockDb);
+
+      // Verify that TypeScript blocks access to API methods (compile-time boundary)
+      // @ts-expect-error - Worker adapter should not have findByIdempotencyDigest
+      expect(workerAdapter.findByIdempotencyDigest).toBeUndefined();
+
+      // @ts-expect-error - Worker adapter should not have transaction
+      expect(workerAdapter.transaction).toBeUndefined();
+
+      // @ts-expect-error - Worker adapter should not have reserveAnnualSequence
+      expect(workerAdapter.reserveAnnualSequence).toBeUndefined();
+
+      // @ts-expect-error - Worker adapter should not have insertComplaint
+      expect(workerAdapter.insertComplaint).toBeUndefined();
+
+      // @ts-expect-error - Worker adapter should not have insertInitialStatusHistory
+      expect(workerAdapter.insertInitialStatusHistory).toBeUndefined();
+
+      // @ts-expect-error - Worker adapter should not have insertCreatedAuditEvent
+      expect(workerAdapter.insertCreatedAuditEvent).toBeUndefined();
+
+      // @ts-expect-error - Worker adapter should not have insertReceiptOutbox
+      expect(workerAdapter.insertReceiptOutbox).toBeUndefined();
     });
   });
 });

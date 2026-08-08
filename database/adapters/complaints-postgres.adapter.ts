@@ -7,10 +7,11 @@ import type {
   ComplaintInsertInput,
   ComplaintStatusHistoryInsertInput,
   ComplaintOutboxInsertInput,
-  ComplaintAuditInsertInput
+  ComplaintAuditInsertInput,
+  ComplaintsOutboxWorkerPersistenceAdapter
 } from "../repositories/complaints.types";
 import { SanitizedDatabaseConstraintError, createComplaintPersistenceError } from "../repositories/complaints.errors";
-import { ComplaintsTransaction, withComplaintsApiRole, withComplaintsWorkerRole } from "../roles";
+import { ComplaintsTransaction, withComplaintsApiRole } from "../roles";
 
 function isPostgresError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
@@ -210,9 +211,11 @@ export function createComplaintsApiPersistenceAdapter(
 
 export function createComplaintsWorkerPersistenceAdapter(
   db: PostgresJsDatabase<typeof schema>,
-): ComplaintsPersistenceAdapter {
+): ComplaintsOutboxWorkerPersistenceAdapter {
   if (!db || typeof db.transaction !== "function" || typeof db.select !== "function") {
     throw new Error("Invalid database dependency provided.");
   }
-  return createCoreAdapter((callback) => withComplaintsWorkerRole(db, callback));
+  // At present, the Worker adapter exposes no functional methods as outbox processing
+  // is not yet implemented. This prevents the worker from accidentally accessing API methods.
+  return {};
 }
