@@ -43,6 +43,13 @@
       "when": 1785989447563,
       "tag": "0005_complaints_closed_at_insert_privilege",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785989447564,
+      "tag": "0006_complaints_history_audit_insert_privileges",
+      "breakpoints": true
     }
   ]
 }
