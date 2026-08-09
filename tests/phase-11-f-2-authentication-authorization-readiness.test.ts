@@ -25,6 +25,9 @@ const projectManifestSchema = z.object({
     react: z.literal("19.1.1"),
     "react-dom": z.literal("19.1.1"),
     zod: z.string(),
+    "drizzle-orm": z.string().optional(),
+    postgres: z.string().optional(),
+    "server-only": z.string().optional(),
   }).strict(),
 }).passthrough();
 
@@ -212,6 +215,7 @@ describe("barreras estáticas y preservación del proyecto", () => {
 
   it("no crea app/api ni route.ts", () => {
     const authorizedRouteFiles = [
+      "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];
     const entries = readdirSync(path.join(process.cwd(), "app"), { recursive: true })

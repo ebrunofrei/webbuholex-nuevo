@@ -291,6 +291,7 @@ describe("persistencia, lifecycle y logging", () => {
 describe("barreras estáticas y preservación", () => {
   it("mantiene rutas, UI y jurisprudencia desconectadas", () => {
     const authorizedRouteFiles = [
+      "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];
     const routes = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string" && /(^|[\/\\])route\.ts$/.test(entry)).map((entry) => path.relative(ROOT, path.join(ROOT, "app", entry)).split(path.sep).join("/"));

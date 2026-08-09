@@ -418,6 +418,7 @@ describe("seguridad estática y preservación", () => {
 
   it("no crea app/api, route.ts, scraping, fetch, OCR, IA, RAG ni embeddings", () => {
     const authorizedRouteFiles = [
+      "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];
     const appEntries = readdirSync(path.join(process.cwd(), "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string");

@@ -595,8 +595,9 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
 
     it("no crea app/api, route.ts, endpoints ni detalle ficticio", async () => {
       const authorizedRouteFiles = [
-        "app/api/owl/admission/route.ts",
-      ];
+      "app/api/complaints/route.ts",
+      "app/api/owl/admission/route.ts",
+    ];
       const root = process.cwd();
       const appFiles = await readdir(path.join(root, "app"), { recursive: true });
       const routeFiles = appFiles

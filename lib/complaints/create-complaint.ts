@@ -1,3 +1,4 @@
+import "server-only";
 import { ComplaintsRepository } from "@/database/repositories/complaints.repository";
 import { Clock, VersionedHmacSecret, CreateComplaintResult } from "@/database/repositories/complaints.types";
 import { RandomBytesSource, createComplaintPrivateToken } from "./complaint-identifiers";
@@ -5,6 +6,7 @@ import { createComplaintPayloadSnapshot } from "@/database/mappers/complaints";
 import { buildComplaintSubmission } from "./complaint.builder";
 import { deriveComplaintAccessTokenDigest, deriveComplaintIdempotencyDigest, hashCanonicalJson } from "./crypto";
 import { calculatePreliminaryComplaintDeadline } from "./complaint-deadline";
+import { ComplaintsValidationError, ComplaintsInternalError } from "./complaints-errors";
 
 export interface CreateComplaintDependencies {
   readonly repository: ComplaintsRepository;
@@ -26,14 +28,14 @@ export async function createComplaint(
 
   const buildResult = buildComplaintSubmission(mergedInput);
   if (!buildResult.ok) {
-    throw new Error("complaint_creation_failed");
+    throw new ComplaintsValidationError("complaint_validation_failed");
   }
 
   const normalized = buildResult.value as unknown as Record<string, unknown>;
 
   const now = deps.clock.now();
   if (!(now instanceof Date) || isNaN(now.getTime())) {
-    throw new Error("complaint_creation_failed");
+    throw new ComplaintsInternalError("invalid_clock_time");
   }
 
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -48,7 +50,7 @@ export async function createComplaint(
   const dayStr = parts.find(p => p.type === "day")?.value;
 
   if (!yearStr || !monthStr || !dayStr) {
-    throw new Error("complaint_creation_failed");
+    throw new ComplaintsInternalError("failed_to_format_lima_date");
   }
 
   const limaDateStr = `${yearStr}-${monthStr}-${dayStr}`;

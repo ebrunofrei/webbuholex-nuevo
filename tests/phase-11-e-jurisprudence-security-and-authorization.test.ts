@@ -674,6 +674,7 @@ describe("readiness y límites estáticos", () => {
 
   it("no existen app/api ni route.ts", () => {
     const authorizedRouteFiles = [
+      "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];
     const appRoot = path.join(process.cwd(), "app");

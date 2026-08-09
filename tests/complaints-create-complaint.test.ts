@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from "vitest";
+vi.mock("server-only", () => ({}));
 import { createComplaint, CreateComplaintDependencies } from "@/lib/complaints/create-complaint";
 import { ComplaintsRepository } from "@/database/repositories/complaints.repository";
 
@@ -80,7 +81,7 @@ describe("Complaints Use Case - createComplaint", () => {
   });
 
   it("input inválido", async () => {
-    await expect(createComplaint({}, "idem-key-1234567890", deps)).rejects.toThrow("complaint_creation_failed");
+    await expect(createComplaint({} as Parameters<typeof createComplaint>[0], "idem-key-123", deps)).rejects.toThrow("complaint_validation_failed");
   });
 
   it("utiliza builder oficial y normalización aplicada", async () => {
@@ -103,7 +104,7 @@ describe("Complaints Use Case - createComplaint", () => {
 
   it("Date inválida", async () => {
     deps.clock.now = vi.fn(() => new Date("invalid"));
-    await expect(createComplaint(defaultInput, "idem-key-1234567890", deps)).rejects.toThrow("complaint_creation_failed");
+    await expect(createComplaint(defaultInput, "idem-key-1234567890", deps)).rejects.toThrow("invalid_clock_time");
   });
 
   it("fecha Lima en día ordinario, deadline laboral, fin de semana, feriado", async () => {
@@ -225,10 +226,35 @@ describe("Complaints Use Case - createComplaint", () => {
     const consoleSpy = vi.spyOn(console, "log");
     const envSpy = vi.spyOn(process, "env", "get");
 
-    // Test logic is just functions, no env/SQL access in use case by definition if we don't import them.
     expect(consoleSpy).not.toHaveBeenCalled();
     expect(envSpy).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
     envSpy.mockRestore();
+  });
+
+  it("descarta campos internos mediante stripping seguro (builder)", async () => {
+    const hackedInput = {
+      ...defaultInput,
+      complaintId: "c-hacked",
+      status: "closed",
+      privateTokenHash: "leak"
+    };
+
+    const result = await createComplaint(hackedInput, "idem-key-1234567890", deps);
+
+    expect(result.kind).toBe("created");
+
+    const firstCall = vi.mocked(mockRepo.createComplaint).mock.calls.at(0);
+    expect(firstCall).toBeDefined();
+
+    if (!firstCall) {
+      throw new Error("expected createComplaint repository call");
+    }
+
+    const repoCallArgs = firstCall[0];
+    const snapshotStr = JSON.stringify(repoCallArgs.payloadSnapshot);
+    expect(snapshotStr).not.toContain("c-hacked");
+    expect(snapshotStr).not.toContain("closed");
+    expect(snapshotStr).not.toContain("leak");
   });
 });
