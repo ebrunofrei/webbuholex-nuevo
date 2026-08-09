@@ -7,14 +7,21 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 7 migrations now
-    expect(sqlFiles.length).toBe(7);
+    // There must be exactly 8 migrations now
+    expect(sqlFiles.length).toBe(8);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
     expect(sqlFiles[3]).toBe("0003_complaints_runtime_logins.sql");
     expect(sqlFiles[4]).toBe("0004_complaints_runtime_column_privileges.sql");
     expect(sqlFiles[5]).toBe("0005_complaints_closed_at_insert_privilege.sql");
+    expect(sqlFiles[6]).toBe(
+      "0006_complaints_history_audit_insert_privileges.sql",
+    );
+    expect(sqlFiles[7]).toBe(
+      "0007_complaints_drizzle_insert_privileges.sql",
+    );
+
 
     const metaFiles = readdirSync(
       join(process.cwd(), "database", "migrations", "meta"),
@@ -29,7 +36,7 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(7);
+    expect(journalContent.entries.length).toBe(8);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
@@ -351,6 +358,35 @@ describe("Complaints Database Migration", () => {
     expect(normalizedContent).not.toMatch(/password/i);
     expect(normalizedContent).not.toMatch(/secret/i);
   });
+
+  it("should have correct setup for 0007 drizzle insert privileges", () => {
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const sqlFile = files.find((f) => f.startsWith("0007"));
+    expect(sqlFile).toBeDefined();
+    const content = readFileSync(
+      join(process.cwd(), "database", "migrations", sqlFile!),
+      "utf8",
+    );
+    const normalizedContent = content.replace(/\s+/g, " ");
+
+    expect(normalizedContent).toMatch(
+      /GRANT INSERT\s*\(\s*reason,\s*metadata\s*\)\s*ON complaints_private\.complaint_status_history TO complaints_api_runtime;/i,
+    );
+    expect(normalizedContent).toMatch(
+      /GRANT INSERT\s*\(\s*last_error_code,\s*processed_at,\s*processing_started_at\s*\)\s*ON complaints_private\.complaint_outbox TO complaints_api_runtime;/i,
+    );
+
+    // Negative assertions
+    expect(normalizedContent).not.toMatch(/GRANT INSERT ON TABLE/i);
+    expect(normalizedContent).not.toMatch(/GRANT ALL/i);
+    expect(normalizedContent).not.toMatch(/complaints_api_login/i);
+    expect(normalizedContent).not.toMatch(/complaints_worker_login/i);
+    expect(normalizedContent).not.toMatch(/TO PUBLIC/i);
+    expect(normalizedContent).not.toMatch(/complaints_outbox_worker/i);
+    expect(normalizedContent).not.toMatch(/REVOKE/i);
+    expect(normalizedContent).not.toMatch(/password/i);
+    expect(normalizedContent).not.toMatch(/secret/i);
+  });
 });
 
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -362,7 +398,7 @@ import {
   mapComplaintReceiptOutboxToInsert,
 } from "../database/mappers/complaints";
 describe("ORM/ACL Contract Tests", () => {
-  it("Drizzle INSERT columns for productive tables should not have missing privileges in 0004+0005+0006", () => {
+  it("Drizzle INSERT columns for productive tables should not have missing privileges in 0004+0005+0006+0007", () => {
     // Generamos localmente el SQL del INSERT real sin DML ni conexión
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dummyDb = drizzle({} as any);
@@ -419,9 +455,8 @@ describe("ORM/ACL Contract Tests", () => {
       cols.forEach((col, i) => {
         if (vals[i] === "default") {
           defaults.push(col);
-        } else {
-          required.push(col);
         }
+        required.push(col);
       });
 
       return { required: required.sort(), defaults: defaults.sort() };
@@ -447,10 +482,9 @@ describe("ORM/ACL Contract Tests", () => {
       .onConflictDoUpdate({
         target: schema.complaintSequences.year,
         set: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           lastValue: dummyDb.execute(
             `complaint_sequences.last_value + 1`,
-          ) as any,
+          ) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
           updatedAt: new Date(),
         },
       })
@@ -463,6 +497,7 @@ describe("ORM/ACL Contract Tests", () => {
     const file0004 = files.find((f) => f.startsWith("0004"));
     const file0005 = files.find((f) => f.startsWith("0005"));
     const file0006 = files.find((f) => f.startsWith("0006"));
+    const file0007 = files.find((f) => f.startsWith("0007"));
 
     const content0001 = readFileSync(
       join(process.cwd(), "database", "migrations", file0001!),
@@ -481,6 +516,12 @@ describe("ORM/ACL Contract Tests", () => {
     const content0006 = file0006
       ? readFileSync(
           join(process.cwd(), "database", "migrations", file0006),
+          "utf8",
+        )
+      : "";
+    const content0007 = file0007
+      ? readFileSync(
+          join(process.cwd(), "database", "migrations", file0007),
           "utf8",
         )
       : "";
@@ -511,11 +552,13 @@ describe("ORM/ACL Contract Tests", () => {
       const granted0004 = extractGrantedColumns(content0004, pattern);
       const granted0005 = extractGrantedColumns(content0005, pattern);
       const granted0006 = extractGrantedColumns(content0006, pattern);
+      const granted0007 = extractGrantedColumns(content0007, pattern);
       return [
         ...granted0001,
         ...granted0004,
         ...granted0005,
         ...granted0006,
+        ...granted0007,
       ].sort();
     };
 

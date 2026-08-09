@@ -50,6 +50,13 @@
       "when": 1785989447564,
       "tag": "0006_complaints_history_audit_insert_privileges",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785989447565,
+      "tag": "0007_complaints_drizzle_insert_privileges",
+      "breakpoints": true
     }
   ]
 }
