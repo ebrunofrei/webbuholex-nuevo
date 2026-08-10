@@ -44,7 +44,7 @@ describe("portal dual", () => {
   it("no simula el Libro de Reclamaciones ni expone datos privados", () => {
     const { container } = render(<DualPortal />);
     fireEvent.click(screen.getByRole("button", { name: "Transparencia y marco legal" }));
-    expect(screen.getByText("Se habilitará antes del inicio de la atención comercial.")).toBeInTheDocument();
+    expect(screen.getByText("Canal disponible para el registro de reclamos y quejas.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Libro de Reclamaciones/i })).not.toBeInTheDocument();
     expect(container.textContent).not.toMatch(/DNI|firma|CONTRATO-CESION|product-assets|sha256|cuenta bancaria/i);
     expect(container.querySelector("[download], [href*='compra']")).toBeNull();

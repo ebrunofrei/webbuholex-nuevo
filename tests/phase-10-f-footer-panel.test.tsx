@@ -17,7 +17,7 @@ describe("correcciones institucionales de la fase 10.F", () => {
     expect(container.querySelector(".footer-main")).toBeInTheDocument();
     expect(container.querySelector(".footer-lower")).toBeInTheDocument();
     expect(screen.getByText("Libro de Reclamaciones")).toBeInTheDocument();
-    expect(screen.getByText("Se habilitará antes del inicio de la atención comercial.")).toBeInTheDocument();
+    expect(screen.getByText("Canal disponible para el registro de reclamos y quejas.")).toBeInTheDocument();
   });
 
   it("organiza la información empresarial del diálogo con etiquetas semánticas", () => {
