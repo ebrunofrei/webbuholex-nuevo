@@ -16,7 +16,8 @@
     "test:integration:complaints": "vitest run -c vitest.integration.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
-    "db:migrate:staging": "node --env-file-if-exists=.env.local scripts/complaints-migrate-staging.mjs"
+    "db:migrate:staging": "node --env-file-if-exists=.env.local scripts/complaints-migrate-staging.mjs",
+    "db:migrate:production": "node scripts/complaints-migrate-production.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
