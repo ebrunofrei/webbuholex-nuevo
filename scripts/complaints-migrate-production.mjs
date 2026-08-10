@@ -94,44 +94,108 @@ export async function executeMigration({ env, mockSql, mockMigrator, mockFs, mig
       // Ignored if folder doesn't exist in mocks
     }
 
-    let marker;
+    const schemaResult = await sql`
+      SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'complaints_private') as schema_exists
+    `;
+    const schemaExists = schemaResult && schemaResult[0] && schemaResult[0].schema_exists;
+
+    let journalExists = false;
     try {
-      marker = await sql`
-        SELECT * FROM complaints_private.environment_marker WHERE id = 1
+      const journalResult = await sql`
+        SELECT EXISTS (
+          SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'drizzle'
+            AND c.relname = '__drizzle_migrations'
+        ) AS journal_exists
       `;
-    } catch {
-       throw new Error('complaints_production_target_unverified');
-    }
-
-    if (!marker || !marker.length || marker[0].environment !== 'production' || marker[0].project_ref !== projectRef || marker[0].database_name !== dbName) {
-      throw new Error('complaints_production_target_unverified');
-    }
-
-    let appliedMigrations = 0;
-    try {
-      const dbMigrations = await sql`SELECT count(*) as count FROM drizzle.__drizzle_migrations`;
-      if (dbMigrations && dbMigrations[0]) {
-        appliedMigrations = parseInt(dbMigrations[0].count, 10);
+      if (journalResult && journalResult[0] && journalResult[0].journal_exists) {
+        journalExists = true;
       }
     } catch {
-      // It's possible the migrations table doesn't exist yet, we catch it silently.
+      // Ignored
     }
 
-    const pending = totalLocalMigrations - appliedMigrations;
-    console.log(`complaints_production_migrations_inventory: total=${totalLocalMigrations}, applied=${appliedMigrations}, pending=${pending}`);
-
-    await migrator(db, { migrationsFolder });
-
-    const markerAfter = await sql`
-      SELECT * FROM complaints_private.environment_marker WHERE id = 1
+    const rolesResult = await sql`
+      SELECT EXISTS(
+        SELECT 1 FROM pg_roles
+        WHERE rolname IN ('complaints_api_runtime', 'complaints_outbox_worker', 'complaints_api_login', 'complaints_worker_login')
+      ) as roles_exist
     `;
-    if (!markerAfter || !markerAfter.length || markerAfter[0].environment !== 'production' || markerAfter[0].project_ref !== projectRef || markerAfter[0].database_name !== dbName) {
-      throw new Error('complaints_production_target_unverified');
-    }
+    const rolesExist = rolesResult && rolesResult[0] && rolesResult[0].roles_exist;
 
-    console.log('complaints_production_migrations_applied');
-    console.log('complaints_production_marker_verified');
-    console.log('complaints_production_target_verified');
+    const isVirgin = !schemaExists && !journalExists && !rolesExist;
+
+    if (isVirgin) {
+      await migrator(db, { migrationsFolder });
+
+      const markerAfterResult = await sql`
+        SELECT EXISTS(
+          SELECT 1 FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'complaints_private' AND c.relname = 'environment_marker'
+        ) as marker_exists_after
+      `;
+      if (!markerAfterResult || !markerAfterResult[0] || !markerAfterResult[0].marker_exists_after) {
+        throw new Error('complaints_production_target_unverified');
+      }
+
+      await sql`
+        INSERT INTO complaints_private.environment_marker (id, environment, project_ref, database_name)
+        VALUES (1, 'production', ${projectRef}, ${dbName})
+      `;
+
+      const marker = await sql`
+        SELECT * FROM complaints_private.environment_marker WHERE id = 1
+      `;
+      if (!marker || !marker.length || marker[0].environment !== 'production' || marker[0].project_ref !== projectRef || marker[0].database_name !== dbName) {
+        throw new Error('complaints_production_target_unverified');
+      }
+
+      console.log('complaints_production_migrations_applied');
+      console.log('complaints_production_marker_verified');
+      console.log('complaints_production_target_verified');
+    } else {
+      let marker;
+      try {
+        marker = await sql`
+          SELECT * FROM complaints_private.environment_marker WHERE id = 1
+        `;
+      } catch {
+         throw new Error('complaints_production_target_unverified');
+      }
+
+      if (!marker || !marker.length || marker[0].environment !== 'production' || marker[0].project_ref !== projectRef || marker[0].database_name !== dbName) {
+        throw new Error('complaints_production_target_unverified');
+      }
+
+      let appliedMigrations = 0;
+      try {
+        const dbMigrations = await sql`SELECT count(*) as count FROM drizzle.__drizzle_migrations`;
+        if (dbMigrations && dbMigrations[0]) {
+          appliedMigrations = parseInt(dbMigrations[0].count, 10);
+        }
+      } catch {
+        // It's possible the migrations table doesn't exist yet, we catch it silently.
+      }
+
+      const pending = totalLocalMigrations - appliedMigrations;
+      console.log(`complaints_production_migrations_inventory: total=${totalLocalMigrations}, applied=${appliedMigrations}, pending=${pending}`);
+
+      await migrator(db, { migrationsFolder });
+
+      const markerAfter = await sql`
+        SELECT * FROM complaints_private.environment_marker WHERE id = 1
+      `;
+      if (!markerAfter || !markerAfter.length || markerAfter[0].environment !== 'production' || markerAfter[0].project_ref !== projectRef || markerAfter[0].database_name !== dbName) {
+        throw new Error('complaints_production_target_unverified');
+      }
+
+      console.log('complaints_production_migrations_applied');
+      console.log('complaints_production_marker_verified');
+      console.log('complaints_production_target_verified');
+    }
   } catch (e) {
     let errorMsg = e.message;
     if (errorMsg === 'complaints_production_target_unverified' || errorMsg === 'complaints_production_prerequisite_missing') {
