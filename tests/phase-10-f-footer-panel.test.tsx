@@ -18,6 +18,12 @@ describe("correcciones institucionales de la fase 10.F", () => {
     expect(container.querySelector(".footer-lower")).toBeInTheDocument();
     expect(screen.getByText("Libro de Reclamaciones")).toBeInTheDocument();
     expect(screen.getByText("Canal disponible para el registro de reclamos y quejas.")).toBeInTheDocument();
+
+    const link = screen.getByRole("link", { name: /Libro de Reclamaciones/i });
+    expect(link).toHaveAttribute("href", "/libro-de-reclamaciones");
+    expect(link).not.toHaveAttribute("disabled");
+    expect(link).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText(/próximamente disponible/i)).not.toBeInTheDocument();
   });
 
   it("organiza la información empresarial del diálogo con etiquetas semánticas", () => {
@@ -26,6 +32,12 @@ describe("correcciones institucionales de la fase 10.F", () => {
     expect(screen.getByText("Correo corporativo")).toBeInTheDocument();
     expect(screen.getByText("WhatsApp Business corporativo")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "eduardo@buholex.com" })).toHaveAttribute("href", "mailto:eduardo@buholex.com");
+
+    const reclamacionesLink = screen.getByRole("link", { name: /Libro de Reclamaciones/i });
+    expect(reclamacionesLink).toHaveAttribute("href", "/libro-de-reclamaciones");
+    expect(reclamacionesLink).not.toHaveAttribute("disabled");
+    expect(reclamacionesLink).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText(/próximamente disponible/i)).not.toBeInTheDocument();
   });
 
   it("protege el correo del corte arbitrario", () => {

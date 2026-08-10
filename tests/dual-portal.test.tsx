@@ -41,11 +41,17 @@ describe("portal dual", () => {
     expect(contact).toHaveFocus();
   });
 
-  it("no simula el Libro de Reclamaciones ni expone datos privados", () => {
+  it("expone el Libro de Reclamaciones funcional y no expone datos privados", () => {
     const { container } = render(<DualPortal />);
     fireEvent.click(screen.getByRole("button", { name: "Transparencia y marco legal" }));
     expect(screen.getByText("Canal disponible para el registro de reclamos y quejas.")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Libro de Reclamaciones/i })).not.toBeInTheDocument();
+
+    const link = screen.getByRole("link", { name: /Libro de Reclamaciones/i });
+    expect(link).toHaveAttribute("href", "/libro-de-reclamaciones");
+    expect(link).not.toHaveAttribute("disabled");
+    expect(link).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText(/próximamente disponible/i)).not.toBeInTheDocument();
+
     expect(container.textContent).not.toMatch(/DNI|firma|CONTRATO-CESION|product-assets|sha256|cuenta bancaria/i);
     expect(container.querySelector("[download], [href*='compra']")).toBeNull();
   });

@@ -48,7 +48,7 @@ export function SiteFooter() {
             ))}
             <div className="footer-contact"><h2>Contacto institucional</h2><a href={`mailto:${siteConfig.contact.email}`}>{siteConfig.contact.email}</a><a href={buildWhatsAppUrl()}>{siteConfig.contact.whatsapp.display}</a><small>{siteConfig.contact.whatsapp.label}</small></div>
           </div>
-          <div className="footer-consumer"><h2>Atención al consumidor</h2><p><strong>Libro de Reclamaciones</strong><span>Canal disponible para el registro de reclamos y quejas.</span></p></div>
+          <div className="footer-consumer"><h2>Atención al consumidor</h2><p><Link href="/libro-de-reclamaciones"><strong>Libro de Reclamaciones</strong></Link><span>Canal disponible para el registro de reclamos y quejas.</span></p></div>
         </div>
       </div>
       <div className="footer-lower"><div className="container footer-bottom"><span>© {new Date().getFullYear()} {siteConfig.institutionalIdentity}.</span><span>La información del sitio no sustituye asesoría jurídica individual.</span><span>BúhoLex LegalTech · Perú</span></div></div>
