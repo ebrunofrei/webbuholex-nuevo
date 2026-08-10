@@ -7,8 +7,8 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 8 migrations now
-    expect(sqlFiles.length).toBe(8);
+    // There must be exactly 9 migrations now
+    expect(sqlFiles.length).toBe(9);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
@@ -20,6 +20,9 @@ describe("Complaints Database Migration", () => {
     );
     expect(sqlFiles[7]).toBe(
       "0007_complaints_drizzle_insert_privileges.sql",
+    );
+    expect(sqlFiles[8]).toBe(
+      "0008_complaints_environment_marker_contract.sql",
     );
 
 
@@ -36,7 +39,7 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(8);
+    expect(journalContent.entries.length).toBe(9);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
