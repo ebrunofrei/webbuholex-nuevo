@@ -149,3 +149,27 @@ export function readComplaintsAdminDatabaseConfig(
     prepare: false,
   };
 }
+
+export type AuthorizationDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readAuthorizationDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): AuthorizationDatabaseRuntimeConfig {
+  const url = source.DATABASE_AUTHORIZATION_URL;
+  if (!url) {
+    throw new Error("authorization_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("authorization_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}

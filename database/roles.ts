@@ -37,3 +37,14 @@ export async function withComplaintsAdminRole<T>(
     return await callback(tx);
   });
 }
+
+export async function withComplaintsAuthorizationRole<T>(
+  db: PostgresJsDatabase<typeof schema>,
+  callback: (tx: ComplaintsTransaction) => Promise<T>
+): Promise<T> {
+  return await db.transaction(async (tx) => {
+    // FAIL CLOSED: If SET LOCAL ROLE fails, an error is thrown and callback is NEVER executed.
+    await tx.execute(sql`SET LOCAL ROLE complaints_authorization_runtime`);
+    return await callback(tx);
+  });
+}
