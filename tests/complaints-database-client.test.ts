@@ -4,7 +4,7 @@ vi.mock("server-only", () => {
   return {};
 });
 
-import { createDatabaseClient, getDatabase, getComplaintsApiDatabase, getComplaintsWorkerDatabase } from "@/database/client";
+import { createDatabaseClient, getDatabase, getComplaintsApiDatabase, getComplaintsWorkerDatabase, createComplaintsAdminDatabaseClient, getComplaintsAdminDatabase } from "@/database/client";
 import * as configModule from "@/database/config";
 import * as schema from "@/database/schema";
 
@@ -37,6 +37,7 @@ describe("complaints-database-client", () => {
     delete (globalThis as unknown as Record<string, unknown>).__buholexDatabaseClient__;
     delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsApiClient__;
     delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsWorkerClient__;
+    delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsAdminClient__;
     vi.clearAllMocks();
   });
 
@@ -45,6 +46,7 @@ describe("complaints-database-client", () => {
     delete (globalThis as unknown as Record<string, unknown>).__buholexDatabaseClient__;
     delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsApiClient__;
     delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsWorkerClient__;
+    delete (globalThis as unknown as Record<string, unknown>).__buholexComplaintsAdminClient__;
     vi.restoreAllMocks();
   });
 
@@ -160,6 +162,78 @@ describe("complaints-database-client", () => {
     expect(indexExports).not.toHaveProperty("getComplaintsWorkerDatabase");
     expect(indexExports).not.toHaveProperty("createComplaintsApiDatabaseClient");
     expect(indexExports).not.toHaveProperty("createComplaintsWorkerDatabaseClient");
+    expect(indexExports).not.toHaveProperty("getComplaintsAdminDatabase");
+    expect(indexExports).not.toHaveProperty("createComplaintsAdminDatabaseClient");
+    expect(indexExports).not.toHaveProperty("readComplaintsAdminDatabaseConfig");
+  });
+  describe("Admin DB client", () => {
+  it("B1. createComplaintsAdminDatabaseClient pasa ssl:'require' a postgres", () => {
+    const config: configModule.ComplaintsAdminDatabaseRuntimeConfig = {
+      url: "postgres://admin:pass@localhost:5432/db",
+      maxConnections: 1,
+      idleTimeoutSeconds: 20,
+      connectTimeoutSeconds: 5,
+      prepare: false,
+    };
+    createComplaintsAdminDatabaseClient(config);
+    expect(postgres).toHaveBeenCalledWith(
+      "postgres://admin:pass@localhost:5432/db",
+      expect.objectContaining({ ssl: "require" })
+    );
   });
 
+  it("B2. getComplaintsAdminDatabase reutiliza singleton en development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DATABASE_ADMIN_URL", "postgres://admin:pass@localhost:5432/db");
+    const db1 = getComplaintsAdminDatabase();
+    const db2 = getComplaintsAdminDatabase();
+    expect(db1).toBe(db2);
+    expect(postgres).toHaveBeenCalledTimes(1);
+  });
+
+  it("B3. getComplaintsAdminDatabase crea instancia nueva por llamada en production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DATABASE_ADMIN_URL", "postgres://admin:pass@localhost:5432/db");
+    const db1 = getComplaintsAdminDatabase();
+    const db2 = getComplaintsAdminDatabase();
+    expect(db1).not.toBe(db2);
+    expect(postgres).toHaveBeenCalledTimes(2);
+  });
+
+  it("B4. getComplaintsAdminDatabase lanza si DATABASE_ADMIN_URL falta (sin fallback a DATABASE_API_URL)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DATABASE_API_URL", "postgres://api:pass@localhost:5432/db");
+    // Sin DATABASE_ADMIN_URL
+    expect(() => getComplaintsAdminDatabase())
+      .toThrow("complaints_admin_database_configuration_missing");
+    expect(postgres).not.toHaveBeenCalled();
+  });
+
+  it("B5. Admin client es instancia diferente a API client y Worker client", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DATABASE_ADMIN_URL", "postgres://admin:pass@localhost:5432/db");
+    vi.stubEnv("DATABASE_API_URL", "postgres://api:pass@localhost:5432/db");
+    vi.stubEnv("DATABASE_WORKER_URL", "postgres://worker:pass@localhost:5432/db");
+    const adminDb = getComplaintsAdminDatabase();
+    const apiDb = getComplaintsApiDatabase();
+    const workerDb = getComplaintsWorkerDatabase();
+    expect(adminDb).not.toBe(apiDb);
+    expect(adminDb).not.toBe(workerDb);
+  });
+
+  it("B6. postgres llamado con DATABASE_ADMIN_URL correcto (no DATABASE_API_URL)", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DATABASE_ADMIN_URL", "postgres://admin:secret@host:5432/db");
+    vi.stubEnv("DATABASE_API_URL", "postgres://api:other@host:5432/db");
+    getComplaintsAdminDatabase();
+    expect(postgres).toHaveBeenCalledWith(
+      "postgres://admin:secret@host:5432/db",
+      expect.objectContaining({ ssl: "require" })
+    );
+    expect(postgres).not.toHaveBeenCalledWith(
+      "postgres://api:other@host:5432/db",
+      expect.anything()
+    );
+  });
+  });
 });

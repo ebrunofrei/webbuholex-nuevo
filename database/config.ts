@@ -82,6 +82,7 @@ export function readDatabaseMigrationConfig(
 
 export type ComplaintsApiDatabaseRuntimeConfig = DatabaseRuntimeConfig;
 export type ComplaintsWorkerDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+export type ComplaintsAdminDatabaseRuntimeConfig = DatabaseRuntimeConfig;
 
 export function readComplaintsApiDatabaseConfig(
   source: Readonly<Record<string, string | undefined>> = process.env
@@ -116,6 +117,28 @@ export function readComplaintsWorkerDatabaseConfig(
   const result = pgUrlSchema.safeParse(url);
   if (!result.success) {
     throw new Error("complaints_worker_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}
+
+export function readComplaintsAdminDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): ComplaintsAdminDatabaseRuntimeConfig {
+  const url = source.DATABASE_ADMIN_URL;
+  if (!url) {
+    throw new Error("complaints_admin_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("complaints_admin_database_configuration_invalid");
   }
 
   return {

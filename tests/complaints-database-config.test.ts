@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readDatabaseRuntimeConfig, readDatabaseMigrationConfig, readComplaintsApiDatabaseConfig, readComplaintsWorkerDatabaseConfig } from "@/database/config";
+import { readDatabaseRuntimeConfig, readDatabaseMigrationConfig, readComplaintsApiDatabaseConfig, readComplaintsWorkerDatabaseConfig, readComplaintsAdminDatabaseConfig } from "@/database/config";
 
 describe("complaints-database-config (Runtime)", () => {
   it("accepts valid postgres:// URL", () => {
@@ -130,5 +130,63 @@ describe("complaints-database-config (Complaints Worker)", () => {
   it("throws error for invalid URL without leaking", () => {
     const source = { DATABASE_WORKER_URL: "http://user:pass@localhost:5432/db" };
     expect(() => readComplaintsWorkerDatabaseConfig(source)).toThrow("complaints_worker_database_configuration_invalid");
+  });
+});
+
+describe("complaints-database-config (Complaints Admin)", () => {
+
+  it("A1. acepta URL válida desde DATABASE_ADMIN_URL", () => {
+    const source = { DATABASE_ADMIN_URL: "postgres://admin:pass@localhost:5432/db" };
+    const config = readComplaintsAdminDatabaseConfig(source);
+    expect(config.url).toBe("postgres://admin:pass@localhost:5432/db");
+  });
+
+  it("A2. lanza complaints_admin_database_configuration_missing si DATABASE_ADMIN_URL ausente", () => {
+    expect(() => readComplaintsAdminDatabaseConfig({})).toThrow("complaints_admin_database_configuration_missing");
+  });
+
+  it("A3. sin fallback a DATABASE_URL aunque exista", () => {
+    const source = { DATABASE_URL: "postgres://api:pass@localhost:5432/db" };
+    expect(() => readComplaintsAdminDatabaseConfig(source)).toThrow("complaints_admin_database_configuration_missing");
+  });
+
+  it("A4. sin fallback a DATABASE_API_URL aunque exista", () => {
+    const source = { DATABASE_API_URL: "postgres://api:pass@localhost:5432/db" };
+    expect(() => readComplaintsAdminDatabaseConfig(source)).toThrow("complaints_admin_database_configuration_missing");
+  });
+
+  it("A5. sin fallback a DATABASE_WORKER_URL aunque exista", () => {
+    const source = { DATABASE_WORKER_URL: "postgres://worker:pass@localhost:5432/db" };
+    expect(() => readComplaintsAdminDatabaseConfig(source)).toThrow("complaints_admin_database_configuration_missing");
+  });
+
+  it("A6. lanza complaints_admin_database_configuration_invalid para URL HTTP", () => {
+    const source = { DATABASE_ADMIN_URL: "http://admin:pass@localhost:5432/db" };
+    expect(() => readComplaintsAdminDatabaseConfig(source)).toThrow("complaints_admin_database_configuration_invalid");
+  });
+
+  it("A7. lanza complaints_admin_database_configuration_invalid para URL sin password", () => {
+    const source = { DATABASE_ADMIN_URL: "postgres://admin@localhost:5432/db" };
+    expect(() => readComplaintsAdminDatabaseConfig(source)).toThrow("complaints_admin_database_configuration_invalid");
+  });
+
+  it("A8. enforce: prepare false, maxConnections 1, idle 20, connect 5", () => {
+    const source = { DATABASE_ADMIN_URL: "postgres://admin:pass@localhost:5432/db" };
+    const config = readComplaintsAdminDatabaseConfig(source);
+    expect(config.prepare).toBe(false);
+    expect(config.maxConnections).toBe(1);
+    expect(config.idleTimeoutSeconds).toBe(20);
+    expect(config.connectTimeoutSeconds).toBe(5);
+  });
+
+  it("A9. mensaje de error no contiene URL ni password", () => {
+    expect.assertions(3);
+    try {
+      readComplaintsAdminDatabaseConfig({ DATABASE_ADMIN_URL: "http://admin:secret@host/db" });
+    } catch (e: unknown) {
+      expect((e as Error).message).not.toContain("http://");
+      expect((e as Error).message).not.toContain("secret");
+      expect((e as Error).message).toBe("complaints_admin_database_configuration_invalid");
+    }
   });
 });
