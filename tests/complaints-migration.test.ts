@@ -42,7 +42,7 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(9);
+    expect(journalContent.entries.length).toBe(10);
     expect(journalContent.entries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );

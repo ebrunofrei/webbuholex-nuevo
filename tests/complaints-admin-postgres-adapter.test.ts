@@ -3,6 +3,12 @@ import { createComplaintsAdminPersistenceAdapter } from "@/database/adapters/com
 import { createComplaintsAdminRepository } from "@/database/repositories/complaints.repository";
 import { SanitizedDatabaseConstraintError, createComplaintPersistenceError } from "@/database/repositories/complaints.errors";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type {
+  ComplaintAdminTransactionExecutor,
+  ComplaintsAdminPersistenceAdapter,
+  ComplaintProviderResponseInsertInput,
+  ComplaintOutboxInsertInput,
+} from "@/database/repositories/complaints.types";
 import * as schema from "@/database/schema";
 
 type DummyDb = PostgresJsDatabase<typeof schema>;
@@ -44,9 +50,9 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
       })
     });
 
-    const mockInsert = vi.fn((table) => {
+    const mockInsert = vi.fn(() => {
       return {
-        values: vi.fn(async (vals) => {
+        values: vi.fn(async () => {
           if (forceFailure && forceFailure.step === "insert") {
              // to simulate specific inserts failing based on data or just general failure
              throw forceFailure.error;
@@ -56,9 +62,9 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
       };
     });
 
-    const mockUpdate = vi.fn((table) => {
+    const mockUpdate = vi.fn(() => {
       return {
-        set: vi.fn((vals) => {
+        set: vi.fn(() => {
           if (forceFailure && forceFailure.step === "update") {
              throw forceFailure.error;
           }
@@ -131,40 +137,41 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
 
   // --- B. EXACT COMPLAINT UPDATE ---
   it("B.4. B.5. B.6. EXACT COMPLAINT UPDATE shape", async () => {
-    let capturedUpdateVals: any;
-    const { mockDb } = createMockDb({ id: "c-123", status: "under_review" }, false, [{ id: "c-123" }]);
-    const adapter = createComplaintsAdminPersistenceAdapter(mockDb);
+    let capturedUpdateVals: { status: string; updated_at: Date } & Record<string, unknown>;
     // Overriding the adapter to capture the update
-    const repo = createComplaintsAdminRepository({
-      transaction: async (cb) => {
-        return cb({
-           getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" }),
-           checkInitialResponseExists: async () => false,
-           insertProviderResponse: async () => {},
-           updateComplaintStatusToAnswered: async (id, expected, updatedAt) => {
-              capturedUpdateVals = { status: "answered", updated_at: updatedAt };
-              return 1;
-           },
-           insertResponseStatusHistory: async () => {},
-           insertResponseAuditEvent: async () => {},
-           insertResponseOutbox: async () => {},
-        });
-      }
-    }, dummyClock);
+    const repo = createComplaintsAdminRepository(
+      {
+        transaction: async (cb) => {
+          return cb({
+             getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" as const }),
+             checkInitialResponseExists: async () => false,
+             insertProviderResponse: async () => {},
+             updateComplaintStatusToAnswered: async (_id, _expected, updatedAt) => {
+                capturedUpdateVals = { status: "answered", updated_at: updatedAt };
+                return 1;
+             },
+             insertResponseStatusHistory: async () => {},
+             insertResponseAuditEvent: async () => {},
+             insertResponseOutbox: async () => {},
+          });
+        }
+      } satisfies ComplaintsAdminPersistenceAdapter,
+      dummyClock
+    );
 
     await repo.issueInitialProviderResponse(baseInput);
 
     // 4. complaint status changed exactly once - guaranteed by the repo workflow calling it once
     // 5. update shape contiene status, updated_at
-    expect(capturedUpdateVals.status).toBe("answered");
-    expect(capturedUpdateVals.updated_at).toBeDefined();
+    expect(capturedUpdateVals!.status).toBe("answered");
+    expect(capturedUpdateVals!.updated_at).toBeDefined();
 
     // 6. update shape NO contiene: version, closed_at, payload_snapshot, deadline_at, private_token_hash, ninguna PII
-    expect(capturedUpdateVals.version).toBeUndefined();
-    expect(capturedUpdateVals.closed_at).toBeUndefined();
-    expect(capturedUpdateVals.payload_snapshot).toBeUndefined();
-    expect(capturedUpdateVals.deadline_at).toBeUndefined();
-    expect(capturedUpdateVals.private_token_hash).toBeUndefined();
+    expect(capturedUpdateVals!.version).toBeUndefined();
+    expect(capturedUpdateVals!.closed_at).toBeUndefined();
+    expect(capturedUpdateVals!.payload_snapshot).toBeUndefined();
+    expect(capturedUpdateVals!.deadline_at).toBeUndefined();
+    expect(capturedUpdateVals!.private_token_hash).toBeUndefined();
   });
 
   // --- C. PROVIDER RESPONSE IMMUTABILITY ---
@@ -173,18 +180,18 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
     const adapter = createComplaintsAdminPersistenceAdapter(mockDb);
     const repo = createComplaintsAdminRepository(adapter, dummyClock);
 
-    expect((repo as any).updateProviderResponse).toBeUndefined();
-    expect((repo as any).deleteProviderResponse).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).updateProviderResponse).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).deleteProviderResponse).toBeUndefined();
   });
 
   // --- D. TRANSACTION FAILURE / ROLLBACK CONTRACT ---
   function createFailureRepo(stepToFail: string) {
     const errorToThrow = new Error("simulated " + stepToFail + " failure");
-    const adapter = {
-      transaction: async (cb: any) => {
+    const adapter: ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
         try {
-           const tx = {
-              getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" }),
+           const tx: ComplaintAdminTransactionExecutor = {
+              getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" as const }),
               checkInitialResponseExists: async () => false,
               insertProviderResponse: async () => { if(stepToFail === "insertProviderResponse") throw errorToThrow; },
               updateComplaintStatusToAnswered: async () => { if(stepToFail === "updateComplaintStatusToAnswered") throw errorToThrow; return 1; },
@@ -193,7 +200,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
               insertResponseOutbox: async () => { if(stepToFail === "insertResponseOutbox") throw errorToThrow; },
            };
            return await cb(tx);
-        } catch (e: any) {
+        } catch {
            throw createComplaintPersistenceError("complaint_transaction_failed");
         }
       }
@@ -227,19 +234,18 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
 
   // --- E. PRIVACY / SECRET BOUNDARY ---
   it("E.14. E.15. E.16. E.17. E.18. E.19. E.20. E.21. E.22. PRIVACY / SECRET BOUNDARY", async () => {
-    let capturedOutbox: any;
-    let capturedResponse: any;
+    let capturedOutbox: ComplaintOutboxInsertInput;
 
-    const adapter = {
-      transaction: async (cb: any) => {
+    const adapter: ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
         return cb({
-           getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" }),
+           getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" as const }),
            checkInitialResponseExists: async () => false,
-           insertProviderResponse: async (input: any) => { capturedResponse = input; },
+           insertProviderResponse: async () => {},
            updateComplaintStatusToAnswered: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
-           insertResponseOutbox: async (input: any) => { capturedOutbox = input; },
+           insertResponseOutbox: async (input: ComplaintOutboxInsertInput) => { capturedOutbox = input; },
         });
       }
     };
@@ -255,12 +261,12 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
     expect(inputKeys).not.toContain("idempotencyHashKeyVersion");
 
     // E.19, E.20, E.21: absent from outbox payload
-    expect(capturedOutbox.payload).not.toHaveProperty("consumer");
-    expect(capturedOutbox.payload).not.toHaveProperty("operatorId");
-    expect(capturedOutbox.payload).not.toHaveProperty("responseText");
+    expect(capturedOutbox!.payload).not.toHaveProperty("consumer");
+    expect(capturedOutbox!.payload).not.toHaveProperty("operatorId");
+    expect(capturedOutbox!.payload).not.toHaveProperty("responseText");
 
     // E.22: outbox payload exact shape
-    expect(capturedOutbox.payload).toEqual({
+    expect(capturedOutbox!.payload).toEqual({
       complaintId: "c-123",
       version: 1
     });
@@ -268,13 +274,13 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
 
   // --- F. DOMAIN BOUNDARY ---
   it("F.23. F.24. DOMAIN BOUNDARY", async () => {
-    let capturedResponse: any;
-    const adapter = {
-      transaction: async (cb: any) => {
+    let capturedResponse: ComplaintProviderResponseInsertInput;
+    const adapter: ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
         return cb({
-           getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" }),
+           getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" as const }),
            checkInitialResponseExists: async () => false,
-           insertProviderResponse: async (input: any) => { capturedResponse = input; },
+           insertProviderResponse: async (input: ComplaintProviderResponseInsertInput) => { capturedResponse = input; },
            updateComplaintStatusToAnswered: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
@@ -287,7 +293,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
     await repo.issueInitialProviderResponse({ ...baseInput, responseText: unnormalizedResponse });
 
     // F.23. persistence no vuelve a normalizar responseText
-    expect(capturedResponse.responseText).toBe(unnormalizedResponse);
+    expect(capturedResponse!.responseText).toBe(unnormalizedResponse);
 
     // F.24. response channel validated in domain, repo accepts it trusted
     // Since channel is typed as "email" in input, ts handles it.
