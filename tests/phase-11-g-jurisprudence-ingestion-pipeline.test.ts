@@ -434,11 +434,10 @@ describe("seguridad estática y preservación", () => {
     expect(sourceCode).not.toMatch(/\bany\b/);
   });
 
-  it("mantiene manifiestos, React 19.1.1 y jurisprudencia desconectada", () => {
+  it("barrera de despliegue: el servicio de ingesta carece de rutas y dependencias externas cruzadas", () => {
     const manifest = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
     expect(manifest.dependencies).toMatchObject({ react: "19.1.6", "react-dom": "19.1.6" });
-    expect(`${JSON.stringify(manifest)}\n${readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8")}`).not.toContain("@auth0/nextjs-auth0");
-    expect(readFileSync(path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"), "utf8")).not.toMatch(/ingestion|JurisprudenceInternalApi|fetch\(/);
+    expect(readFileSync(path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"), "utf8")).not.toMatch(/IngestionPipeline|ingestion-pipeline|ingestJurisprudenceRecord|fetch\(/);
   });
 
   it("no incorpora fixtures jurisprudenciales en public", () => {

@@ -3,10 +3,10 @@ export type AuthStatus = "authenticated" | "unauthenticated" | "loading" | "not_
 export interface WorkspaceSession {
   status: AuthStatus;
   sessionId: string | null;
-  subjectId: string | null;
+  providerSubjectId: string | null;
   issuedAt: string | null;
   expiresAt: string | null;
-  provider: null;
+  provider: "auth0" | null;
 }
 
 export interface WorkspaceGuardDecision {

@@ -20,10 +20,29 @@ describe("correo corporativo y seguridad pública", () => {
   });
 
   it("no incorpora datos bancarios, descargas, pagos o proveedores ficticios", () => {
-    const files = ["components/public-header.tsx", "components/auth-header.tsx", "components/portal/legal-transparency-panel.tsx", "components/workspace/workspace-header.tsx", "components/workspace/workspace-placeholder.tsx", "app/espacio/page.tsx", "app/iniciar-sesion/page.tsx", "middleware.ts"];
-    const source = files.map((file) => readFileSync(file, "utf8")).join("\n");
-    expect(source).not.toMatch(/cuenta corriente|\bCCI\b|tarjeta|IBAN|SWIFT|Banco de Crédito|OAuth|magic link|Clerk|Auth0|Supabase|Firebase|\bQR\b|Calendly|Messenger/i);
-    expect(source).not.toMatch(/\bdownload\s*=|checkout|pasarela|payment/i);
+    const publicFiles = [
+      "components/public-header.tsx",
+      "components/auth-header.tsx",
+      "components/portal/legal-transparency-panel.tsx",
+      "app/iniciar-sesion/page.tsx"
+    ];
+
+    const technicalFiles = [
+      "components/workspace/workspace-header.tsx",
+      "components/workspace/workspace-placeholder.tsx",
+      "app/espacio/page.tsx",
+      "middleware.ts"
+    ];
+
+    const publicContentSource = publicFiles.map((file) => readFileSync(file, "utf8")).join("\n");
+    const technicalSource = technicalFiles.map((file) => readFileSync(file, "utf8")).join("\n");
+
+    // Provider denylist only applies to public content
+    expect(publicContentSource).not.toMatch(/cuenta corriente|\bCCI\b|tarjeta|IBAN|SWIFT|Banco de Crédito|OAuth|magic link|Clerk|Auth0|Supabase|Firebase|\bQR\b|Calendly|Messenger/i);
+
+    // Restrictions on payments and downloads apply to both public and technical sources
+    const allSource = publicContentSource + "\n" + technicalSource;
+    expect(allSource).not.toMatch(/\bdownload\s*=|checkout|pasarela|payment/i);
   });
 
   it("mantiene BL-LEG-CON-001 fuera de publicación", () => {

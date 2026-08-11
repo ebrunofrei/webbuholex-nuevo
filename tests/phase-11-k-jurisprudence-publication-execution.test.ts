@@ -300,8 +300,8 @@ describe("barreras estáticas y preservación", () => {
     expect(appEntries.some((entry) => entry.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(entry))).toBe(false);
     const page = readFileSync(path.join(ROOT, "app", "jurisprudencia", "page.tsx"), "utf8"); expect(page).not.toMatch(/publication-execution|executePublication|JurisprudencePublicationExecution/);
   });
-  it("no instala Auth0 ni cambia React", () => {
-    const manifest = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")); expect(manifest.dependencies).not.toHaveProperty("@auth0/nextjs-auth0"); expect(manifest.dependencies.react).toBe("19.1.6"); expect(manifest.dependencies["react-dom"]).toBe("19.1.6");
+  it("mantiene versiones de React", () => {
+    const manifest = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")); expect(manifest.dependencies.react).toBe("19.1.6"); expect(manifest.dependencies["react-dom"]).toBe("19.1.6");
   });
   it("el servicio depende de puertos y no de adaptadores o UI", () => {
     const source = readFileSync(path.join(ROOT, "lib", "jurisprudence-publication-execution-service.ts"), "utf8"); expect(source).not.toMatch(/in-memory|sqlite-jurisprudence|@\/app|@\/components|next\//i); expect(source).not.toMatch(/fetch\(|scrap|OCR|embedding|RAG|Auth0/i);

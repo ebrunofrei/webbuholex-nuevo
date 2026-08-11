@@ -428,10 +428,9 @@ describe("publicación, seguridad estática y preservación", () => {
     expect(readFileSync(path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"), "utf8")).not.toMatch(/EditorialWorkflow|editorial-workflow|fetch\(/);
   });
 
-  it("mantiene package y lockfile sin Auth0 y React/React DOM en 19.1.1", () => {
+  it("mantiene package y lockfile con React y Next en las versiones esperadas", () => {
     const manifest: unknown = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
-    expect(manifest).toMatchObject({ dependencies: { react: "19.1.6", "react-dom": "19.1.6" } });
-    expect(`${JSON.stringify(manifest)}\n${readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8")}`).not.toContain("@auth0/nextjs-auth0");
+    expect(manifest).toMatchObject({ dependencies: { react: "19.1.6", next: "15.5.23" } });
   });
 
   it("preserva estructuralmente SRV-WEB-001 y BL-LEG-CON-001", () => {

@@ -25,6 +25,7 @@ const projectManifestSchema = z.object({
     react: z.literal("19.1.6"),
     "react-dom": z.literal("19.1.6"),
     zod: z.string(),
+    "@auth0/nextjs-auth0": z.string().optional(),
     "drizzle-orm": z.string().optional(),
     postgres: z.string().optional(),
     "server-only": z.string().optional(),
@@ -201,12 +202,12 @@ describe("decisión discriminada y readiness institucional", () => {
 });
 
 describe("barreras estáticas y preservación del proyecto", () => {
-  it("mantiene Auth0 fuera del manifiesto y del lockfile", () => {
-    expect(`${readProjectFile("package.json")}\n${readProjectFile("pnpm-lock.yaml")}`).not.toContain("@auth0/nextjs-auth0");
+  it("Auth0 4.26.0 está instalado según la autorización de B5B", () => {
+    expect(`${readProjectFile("package.json")}\n${readProjectFile("pnpm-lock.yaml")}`).toContain("@auth0/nextjs-auth0");
   });
 
-  it("no importa el SDK recomendado", () => {
-    const roots = ["app", "components", "data", "lib", "types"];
+  it("restringe la importación del SDK recomendado a las capas autorizadas", () => {
+    const roots = ["app", "components", "data", "types"];
     const sources = roots.flatMap((root) => readdirSync(path.join(process.cwd(), root), { recursive: true })
       .filter((entry): entry is string => typeof entry === "string" && /\.(ts|tsx)$/.test(entry))
       .map((entry) => readFileSync(path.join(process.cwd(), root, entry), "utf8"))).join("\n");

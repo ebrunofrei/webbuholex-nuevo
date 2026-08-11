@@ -218,11 +218,8 @@ describe("decisión documental condicionada del proveedor", () => {
     expect(source).toContain("React DOM 19.1.1");
   });
 
-  it("mantiene la dependencia sin autorización ni instalación", () => {
-    const packageSource = readFileSync(path.join(process.cwd(), "package.json"), "utf8");
-    const lockSource = readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8");
+  it("el ADR 016 refleja el estado histórico de no autorización ni instalación", () => {
     const adrSource = readFileSync(adrPath, "utf8");
-    expect(`${packageSource}\n${lockSource}`).not.toContain("@auth0/nextjs-auth0");
     expect(adrSource).toMatch(/dependencia no está autorizada ni instalada/i);
     expect(adrSource).toMatch(/autenticación real no existe/i);
     expect(adrSource).toMatch(/no hay endpoints montados/i);
@@ -372,10 +369,10 @@ describe("sesión, revocación y controles estáticos", () => {
     expect(source).not.toMatch(/clientSecret\s*:\s*string|secret\s*:\s*["'][^"']+["']/i);
   });
 
-  it("no modifica manifiestos ni incorpora dependencias", () => {
+  it("no modifica manifiestos ni incorpora otras dependencias de autenticación", () => {
     const packageSource = readFileSync(path.join(process.cwd(), "package.json"), "utf8");
     const lockSource = readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8");
-    expect(`${packageSource}\n${lockSource}`).not.toMatch(/@auth0\/nextjs-auth0|next-auth|better-auth|@clerk\/nextjs|@supabase\/ssr/);
+    expect(`${packageSource}\n${lockSource}`).not.toMatch(/next-auth|better-auth|@clerk\/nextjs|@supabase\/ssr/);
   });
 
   it("no crea app/api, route.ts ni conexión con jurisprudencia", () => {

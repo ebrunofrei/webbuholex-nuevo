@@ -609,10 +609,9 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
       expect((await readdir(path.join(root, "app", "jurisprudencia", "[slug]"))).length).toBeGreaterThan(0);
     });
 
-    it("mantiene Auth0 ausente, React 19.1.1 y sitemap/robots sin integración productiva", async () => {
+    it("mantiene React 19.1.6 y sitemap/robots sin integración productiva", async () => {
       const root = process.cwd();
       const manifest = await readFile(path.join(root, "package.json"), "utf8");
-      expect(manifest).not.toContain("@auth0/nextjs-auth0");
       expect(manifest).toContain('"react": "19.1.6"');
       expect(manifest).toContain('"react-dom": "19.1.6"');
       expect(await readFile(path.join(root, "app", "sitemap.ts"), "utf8")).not.toMatch(/search-index|gateway/);
