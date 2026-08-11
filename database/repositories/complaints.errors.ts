@@ -4,7 +4,12 @@ export type ComplaintPersistenceErrorCode =
   | "complaint_sequence_failed"
   | "complaint_sequence_exhausted"
   | "complaint_database_constraint_failed"
-  | "complaint_existing_record_incomplete";
+  | "complaint_existing_record_incomplete"
+  | "complaint_not_found"
+  | "complaint_stale_status"
+  | "complaint_fk_violation"
+  | "complaint_response_invalid_status"
+  | "complaint_initial_response_already_exists";
 
 export class ComplaintPersistenceError extends Error {
   public readonly code: ComplaintPersistenceErrorCode;

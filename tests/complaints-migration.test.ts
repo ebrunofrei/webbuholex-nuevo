@@ -7,8 +7,8 @@ describe("Complaints Database Migration", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    // There must be exactly 9 migrations now
-    expect(sqlFiles.length).toBe(9);
+    // There must be exactly 10 migrations now
+    expect(sqlFiles.length).toBe(10);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
@@ -23,6 +23,9 @@ describe("Complaints Database Migration", () => {
     );
     expect(sqlFiles[8]).toBe(
       "0008_complaints_environment_marker_contract.sql",
+    );
+    expect(sqlFiles[9]).toBe(
+      "0009_complaints_admin_runtime.sql",
     );
 
 
@@ -389,6 +392,52 @@ describe("Complaints Database Migration", () => {
     expect(normalizedContent).not.toMatch(/REVOKE/i);
     expect(normalizedContent).not.toMatch(/password/i);
     expect(normalizedContent).not.toMatch(/secret/i);
+  });
+  it("should have correct setup for 0009 admin runtime and completion tests", () => {
+    const files = readdirSync(join(process.cwd(), "database", "migrations"));
+    const sqlFile = files.find((f) => f.startsWith("0009"));
+    expect(sqlFile).toBeDefined();
+    const content = readFileSync(
+      join(process.cwd(), "database", "migrations", sqlFile!),
+      "utf8",
+    );
+    const normalizedContent = content.replace(/\s+/g, " ");
+
+    // ADMIN ALLOWED:
+    expect(normalizedContent).toMatch(/GRANT SELECT \(id, status\) ON complaints_private\.complaints TO complaints_admin_runtime/i);
+    expect(normalizedContent).toMatch(/GRANT UPDATE \(status, updated_at\) ON complaints_private\.complaints TO complaints_admin_runtime/i);
+    expect(normalizedContent).toMatch(/GRANT SELECT \(id, complaint_id, version\) ON complaints_private\.complaint_provider_responses TO complaints_admin_runtime/i);
+    expect(normalizedContent).toMatch(/GRANT INSERT \(\s*complaint_id,\s*version,\s*response_text,\s*actions_taken,\s*responded_at,\s*response_channel,\s*responder_name,\s*responder_role\s*\) ON complaints_private\.complaint_provider_responses TO complaints_admin_runtime/i);
+    expect(normalizedContent).toMatch(/GRANT INSERT \(\s*complaint_id,\s*from_status,\s*to_status,\s*changed_by\s*\) ON complaints_private\.complaint_status_history TO complaints_admin_runtime/i);
+    expect(normalizedContent).toMatch(/GRANT INSERT \(\s*complaint_id,\s*event_type,\s*metadata,\s*created_by\s*\) ON complaints_private\.complaint_audit_events TO complaints_admin_runtime/i);
+    expect(normalizedContent).toMatch(/GRANT INSERT \(\s*complaint_id,\s*event_type,\s*payload\s*\) ON complaints_private\.complaint_outbox TO complaints_admin_runtime/i);
+
+    // ADMIN DENIED (Negatives)
+    expect(normalizedContent).not.toMatch(/private_token_hash/i);
+    expect(normalizedContent).not.toMatch(/payload_snapshot/i);
+    // consumer PII implicitly inside payload_snapshot
+    expect(normalizedContent).not.toMatch(/UPDATE \([^;]*version[^;]*\) ON/i);
+    expect(normalizedContent).not.toMatch(/closed_at/i);
+    expect(normalizedContent).not.toMatch(/correction_reason/i);
+    expect(normalizedContent).not.toMatch(/supersedes_response_id/i);
+    expect(normalizedContent).not.toMatch(/delivery_evidence_reference/i);
+    expect(normalizedContent).not.toMatch(/UPDATE[^;]*complaint_provider_responses/i);
+    expect(normalizedContent).not.toMatch(/DELETE[^;]*complaint_provider_responses/i);
+    expect(normalizedContent).not.toMatch(/UPDATE[^;]*complaint_outbox/i);
+    expect(normalizedContent).not.toMatch(/DELETE[^;]*complaint_outbox/i);
+
+    // AISLAMIENTO
+    expect(normalizedContent).not.toMatch(/complaints_api_runtime[^;]*complaint_provider_responses/i);
+    expect(normalizedContent).not.toMatch(/complaints_outbox_worker[^;]*complaint_provider_responses/i);
+    // login direct grants (functional)
+    expect(normalizedContent).not.toMatch(/GRANT (SELECT|INSERT|UPDATE|DELETE)[^;]*TO complaints_admin_login/i);
+    expect(normalizedContent).toContain("GRANT complaints_admin_runtime TO complaints_admin_login WITH ADMIN FALSE, INHERIT FALSE, SET TRUE");
+    expect(normalizedContent).not.toMatch(/complaints_api_login[^;]*complaints_admin_runtime/i);
+    expect(normalizedContent).not.toMatch(/complaints_worker_login[^;]*complaints_admin_runtime/i);
+    expect(normalizedContent).not.toMatch(/PUBLIC/i);
+
+    // ACL CONTRACT TESTED
+    expect(true).toBe(true);
   });
 });
 

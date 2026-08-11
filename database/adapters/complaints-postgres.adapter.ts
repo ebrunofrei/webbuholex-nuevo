@@ -11,7 +11,9 @@ import type {
   ComplaintsOutboxWorkerPersistenceAdapter
 } from "../repositories/complaints.types";
 import { SanitizedDatabaseConstraintError, createComplaintPersistenceError } from "../repositories/complaints.errors";
-import { ComplaintsTransaction, withComplaintsApiRole } from "../roles";
+import { ComplaintsTransaction, withComplaintsApiRole, withComplaintsAdminRole } from "../roles";
+import type { ComplaintStatus } from "@/lib/complaints/complaint.types";
+import type { ComplaintProviderResponseInsertInput, ComplaintAdminTransactionExecutor, ComplaintsAdminPersistenceAdapter } from "../repositories/complaints.types";
 
 function findPostgresError(error: unknown, depth: number = 0): Record<string, unknown> | null {
   if (depth > 5 || typeof error !== "object" || error === null) return null;
@@ -221,4 +223,108 @@ export function createComplaintsWorkerPersistenceAdapter(
   // At present, the Worker adapter exposes no functional methods as outbox processing
   // is not yet implemented. This prevents the worker from accidentally accessing API methods.
   return {};
+}
+
+class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransactionExecutor {
+  constructor(private readonly tx: ComplaintsTransaction) {}
+
+  async getComplaintForUpdate(complaintId: string): Promise<{ id: string; status: ComplaintStatus } | null> {
+    try {
+      const rows = await this.tx
+        .select({
+          id: schema.complaints.id,
+          status: schema.complaints.status,
+        })
+        .from(schema.complaints)
+        .where(eq(schema.complaints.id, complaintId))
+        .for('update');
+      return rows.length > 0 ? (rows[0] as { id: string; status: ComplaintStatus }) : null;
+    } catch (e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
+  async checkInitialResponseExists(complaintId: string): Promise<boolean> {
+    try {
+      const rows = await this.tx
+        .select({ id: schema.complaintProviderResponses.id })
+        .from(schema.complaintProviderResponses)
+        .where(and(
+          eq(schema.complaintProviderResponses.complaintId, complaintId),
+          eq(schema.complaintProviderResponses.version, 1)
+        ));
+      return rows.length > 0;
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
+  async insertProviderResponse(input: ComplaintProviderResponseInsertInput): Promise<void> {
+    try {
+      await this.tx.insert(schema.complaintProviderResponses).values(input);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  async updateComplaintStatusToAnswered(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number> {
+    try {
+      const result = await this.tx.update(schema.complaints)
+        .set({ status: 'answered', updatedAt })
+        .where(and(
+          eq(schema.complaints.id, complaintId),
+          eq(schema.complaints.status, expectedStatus)
+        ))
+        .returning({ id: schema.complaints.id });
+      return result.length;
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
+  async insertResponseStatusHistory(input: ComplaintStatusHistoryInsertInput): Promise<void> {
+    try {
+      await this.tx.insert(schema.complaintStatusHistory).values(input);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  async insertResponseAuditEvent(input: ComplaintAuditInsertInput): Promise<void> {
+    try {
+      await this.tx.insert(schema.complaintAuditEvents).values(input);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  async insertResponseOutbox(input: ComplaintOutboxInsertInput): Promise<void> {
+    try {
+      await this.tx.insert(schema.complaintOutbox).values(input);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+}
+
+export function createComplaintsAdminPersistenceAdapter(
+  db: PostgresJsDatabase<typeof schema>,
+): ComplaintsAdminPersistenceAdapter {
+  if (!db || typeof db.transaction !== "function" || typeof db.select !== "function") {
+    throw new Error("Invalid database dependency provided.");
+  }
+  return {
+    async transaction<T>(
+      executor: (tx: ComplaintAdminTransactionExecutor) => Promise<T>
+    ): Promise<T> {
+      try {
+        return await withComplaintsAdminRole(db, async (tx) => {
+          const wrapper = new DrizzleComplaintAdminTransactionExecutor(tx);
+          return await executor(wrapper);
+        });
+      } catch (error) {
+        throw translateDatabaseError(error);
+      }
+    }
+  };
 }

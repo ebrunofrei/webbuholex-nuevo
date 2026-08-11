@@ -47,12 +47,13 @@ export type CreateComplaintResult =
       readonly deadlineAt: string;
     };
 
-import type { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents } from "../schema/complaints";
+import type { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents, complaintProviderResponses } from "../schema/complaints";
 
 export type ComplaintInsertInput = typeof complaints.$inferInsert;
 export type ComplaintStatusHistoryInsertInput = typeof complaintStatusHistory.$inferInsert;
 export type ComplaintAuditInsertInput = typeof complaintAuditEvents.$inferInsert;
 export type ComplaintOutboxInsertInput = typeof complaintOutbox.$inferInsert;
+export type ComplaintProviderResponseInsertInput = typeof complaintProviderResponses.$inferInsert;
 
 export interface InsertedComplaintSummary {
   readonly id: string;
@@ -103,4 +104,37 @@ export interface CreateComplaintRepositoryInput {
   readonly sheetYear: number;
   readonly submittedAt: Date;
   readonly deadlineAt: string;
+}
+
+export interface IssueInitialProviderResponseInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "under_review" | "awaiting_information";
+  readonly responseText: string;
+  readonly actionsTaken: string | null;
+  readonly respondedAt: Date;
+  readonly responseChannel: "email";
+  readonly responderName: string;
+  readonly responderRole: string;
+  readonly operatorId: string;
+}
+
+export type IssueInitialProviderResponseResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" }
+  | { readonly kind: "complaint_response_invalid_status" }
+  | { readonly kind: "complaint_initial_response_already_exists" };
+
+export interface ComplaintAdminTransactionExecutor {
+  getComplaintForUpdate(complaintId: string): Promise<{ id: string; status: ComplaintStatus } | null>;
+  checkInitialResponseExists(complaintId: string): Promise<boolean>;
+  insertProviderResponse(input: ComplaintProviderResponseInsertInput): Promise<void>;
+  updateComplaintStatusToAnswered(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number>;
+  insertResponseStatusHistory(input: ComplaintStatusHistoryInsertInput): Promise<void>;
+  insertResponseAuditEvent(input: ComplaintAuditInsertInput): Promise<void>;
+  insertResponseOutbox(input: ComplaintOutboxInsertInput): Promise<void>;
+}
+
+export interface ComplaintsAdminPersistenceAdapter {
+  transaction<T>(operation: (tx: ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T>;
 }

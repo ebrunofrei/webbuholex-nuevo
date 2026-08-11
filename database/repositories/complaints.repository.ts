@@ -1,7 +1,8 @@
 import { ComplaintsPersistenceAdapter, CreateComplaintRepositoryInput, CreateComplaintPersistenceResult } from "./complaints.types";
 import { createComplaintPersistenceError, SanitizedDatabaseConstraintError } from "./complaints.errors";
-import { mapComplaintDomainToInsert, mapInitialComplaintStatusHistoryToInsert, mapComplaintReceiptOutboxToInsert, mapComplaintCreatedAuditEventToInsert } from "../mappers/complaints";
 import { formatComplaintSheetNumber } from "@/lib/complaints/complaint-identifiers";
+import { mapComplaintDomainToInsert, mapInitialComplaintStatusHistoryToInsert, mapComplaintReceiptOutboxToInsert, mapComplaintCreatedAuditEventToInsert, mapProviderResponseToInsert, mapAnsweredComplaintStatusHistoryToInsert, mapProviderResponseCreatedAuditEventToInsert, mapProviderResponseDeliveryOutboxToInsert } from "../mappers/complaints";
+import { Clock, ComplaintsAdminPersistenceAdapter, IssueInitialProviderResponseInput, IssueInitialProviderResponseResult } from "./complaints.types";
 
 export interface ComplaintsRepository {
   createComplaint(input: CreateComplaintRepositoryInput): Promise<CreateComplaintPersistenceResult>;
@@ -101,6 +102,90 @@ export function createComplaintsRepository(adapter: ComplaintsPersistenceAdapter
           throw createComplaintPersistenceError("complaint_existing_record_incomplete");
         }
 
+        if (err instanceof Error && err.name === "ComplaintPersistenceError") {
+          throw err;
+        }
+
+        throw createComplaintPersistenceError("complaint_transaction_failed");
+      }
+    }
+  };
+}
+
+export interface ComplaintsAdminRepository {
+  issueInitialProviderResponse(input: IssueInitialProviderResponseInput): Promise<IssueInitialProviderResponseResult>;
+}
+
+export function createComplaintsAdminRepository(adapter: ComplaintsAdminPersistenceAdapter, clock: Clock): ComplaintsAdminRepository {
+  return {
+    async issueInitialProviderResponse(input: IssueInitialProviderResponseInput): Promise<IssueInitialProviderResponseResult> {
+      if (input.expectedCurrentStatus !== "under_review" && input.expectedCurrentStatus !== "awaiting_information") {
+        return { kind: "complaint_response_invalid_status" };
+      }
+
+      try {
+        return await adapter.transaction(async (tx) => {
+          const complaint = await tx.getComplaintForUpdate(input.complaintId);
+          if (!complaint) {
+            return { kind: "complaint_not_found" };
+          }
+
+          if (complaint.status !== input.expectedCurrentStatus) {
+            return { kind: "complaint_stale_status" };
+          }
+
+          const exists = await tx.checkInitialResponseExists(input.complaintId);
+          if (exists) {
+            return { kind: "complaint_initial_response_already_exists" };
+          }
+
+          const responseInsert = mapProviderResponseToInsert({
+            complaintId: input.complaintId,
+            version: 1,
+            responseText: input.responseText,
+            actionsTaken: input.actionsTaken,
+            respondedAt: input.respondedAt,
+            responseChannel: input.responseChannel,
+            responderName: input.responderName,
+            responderRole: input.responderRole,
+          });
+
+          await tx.insertProviderResponse(responseInsert);
+
+          const updatedRows = await tx.updateComplaintStatusToAnswered(input.complaintId, input.expectedCurrentStatus, clock.now());
+          if (updatedRows === 0) {
+            throw createComplaintPersistenceError("complaint_stale_status");
+          }
+
+          const historyInsert = mapAnsweredComplaintStatusHistoryToInsert({
+            complaintId: input.complaintId,
+            fromStatus: input.expectedCurrentStatus,
+            changedBy: input.operatorId,
+          });
+          await tx.insertResponseStatusHistory(historyInsert);
+
+          const auditInsert = mapProviderResponseCreatedAuditEventToInsert({
+            complaintId: input.complaintId,
+            createdBy: input.operatorId,
+            metadata: { version: 1 },
+          });
+          await tx.insertResponseAuditEvent(auditInsert);
+
+          const outboxInsert = mapProviderResponseDeliveryOutboxToInsert({
+            complaintId: input.complaintId,
+            version: 1,
+          });
+          await tx.insertResponseOutbox(outboxInsert);
+
+          return { kind: "success" };
+        });
+      } catch (err) {
+        if (err instanceof SanitizedDatabaseConstraintError && err.code === "23505" && err.constraint === "complaint_provider_responses_comp_ver_idx") {
+          return { kind: "complaint_initial_response_already_exists" };
+        }
+        if (err instanceof SanitizedDatabaseConstraintError && err.code === "23503") {
+          throw createComplaintPersistenceError("complaint_fk_violation");
+        }
         if (err instanceof Error && err.name === "ComplaintPersistenceError") {
           throw err;
         }

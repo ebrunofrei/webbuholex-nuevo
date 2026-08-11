@@ -1,4 +1,4 @@
-import { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents } from "../schema/complaints";
+import { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents, complaintProviderResponses } from "../schema/complaints";
 
 export interface ComplaintPayloadSnapshotV1 {
   readonly schemaVersion: "1.0";
@@ -256,5 +256,82 @@ export function mapComplaintCreatedAuditEventToInsert(input: {
     eventType: "created",
     createdBy: input.createdBy,
     metadata: { snapshotVersion: "1.0" },
+  };
+}
+
+export interface ProviderResponseIssuePlanInsert {
+  readonly complaintId: string;
+  readonly version: number;
+  readonly responseText: string;
+  readonly actionsTaken: string | null;
+  readonly respondedAt: Date;
+  readonly responseChannel: "email";
+  readonly responderName: string;
+  readonly responderRole: string;
+}
+
+export function mapProviderResponseToInsert(
+  input: ProviderResponseIssuePlanInsert
+): typeof complaintProviderResponses.$inferInsert {
+  const allowedKeys = ["complaintId", "version", "responseText", "actionsTaken", "respondedAt", "responseChannel", "responderName", "responderRole"];
+  if (Object.keys(input).some(k => !allowedKeys.includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    version: input.version,
+    responseText: input.responseText,
+    actionsTaken: input.actionsTaken,
+    respondedAt: input.respondedAt,
+    responseChannel: input.responseChannel,
+    responderName: input.responderName,
+    responderRole: input.responderRole,
+  };
+}
+
+export function mapAnsweredComplaintStatusHistoryToInsert(input: {
+  readonly complaintId: string;
+  readonly fromStatus: "under_review" | "awaiting_information";
+  readonly changedBy: string;
+}): typeof complaintStatusHistory.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "fromStatus", "changedBy"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    fromStatus: input.fromStatus,
+    toStatus: "answered",
+    changedBy: input.changedBy,
+  };
+}
+
+export function mapProviderResponseCreatedAuditEventToInsert(input: {
+  readonly complaintId: string;
+  readonly createdBy: string;
+  readonly metadata: Record<string, unknown>;
+}): typeof complaintAuditEvents.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "createdBy", "metadata"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    eventType: "response_created",
+    createdBy: input.createdBy,
+    metadata: input.metadata,
+  };
+}
+
+export function mapProviderResponseDeliveryOutboxToInsert(input: {
+  readonly complaintId: string;
+  readonly version: number;
+}): typeof complaintOutbox.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "version"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    eventType: "complaint_response_delivery_requested",
+    payload: { complaintId: input.complaintId, version: input.version },
+    status: "pending",
   };
 }
