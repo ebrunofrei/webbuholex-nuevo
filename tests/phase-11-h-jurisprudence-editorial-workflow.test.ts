@@ -430,7 +430,7 @@ describe("publicación, seguridad estática y preservación", () => {
 
   it("mantiene package y lockfile sin Auth0 y React/React DOM en 19.1.1", () => {
     const manifest: unknown = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
-    expect(manifest).toMatchObject({ dependencies: { react: "19.1.1", "react-dom": "19.1.1" } });
+    expect(manifest).toMatchObject({ dependencies: { react: "19.1.6", "react-dom": "19.1.6" } });
     expect(`${JSON.stringify(manifest)}\n${readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8")}`).not.toContain("@auth0/nextjs-auth0");
   });
 

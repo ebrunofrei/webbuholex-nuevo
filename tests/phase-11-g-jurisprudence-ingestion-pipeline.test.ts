@@ -436,7 +436,7 @@ describe("seguridad estática y preservación", () => {
 
   it("mantiene manifiestos, React 19.1.1 y jurisprudencia desconectada", () => {
     const manifest = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
-    expect(manifest.dependencies).toMatchObject({ react: "19.1.1", "react-dom": "19.1.1" });
+    expect(manifest.dependencies).toMatchObject({ react: "19.1.6", "react-dom": "19.1.6" });
     expect(`${JSON.stringify(manifest)}\n${readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8")}`).not.toContain("@auth0/nextjs-auth0");
     expect(readFileSync(path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"), "utf8")).not.toMatch(/ingestion|JurisprudenceInternalApi|fetch\(/);
   });

@@ -613,8 +613,8 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
       const root = process.cwd();
       const manifest = await readFile(path.join(root, "package.json"), "utf8");
       expect(manifest).not.toContain("@auth0/nextjs-auth0");
-      expect(manifest).toContain('"react": "19.1.1"');
-      expect(manifest).toContain('"react-dom": "19.1.1"');
+      expect(manifest).toContain('"react": "19.1.6"');
+      expect(manifest).toContain('"react-dom": "19.1.6"');
       expect(await readFile(path.join(root, "app", "sitemap.ts"), "utf8")).not.toMatch(/search-index|gateway/);
       expect(await readFile(path.join(root, "app", "robots.ts"), "utf8")).not.toMatch(/search-index|gateway/);
     });
