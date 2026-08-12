@@ -674,6 +674,7 @@ describe("readiness y límites estáticos", () => {
 
   it("no existen app/api ni route.ts", () => {
     const authorizedRouteFiles = [
+      "app/api/admin/complaints/[complaintId]/responses/route.ts",
       "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];

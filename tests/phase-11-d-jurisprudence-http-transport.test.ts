@@ -375,6 +375,7 @@ describe("persistencia SQLite y seguridad estática", () => {
 
   it("mantiene el transporte sin montar y desconectado de UI", () => {
     const authorizedRouteFiles = [
+      "app/api/admin/complaints/[complaintId]/responses/route.ts",
       "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];

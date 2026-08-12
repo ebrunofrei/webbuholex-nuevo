@@ -604,9 +604,10 @@ describe(
           "15. no existen directorios app/api ni archivos route.ts",
           async () => {
             const authorizedRouteFiles = [
-      "app/api/complaints/route.ts",
-      "app/api/owl/admission/route.ts",
-    ];
+            "app/api/admin/complaints/[complaintId]/responses/route.ts",
+            "app/api/complaints/route.ts",
+            "app/api/owl/admission/route.ts",
+          ];
             const root = process.cwd();
 
             const appFiles = await readdir(

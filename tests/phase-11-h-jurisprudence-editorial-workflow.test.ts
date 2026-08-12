@@ -412,6 +412,7 @@ describe("publicación, seguridad estática y preservación", () => {
 
   it("no crea rutas, UI, scraping, OCR, IA, RAG, embeddings ni Auth0", () => {
     const authorizedRouteFiles = [
+      "app/api/admin/complaints/[complaintId]/responses/route.ts",
       "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];

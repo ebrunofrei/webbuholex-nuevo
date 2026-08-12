@@ -291,6 +291,7 @@ describe("persistencia, lifecycle y logging", () => {
 describe("barreras estáticas y preservación", () => {
   it("mantiene rutas, UI y jurisprudencia desconectadas", () => {
     const authorizedRouteFiles = [
+      "app/api/admin/complaints/[complaintId]/responses/route.ts",
       "app/api/complaints/route.ts",
       "app/api/owl/admission/route.ts",
     ];
