@@ -2,7 +2,7 @@ export type ExternalIdentityProvider = "auth0";
 
 export type OperatorStatus = "active" | "suspended";
 
-export type AdminCapability = "complaints:respond";
+export type AdminCapability = "complaints:respond" | "complaints:read";
 
 export type AuthorizationRepositoryResult =
   | { kind: "authorized"; operatorId: string }
