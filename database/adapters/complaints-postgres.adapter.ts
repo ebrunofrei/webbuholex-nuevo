@@ -259,9 +259,32 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
-  async insertProviderResponse(input: ComplaintProviderResponseInsertInput): Promise<void> {
+  async insertProviderResponse(
+    input: ComplaintProviderResponseInsertInput,
+  ): Promise<void> {
     try {
-      await this.tx.insert(schema.complaintProviderResponses).values(input);
+      await this.tx.execute(sql`
+        INSERT INTO complaints_private.complaint_provider_responses (
+          complaint_id,
+          version,
+          response_text,
+          actions_taken,
+          responded_at,
+          response_channel,
+          responder_name,
+          responder_role
+        )
+        VALUES (
+          ${input.complaintId},
+          ${input.version},
+          ${input.responseText ?? null},
+          ${input.actionsTaken ?? null},
+          ${input.respondedAt.toISOString()},
+          ${input.responseChannel},
+          ${input.responderName},
+          ${input.responderRole}
+        )
+      `);
     } catch (error) {
       throw translateDatabaseError(error);
     }
@@ -282,25 +305,71 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
-  async insertResponseStatusHistory(input: ComplaintStatusHistoryInsertInput): Promise<void> {
+  async insertResponseStatusHistory(
+    input: ComplaintStatusHistoryInsertInput,
+  ): Promise<void> {
     try {
-      await this.tx.insert(schema.complaintStatusHistory).values(input);
+      await this.tx.execute(sql`
+        INSERT INTO complaints_private.complaint_status_history (
+          complaint_id,
+          from_status,
+          to_status,
+          changed_by
+        )
+        VALUES (
+          ${input.complaintId},
+          ${input.fromStatus},
+          ${input.toStatus},
+          ${input.changedBy}
+        )
+      `);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+  async insertResponseAuditEvent(
+    input: ComplaintAuditInsertInput,
+  ): Promise<void> {
+    try {
+      const metadata = JSON.stringify(input.metadata);
+
+      await this.tx.execute(sql`
+        INSERT INTO complaints_private.complaint_audit_events (
+          complaint_id,
+          event_type,
+          metadata,
+          created_by
+        )
+        VALUES (
+          ${input.complaintId},
+          ${input.eventType},
+          ${metadata}::jsonb,
+          ${input.createdBy}
+        )
+      `);
     } catch (error) {
       throw translateDatabaseError(error);
     }
   }
 
-  async insertResponseAuditEvent(input: ComplaintAuditInsertInput): Promise<void> {
+  async insertResponseOutbox(
+    input: ComplaintOutboxInsertInput,
+  ): Promise<void> {
     try {
-      await this.tx.insert(schema.complaintAuditEvents).values(input);
-    } catch (error) {
-      throw translateDatabaseError(error);
-    }
-  }
+      const payload = JSON.stringify(input.payload);
 
-  async insertResponseOutbox(input: ComplaintOutboxInsertInput): Promise<void> {
-    try {
-      await this.tx.insert(schema.complaintOutbox).values(input);
+      await this.tx.execute(sql`
+        INSERT INTO complaints_private.complaint_outbox (
+          complaint_id,
+          event_type,
+          payload
+        )
+        VALUES (
+          ${input.complaintId},
+          ${input.eventType},
+          ${payload}::jsonb
+        )
+      `);
     } catch (error) {
       throw translateDatabaseError(error);
     }
