@@ -137,7 +137,7 @@ describe("Phase 14.O.D.4.6-A.2 - Admin Read Security Foundation (Static/Unit)", 
     it("contiene GRANT SELECT solo para las 6 columnas autorizadas", () => {
       const selectMatch = sqlContent.match(/GRANT SELECT \(([^)]+)\) ON complaints_private\.complaints/);
       if (!selectMatch || !selectMatch[1]) throw new Error("Match failed");
-      
+
       const columns = selectMatch[1].split(",").map(c => c.trim().toLowerCase());
       expect(columns).toHaveLength(6);
       expect(columns).toContain("id");
@@ -156,7 +156,7 @@ describe("Phase 14.O.D.4.6-A.2 - Admin Read Security Foundation (Static/Unit)", 
       expect(sqlContent.toLowerCase()).not.toContain("grant delete");
       expect(sqlContent.toLowerCase()).not.toContain("grant truncate");
     });
-    
+
     it("no contiene grants de escalamiento de roles", () => {
        expect(sqlContent.toLowerCase()).not.toContain("grant complaints_admin_runtime");
        expect(sqlContent.toLowerCase()).not.toContain("grant complaints_authorization_runtime");

@@ -15,7 +15,7 @@ export async function listAdminComplaintsRepository({
   cursor?: AdminComplaintsCursor | undefined;
 }): Promise<AdminComplaintListItem[]> {
   const db = getComplaintsAdminReadDatabase();
-  
+
   return await withComplaintsAdminReadRole(db, async (tx) => {
     let whereClause = undefined;
     const conditions = [];
@@ -57,13 +57,13 @@ export async function listAdminComplaintsRepository({
 
     return rows.map((row) => {
       const mappedDeadline = typeof row.deadline_at === 'string' ? row.deadline_at : (row.deadline_at as unknown as Date).toISOString().split("T")[0];
-      
+
       return {
         complaintId: row.id,
         sheetNumber: row.sheet_number,
         status: row.status as ComplaintStatus,
         submittedAt: row.submitted_at.toISOString(),
-        deadlineAt: mappedDeadline as string, 
+        deadlineAt: mappedDeadline as string,
         updatedAt: row.updated_at.toISOString(),
       };
     });

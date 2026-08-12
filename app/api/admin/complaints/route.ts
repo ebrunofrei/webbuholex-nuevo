@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     }
 
     const principal = authResult.principal;
-    
+
     const result = await listAdminComplaintsRuntime(parsedQuery.data, principal);
 
     switch (result.kind) {
@@ -69,14 +69,14 @@ export async function GET(request: Request) {
     }
   } catch (error) {
     if (
-      error instanceof Error && 
+      error instanceof Error &&
       (error.message.includes("database_configuration_missing") ||
        error.message.includes("database_configuration_invalid") ||
        error.message.includes("Connection") ||
        error.message.includes("connect") ||
        error.message.includes("ECONNREFUSED") ||
        error.message.includes("Network DB Error") || // typical mock error
-       error.message.includes("unauthorized_capability")) 
+       error.message.includes("unauthorized_capability"))
     ) {
         if (error.message.includes("unauthorized_capability")) {
             return NextResponse.json(
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
           { status: 503, headers: { "Cache-Control": "no-store, max-age=0", "Content-Type": "application/json" } }
         );
     }
-    
+
     if (error instanceof ComplaintsServiceUnavailableError) {
       return NextResponse.json(
         { success: false, error: { code: "service_unavailable" } },

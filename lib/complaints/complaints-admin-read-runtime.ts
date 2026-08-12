@@ -32,7 +32,7 @@ export type ListAdminComplaintsRuntimeInput = {
   cursor?: string | undefined;
 };
 
-export type ListAdminComplaintsRuntimeResult = 
+export type ListAdminComplaintsRuntimeResult =
   | { kind: "success"; data: AdminComplaintListResponse }
   | { kind: "invalid_cursor" }
   | { kind: "invalid_limit" }
@@ -79,7 +79,7 @@ export async function listAdminComplaintsRuntime(
       if (parsed.status !== undefined && parsed.status !== input.status) {
         return { kind: "invalid_cursor" };
       }
-      
+
       if (parsed.status === undefined && input.status !== undefined) {
         return { kind: "invalid_cursor" };
       }
@@ -107,7 +107,7 @@ export async function listAdminComplaintsRuntime(
 
   if (items.length > input.limit) {
     items.pop();
-    
+
     const lastItem = items[items.length - 1]!;
     const nextCursorObj: AdminComplaintsCursor = {
       v: 1,
@@ -117,12 +117,12 @@ export async function listAdminComplaintsRuntime(
     if (input.status) {
       nextCursorObj.status = input.status;
     }
-    
+
     nextCursor = encodeAdminComplaintsCursor(nextCursorObj);
   }
 
-  return { 
-    kind: "success", 
+  return {
+    kind: "success",
     data: {
       items,
       nextCursor

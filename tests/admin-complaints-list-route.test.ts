@@ -128,7 +128,7 @@ describe("Admin Complaints Protected Read API (GET /api/admin/complaints)", () =
     });
 
     const createCursorStr = (obj: unknown) => Buffer.from(JSON.stringify(obj)).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-    
+
     const validId = "12345678-1234-1234-1234-123456789012";
 
     it("L. invalid cursor syntax -> 400", async () => {
@@ -200,7 +200,7 @@ describe("Admin Complaints Protected Read API (GET /api/admin/complaints)", () =
       const res = await GET(createRequest("/api/admin/complaints?limit=2"));
       expect(res.status).toBe(200);
       const data = await res.json();
-      
+
       expect(data.items).toHaveLength(2);
       expect(data.items[0].complaintId).toBe("00000000-0000-0000-0000-000000000000");
       expect(data.nextCursor).toBeDefined();
@@ -223,10 +223,10 @@ describe("Admin Complaints Protected Read API (GET /api/admin/complaints)", () =
 
       const res = await GET(createRequest("/api/admin/complaints"));
       const data = await res.json();
-      
+
       const item = data.items[0];
       const keys = Object.keys(item);
-      
+
       expect(keys.sort()).toEqual([
         "complaintId", "deadlineAt", "sheetNumber", "status", "submittedAt", "updatedAt"
       ].sort());
@@ -249,7 +249,7 @@ describe("Admin Complaints Protected Read API (GET /api/admin/complaints)", () =
     it("H/AL. read DB unavailable -> 503 / missing config", async () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "authorized", principal: mockValidPrincipal });
       vi.mocked(listAdminComplaintsRepository).mockRejectedValue(new Error("complaints_admin_read_database_configuration_missing"));
-      
+
       const res = await GET(createRequest("/api/admin/complaints"));
       expect(res.status).toBe(503);
     });
@@ -257,7 +257,7 @@ describe("Admin Complaints Protected Read API (GET /api/admin/complaints)", () =
     it("AM. read DB config never falls back to write DB", () => {
       const configSource = fs.readFileSync(path.join(process.cwd(), "database/config.ts"), "utf-8");
       expect(configSource).toContain("DATABASE_ADMIN_READ_URL");
-      
+
       // Ensure read config does NOT use DATABASE_ADMIN_URL
       const readConfigFn = configSource.match(/export function readComplaintsAdminReadDatabaseConfig[\s\S]*?}/);
       expect(readConfigFn![0]).not.toContain("DATABASE_ADMIN_URL");
@@ -266,7 +266,7 @@ describe("Admin Complaints Protected Read API (GET /api/admin/complaints)", () =
 
     it("S/T/W/Z/AA. Repository explicitly selects safe columns, avoids SELECT *, avoids write runtime", () => {
       const repoSource = fs.readFileSync(path.join(process.cwd(), "database/repositories/admin-complaints-read.repository.ts"), "utf-8");
-      
+
       expect(repoSource).toContain("withComplaintsAdminReadRole");
       expect(repoSource).not.toContain("withComplaintsAdminRole");
       expect(repoSource).not.toContain("withComplaintsApiRole");
