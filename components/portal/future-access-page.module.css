@@ -30,4 +30,4 @@
 .overview aside { margin-top: 30px; padding: 22px; border-left: 3px solid var(--gold); background: rgb(255 255 255 / 7%); }
 .overview aside p { margin: 7px 0 0; color: #dce9ff; font-size: .75rem; }
 @media (max-width: 780px) { .boundaries { grid-template-columns: 1fr; } .boundaries article { border-right: 0; border-bottom: 1px solid var(--line); } .boundaries article:last-child { border-bottom: 0; } }
-@media (max-width: 560px) { .container { width: min(100% - 28px, 1120px); } .actions { display: grid; } .actions a { width: 100%; text-align: center; } .overviewGrid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .container { width: min(100% - 28px, 1120px); } .actions { display: grid; } .actions a { width: 100%; text-align: center; } .overviewGrid { grid-template-columns: 1fr; } .boundaries article { padding: 20px; } .boundaries h2 { font-size: 1.3rem; margin: 20px 0 8px; } .intro { margin-top: 10px; } .intro h1 { font-size: clamp(2rem, 8vw, 5rem); line-height: 1.1; } }
