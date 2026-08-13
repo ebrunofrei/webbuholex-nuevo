@@ -214,5 +214,57 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(500);
     });
+
+    it("double-stringified invalid-data regression: projection fields become null -> 500", async () => {
+      // In the database, if payload_snapshot is a double-stringified JSON, the nested ->> paths return NULL.
+      // This test proves that the route rejects such rows as invalid state instead of crashing or blessing them.
+      vi.mocked(getAdminComplaintDetailRepository).mockResolvedValue({
+        kind: "success",
+        complaint: {
+          ...validSafeRow,
+          consumer_type: null as unknown as string,
+          subject_kind: null as unknown as string,
+          complaint_facts: null as unknown as string
+        },
+        providerResponse: null,
+        timeline: [],
+      });
+      const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
+      expect(res.status).toBe(500);
+      const data = await res.json();
+      expect(data).toEqual({ error: "internal_server_error" });
+    });
+
+    it("18. Contract Test - synthetic payload maps to response", async () => {
+      // The API receives the safe row already flattened by the DB projection.
+      // So this asserts that the route handler maps the flattened row back to the nested contract.
+      vi.mocked(getAdminComplaintDetailRepository).mockResolvedValue({
+        kind: "success",
+        complaint: {
+          ...validSafeRow,
+          consumer_type: "natural_person",
+          consumer_first_names: "Jane",
+          consumer_last_names: "Doe",
+          consumer_representative_first_names: "John",
+          consumer_representative_last_names: "Smith",
+          consumer_representative_role: "Parent",
+          subject_kind: "service",
+          complaint_kind: "claim",
+          complaint_facts: "Tested facts",
+        },
+        providerResponse: null,
+        timeline: [],
+      });
+
+      const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.complaint.consumer.consumerType).toBe("natural_person");
+      expect(data.complaint.consumer.firstNames).toBe("Jane");
+      expect(data.complaint.consumer.representative.firstNames).toBe("John");
+      expect(data.complaint.subject.kind).toBe("service");
+      expect(data.complaint.details.kind).toBe("claim");
+      expect(data.complaint.details.facts).toBe("Tested facts");
+    });
   });
 });

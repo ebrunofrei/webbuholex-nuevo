@@ -99,6 +99,13 @@
       "when": 1786665405000,
       "tag": "0013_admin_detail_safe_unsupported_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786675405000,
+      "tag": "0014_admin_detail_safe_payload_projection",
+      "breakpoints": true
     }
   ]
 }

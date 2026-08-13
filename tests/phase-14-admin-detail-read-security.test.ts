@@ -184,4 +184,78 @@ describe("Phase 14.O.D.4.6-C.1 - Admin Complaint Detail Read Security Foundation
       expect(sqlContent0013).toMatch(/REVOKE ALL ON complaints_private\.admin_complaint_detail_safe FROM PUBLIC/);
     });
   });
+
+  describe("E. Corrective SQL Migration Analysis (0014 - Payload Projection Fix)", () => {
+    let sqlContent0014: string;
+
+    beforeAll(() => {
+      sqlContent0014 = readFileSync("database/migrations/0014_admin_detail_safe_payload_projection.sql", "utf-8");
+    });
+
+    it("recreates the safe view using CREATE OR REPLACE VIEW", () => {
+      expect(sqlContent0014).toContain("CREATE OR REPLACE VIEW complaints_private.admin_complaint_detail_safe AS");
+    });
+
+    it("uses exact canonical nested schema 1.0 paths", () => {
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->>'consumerType'");
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->>'firstNames'");
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->>'lastNames'");
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->>'legalName'");
+
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->'representative'->>'firstNames'");
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->'representative'->>'lastNames'");
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->'representative'->>'relationship'");
+
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->>'representativeFirstNames'");
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->>'representativeLastNames'");
+      expect(sqlContent0014).toContain("payload_snapshot->'consumer'->>'representativeRole'");
+
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'kind'");
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'description'");
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'amountApplicability'");
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'amount'");
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'currency'");
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'transactionDate'");
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'referenceNumber'");
+      expect(sqlContent0014).toContain("payload_snapshot->'subject'->>'channel'");
+
+      expect(sqlContent0014).toContain("payload_snapshot->'complaint'->>'kind'");
+      expect(sqlContent0014).toContain("payload_snapshot->'complaint'->>'facts'");
+      expect(sqlContent0014).toContain("payload_snapshot->'complaint'->>'requestedResolution'");
+    });
+
+    it("handles both legitimate representative shapes with COALESCE", () => {
+      expect(sqlContent0014).toMatch(/COALESCE\([\s\S]*?payload_snapshot->'consumer'->'representative'->>'firstNames'[\s\S]*?payload_snapshot->'consumer'->>'representativeFirstNames'[\s\S]*?\)/);
+      expect(sqlContent0014).toMatch(/COALESCE\([\s\S]*?payload_snapshot->'consumer'->'representative'->>'lastNames'[\s\S]*?payload_snapshot->'consumer'->>'representativeLastNames'[\s\S]*?\)/);
+    });
+
+    it("does not use top-level snake_case paths for json properties", () => {
+      expect(sqlContent0014).not.toMatch(/payload_snapshot->>'consumer_type'/);
+      expect(sqlContent0014).not.toMatch(/payload_snapshot->>'complaint_facts'/);
+    });
+
+    it("DOES NOT contain a schema-version row filter (no WHERE schema_version = '1.0')", () => {
+      expect(sqlContent0014).not.toMatch(/WHERE\s+schema_version\s*=/);
+    });
+
+    it("preserves exact columns and data minimization (no PII exposure)", () => {
+      const match = sqlContent0014.match(/CREATE OR REPLACE VIEW complaints_private.admin_complaint_detail_safe AS([\s\S]*?)FROM complaints_private\.complaints/);
+      const viewSelect = match![1];
+      expect(viewSelect).not.toContain("document_number");
+      expect(viewSelect).not.toContain("ruc");
+      expect(viewSelect).not.toContain("email");
+      expect(viewSelect).not.toContain("phone");
+      expect(viewSelect).not.toContain("address");
+      expect(viewSelect).not.toContain("private_token_hash");
+    });
+
+    it("does not cast directly to jsonb using #>>", () => {
+      expect(sqlContent0014).not.toContain("#>> '{}')::jsonb");
+    });
+
+    it("restores privileges properly", () => {
+      expect(sqlContent0014).toMatch(/GRANT SELECT ON complaints_private\.admin_complaint_detail_safe TO complaints_admin_detail_read_runtime/);
+      expect(sqlContent0014).toMatch(/REVOKE ALL ON complaints_private\.admin_complaint_detail_safe FROM PUBLIC/);
+    });
+  });
 });
