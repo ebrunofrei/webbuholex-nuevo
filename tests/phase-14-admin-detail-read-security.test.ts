@@ -144,4 +144,44 @@ describe("Phase 14.O.D.4.6-C.1 - Admin Complaint Detail Read Security Foundation
       }
     });
   });
+
+  describe("D. Corrective SQL Migration Analysis (0013 - Unsupported Schema Safe-Surface Fix)", () => {
+    let sqlContent0013: string;
+
+    beforeAll(() => {
+      sqlContent0013 = readFileSync("database/migrations/0013_admin_detail_safe_unsupported_schema.sql", "utf-8");
+    });
+
+    it("recreates the safe view using CREATE OR REPLACE VIEW", () => {
+      expect(sqlContent0013).toContain("CREATE OR REPLACE VIEW complaints_private.admin_complaint_detail_safe AS");
+    });
+
+    it("DOES NOT contain a schema-version row filter (no WHERE schema_version = '1.0')", () => {
+      // The regression must prevent reintroduction of: WHERE schema_version = '1.0' or equivalent
+      expect(sqlContent0013).not.toMatch(/WHERE\s+schema_version\s*=/);
+
+      const match = sqlContent0013.match(/CREATE OR REPLACE VIEW complaints_private.admin_complaint_detail_safe AS([\s\S]*?)FROM complaints_private\.complaints/);
+      expect(match).not.toBeNull();
+
+      // Still maintains the exact column allowlist (does not expose full payload)
+      expect(match![1]).not.toMatch(/\bpayload_snapshot\b(?!->)/);
+      expect(match![1]).toContain("schema_version"); // schema_version is still exposed
+    });
+
+    it("preserves exact columns and data minimization (no PII exposure)", () => {
+      const match = sqlContent0013.match(/CREATE OR REPLACE VIEW complaints_private.admin_complaint_detail_safe AS([\s\S]*?)FROM complaints_private\.complaints/);
+      const viewSelect = match![1];
+      expect(viewSelect).not.toContain("document_number");
+      expect(viewSelect).not.toContain("ruc");
+      expect(viewSelect).not.toContain("email");
+      expect(viewSelect).not.toContain("phone");
+      expect(viewSelect).not.toContain("address");
+      expect(viewSelect).not.toContain("private_token_hash");
+    });
+
+    it("restores privileges properly", () => {
+      expect(sqlContent0013).toMatch(/GRANT SELECT ON complaints_private\.admin_complaint_detail_safe TO complaints_admin_detail_read_runtime/);
+      expect(sqlContent0013).toMatch(/REVOKE ALL ON complaints_private\.admin_complaint_detail_safe FROM PUBLIC/);
+    });
+  });
 });

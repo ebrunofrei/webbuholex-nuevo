@@ -92,6 +92,13 @@
       "when": 1786655405000,
       "tag": "0012_admin_detail_read_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786665405000,
+      "tag": "0013_admin_detail_safe_unsupported_schema",
+      "breakpoints": true
     }
   ]
 }
