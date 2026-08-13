@@ -19,7 +19,7 @@ describe('Admin Complaints Workspace UI', () => {
     originalFetch = global.fetch;
     fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: [], nextCursor: null }),
+      json: async () => ({ items: [], nextCursor: null }),
     });
     global.fetch = fetchMock as unknown as typeof global.fetch;
     mockReplace.mockClear();
@@ -67,7 +67,7 @@ describe('Admin Complaints Workspace UI', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        data: [{
+        items: [{
           complaintId: 'cmp-123',
           sheetNumber: 'R001',
           status: 'under_review',
@@ -114,7 +114,7 @@ describe('Admin Complaints Workspace UI', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        data: [{ complaintId: '1', sheetNumber: 'R1', status: 'received', submittedAt: '', deadlineAt: '', updatedAt: '' }],
+        items: [{ complaintId: '1', sheetNumber: 'R1', status: 'received', submittedAt: '', deadlineAt: '', updatedAt: '' }],
         nextCursor: 'opaque-cursor-123'
       })
     });
@@ -128,7 +128,7 @@ describe('Admin Complaints Workspace UI', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        data: [
+        items: [
           { complaintId: '1', sheetNumber: 'R1', status: 'received', submittedAt: '', deadlineAt: '', updatedAt: '' },
           { complaintId: '2', sheetNumber: 'R2', status: 'received', submittedAt: '', deadlineAt: '', updatedAt: '' }
         ],
@@ -180,5 +180,43 @@ describe('Admin Complaints Workspace UI', () => {
     });
     const callArgs = fetchMock.mock.calls[0]!;
     expect(callArgs[1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('malformed 200 response without items does NOT throw TypeError and produces controlled generic error', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: [], nextCursor: null }) // Malformed response missing 'items' array
+    });
+
+    render(<AdminComplaintsList />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/formato esperado/i);
+    });
+  });
+
+  it('recovers from client-side route transition (unmount/remount strict mode simulation)', async () => {
+    // Return empty items
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [], nextCursor: null })
+    });
+
+    const { unmount } = render(<AdminComplaintsList />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No hay reclamos para mostrar/i)).toBeInTheDocument();
+    });
+
+    // Simulate navigation away
+    unmount();
+
+    // Simulate navigation back (remount)
+    render(<AdminComplaintsList />);
+
+    await waitFor(() => {
+      // It should NOT be stuck on 'Cargando...'
+      expect(screen.getByText(/No hay reclamos para mostrar/i)).toBeInTheDocument();
+    });
   });
 });

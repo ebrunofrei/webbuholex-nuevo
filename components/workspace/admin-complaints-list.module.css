@@ -197,7 +197,7 @@
   }
 }
 
-@media (max-width: 639px) { /* Mobile */
+@media (max-width: 639px), (orientation: landscape) and (max-height: 500px) { /* Mobile */
   .tableContainer {
     display: none;
   }

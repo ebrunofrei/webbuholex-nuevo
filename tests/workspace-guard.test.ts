@@ -39,7 +39,7 @@ describe("guard del espacio privado", () => {
   it("reserva las diez rutas y aplica el guard antes del shell", () => {
     for (const route of privateRoutes) { const file = route === "app" ? "app/app/page.tsx" : `app/app/${route}/page.tsx`; expect(existsSync(file)).toBe(true); }
     const layout = readFileSync("app/app/layout.tsx", "utf8");
-    expect(layout.indexOf("requireWorkspaceSession")).toBeLessThan(layout.indexOf("<WorkspaceShell>"));
+    expect(layout.indexOf("requireWorkspaceSession")).toBeLessThan(layout.indexOf("<WorkspaceShell"));
     const middleware = readFileSync("middleware.ts", "utf8");
     expect(middleware).toContain('"/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)"');
   });

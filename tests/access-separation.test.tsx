@@ -30,7 +30,7 @@ describe("separación de shells y menús", () => {
 
   it("WorkspaceShell usa navegación privada sin usuario, plan o historial ficticios", () => {
     routeState.pathname = "/app";
-    const { container } = render(<WorkspaceShell><p>Contenido aislado de prueba</p></WorkspaceShell>);
+    const { container } = render(<WorkspaceShell navigationItems={workspaceNavigation}><p>Contenido aislado de prueba</p></WorkspaceShell>);
     expect(screen.getByRole("navigation", { name: "Navegación del espacio privado" })).toBeInTheDocument();
     expect(container.querySelector('a[href="/app/proyectos"]')).toBeInTheDocument();
     expect(container.querySelector('a[href="/explorar"]')).toBeNull();

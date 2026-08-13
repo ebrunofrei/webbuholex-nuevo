@@ -16,7 +16,7 @@ interface ComplaintItem {
 }
 
 interface FetchResponse {
-  data: ComplaintItem[];
+  items?: ComplaintItem[];
   nextCursor?: string;
 }
 
@@ -58,6 +58,7 @@ export function AdminComplaintsList() {
   const mountedRef = useRef<boolean>(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       if (abortControllerRef.current) {
@@ -117,17 +118,21 @@ export function AdminComplaintsList() {
 
       const data: FetchResponse = await res.json();
 
+      if (!data || !Array.isArray(data.items)) {
+        throw new Error('La respuesta del servidor no tiene el formato esperado.');
+      }
+
       if (!mountedRef.current || controller.signal.aborted) return;
 
       if (isLoadMore) {
         setItems(prev => {
-          const newItems = data.data.filter(
+          const newItems = data.items!.filter(
             newItem => !prev.some(prevItem => prevItem.complaintId === newItem.complaintId)
           );
           return [...prev, ...newItems];
         });
       } else {
-        setItems(data.data);
+        setItems(data.items!);
       }
 
       setNextCursor(data.nextCursor || null);

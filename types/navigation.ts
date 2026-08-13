@@ -10,4 +10,5 @@ export interface NavigationItem {
   visibility: NavigationVisibility;
   icon?: NavigationIcon;
   activeMatch: "exact" | "prefix";
+  requiredCapability?: import("@/database/repositories/authorization.types").AdminCapability;
 }
