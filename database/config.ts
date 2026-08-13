@@ -173,6 +173,33 @@ export function readComplaintsAdminReadDatabaseConfig(
   };
 }
 
+export type ComplaintsAdminDetailReadDatabaseRuntimeConfig =
+  | { readonly available: true; readonly url: string; readonly maxConnections: number; readonly idleTimeoutSeconds: number; readonly connectTimeoutSeconds: number; readonly prepare: false; }
+  | { readonly available: false; readonly reason: "missing" | "invalid" };
+
+export function readComplaintsAdminDetailReadDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): ComplaintsAdminDetailReadDatabaseRuntimeConfig {
+  const url = source.DATABASE_ADMIN_DETAIL_READ_URL;
+  if (!url) {
+    return { available: false, reason: "missing" };
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    return { available: false, reason: "invalid" };
+  }
+
+  return {
+    available: true,
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}
+
 export type AuthorizationDatabaseRuntimeConfig = DatabaseRuntimeConfig;
 
 export function readAuthorizationDatabaseConfig(

@@ -85,6 +85,13 @@
       "when": 1786555405046,
       "tag": "0011_admin_read_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786655405000,
+      "tag": "0012_admin_detail_read_runtime",
+      "breakpoints": true
     }
   ]
 }
