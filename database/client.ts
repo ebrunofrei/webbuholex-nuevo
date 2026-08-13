@@ -13,6 +13,8 @@ import {
   readComplaintsAdminDatabaseConfig,
   ComplaintsAdminReadDatabaseRuntimeConfig,
   readComplaintsAdminReadDatabaseConfig,
+  ComplaintsAdminDetailReadDatabaseRuntimeConfig,
+  readComplaintsAdminDetailReadDatabaseConfig,
   AuthorizationDatabaseRuntimeConfig,
   readAuthorizationDatabaseConfig,
 } from "./config";
@@ -41,6 +43,7 @@ type DatabaseGlobal = typeof globalThis & {
   __buholexComplaintsWorkerClient__?: DatabaseClientBundle;
   __buholexComplaintsAdminClient__?: DatabaseClientBundle;
   __buholexComplaintsAdminReadClient__?: DatabaseClientBundle;
+  __buholexComplaintsAdminDetailReadClient__?: DatabaseClientBundle;
   __buholexAuthorizationClient__?: DatabaseClientBundle;
 };
 
@@ -174,6 +177,36 @@ export function getComplaintsAdminReadDatabase(): PostgresJsDatabase<typeof sche
   }
 
   return createComplaintsAdminReadDatabaseClient(config).db;
+}
+
+export function createComplaintsAdminDetailReadDatabaseClient(config: Extract<ComplaintsAdminDetailReadDatabaseRuntimeConfig, { available: true }>): DatabaseClientBundle {
+  const sql = postgres(config.url, {
+    max: config.maxConnections,
+    idle_timeout: config.idleTimeoutSeconds,
+    connect_timeout: config.connectTimeoutSeconds,
+    prepare: config.prepare,
+    ssl: "require",
+  });
+  const db = drizzle(sql, { schema });
+  return { sql, db };
+}
+
+export function getComplaintsAdminDetailReadDatabase(): PostgresJsDatabase<typeof schema> {
+  const config = readComplaintsAdminDetailReadDatabaseConfig();
+
+  if (!config.available) {
+    throw new Error("complaints_admin_detail_read_database_unavailable");
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    const g = globalThis as DatabaseGlobal;
+    if (!g.__buholexComplaintsAdminDetailReadClient__) {
+      g.__buholexComplaintsAdminDetailReadClient__ = createComplaintsAdminDetailReadDatabaseClient(config);
+    }
+    return g.__buholexComplaintsAdminDetailReadClient__.db;
+  }
+
+  return createComplaintsAdminDetailReadDatabaseClient(config).db;
 }
 
 export function createAuthorizationDatabaseClient(config: AuthorizationDatabaseRuntimeConfig): DatabaseClientBundle {
