@@ -48,6 +48,15 @@ interface ProviderResponseData {
   responseChannel: string;
 }
 
+interface InformationRequestData {
+  requestSequence: number;
+  requestText: string;
+  requestedAt: string;
+  status: 'open' | 'received';
+  returnNote: string | null;
+  receivedAt: string | null;
+}
+
 interface ComplaintData {
   id: string;
   sheetNumber: string;
@@ -64,6 +73,7 @@ interface AdminComplaintDetailResponse {
   complaint: ComplaintData;
   timeline: TimelineEntry[];
   providerResponse: ProviderResponseData | null;
+  informationRequests: InformationRequestData[];
 }
 
 interface AdminComplaintDetailProps {
@@ -164,6 +174,9 @@ const formatDateTime = (dateString: string) => {
 
 import { AdminComplaintReviewAction } from './admin-complaint-review-action';
 import { AdminComplaintResponseForm } from './admin-complaint-response-form';
+import { AdminComplaintInformationHistory } from './admin-complaint-information-history';
+import { AdminComplaintRequestInformationForm } from './admin-complaint-request-information-form';
+import { AdminComplaintResumeReviewForm } from './admin-complaint-resume-review-form';
 
 export function AdminComplaintDetail({ complaintId, canReview = false, canRespond = false }: AdminComplaintDetailProps) {
   const [uiState, setUiState] = useState<UIState>({ type: 'loading' });
@@ -211,7 +224,7 @@ export function AdminComplaintDetail({ complaintId, canReview = false, canRespon
 
       if (!mountedRef.current || controller.signal.aborted) return;
 
-      if (!data || !data.complaint || !data.timeline || data.providerResponse === undefined) {
+      if (!data || !data.complaint || !data.timeline || data.providerResponse === undefined || !data.informationRequests) {
         setUiState({ type: 'error', status: 500, message: 'La respuesta del servidor no tiene el formato esperado.' });
         return;
       }
@@ -293,13 +306,16 @@ export function AdminComplaintDetail({ complaintId, canReview = false, canRespon
     );
   }
 
-  const { complaint, timeline, providerResponse } = uiState.data;
+  const { complaint, timeline, providerResponse, informationRequests } = uiState.data;
   const hasRepresentative = complaint.consumer.representative && (
     complaint.consumer.representative.firstNames ||
     complaint.consumer.representative.lastNames ||
     complaint.consumer.representative.relationship ||
     complaint.consumer.representative.role
   );
+
+  const openRequests = informationRequests.filter((request) => request.status === 'open');
+  const canResumeReview = canReview === true && complaint.status === 'awaiting_information' && openRequests.length === 1;
 
   return (
     <div className={styles.container}>
@@ -470,6 +486,26 @@ export function AdminComplaintDetail({ complaintId, canReview = false, canRespon
                 <dd className={styles.textBlock}>{complaint.details.requestedResolution}</dd>
               </div>
             </dl>
+          </section>
+
+          <section className={styles.section} aria-labelledby="section-informacion">
+            <h2 id="section-informacion" className={styles.sectionTitle}>Solicitudes de Información</h2>
+
+            <AdminComplaintInformationHistory requests={informationRequests} />
+
+            {canReview && complaint.status === 'under_review' && (
+              <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e5e7eb' }}>
+                <h3 className={styles.dt} style={{ fontSize: '1rem', color: '#111827', marginBottom: '1rem' }}>Solicitar Información al Consumidor</h3>
+                <AdminComplaintRequestInformationForm complaintId={complaintId} onRefresh={fetchDetail} />
+              </div>
+            )}
+
+            {canResumeReview && (
+              <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e5e7eb' }}>
+                <h3 className={styles.dt} style={{ fontSize: '1rem', color: '#111827', marginBottom: '1rem' }}>Reanudar Revisión</h3>
+                <AdminComplaintResumeReviewForm complaintId={complaintId} onRefresh={fetchDetail} />
+              </div>
+            )}
           </section>
 
           <section className={styles.section} aria-labelledby="section-respuesta">

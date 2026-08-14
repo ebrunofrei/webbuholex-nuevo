@@ -370,4 +370,106 @@ describe('AdminComplaintDetail Workspace Component', () => {
       });
     });
   });
+
+  describe('Information Requests section', () => {
+    it('renders history rendering and empty history', async () => {
+      (global.fetch as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockData,
+      });
+      render(<AdminComplaintDetail complaintId="123" canReview={false} />);
+      await waitFor(() => {
+        expect(screen.getByText('Solicitudes de Información')).toBeInTheDocument();
+        expect(screen.getByText('No se han registrado solicitudes de información para esta denuncia.')).toBeInTheDocument();
+      });
+    });
+
+    it('renders request form visibility under_review with canReview=true', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'under_review' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={true} />);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Solicitar Información al Consumidor' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Solicitar Información' })).toBeInTheDocument();
+      });
+    });
+
+    it('hides request form when canReview=false', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'under_review' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={false} />);
+      await waitFor(() => {
+        expect(screen.queryByText('Solicitar Información al Consumidor')).not.toBeInTheDocument();
+      });
+    });
+
+    it('renders resume form visibility awaiting_information with openRequests cardinality', async () => {
+      const data = {
+        ...mockData,
+        complaint: { ...mockData.complaint, status: 'awaiting_information' as const },
+        informationRequests: [
+          { requestSequence: 1, requestText: 'Req 1', requestedAt: '2026-08-11T10:00:00Z', status: 'open', returnNote: null, receivedAt: null }
+        ]
+      };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={true} />);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Reanudar Revisión' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Reanudar Revisión' })).toBeInTheDocument();
+      });
+    });
+
+    it('hides resume form if no open requests', async () => {
+      const data = {
+        ...mockData,
+        complaint: { ...mockData.complaint, status: 'awaiting_information' as const },
+        informationRequests: [
+          { requestSequence: 1, requestText: 'Req 1', requestedAt: '2026-08-11T10:00:00Z', status: 'received', returnNote: 'Note 1', receivedAt: '2026-08-12T10:00:00Z' }
+        ]
+      };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={true} />);
+      await waitFor(() => {
+        expect(screen.queryByText('Reanudar Revisión')).not.toBeInTheDocument();
+      });
+    });
+
+    it('shows coexistence with canRespond in awaiting_information', async () => {
+      const data = {
+        ...mockData,
+        complaint: { ...mockData.complaint, status: 'awaiting_information' as const },
+        informationRequests: [
+          { requestSequence: 1, requestText: 'Req 1', requestedAt: '2026-08-11T10:00:00Z', status: 'open', returnNote: null, receivedAt: null }
+        ]
+      };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={true} canRespond={true} />);
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Reanudar Revisión' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Registrar respuesta' })).toBeInTheDocument();
+      });
+    });
+
+    it('triggers canonical refetch after child mutation', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'under_review' as const } };
+      (global.fetch as Mock).mockResolvedValue({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={true} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Solicitar Información' })).toBeInTheDocument();
+      });
+
+      const prevFetchCalls = (global.fetch as Mock).mock.calls.length;
+
+      const textarea = screen.getByLabelText(/Motivo de la solicitud de información/i);
+      fireEvent.change(textarea, { target: { value: 'Necesito más pruebas.' } });
+
+      const button = screen.getByRole('button', { name: 'Solicitar Información' });
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect((global.fetch as Mock).mock.calls.length).toBeGreaterThan(prevFetchCalls + 1);
+      });
+    });
+  });
 });
