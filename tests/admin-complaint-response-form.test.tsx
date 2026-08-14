@@ -8,7 +8,7 @@ describe('AdminComplaintResponseForm Shared Contract', () => {
   it('should export the schema correctly', () => {
     expect(ProviderResponseHttpSchema).toBeDefined();
   });
-  
+
   it('should validate correctly based on limits', () => {
     const validData = {
       expectedCurrentStatus: 'under_review',
@@ -47,12 +47,12 @@ describe('AdminComplaintResponseForm Component', () => {
   it('should validate required fields locally before submit', async () => {
     render(<AdminComplaintResponseForm complaintId="test-123" currentStatus="under_review" onRefresh={mockOnRefresh} />);
     const submitBtn = screen.getByRole('button', { name: /Registrar respuesta/i });
-    
+
     // Attempt submit
     fireEvent.click(submitBtn);
 
     expect(await screen.findAllByText('Este campo es obligatorio.')).toHaveLength(3);
-    
+
     // Ensure fetch wasn't called
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -64,7 +64,7 @@ describe('AdminComplaintResponseForm Component', () => {
     });
 
     render(<AdminComplaintResponseForm complaintId="test-123" currentStatus="under_review" onRefresh={mockOnRefresh} />);
-    
+
     fireEvent.change(screen.getByLabelText(/Nombre que figurará/i), { target: { value: 'Juan' } });
     fireEvent.change(screen.getByLabelText(/Cargo que figurará/i), { target: { value: 'Admin' } });
     fireEvent.change(screen.getByLabelText(/Respuesta al consumidor/i), { target: { value: 'Hola' } });
@@ -107,7 +107,7 @@ describe('AdminComplaintResponseForm Component', () => {
   });
 
   it('should map 422 domain validation errors', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ 
+    global.fetch = vi.fn().mockResolvedValue({
       status: 422,
       json: vi.fn().mockResolvedValue({ error: { code: 'complaint_response_text_too_long' } })
     });
@@ -131,13 +131,13 @@ describe('AdminComplaintResponseForm Component', () => {
     }), 100)));
 
     render(<AdminComplaintResponseForm complaintId="test-123" currentStatus="under_review" onRefresh={mockOnRefresh} />);
-    
+
     fireEvent.change(screen.getByLabelText(/Nombre que figurará/i), { target: { value: 'Juan' } });
     fireEvent.change(screen.getByLabelText(/Cargo que figurará/i), { target: { value: 'Admin' } });
     fireEvent.change(screen.getByLabelText(/Respuesta al consumidor/i), { target: { value: 'Hola' } });
 
     const form = screen.getByRole('button', { name: /Registrar respuesta/i }).closest('form')!;
-    
+
     // Trigger rapid double submit before any state update / re-render
     fireEvent.submit(form);
     fireEvent.submit(form);

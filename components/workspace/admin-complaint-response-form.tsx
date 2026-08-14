@@ -75,7 +75,7 @@ export function AdminComplaintResponseForm({ complaintId, currentStatus, onRefre
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitLockRef.current) return;
-    
+
     setGlobalError(null);
     setSuccessMessage(null);
 
@@ -201,7 +201,7 @@ export function AdminComplaintResponseForm({ complaintId, currentStatus, onRefre
       setGlobalError('Resultado incierto. Verificando estado actualizado...');
       onRefresh();
       // Do not release lock; wait for refetch
-      
+
     } catch {
       if (!mountedRef.current) return;
       setGlobalError('Ocurrió un error de conexión. Intenta de nuevo.');
