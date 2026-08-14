@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 const mockData: AdminComplaintDetailResponse = {
+  informationRequests: [],
   complaint: {
     id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     sheetNumber: 'HOJA-2026-0001',

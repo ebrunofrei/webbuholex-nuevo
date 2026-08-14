@@ -36,11 +36,13 @@
     "@types/node": "24.10.1",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
+    "@types/uuid": "^11.0.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "9.39.1",
     "eslint-config-next": "15.5.9",
     "jsdom": "27.2.0",
     "typescript": "5.9.3",
+    "uuid": "^14.0.1",
     "vitest": "4.0.14",
     "vitest-axe": "0.1.0"
   }

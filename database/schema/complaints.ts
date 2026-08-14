@@ -7,6 +7,7 @@ import {
   date,
   jsonb,
   unique,
+  uniqueIndex,
   check,
   index,
   foreignKey
@@ -126,10 +127,31 @@ export const complaintOutbox = complaintsPrivateSchema.table("complaint_outbox",
 export const complaintAuditEvents = complaintsPrivateSchema.table("complaint_audit_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   complaintId: uuid("complaint_id").notNull().references(() => complaints.id, { onDelete: 'restrict' }),
-  eventType: varchar("event_type", { enum: ["created", "status_changed", "response_created", "response_corrected", "receipt_generated", "notification_attempted", "notification_sent", "notification_failed", "exported", "viewed_by_staff"] }).notNull(),
+  eventType: varchar("event_type", { enum: ["created", "status_changed", "response_created", "response_corrected", "receipt_generated", "notification_attempted", "notification_sent", "notification_failed", "exported", "viewed_by_staff", "information_requested", "review_resumed"] }).notNull(),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdBy: varchar("created_by").notNull(),
 }, (table) => [
   index("complaint_audit_events_comp_created_idx").on(table.complaintId, table.createdAt),
+]);
+
+export const complaintInformationRequests = complaintsPrivateSchema.table("complaint_information_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  complaintId: uuid("complaint_id").notNull().references(() => complaints.id, { onDelete: 'restrict' }),
+  requestSequence: integer("request_sequence").notNull(),
+  requestText: varchar("request_text", { length: 2000 }).notNull(),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+  requestedBy: varchar("requested_by").notNull(),
+  status: varchar("status", { enum: ["open", "received"] }).notNull().default("open"),
+  returnNote: varchar("return_note", { length: 2000 }),
+  receivedAt: timestamp("received_at", { withTimezone: true }),
+  receivedBy: varchar("received_by"),
+}, (table) => [
+  unique("complaint_information_requests_comp_seq_idx").on(table.complaintId, table.requestSequence),
+  uniqueIndex("complaint_information_requests_comp_open_idx")
+    .on(table.complaintId)
+    .where(sql`${table.status} = 'open'`),
+  check("lifecycle_consistency", sql`(${table.status} = 'open' AND ${table.returnNote} IS NULL AND ${table.receivedAt} IS NULL AND ${table.receivedBy} IS NULL) OR (${table.status} = 'received' AND ${table.returnNote} IS NOT NULL AND ${table.receivedAt} IS NOT NULL AND ${table.receivedBy} IS NOT NULL)`),
+  check("request_sequence_positive", sql`${table.requestSequence} > 0`),
+  check("request_text_not_empty", sql`length(trim(${table.requestText})) > 0`)
 ]);

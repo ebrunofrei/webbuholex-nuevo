@@ -83,6 +83,14 @@ export interface AdminComplaintDetailResponse {
     respondedAt: string;
     responseChannel: string;
   } | null;
+  informationRequests: {
+    requestSequence: number;
+    requestText: string;
+    requestedAt: string;
+    status: string;
+    returnNote: string | null;
+    receivedAt: string | null;
+  }[];
 }
 
 export type GetAdminComplaintDetailRuntimeResult =
@@ -108,7 +116,7 @@ export async function getAdminComplaintDetailRuntime(
       return { kind: "invalid_state", reason: "duplicate_provider_response" };
     }
 
-    const { complaint, providerResponse, timeline } = result;
+    const { complaint, providerResponse, timeline, informationRequests } = result;
 
     if (complaint.schema_version !== "1.0") {
       return { kind: "unsupported_schema", version: complaint.schema_version };
@@ -191,6 +199,19 @@ export async function getAdminComplaintDetailRuntime(
         respondedAt: normalizeTimestamp(providerResponse.responded_at),
         responseChannel: providerResponse.response_channel,
       } : null,
+      informationRequests: informationRequests.map(r => {
+        if (r.status !== "open" && r.status !== "received") {
+          throw new Error("invalid_information_request_status");
+        }
+        return {
+          requestSequence: r.request_sequence,
+          requestText: r.request_text,
+          requestedAt: normalizeTimestamp(r.requested_at),
+          status: r.status,
+          returnNote: r.return_note,
+          receivedAt: r.received_at ? normalizeTimestamp(r.received_at) : null,
+        };
+      }),
     };
 
     return {
@@ -200,6 +221,9 @@ export async function getAdminComplaintDetailRuntime(
   } catch (error) {
     if (error instanceof Error && error.message === "invalid_timeline_status") {
       return { kind: "invalid_state", reason: "invalid_timeline_status" };
+    }
+    if (error instanceof Error && error.message === "invalid_information_request_status") {
+      return { kind: "invalid_state", reason: "invalid_information_request_status" };
     }
     if (error instanceof Error && error.message === "invalid_temporal_value") {
       return { kind: "invalid_state", reason: "invalid_temporal_value" };

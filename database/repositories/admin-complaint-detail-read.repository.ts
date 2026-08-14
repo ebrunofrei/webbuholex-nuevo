@@ -16,6 +16,16 @@ export interface ComplaintStatusTimelineSafeRow {
   changed_at: string | Date;
 }
 
+export interface InformationRequestSafeRow {
+  complaint_id: string;
+  request_sequence: number;
+  request_text: string;
+  requested_at: string | Date;
+  status: string;
+  return_note: string | null;
+  received_at: string | Date | null;
+}
+
 export interface ComplaintDetailSafeRow {
   id: string;
   schema_version: string;
@@ -46,7 +56,7 @@ export interface ComplaintDetailSafeRow {
 }
 
 export type AdminComplaintDetailRepositoryResult =
-  | { kind: "success"; complaint: ComplaintDetailSafeRow; providerResponse: ProviderResponseSafeRow | null; timeline: ComplaintStatusTimelineSafeRow[] }
+  | { kind: "success"; complaint: ComplaintDetailSafeRow; providerResponse: ProviderResponseSafeRow | null; timeline: ComplaintStatusTimelineSafeRow[]; informationRequests: InformationRequestSafeRow[] }
   | { kind: "not_found" }
   | { kind: "duplicate_response" };
 
@@ -90,11 +100,19 @@ export async function getAdminComplaintDetailRepository(complaintId: string): Pr
       ORDER BY changed_at DESC
     `)) as unknown as ComplaintStatusTimelineSafeRow[];
 
+    const requestsResult = (await tx.execute(sql`
+      SELECT complaint_id, request_sequence, request_text, requested_at, status, return_note, received_at
+      FROM complaints_private.admin_complaint_information_requests_safe
+      WHERE complaint_id = ${complaintId}
+      ORDER BY request_sequence ASC
+    `)) as unknown as InformationRequestSafeRow[];
+
     return {
       kind: "success",
       complaint: complaintRow,
       providerResponse: responseRow,
       timeline: timelineResult,
+      informationRequests: requestsResult,
     };
   });
 }

@@ -182,6 +182,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         complaint: { ...validSafeRow, schema_version: "2.0" },
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(500);
@@ -191,6 +192,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         complaint: validSafeRow,
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
       const resValid = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       const data = await resValid.json();
@@ -210,6 +212,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         complaint: { ...validSafeRow, complaint_facts: null as unknown as string },
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(500);
@@ -228,6 +231,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         },
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(500);
@@ -254,6 +258,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         },
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
 
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
@@ -285,6 +290,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         timeline: [
           { complaint_id: validId, status: "received", changed_at: "2026-08-13 21:33:54.725+00" as unknown as Date }
         ],
+        informationRequests: [],
       });
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(200);
@@ -305,6 +311,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         },
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(500);
@@ -317,6 +324,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         },
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
       const res2 = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res2.status).toBe(500);
@@ -331,6 +339,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         },
         providerResponse: null,
         timeline: [],
+        informationRequests: [],
       });
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(200);
@@ -374,6 +383,7 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
         timeline: [
           { complaint_id: validId, status: "received", changed_at: "2026-08-13 21:33:54.725+00" as unknown as Date }
         ],
+        informationRequests: [],
       });
       const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
       expect(res.status).toBe(200);
