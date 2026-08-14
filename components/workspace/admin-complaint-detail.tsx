@@ -68,6 +68,7 @@ interface AdminComplaintDetailResponse {
 
 interface AdminComplaintDetailProps {
   complaintId: string;
+  canReview?: boolean;
 }
 
 type UIState =
@@ -160,7 +161,9 @@ const formatDateTime = (dateString: string) => {
   }
 };
 
-export function AdminComplaintDetail({ complaintId }: AdminComplaintDetailProps) {
+import { AdminComplaintReviewAction } from './admin-complaint-review-action';
+
+export function AdminComplaintDetail({ complaintId, canReview = false }: AdminComplaintDetailProps) {
   const [uiState, setUiState] = useState<UIState>({ type: 'loading' });
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef<boolean>(true);
@@ -305,10 +308,18 @@ export function AdminComplaintDetail({ complaintId }: AdminComplaintDetailProps)
       </div>
 
       <div className={styles.header}>
-        <h1 className={styles.title}>{complaint.sheetNumber}</h1>
-        <span className={`${styles.statusBadge} ${styles[`status_${complaint.status}`]}`}>
-          {getStatusLabel(complaint.status)}
-        </span>
+        <div className={styles.headerTitleRow}>
+          <h1 className={styles.title}>{complaint.sheetNumber}</h1>
+          <span className={`${styles.statusBadge} ${styles[`status_${complaint.status}`]}`}>
+            {getStatusLabel(complaint.status)}
+          </span>
+        </div>
+        <AdminComplaintReviewAction
+          complaintId={complaintId}
+          currentStatus={complaint.status}
+          canReview={canReview}
+          onRefresh={fetchDetail}
+        />
       </div>
 
       <div className={styles.grid}>
