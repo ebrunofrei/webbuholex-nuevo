@@ -375,10 +375,13 @@ describe("persistencia SQLite y seguridad estática", () => {
 
   it("mantiene el transporte sin montar y desconectado de UI", () => {
     const authorizedRouteFiles = [
-      "app/api/admin/complaints/[complaintId]/responses/route.ts",
-      "app/api/complaints/route.ts",
-      "app/api/owl/admission/route.ts",
-    ];
+    "app/api/admin/complaints/[complaintId]/responses/route.ts",
+    "app/api/admin/complaints/[complaintId]/review/route.ts",
+    "app/api/admin/complaints/[complaintId]/route.ts",
+    "app/api/admin/complaints/route.ts",
+    "app/api/complaints/route.ts",
+    "app/api/owl/admission/route.ts",
+];
     const appFiles = readdirSync(path.join(process.cwd(), "app"), { recursive: true }).filter(
       (entry): entry is string => typeof entry === "string",
     );

@@ -150,6 +150,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
                 capturedUpdateVals = { status: "answered", updated_at: updatedAt };
                 return 1;
              },
+             updateComplaintStatusToUnderReview: async () => 1,
              insertResponseStatusHistory: async () => {},
              insertResponseAuditEvent: async () => {},
              insertResponseOutbox: async () => {},
@@ -195,6 +196,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
               checkInitialResponseExists: async () => false,
               insertProviderResponse: async () => { if(stepToFail === "insertProviderResponse") throw errorToThrow; },
               updateComplaintStatusToAnswered: async () => { if(stepToFail === "updateComplaintStatusToAnswered") throw errorToThrow; return 1; },
+              updateComplaintStatusToUnderReview: async () => 1,
               insertResponseStatusHistory: async () => { if(stepToFail === "insertResponseStatusHistory") throw errorToThrow; },
               insertResponseAuditEvent: async () => { if(stepToFail === "insertResponseAuditEvent") throw errorToThrow; },
               insertResponseOutbox: async () => { if(stepToFail === "insertResponseOutbox") throw errorToThrow; },
@@ -243,6 +245,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            checkInitialResponseExists: async () => false,
            insertProviderResponse: async () => {},
            updateComplaintStatusToAnswered: async () => 1,
+           updateComplaintStatusToUnderReview: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertResponseOutbox: async (input: ComplaintOutboxInsertInput) => { capturedOutbox = input; },
@@ -282,6 +285,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            checkInitialResponseExists: async () => false,
            insertProviderResponse: async (input: ComplaintProviderResponseInsertInput) => { capturedResponse = input; },
            updateComplaintStatusToAnswered: async () => 1,
+           updateComplaintStatusToUnderReview: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertResponseOutbox: async () => {},

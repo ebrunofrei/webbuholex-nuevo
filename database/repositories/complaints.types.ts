@@ -125,11 +125,23 @@ export type IssueInitialProviderResponseResult =
   | { readonly kind: "complaint_response_invalid_status" }
   | { readonly kind: "complaint_initial_response_already_exists" };
 
+export interface StartComplaintReviewInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "received";
+  readonly operatorId: string;
+}
+
+export type StartComplaintReviewResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" };
+
 export interface ComplaintAdminTransactionExecutor {
   getComplaintForUpdate(complaintId: string): Promise<{ id: string; status: ComplaintStatus } | null>;
   checkInitialResponseExists(complaintId: string): Promise<boolean>;
   insertProviderResponse(input: ComplaintProviderResponseInsertInput): Promise<void>;
   updateComplaintStatusToAnswered(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number>;
+  updateComplaintStatusToUnderReview(complaintId: string, updatedAt: Date): Promise<number>;
   insertResponseStatusHistory(input: ComplaintStatusHistoryInsertInput): Promise<void>;
   insertResponseAuditEvent(input: ComplaintAuditInsertInput): Promise<void>;
   insertResponseOutbox(input: ComplaintOutboxInsertInput): Promise<void>;

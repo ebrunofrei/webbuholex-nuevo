@@ -1,8 +1,8 @@
 import { ComplaintsPersistenceAdapter, CreateComplaintRepositoryInput, CreateComplaintPersistenceResult } from "./complaints.types";
 import { createComplaintPersistenceError, SanitizedDatabaseConstraintError } from "./complaints.errors";
 import { formatComplaintSheetNumber } from "@/lib/complaints/complaint-identifiers";
-import { mapComplaintDomainToInsert, mapInitialComplaintStatusHistoryToInsert, mapComplaintReceiptOutboxToInsert, mapComplaintCreatedAuditEventToInsert, mapProviderResponseToInsert, mapAnsweredComplaintStatusHistoryToInsert, mapProviderResponseCreatedAuditEventToInsert, mapProviderResponseDeliveryOutboxToInsert } from "../mappers/complaints";
-import { Clock, ComplaintsAdminPersistenceAdapter, IssueInitialProviderResponseInput, IssueInitialProviderResponseResult } from "./complaints.types";
+import { mapComplaintDomainToInsert, mapInitialComplaintStatusHistoryToInsert, mapComplaintReceiptOutboxToInsert, mapComplaintCreatedAuditEventToInsert, mapProviderResponseToInsert, mapAnsweredComplaintStatusHistoryToInsert, mapProviderResponseCreatedAuditEventToInsert, mapProviderResponseDeliveryOutboxToInsert, mapUnderReviewComplaintStatusHistoryToInsert, mapComplaintStatusChangedAuditEventToInsert } from "../mappers/complaints";
+import { Clock, ComplaintsAdminPersistenceAdapter, IssueInitialProviderResponseInput, IssueInitialProviderResponseResult, StartComplaintReviewInput, StartComplaintReviewResult } from "./complaints.types";
 
 export interface ComplaintsRepository {
   createComplaint(input: CreateComplaintRepositoryInput): Promise<CreateComplaintPersistenceResult>;
@@ -114,6 +114,7 @@ export function createComplaintsRepository(adapter: ComplaintsPersistenceAdapter
 
 export interface ComplaintsAdminRepository {
   issueInitialProviderResponse(input: IssueInitialProviderResponseInput): Promise<IssueInitialProviderResponseResult>;
+  startComplaintReview(input: StartComplaintReviewInput): Promise<StartComplaintReviewResult>;
 }
 
 export function createComplaintsAdminRepository(adapter: ComplaintsAdminPersistenceAdapter, clock: Clock): ComplaintsAdminRepository {
@@ -186,6 +187,51 @@ export function createComplaintsAdminRepository(adapter: ComplaintsAdminPersiste
         if (err instanceof SanitizedDatabaseConstraintError && err.code === "23503") {
           throw createComplaintPersistenceError("complaint_fk_violation");
         }
+        if (err instanceof Error && err.name === "ComplaintPersistenceError") {
+          throw err;
+        }
+
+        throw createComplaintPersistenceError("complaint_transaction_failed");
+      }
+    },
+    async startComplaintReview(input: StartComplaintReviewInput): Promise<StartComplaintReviewResult> {
+      if (input.expectedCurrentStatus !== "received") {
+        return { kind: "complaint_stale_status" };
+      }
+
+      try {
+        return await adapter.transaction(async (tx) => {
+          const complaint = await tx.getComplaintForUpdate(input.complaintId);
+          if (!complaint) {
+            return { kind: "complaint_not_found" };
+          }
+
+          if (complaint.status !== input.expectedCurrentStatus) {
+            return { kind: "complaint_stale_status" };
+          }
+
+          const updatedRows = await tx.updateComplaintStatusToUnderReview(input.complaintId, clock.now());
+          if (updatedRows === 0) {
+            throw createComplaintPersistenceError("complaint_stale_status");
+          }
+
+          const historyInsert = mapUnderReviewComplaintStatusHistoryToInsert({
+            complaintId: input.complaintId,
+            changedBy: input.operatorId,
+          });
+          await tx.insertResponseStatusHistory(historyInsert);
+
+          const auditInsert = mapComplaintStatusChangedAuditEventToInsert({
+            complaintId: input.complaintId,
+            createdBy: input.operatorId,
+            fromStatus: "received",
+            toStatus: "under_review",
+          });
+          await tx.insertResponseAuditEvent(auditInsert);
+
+          return { kind: "success" };
+        });
+      } catch (err) {
         if (err instanceof Error && err.name === "ComplaintPersistenceError") {
           throw err;
         }

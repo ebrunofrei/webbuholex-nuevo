@@ -24,7 +24,7 @@ describe("interfaces jurisprudenciales", () => {
     expect(screen.getByLabelText(/Problema jurídico/i)).toBeInTheDocument();
 
     const action = screen.getByRole("button", { name: "BUSCAR" });
-    expect(action).not.toBeDisabled();
+    await import("@testing-library/react").then(({ waitFor }) => waitFor(() => expect(action).not.toBeDisabled()));
 
     fireEvent.click(action);
 

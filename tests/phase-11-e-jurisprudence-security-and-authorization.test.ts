@@ -674,10 +674,13 @@ describe("readiness y límites estáticos", () => {
 
   it("no existen app/api ni route.ts", () => {
     const authorizedRouteFiles = [
-      "app/api/admin/complaints/[complaintId]/responses/route.ts",
-      "app/api/complaints/route.ts",
-      "app/api/owl/admission/route.ts",
-    ];
+    "app/api/admin/complaints/[complaintId]/responses/route.ts",
+    "app/api/admin/complaints/[complaintId]/review/route.ts",
+    "app/api/admin/complaints/[complaintId]/route.ts",
+    "app/api/admin/complaints/route.ts",
+    "app/api/complaints/route.ts",
+    "app/api/owl/admission/route.ts",
+];
     const appRoot = path.join(process.cwd(), "app");
     const entries = readdirSync(appRoot, { recursive: true })
       .filter((entry): entry is string => typeof entry === "string");

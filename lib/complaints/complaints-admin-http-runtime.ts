@@ -49,3 +49,17 @@ export async function executeAdminComplaintResponse(
 
   return submitProviderResponseRuntime(runtimeInput, principal);
 }
+
+export const StartComplaintReviewHttpSchema = z.object({
+  expectedCurrentStatus: z.literal("received")
+}).strict();
+
+export type StartComplaintReviewHttpPayload = z.infer<typeof StartComplaintReviewHttpSchema>;
+
+export async function authorizeAdminComplaintReview(): Promise<ResolveTrustedAdminPrincipalResult> {
+  const session = await getWorkspaceSession();
+  const db = getAuthorizationDatabase();
+  const repository = createAuthorizationRepository(db);
+
+  return resolveTrustedAdminPrincipal(session, "complaints:review", repository);
+}

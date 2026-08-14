@@ -130,3 +130,40 @@ export async function submitProviderResponseRuntime(
     throw error;
   }
 }
+
+export interface StartComplaintReviewRuntimeInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "received";
+}
+
+export type StartComplaintReviewRuntimeResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" };
+
+export async function startComplaintReviewRuntime(
+  input: StartComplaintReviewRuntimeInput,
+  principal: TrustedAdminPrincipal,
+): Promise<StartComplaintReviewRuntimeResult> {
+  const db = getComplaintsAdminDatabase();
+  const adapter = createComplaintsAdminPersistenceAdapter(db);
+  const now = new Date();
+  const repo = createComplaintsAdminRepository(adapter, { now: () => now });
+
+  try {
+    const result = await repo.startComplaintReview({
+      complaintId: input.complaintId,
+      expectedCurrentStatus: input.expectedCurrentStatus,
+      operatorId: principal.operatorId,
+    });
+    return result;
+  } catch (error) {
+    if (
+      error instanceof ComplaintPersistenceError ||
+      error instanceof SanitizedDatabaseConstraintError
+    ) {
+      throw new ComplaintsServiceUnavailableError("complaints_admin_persistence_failed");
+    }
+    throw error;
+  }
+}

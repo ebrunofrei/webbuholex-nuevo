@@ -305,6 +305,21 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
+  async updateComplaintStatusToUnderReview(complaintId: string, updatedAt: Date): Promise<number> {
+    try {
+      const result = await this.tx.update(schema.complaints)
+        .set({ status: 'under_review', updatedAt })
+        .where(and(
+          eq(schema.complaints.id, complaintId),
+          eq(schema.complaints.status, 'received')
+        ))
+        .returning({ id: schema.complaints.id });
+      return result.length;
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
   async insertResponseStatusHistory(
     input: ComplaintStatusHistoryInsertInput,
   ): Promise<void> {

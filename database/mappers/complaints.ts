@@ -335,3 +335,35 @@ export function mapProviderResponseDeliveryOutboxToInsert(input: {
     status: "pending",
   };
 }
+
+export function mapUnderReviewComplaintStatusHistoryToInsert(input: {
+  readonly complaintId: string;
+  readonly changedBy: string;
+}): typeof complaintStatusHistory.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "changedBy"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    fromStatus: "received",
+    toStatus: "under_review",
+    changedBy: input.changedBy,
+  };
+}
+
+export function mapComplaintStatusChangedAuditEventToInsert(input: {
+  readonly complaintId: string;
+  readonly createdBy: string;
+  readonly fromStatus: string;
+  readonly toStatus: string;
+}): typeof complaintAuditEvents.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "createdBy", "fromStatus", "toStatus"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    eventType: "status_changed",
+    createdBy: input.createdBy,
+    metadata: { fromStatus: input.fromStatus, toStatus: input.toStatus },
+  };
+}

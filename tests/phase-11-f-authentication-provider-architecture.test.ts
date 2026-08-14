@@ -377,10 +377,13 @@ describe("sesión, revocación y controles estáticos", () => {
 
   it("no crea app/api, route.ts ni conexión con jurisprudencia", () => {
     const authorizedRouteFiles = [
-      "app/api/admin/complaints/[complaintId]/responses/route.ts",
-      "app/api/complaints/route.ts",
-      "app/api/owl/admission/route.ts",
-    ];
+    "app/api/admin/complaints/[complaintId]/responses/route.ts",
+    "app/api/admin/complaints/[complaintId]/review/route.ts",
+    "app/api/admin/complaints/[complaintId]/route.ts",
+    "app/api/admin/complaints/route.ts",
+    "app/api/complaints/route.ts",
+    "app/api/owl/admission/route.ts",
+];
     const entries = readdirSync(path.join(process.cwd(), "app"), { recursive: true })
       .filter((entry): entry is string => typeof entry === "string");
     const routeFiles = entries

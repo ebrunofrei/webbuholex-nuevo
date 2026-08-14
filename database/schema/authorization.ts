@@ -27,7 +27,7 @@ export const externalIdentityBindings = authorizationSchema.table("external_iden
 
 export const operatorCapabilities = authorizationSchema.table("operator_capabilities", {
   operatorId: uuid("operator_id").notNull().references(() => operators.id, { onDelete: 'restrict' }),
-  capability: varchar("capability", { enum: ["complaints:respond", "complaints:read"] }).notNull(),
+  capability: varchar("capability", { enum: ["complaints:respond", "complaints:read", "complaints:review"] }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   primaryKey({ columns: [table.operatorId, table.capability] }),
