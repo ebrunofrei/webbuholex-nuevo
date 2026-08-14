@@ -21,12 +21,15 @@ describe("resumeComplaintReviewRuntime", () => {
   const validComplaintId = "123e4567-e89b-12d3-a456-426614174000";
   const validPrincipal = { operatorId: "op_123", identitySource: "authenticated_session" } as const;
 
-  let mockRepo: unknown;
+  let mockRepo: repoModule.ComplaintsAdminRepository;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepo = {
       resumeComplaintReview: vi.fn().mockResolvedValue({ kind: "success" }),
+      issueInitialProviderResponse: vi.fn(),
+      startComplaintReview: vi.fn(),
+      requestComplaintInformation: vi.fn(),
     };
     vi.mocked(repoModule.createComplaintsAdminRepository).mockReturnValue(mockRepo);
   });
