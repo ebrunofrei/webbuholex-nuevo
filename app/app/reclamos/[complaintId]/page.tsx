@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { AdminComplaintDetail } from '@/components/workspace/admin-complaint-detail';
 import { Metadata } from 'next';
-import { authorizeAdminComplaintReview } from '@/lib/complaints/complaints-admin-http-runtime';
+import { authorizeAdminComplaintReview, authorizeAdminComplaintResponse } from '@/lib/complaints/complaints-admin-http-runtime';
 
 export const metadata: Metadata = {
   title: 'Detalle de Reclamo | BúhoLex',
@@ -27,9 +27,19 @@ export default async function AdminComplaintDetailPage({ params }: PageProps) {
     canReview = false;
   }
 
+  let canRespond = false;
+  try {
+    const authResult = await authorizeAdminComplaintResponse();
+    if (authResult.kind === 'authorized') {
+      canRespond = true;
+    }
+  } catch {
+    canRespond = false;
+  }
+
   return (
     <Suspense fallback={<div>Cargando detalle...</div>}>
-      <AdminComplaintDetail complaintId={complaintId} canReview={canReview} />
+      <AdminComplaintDetail complaintId={complaintId} canReview={canReview} canRespond={canRespond} />
     </Suspense>
   );
 }

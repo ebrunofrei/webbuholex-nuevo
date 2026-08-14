@@ -291,4 +291,82 @@ describe('AdminComplaintDetail Workspace Component', () => {
 
     expect(abortSpy).toHaveBeenCalled();
   });
+
+  describe('AdminComplaintResponseForm visibility', () => {
+    it('shows form when canRespond=true, status=under_review, providerResponse=null', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'under_review' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canRespond={true} />);
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Registrar respuesta/i })).toBeInTheDocument();
+      });
+    });
+
+    it('shows form when canRespond=true, status=awaiting_information, providerResponse=null', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'awaiting_information' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canRespond={true} />);
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Registrar respuesta/i })).toBeInTheDocument();
+      });
+    });
+
+    it('hides form when providerResponse is present', async () => {
+      const data = {
+        ...mockData,
+        complaint: { ...mockData.complaint, status: 'under_review' as const },
+        providerResponse: {
+          responseText: 'Respuesta',
+          actionsTaken: null,
+          respondedAt: '2026-08-15T10:00:00Z',
+          responseChannel: 'email'
+        }
+      };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canRespond={true} />);
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /Registrar respuesta/i })).not.toBeInTheDocument();
+        expect(screen.getByText('Respuesta')).toBeInTheDocument();
+      });
+    });
+
+    it('hides form when status is received and providerResponse=null', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'received' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canRespond={true} />);
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /Registrar respuesta/i })).not.toBeInTheDocument();
+        expect(screen.getByText('Aún no se ha registrado una respuesta.')).toBeInTheDocument();
+      });
+    });
+
+    it('hides form when status is answered and providerResponse is present', async () => {
+      const data = {
+        ...mockData,
+        complaint: { ...mockData.complaint, status: 'answered' as const },
+        providerResponse: {
+          responseText: 'Respuesta',
+          actionsTaken: null,
+          respondedAt: '2026-08-15T10:00:00Z',
+          responseChannel: 'email'
+        }
+      };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canRespond={true} />);
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /Registrar respuesta/i })).not.toBeInTheDocument();
+        expect(screen.getByText('Respuesta')).toBeInTheDocument();
+      });
+    });
+
+    it('hides form when status is closed', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'closed' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canRespond={true} />);
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /Registrar respuesta/i })).not.toBeInTheDocument();
+        expect(screen.getByText('Aún no se ha registrado una respuesta.')).toBeInTheDocument();
+      });
+    });
+  });
 });

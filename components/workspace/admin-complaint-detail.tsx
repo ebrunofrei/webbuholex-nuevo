@@ -69,6 +69,7 @@ interface AdminComplaintDetailResponse {
 interface AdminComplaintDetailProps {
   complaintId: string;
   canReview?: boolean;
+  canRespond?: boolean;
 }
 
 type UIState =
@@ -162,8 +163,9 @@ const formatDateTime = (dateString: string) => {
 };
 
 import { AdminComplaintReviewAction } from './admin-complaint-review-action';
+import { AdminComplaintResponseForm } from './admin-complaint-response-form';
 
-export function AdminComplaintDetail({ complaintId, canReview = false }: AdminComplaintDetailProps) {
+export function AdminComplaintDetail({ complaintId, canReview = false, canRespond = false }: AdminComplaintDetailProps) {
   const [uiState, setUiState] = useState<UIState>({ type: 'loading' });
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef<boolean>(true);
@@ -473,7 +475,15 @@ export function AdminComplaintDetail({ complaintId, canReview = false }: AdminCo
           <section className={styles.section} aria-labelledby="section-respuesta">
             <h2 id="section-respuesta" className={styles.sectionTitle}>Respuesta del Proveedor</h2>
             {!providerResponse ? (
-              <p className={styles.dd} style={{ color: '#6b7280' }}>Aún no se ha registrado una respuesta.</p>
+              canRespond && (complaint.status === 'under_review' || complaint.status === 'awaiting_information') ? (
+                <AdminComplaintResponseForm
+                  complaintId={complaintId}
+                  currentStatus={complaint.status as 'under_review' | 'awaiting_information'}
+                  onRefresh={fetchDetail}
+                />
+              ) : (
+                <p className={styles.dd} style={{ color: '#6b7280' }}>Aún no se ha registrado una respuesta.</p>
+              )
             ) : (
               <dl className={styles.dl}>
                 <div className={`${styles.dl} ${styles.twoCols}`} style={{ marginBottom: '1rem' }}>
