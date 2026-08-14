@@ -87,7 +87,11 @@ describe('Admin Complaints Workspace UI', () => {
     });
 
     expect(screen.queryByText('cmp-123')).not.toBeInTheDocument();
-    expect(screen.queryByText('Ver detalle')).not.toBeInTheDocument();
+
+    const detailLinks = screen.getAllByRole('link', { name: 'Ver detalle' });
+    expect(detailLinks.length).toBeGreaterThan(0);
+    expect(detailLinks[0]).toHaveAttribute('href', '/app/reclamos/cmp-123');
+
     expect(screen.queryByText('Responder')).not.toBeInTheDocument();
   });
 

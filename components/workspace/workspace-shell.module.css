@@ -8,7 +8,7 @@
 .header button { padding: 8px 10px; border: 1px solid rgb(255 255 255 / 18%); color: #9db4b1; background: transparent; font-size: .65rem; }
 .navigation { padding: 20px 12px; border-right: 1px solid rgb(255 255 255 / 12%); }
 .navigation ul { margin: 0; padding: 0; list-style: none; }
-.navigation a { display: flex; justify-content: space-between; gap: 10px; padding: 11px 12px; border-radius: 4px; color: #c6d8d6; text-decoration: none; font-size: .74rem; }
+.navigation a { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; min-height: 44px; border-radius: 4px; color: #c6d8d6; text-decoration: none; font-size: .74rem; }
 .navigation a[aria-current="page"] { color: white; background: #1d4b50; }
 .navigation small { color: #d6af69; font-size: .52rem; text-transform: uppercase; }
 .content { min-width: 0; padding: clamp(28px, 5vw, 72px); background: #f5eee4; color: var(--ink); }
@@ -17,4 +17,4 @@
 .placeholder h1 { margin: 14px 0 18px; font-size: clamp(2.8rem, 5vw, 5rem); }
 .placeholder span { display: block; color: var(--ink-soft); font: 1rem/1.65 Georgia, serif; }
 .placeholder strong { display: inline-block; margin-top: 28px; padding: 10px 12px; border-left: 3px solid var(--gold); background: #eee0c3; font-size: .7rem; }
-@media (max-width: 760px), (orientation: landscape) and (max-height: 500px) { .shell { grid-template: auto auto 1fr / 1fr; } .header { grid-column: 1; } .header div { display: none; } .navigation { overflow-x: auto; padding: 8px; border-right: 0; border-bottom: 1px solid rgb(255 255 255 / 12%); } .navigation ul { display: flex; width: max-content; } .navigation a { min-width: max-content; } }
+@media (max-width: 760px), (orientation: landscape) and (max-height: 500px) { .shell { grid-template: auto auto 1fr / 1fr; } .header { grid-column: 1; } .header div { display: none; } .navigation { overflow-x: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; padding: 8px; border-right: 0; border-bottom: 1px solid rgb(255 255 255 / 12%); } .navigation ul { display: flex; width: max-content; } .navigation a { min-width: max-content; } }

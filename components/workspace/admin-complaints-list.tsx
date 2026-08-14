@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import styles from './admin-complaints-list.module.css';
 
 type ComplaintStatus = 'received' | 'under_review' | 'awaiting_information' | 'answered' | 'closed';
@@ -289,6 +290,7 @@ export function AdminComplaintsList() {
                   <th scope="col">Fecha de envío</th>
                   <th scope="col">Fecha límite</th>
                   <th scope="col" className={styles.colUpdatedAt}>Última actualización</th>
+                  <th scope="col"><span className={styles.srOnly}>Acciones</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -303,6 +305,11 @@ export function AdminComplaintsList() {
                     <td>{formatDate(item.submittedAt)}</td>
                     <td>{formatDate(item.deadlineAt)}</td>
                     <td className={styles.colUpdatedAt}>{formatDateTime(item.updatedAt)}</td>
+                    <td>
+                      <Link href={`/app/reclamos/${item.complaintId}`} className={styles.detailLink}>
+                        Ver detalle
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -329,6 +336,11 @@ export function AdminComplaintsList() {
                 <div className={styles.cardRow}>
                   <span className={styles.cardLabel}>Fecha de envío</span>
                   <span className={styles.cardValue}>{formatDate(item.submittedAt)}</span>
+                </div>
+                <div className={styles.cardActionRow}>
+                  <Link href={`/app/reclamos/${item.complaintId}`} className={styles.detailLink}>
+                    Ver detalle
+                  </Link>
                 </div>
               </li>
             ))}
