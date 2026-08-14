@@ -4,6 +4,39 @@ import { TrustedAdminPrincipal } from "./complaints-admin-runtime";
 import { COMPLAINT_STATUSES } from "./complaint.constants";
 import { ComplaintStatus } from "./complaint.types";
 
+function normalizeTimestamp(value: string | Date | null | undefined): string {
+  if (!value) throw new Error("invalid_temporal_value");
+  try {
+    const date = typeof value === "string" ? new Date(value) : value;
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+      throw new Error("invalid_temporal_value");
+    }
+    return date.toISOString();
+  } catch {
+    throw new Error("invalid_temporal_value");
+  }
+}
+
+function normalizeDateOnly(value: string | Date | null | undefined): string {
+  if (!value) throw new Error("invalid_temporal_value");
+  try {
+    if (typeof value === "string") {
+      const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (!match || !match[1]) throw new Error("invalid_temporal_value");
+      return match[1];
+    }
+
+    if (!(value instanceof Date) || isNaN(value.getTime())) {
+      throw new Error("invalid_temporal_value");
+    }
+    const result = value.toISOString().split("T")[0];
+    if (!result) throw new Error("invalid_temporal_value");
+    return result;
+  } catch {
+    throw new Error("invalid_temporal_value");
+  }
+}
+
 export interface AdminComplaintDetailResponse {
   complaint: {
     id: string;
@@ -109,22 +142,20 @@ export async function getAdminComplaintDetailRuntime(
       }
       return {
         status: t.status as ComplaintStatus,
-        changedAt: t.changed_at.toISOString(),
+        changedAt: normalizeTimestamp(t.changed_at),
       };
     });
 
-    const mappedDeadline = typeof complaint.deadline_at === 'string'
-        ? complaint.deadline_at
-        : (complaint.deadline_at as unknown as Date).toISOString().split("T")[0];
+    const mappedDeadline = normalizeDateOnly(complaint.deadline_at);
 
     const data: AdminComplaintDetailResponse = {
       complaint: {
         id: complaint.id,
         sheetNumber: complaint.sheet_number,
         status: complaint.status as ComplaintStatus,
-        submittedAt: complaint.submitted_at.toISOString(),
-        deadlineAt: mappedDeadline as string,
-        closedAt: complaint.closed_at ? complaint.closed_at.toISOString() : null,
+        submittedAt: normalizeTimestamp(complaint.submitted_at),
+        deadlineAt: mappedDeadline,
+        closedAt: complaint.closed_at ? normalizeTimestamp(complaint.closed_at) : null,
         consumer: {
           consumerType: complaint.consumer_type,
           firstNames: complaint.consumer_first_names,
@@ -157,7 +188,7 @@ export async function getAdminComplaintDetailRuntime(
       providerResponse: providerResponse ? {
         responseText: providerResponse.response_text,
         actionsTaken: providerResponse.actions_taken,
-        respondedAt: providerResponse.responded_at.toISOString(),
+        respondedAt: normalizeTimestamp(providerResponse.responded_at),
         responseChannel: providerResponse.response_channel,
       } : null,
     };
@@ -169,6 +200,9 @@ export async function getAdminComplaintDetailRuntime(
   } catch (error) {
     if (error instanceof Error && error.message === "invalid_timeline_status") {
       return { kind: "invalid_state", reason: "invalid_timeline_status" };
+    }
+    if (error instanceof Error && error.message === "invalid_temporal_value") {
+      return { kind: "invalid_state", reason: "invalid_temporal_value" };
     }
     if (error instanceof Error && error.message === "complaints_admin_detail_read_database_unavailable") {
       return { kind: "db_unavailable" };

@@ -266,5 +266,117 @@ describe("Admin Complaint Detail Protected Read API (GET /api/admin/complaints/[
       expect(data.complaint.details.kind).toBe("claim");
       expect(data.complaint.details.facts).toBe("Tested facts");
     });
+    it("Temporal Normalization: REAL RAW STRING TIMESTAMP REGRESSION", async () => {
+      vi.mocked(getAdminComplaintDetailRepository).mockResolvedValue({
+        kind: "success",
+        complaint: {
+          ...validSafeRow,
+          submitted_at: "2026-08-13 21:33:54.725+00" as unknown as Date,
+          deadline_at: "2026-09-02" as unknown as Date,
+          closed_at: "2026-09-02 21:33:54.725+00" as unknown as Date,
+        },
+        providerResponse: {
+          complaint_id: validId,
+          response_text: "Response",
+          actions_taken: null,
+          responded_at: "2026-09-02 21:33:54.725+00" as unknown as Date,
+          response_channel: "email"
+        },
+        timeline: [
+          { complaint_id: validId, status: "received", changed_at: "2026-08-13 21:33:54.725+00" as unknown as Date }
+        ],
+      });
+      const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.complaint.submittedAt).toBe("2026-08-13T21:33:54.725Z");
+      expect(data.complaint.deadlineAt).toBe("2026-09-02");
+      expect(data.complaint.closedAt).toBe("2026-09-02T21:33:54.725Z");
+      expect(data.timeline[0].changedAt).toBe("2026-08-13T21:33:54.725Z");
+      expect(data.providerResponse.respondedAt).toBe("2026-09-02T21:33:54.725Z");
+    });
+
+    it("Temporal Normalization: INVALID TIMESTAMP REGRESSION", async () => {
+      vi.mocked(getAdminComplaintDetailRepository).mockResolvedValue({
+        kind: "success",
+        complaint: {
+          ...validSafeRow,
+          submitted_at: "invalid date" as unknown as Date,
+        },
+        providerResponse: null,
+        timeline: [],
+      });
+      const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
+      expect(res.status).toBe(500);
+
+      vi.mocked(getAdminComplaintDetailRepository).mockResolvedValue({
+        kind: "success",
+        complaint: {
+          ...validSafeRow,
+          deadline_at: "invalid date" as unknown as Date,
+        },
+        providerResponse: null,
+        timeline: [],
+      });
+      const res2 = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
+      expect(res2.status).toBe(500);
+    });
+
+    it("Temporal Normalization: NULL TEMPORAL REGRESSION", async () => {
+      vi.mocked(getAdminComplaintDetailRepository).mockResolvedValue({
+        kind: "success",
+        complaint: {
+          ...validSafeRow,
+          closed_at: null,
+        },
+        providerResponse: null,
+        timeline: [],
+      });
+      const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.complaint.closedAt).toBeNull();
+      expect(data.providerResponse).toBeNull();
+    });
+
+    it("Temporal Normalization: ROUNDTRIP_REGRESSION_ADDED", async () => {
+      vi.mocked(getAdminComplaintDetailRepository).mockResolvedValue({
+        kind: "success",
+        complaint: {
+          id: validId,
+          schema_version: "1.0",
+          sheet_number: "LR-2026-000001",
+          status: "received",
+          submitted_at: "2026-08-13 21:33:54.725+00" as unknown as Date,
+          deadline_at: "2026-09-02" as unknown as Date,
+          closed_at: null,
+          consumer_type: "natural_person",
+          consumer_first_names: "Prueba",
+          consumer_last_names: "Test",
+          consumer_legal_name: null,
+          consumer_representative_first_names: null,
+          consumer_representative_last_names: null,
+          consumer_representative_role: null,
+          consumer_representative_relationship: null,
+          subject_kind: "product",
+          subject_description: "Desc",
+          subject_amount_applicability: "not_applicable",
+          subject_amount: null,
+          subject_currency: "PEN",
+          subject_transaction_date: null,
+          subject_reference_number: null,
+          subject_channel: null,
+          complaint_kind: "complaint",
+          complaint_facts: "Facts",
+          complaint_requested_resolution: "Req",
+        },
+        providerResponse: null,
+        timeline: [
+          { complaint_id: validId, status: "received", changed_at: "2026-08-13 21:33:54.725+00" as unknown as Date }
+        ],
+      });
+      const res = await GET(createRequest(), { params: Promise.resolve({ complaintId: validId }) });
+      expect(res.status).toBe(200);
+    });
   });
 });

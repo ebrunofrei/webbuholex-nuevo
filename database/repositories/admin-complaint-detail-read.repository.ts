@@ -6,14 +6,14 @@ export interface ProviderResponseSafeRow {
   complaint_id: string;
   response_text: string | null;
   actions_taken: string | null;
-  responded_at: Date;
+  responded_at: string | Date;
   response_channel: string;
 }
 
 export interface ComplaintStatusTimelineSafeRow {
   complaint_id: string;
   status: string;
-  changed_at: Date;
+  changed_at: string | Date;
 }
 
 export interface ComplaintDetailSafeRow {
@@ -21,9 +21,9 @@ export interface ComplaintDetailSafeRow {
   schema_version: string;
   sheet_number: string;
   status: string;
-  submitted_at: Date;
-  deadline_at: Date;
-  closed_at: Date | null;
+  submitted_at: string | Date;
+  deadline_at: string | Date;
+  closed_at: string | Date | null;
   consumer_type: string;
   consumer_first_names: string | null;
   consumer_last_names: string | null;
