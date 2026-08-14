@@ -47,13 +47,14 @@ export type CreateComplaintResult =
       readonly deadlineAt: string;
     };
 
-import type { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents, complaintProviderResponses } from "../schema/complaints";
+import type { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents, complaintProviderResponses, complaintInformationRequests } from "../schema/complaints";
 
 export type ComplaintInsertInput = typeof complaints.$inferInsert;
 export type ComplaintStatusHistoryInsertInput = typeof complaintStatusHistory.$inferInsert;
 export type ComplaintAuditInsertInput = typeof complaintAuditEvents.$inferInsert;
 export type ComplaintOutboxInsertInput = typeof complaintOutbox.$inferInsert;
 export type ComplaintProviderResponseInsertInput = typeof complaintProviderResponses.$inferInsert;
+export type ComplaintInformationRequestInsertInput = typeof complaintInformationRequests.$inferInsert;
 
 export interface InsertedComplaintSummary {
   readonly id: string;
@@ -136,12 +137,30 @@ export type StartComplaintReviewResult =
   | { readonly kind: "complaint_not_found" }
   | { readonly kind: "complaint_stale_status" };
 
+export interface RequestComplaintInformationInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "under_review";
+  readonly requestText: string;
+  readonly operatorId: string;
+}
+
+export type RequestComplaintInformationResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" }
+  | { readonly kind: "complaint_open_information_request_exists" }
+  | { readonly kind: "complaint_information_request_sequence_conflict" };
+
 export interface ComplaintAdminTransactionExecutor {
   getComplaintForUpdate(complaintId: string): Promise<{ id: string; status: ComplaintStatus } | null>;
   checkInitialResponseExists(complaintId: string): Promise<boolean>;
+  checkOpenInformationRequestExists(complaintId: string): Promise<boolean>;
+  getNextInformationRequestSequence(complaintId: string): Promise<number>;
   insertProviderResponse(input: ComplaintProviderResponseInsertInput): Promise<void>;
+  insertInformationRequest(input: ComplaintInformationRequestInsertInput): Promise<void>;
   updateComplaintStatusToAnswered(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number>;
   updateComplaintStatusToUnderReview(complaintId: string, updatedAt: Date): Promise<number>;
+  updateComplaintStatusToAwaitingInformation(complaintId: string, updatedAt: Date): Promise<number>;
   insertResponseStatusHistory(input: ComplaintStatusHistoryInsertInput): Promise<void>;
   insertResponseAuditEvent(input: ComplaintAuditInsertInput): Promise<void>;
   insertResponseOutbox(input: ComplaintOutboxInsertInput): Promise<void>;

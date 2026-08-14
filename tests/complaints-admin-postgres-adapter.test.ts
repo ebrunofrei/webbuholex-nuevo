@@ -154,6 +154,10 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
              insertResponseStatusHistory: async () => {},
              insertResponseAuditEvent: async () => {},
              insertResponseOutbox: async () => {},
+             checkOpenInformationRequestExists: async () => false,
+             getNextInformationRequestSequence: async () => 1,
+             insertInformationRequest: async () => {},
+             updateComplaintStatusToAwaitingInformation: async () => 1,
           });
         }
       } satisfies ComplaintsAdminPersistenceAdapter,
@@ -200,6 +204,10 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
               insertResponseStatusHistory: async () => { if(stepToFail === "insertResponseStatusHistory") throw errorToThrow; },
               insertResponseAuditEvent: async () => { if(stepToFail === "insertResponseAuditEvent") throw errorToThrow; },
               insertResponseOutbox: async () => { if(stepToFail === "insertResponseOutbox") throw errorToThrow; },
+              checkOpenInformationRequestExists: async () => false,
+              getNextInformationRequestSequence: async () => 1,
+              insertInformationRequest: async () => { if(stepToFail === "insertInformationRequest") throw errorToThrow; },
+              updateComplaintStatusToAwaitingInformation: async () => { if(stepToFail === "updateComplaintStatusToAwaitingInformation") throw errorToThrow; return 1; },
            };
            return await cb(tx);
         } catch {
@@ -230,6 +238,23 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
     const repo = createFailureRepo("insertResponseOutbox");
     await expect(repo.issueInitialProviderResponse(baseInput)).rejects.toThrow("complaint_transaction_failed");
   });
+
+  it("D.14. rollback contract requestComplaintInformation: information request insert", async () => {
+    const repo = createFailureRepo("insertInformationRequest");
+    await expect(repo.requestComplaintInformation({ complaintId: "c-123", expectedCurrentStatus: "under_review", requestText: "Info", operatorId: "op-1" })).rejects.toThrow("complaint_transaction_failed");
+  });
+  it("D.15. rollback contract requestComplaintInformation: complaint update", async () => {
+    const repo = createFailureRepo("updateComplaintStatusToAwaitingInformation");
+    await expect(repo.requestComplaintInformation({ complaintId: "c-123", expectedCurrentStatus: "under_review", requestText: "Info", operatorId: "op-1" })).rejects.toThrow("complaint_transaction_failed");
+  });
+  it("D.16. rollback contract requestComplaintInformation: status history insert", async () => {
+    const repo = createFailureRepo("insertResponseStatusHistory");
+    await expect(repo.requestComplaintInformation({ complaintId: "c-123", expectedCurrentStatus: "under_review", requestText: "Info", operatorId: "op-1" })).rejects.toThrow("complaint_transaction_failed");
+  });
+  it("D.17. rollback contract requestComplaintInformation: audit insert", async () => {
+    const repo = createFailureRepo("insertResponseAuditEvent");
+    await expect(repo.requestComplaintInformation({ complaintId: "c-123", expectedCurrentStatus: "under_review", requestText: "Info", operatorId: "op-1" })).rejects.toThrow("complaint_transaction_failed");
+  });
   it("ROLLBACK CONTRACT TESTED", () => {
      expect(true).toBe(true);
   });
@@ -249,6 +274,10 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertResponseOutbox: async (input: ComplaintOutboxInsertInput) => { capturedOutbox = input; },
+           checkOpenInformationRequestExists: async () => false,
+           getNextInformationRequestSequence: async () => 1,
+           insertInformationRequest: async () => {},
+           updateComplaintStatusToAwaitingInformation: async () => 1,
         });
       }
     };
@@ -289,6 +318,10 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertResponseOutbox: async () => {},
+           checkOpenInformationRequestExists: async () => false,
+           getNextInformationRequestSequence: async () => 1,
+           insertInformationRequest: async () => {},
+           updateComplaintStatusToAwaitingInformation: async () => 1,
         });
       }
     };
@@ -334,6 +367,72 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
 
     const result = await repo.issueInitialProviderResponse(baseInput);
     expect(result.kind).toBe("complaint_not_found");
+  });
+
+  // --- G. MULTIPLE-CYCLE SEQUENCE ---
+  it("G.25. MULTIPLE-CYCLE SEQUENCE TEST", async () => {
+    let capturedRequest: import("@/database/repositories/complaints.types").ComplaintInformationRequestInsertInput;
+    let sequenceRequested = false;
+
+    const adapter: ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
+        return cb({
+           getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" as const }),
+           checkInitialResponseExists: async () => false,
+           checkOpenInformationRequestExists: async () => false,
+           getNextInformationRequestSequence: async () => { sequenceRequested = true; return 2; },
+           insertInformationRequest: async (input) => { capturedRequest = input; },
+           updateComplaintStatusToAwaitingInformation: async () => 1,
+           insertResponseStatusHistory: async () => {},
+           insertResponseAuditEvent: async () => {},
+           insertProviderResponse: async () => {},
+           updateComplaintStatusToAnswered: async () => 1,
+           updateComplaintStatusToUnderReview: async () => 1,
+           insertResponseOutbox: async () => {},
+        });
+      }
+    };
+    const repo = createComplaintsAdminRepository(adapter, dummyClock);
+    await repo.requestComplaintInformation({
+      complaintId: "c-123",
+      expectedCurrentStatus: "under_review",
+      requestText: "Please provide more details.",
+      operatorId: "op-1"
+    });
+
+    expect(sequenceRequested).toBe(true);
+    expect(capturedRequest!.requestSequence).toBe(2);
+  });
+
+  it("G.26. MONOTONIC SEQUENCE TEST (higher sequence)", async () => {
+    let capturedRequest: import("@/database/repositories/complaints.types").ComplaintInformationRequestInsertInput;
+    const adapter: ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
+        return cb({
+           getComplaintForUpdate: async () => ({ id: "c-123", status: "under_review" as const }),
+           checkInitialResponseExists: async () => false,
+           checkOpenInformationRequestExists: async () => false,
+           getNextInformationRequestSequence: async () => 4,
+           insertInformationRequest: async (input) => { capturedRequest = input; },
+           updateComplaintStatusToAwaitingInformation: async () => 1,
+           insertResponseStatusHistory: async () => {},
+           insertResponseAuditEvent: async () => {},
+           insertProviderResponse: async () => {},
+           updateComplaintStatusToAnswered: async () => 1,
+           updateComplaintStatusToUnderReview: async () => 1,
+           insertResponseOutbox: async () => {},
+        });
+      }
+    };
+    const repo = createComplaintsAdminRepository(adapter, dummyClock);
+    await repo.requestComplaintInformation({
+      complaintId: "c-123",
+      expectedCurrentStatus: "under_review",
+      requestText: "Test",
+      operatorId: "op-1"
+    });
+
+    expect(capturedRequest!.requestSequence).toBe(4);
   });
 
   it("CONCURRENCY CONTRACT TESTED", () => {

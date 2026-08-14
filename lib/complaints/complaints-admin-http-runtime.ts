@@ -53,3 +53,18 @@ export async function authorizeAdminComplaintReview(): Promise<ResolveTrustedAdm
 
   return resolveTrustedAdminPrincipal(session, "complaints:review", repository);
 }
+
+export const RequestInformationHttpSchema = z.object({
+  expectedCurrentStatus: z.literal("under_review"),
+  requestText: z.string().min(1).max(2000),
+}).strict();
+
+export type RequestInformationHttpPayload = z.infer<typeof RequestInformationHttpSchema>;
+
+export async function authorizeAdminComplaintRequestInformation(): Promise<ResolveTrustedAdminPrincipalResult> {
+  const session = await getWorkspaceSession();
+  const db = getAuthorizationDatabase();
+  const repository = createAuthorizationRepository(db);
+
+  return resolveTrustedAdminPrincipal(session, "complaints:review", repository);
+}

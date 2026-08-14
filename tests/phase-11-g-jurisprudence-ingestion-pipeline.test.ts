@@ -422,6 +422,7 @@ describe("seguridad estática y preservación", () => {
     "app/api/admin/complaints/[complaintId]/review/route.ts",
     "app/api/admin/complaints/[complaintId]/route.ts",
     "app/api/admin/complaints/route.ts",
+    "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/complaints/route.ts",
     "app/api/owl/admission/route.ts",
 ];

@@ -1,4 +1,4 @@
-import { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents, complaintProviderResponses } from "../schema/complaints";
+import { complaints, complaintStatusHistory, complaintOutbox, complaintAuditEvents, complaintProviderResponses, complaintInformationRequests } from "../schema/complaints";
 
 export interface ComplaintPayloadSnapshotV1 {
   readonly schemaVersion: "1.0";
@@ -365,5 +365,55 @@ export function mapComplaintStatusChangedAuditEventToInsert(input: {
     eventType: "status_changed",
     createdBy: input.createdBy,
     metadata: { fromStatus: input.fromStatus, toStatus: input.toStatus },
+  };
+}
+
+export function mapInformationRequestToInsert(input: {
+  readonly complaintId: string;
+  readonly requestSequence: number;
+  readonly requestText: string;
+  readonly requestedAt: Date;
+  readonly requestedBy: string;
+}): typeof complaintInformationRequests.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "requestSequence", "requestText", "requestedAt", "requestedBy"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    requestSequence: input.requestSequence,
+    requestText: input.requestText,
+    requestedAt: input.requestedAt,
+    requestedBy: input.requestedBy,
+    status: "open",
+  };
+}
+
+export function mapAwaitingInformationComplaintStatusHistoryToInsert(input: {
+  readonly complaintId: string;
+  readonly changedBy: string;
+}): typeof complaintStatusHistory.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "changedBy"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    fromStatus: "under_review",
+    toStatus: "awaiting_information",
+    changedBy: input.changedBy,
+  };
+}
+
+export function mapInformationRequestedAuditEventToInsert(input: {
+  readonly complaintId: string;
+  readonly createdBy: string;
+}): typeof complaintAuditEvents.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "createdBy"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    eventType: "information_requested",
+    createdBy: input.createdBy,
+    metadata: { fromStatus: "under_review", toStatus: "awaiting_information" },
   };
 }

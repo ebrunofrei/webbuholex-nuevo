@@ -13,7 +13,7 @@ import type {
 import { SanitizedDatabaseConstraintError, createComplaintPersistenceError } from "../repositories/complaints.errors";
 import { ComplaintsTransaction, withComplaintsApiRole, withComplaintsAdminRole } from "../roles";
 import type { ComplaintStatus } from "@/lib/complaints/complaint.types";
-import type { ComplaintProviderResponseInsertInput, ComplaintAdminTransactionExecutor, ComplaintsAdminPersistenceAdapter } from "../repositories/complaints.types";
+import type { ComplaintProviderResponseInsertInput, ComplaintInformationRequestInsertInput, ComplaintAdminTransactionExecutor, ComplaintsAdminPersistenceAdapter } from "../repositories/complaints.types";
 
 function findPostgresError(error: unknown, depth: number = 0): Record<string, unknown> | null {
   if (depth > 5 || typeof error !== "object" || error === null) return null;
@@ -259,6 +259,61 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
+  async checkOpenInformationRequestExists(complaintId: string): Promise<boolean> {
+    try {
+      const rows = await this.tx
+        .select({ id: schema.complaintInformationRequests.id })
+        .from(schema.complaintInformationRequests)
+        .where(and(
+          eq(schema.complaintInformationRequests.complaintId, complaintId),
+          eq(schema.complaintInformationRequests.status, 'open')
+        ));
+      return rows.length > 0;
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
+  async getNextInformationRequestSequence(complaintId: string): Promise<number> {
+    try {
+      const result = await this.tx.execute(sql`
+        SELECT COALESCE(MAX(request_sequence), 0) + 1 AS next_sequence
+        FROM complaints_private.complaint_information_requests
+        WHERE complaint_id = ${complaintId}
+      `);
+      return Number(result[0]?.next_sequence ?? 1);
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
+  async insertInformationRequest(
+    input: ComplaintInformationRequestInsertInput,
+  ): Promise<void> {
+    try {
+      await this.tx.execute(sql`
+        INSERT INTO complaints_private.complaint_information_requests (
+          complaint_id,
+          request_sequence,
+          request_text,
+          requested_at,
+          requested_by,
+          status
+        )
+        VALUES (
+          ${input.complaintId},
+          ${input.requestSequence},
+          ${input.requestText},
+          ${input.requestedAt ? input.requestedAt.toISOString() : sql`NOW()`},
+          ${input.requestedBy},
+          ${input.status ?? 'open'}
+        )
+      `);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
   async insertProviderResponse(
     input: ComplaintProviderResponseInsertInput,
   ): Promise<void> {
@@ -312,6 +367,21 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
         .where(and(
           eq(schema.complaints.id, complaintId),
           eq(schema.complaints.status, 'received')
+        ))
+        .returning({ id: schema.complaints.id });
+      return result.length;
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
+  async updateComplaintStatusToAwaitingInformation(complaintId: string, updatedAt: Date): Promise<number> {
+    try {
+      const result = await this.tx.update(schema.complaints)
+        .set({ status: 'awaiting_information', updatedAt })
+        .where(and(
+          eq(schema.complaints.id, complaintId),
+          eq(schema.complaints.status, 'under_review')
         ))
         .returning({ id: schema.complaints.id });
       return result.length;

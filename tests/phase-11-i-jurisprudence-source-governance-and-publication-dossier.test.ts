@@ -176,6 +176,7 @@ describe("barreras estáticas y preservación", () => {
     "app/api/admin/complaints/[complaintId]/review/route.ts",
     "app/api/admin/complaints/[complaintId]/route.ts",
     "app/api/admin/complaints/route.ts",
+    "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/complaints/route.ts",
     "app/api/owl/admission/route.ts",
 ]; const packageJson = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")); expect(packageJson.dependencies).toMatchObject({ react: "19.1.6", "react-dom": "19.1.6" }); const routes = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string" && /(^|[\\/])route\.ts$/.test(entry)).map((entry) => path.relative(ROOT, path.join(ROOT, "app", entry)).split(path.sep).join("/")); expect(routes.sort()).toEqual(authorizedRouteFiles.sort()); const appEntries = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string"); expect(appEntries.some((entry) => entry.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(entry))).toBe(false); });
