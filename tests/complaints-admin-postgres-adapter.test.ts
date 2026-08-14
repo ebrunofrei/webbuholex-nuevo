@@ -158,6 +158,8 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
              getNextInformationRequestSequence: async () => 1,
              insertInformationRequest: async () => {},
              updateComplaintStatusToAwaitingInformation: async () => 1,
+                getOpenInformationRequestsForUpdate: async () => [],
+                updateInformationRequestToReceived: async () => 1,
           });
         }
       } satisfies ComplaintsAdminPersistenceAdapter,
@@ -208,6 +210,8 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
               getNextInformationRequestSequence: async () => 1,
               insertInformationRequest: async () => { if(stepToFail === "insertInformationRequest") throw errorToThrow; },
               updateComplaintStatusToAwaitingInformation: async () => { if(stepToFail === "updateComplaintStatusToAwaitingInformation") throw errorToThrow; return 1; },
+                getOpenInformationRequestsForUpdate: async () => [],
+                updateInformationRequestToReceived: async () => 1,
            };
            return await cb(tx);
         } catch {
@@ -278,6 +282,8 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            getNextInformationRequestSequence: async () => 1,
            insertInformationRequest: async () => {},
            updateComplaintStatusToAwaitingInformation: async () => 1,
+                getOpenInformationRequestsForUpdate: async () => [],
+                updateInformationRequestToReceived: async () => 1,
         });
       }
     };
@@ -322,6 +328,8 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            getNextInformationRequestSequence: async () => 1,
            insertInformationRequest: async () => {},
            updateComplaintStatusToAwaitingInformation: async () => 1,
+                getOpenInformationRequestsForUpdate: async () => [],
+                updateInformationRequestToReceived: async () => 1,
         });
       }
     };
@@ -383,6 +391,8 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            getNextInformationRequestSequence: async () => { sequenceRequested = true; return 2; },
            insertInformationRequest: async (input) => { capturedRequest = input; },
            updateComplaintStatusToAwaitingInformation: async () => 1,
+                getOpenInformationRequestsForUpdate: async () => [],
+                updateInformationRequestToReceived: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertProviderResponse: async () => {},
@@ -415,6 +425,8 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            getNextInformationRequestSequence: async () => 4,
            insertInformationRequest: async (input) => { capturedRequest = input; },
            updateComplaintStatusToAwaitingInformation: async () => 1,
+                getOpenInformationRequestsForUpdate: async () => [],
+                updateInformationRequestToReceived: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertProviderResponse: async () => {},

@@ -9,7 +9,9 @@ export type ComplaintPersistenceErrorCode =
   | "complaint_stale_status"
   | "complaint_fk_violation"
   | "complaint_response_invalid_status"
-  | "complaint_initial_response_already_exists";
+  | "complaint_initial_response_already_exists"
+  | "complaint_no_open_information_request"
+  | "complaint_multiple_open_information_requests";
 
 export class ComplaintPersistenceError extends Error {
   public readonly code: ComplaintPersistenceErrorCode;

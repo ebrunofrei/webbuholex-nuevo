@@ -4,7 +4,7 @@ import { getWorkspaceSession } from "@/lib/auth/session";
 import { resolveTrustedAdminPrincipal, type ResolveTrustedAdminPrincipalResult } from "@/lib/authorization/authorization-resolver";
 import { getAuthorizationDatabase } from "@/database/client";
 import { createAuthorizationRepository } from "@/database/repositories/authorization.repository";
-import { submitProviderResponseRuntime, type ProviderResponseRuntimeInput, type ProviderResponseRuntimeResult, type TrustedAdminPrincipal } from "./complaints-admin-runtime";
+import { submitProviderResponseRuntime, resumeComplaintReviewRuntime, type ProviderResponseRuntimeInput, type ProviderResponseRuntimeResult, type TrustedAdminPrincipal, type ResumeComplaintReviewRuntimeInput, type ResumeComplaintReviewRuntimeResult } from "./complaints-admin-runtime";
 
 import { ProviderResponseHttpSchema, type ProviderResponseHttpPayload } from "./provider-response.contract";
 
@@ -67,4 +67,33 @@ export async function authorizeAdminComplaintRequestInformation(): Promise<Resol
   const repository = createAuthorizationRepository(db);
 
   return resolveTrustedAdminPrincipal(session, "complaints:review", repository);
+}
+
+export const ResumeComplaintReviewHttpSchema = z.object({
+  expectedCurrentStatus: z.literal("awaiting_information"),
+  returnNote: z.string().trim().min(1).max(2000),
+}).strict();
+
+export type ResumeComplaintReviewHttpPayload = z.infer<typeof ResumeComplaintReviewHttpSchema>;
+
+export async function authorizeAdminComplaintResumeReview(): Promise<ResolveTrustedAdminPrincipalResult> {
+  const session = await getWorkspaceSession();
+  const db = getAuthorizationDatabase();
+  const repository = createAuthorizationRepository(db);
+
+  return resolveTrustedAdminPrincipal(session, "complaints:review", repository);
+}
+
+export async function executeAdminComplaintResumeReview(
+  complaintId: string,
+  payload: ResumeComplaintReviewHttpPayload,
+  principal: TrustedAdminPrincipal
+): Promise<ResumeComplaintReviewRuntimeResult> {
+  const runtimeInput: ResumeComplaintReviewRuntimeInput = {
+    complaintId,
+    expectedCurrentStatus: payload.expectedCurrentStatus,
+    returnNote: payload.returnNote,
+  };
+
+  return resumeComplaintReviewRuntime(runtimeInput, principal);
 }

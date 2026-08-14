@@ -151,15 +151,31 @@ export type RequestComplaintInformationResult =
   | { readonly kind: "complaint_open_information_request_exists" }
   | { readonly kind: "complaint_information_request_sequence_conflict" };
 
+export interface ResumeComplaintReviewInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "awaiting_information";
+  readonly returnNote: string;
+  readonly operatorId: string;
+}
+
+export type ResumeComplaintReviewResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" }
+  | { readonly kind: "complaint_no_open_information_request" }
+  | { readonly kind: "complaint_multiple_open_information_requests" };
+
 export interface ComplaintAdminTransactionExecutor {
   getComplaintForUpdate(complaintId: string): Promise<{ id: string; status: ComplaintStatus } | null>;
   checkInitialResponseExists(complaintId: string): Promise<boolean>;
   checkOpenInformationRequestExists(complaintId: string): Promise<boolean>;
   getNextInformationRequestSequence(complaintId: string): Promise<number>;
+  getOpenInformationRequestsForUpdate(complaintId: string): Promise<{ id: string }[]>;
   insertProviderResponse(input: ComplaintProviderResponseInsertInput): Promise<void>;
   insertInformationRequest(input: ComplaintInformationRequestInsertInput): Promise<void>;
+  updateInformationRequestToReceived(id: string, returnNote: string, receivedAt: Date, receivedBy: string): Promise<number>;
   updateComplaintStatusToAnswered(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number>;
-  updateComplaintStatusToUnderReview(complaintId: string, updatedAt: Date): Promise<number>;
+  updateComplaintStatusToUnderReview(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number>;
   updateComplaintStatusToAwaitingInformation(complaintId: string, updatedAt: Date): Promise<number>;
   insertResponseStatusHistory(input: ComplaintStatusHistoryInsertInput): Promise<void>;
   insertResponseAuditEvent(input: ComplaintAuditInsertInput): Promise<void>;

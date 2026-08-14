@@ -1,8 +1,8 @@
 import { ComplaintsPersistenceAdapter, CreateComplaintRepositoryInput, CreateComplaintPersistenceResult } from "./complaints.types";
 import { createComplaintPersistenceError, SanitizedDatabaseConstraintError } from "./complaints.errors";
 import { formatComplaintSheetNumber } from "@/lib/complaints/complaint-identifiers";
-import { mapComplaintDomainToInsert, mapInitialComplaintStatusHistoryToInsert, mapComplaintReceiptOutboxToInsert, mapComplaintCreatedAuditEventToInsert, mapProviderResponseToInsert, mapAnsweredComplaintStatusHistoryToInsert, mapProviderResponseCreatedAuditEventToInsert, mapProviderResponseDeliveryOutboxToInsert, mapUnderReviewComplaintStatusHistoryToInsert, mapComplaintStatusChangedAuditEventToInsert, mapInformationRequestToInsert, mapAwaitingInformationComplaintStatusHistoryToInsert, mapInformationRequestedAuditEventToInsert } from "../mappers/complaints";
-import { Clock, ComplaintsAdminPersistenceAdapter, IssueInitialProviderResponseInput, IssueInitialProviderResponseResult, StartComplaintReviewInput, StartComplaintReviewResult, RequestComplaintInformationInput, RequestComplaintInformationResult } from "./complaints.types";
+import { mapComplaintDomainToInsert, mapInitialComplaintStatusHistoryToInsert, mapComplaintReceiptOutboxToInsert, mapComplaintCreatedAuditEventToInsert, mapProviderResponseToInsert, mapAnsweredComplaintStatusHistoryToInsert, mapProviderResponseCreatedAuditEventToInsert, mapProviderResponseDeliveryOutboxToInsert, mapUnderReviewComplaintStatusHistoryToInsert, mapComplaintStatusChangedAuditEventToInsert, mapInformationRequestToInsert, mapAwaitingInformationComplaintStatusHistoryToInsert, mapInformationRequestedAuditEventToInsert, mapReviewResumedComplaintStatusHistoryToInsert, mapReviewResumedAuditEventToInsert } from "../mappers/complaints";
+import { Clock, ComplaintsAdminPersistenceAdapter, IssueInitialProviderResponseInput, IssueInitialProviderResponseResult, StartComplaintReviewInput, StartComplaintReviewResult, RequestComplaintInformationInput, RequestComplaintInformationResult, ResumeComplaintReviewInput, ResumeComplaintReviewResult } from "./complaints.types";
 
 export interface ComplaintsRepository {
   createComplaint(input: CreateComplaintRepositoryInput): Promise<CreateComplaintPersistenceResult>;
@@ -115,6 +115,7 @@ export function createComplaintsRepository(adapter: ComplaintsPersistenceAdapter
 export interface ComplaintsAdminRepository {
   issueInitialProviderResponse(input: IssueInitialProviderResponseInput): Promise<IssueInitialProviderResponseResult>;
   startComplaintReview(input: StartComplaintReviewInput): Promise<StartComplaintReviewResult>;
+  resumeComplaintReview(input: ResumeComplaintReviewInput): Promise<ResumeComplaintReviewResult>;
   requestComplaintInformation(input: RequestComplaintInformationInput): Promise<RequestComplaintInformationResult>;
 }
 
@@ -211,7 +212,7 @@ export function createComplaintsAdminRepository(adapter: ComplaintsAdminPersiste
             return { kind: "complaint_stale_status" };
           }
 
-          const updatedRows = await tx.updateComplaintStatusToUnderReview(input.complaintId, clock.now());
+          const updatedRows = await tx.updateComplaintStatusToUnderReview(input.complaintId, 'received', clock.now());
           if (updatedRows === 0) {
             throw createComplaintPersistenceError("complaint_stale_status");
           }
@@ -227,6 +228,59 @@ export function createComplaintsAdminRepository(adapter: ComplaintsAdminPersiste
             createdBy: input.operatorId,
             fromStatus: "received",
             toStatus: "under_review",
+          });
+          await tx.insertResponseAuditEvent(auditInsert);
+
+          return { kind: "success" };
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === "ComplaintPersistenceError") {
+          throw err;
+        }
+
+        throw createComplaintPersistenceError("complaint_transaction_failed");
+      }
+    },
+    async resumeComplaintReview(input: ResumeComplaintReviewInput): Promise<ResumeComplaintReviewResult> {
+      try {
+        return await adapter.transaction(async (tx) => {
+          const complaint = await tx.getComplaintForUpdate(input.complaintId);
+          if (!complaint) {
+            return { kind: "complaint_not_found" };
+          }
+
+          if (complaint.status !== input.expectedCurrentStatus) {
+            return { kind: "complaint_stale_status" };
+          }
+
+          const openRequests = await tx.getOpenInformationRequestsForUpdate(input.complaintId);
+          if (openRequests.length === 0) {
+            return { kind: "complaint_no_open_information_request" };
+          }
+          if (openRequests.length > 1) {
+            return { kind: "complaint_multiple_open_information_requests" };
+          }
+
+          const requestId = openRequests[0]!.id;
+          const updatedRequestRows = await tx.updateInformationRequestToReceived(requestId, input.returnNote, clock.now(), input.operatorId);
+          if (updatedRequestRows === 0) {
+             throw createComplaintPersistenceError("complaint_no_open_information_request");
+          }
+
+          const updatedRows = await tx.updateComplaintStatusToUnderReview(input.complaintId, input.expectedCurrentStatus, clock.now());
+          if (updatedRows === 0) {
+            throw createComplaintPersistenceError("complaint_stale_status");
+          }
+
+          const historyInsert = mapReviewResumedComplaintStatusHistoryToInsert({
+            complaintId: input.complaintId,
+            changedBy: input.operatorId,
+          });
+          await tx.insertResponseStatusHistory(historyInsert);
+
+          const auditInsert = mapReviewResumedAuditEventToInsert({
+            complaintId: input.complaintId,
+            createdBy: input.operatorId,
           });
           await tx.insertResponseAuditEvent(auditInsert);
 

@@ -417,3 +417,33 @@ export function mapInformationRequestedAuditEventToInsert(input: {
     metadata: { fromStatus: "under_review", toStatus: "awaiting_information" },
   };
 }
+
+export function mapReviewResumedComplaintStatusHistoryToInsert(input: {
+  readonly complaintId: string;
+  readonly changedBy: string;
+}): typeof complaintStatusHistory.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "changedBy"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    fromStatus: "awaiting_information",
+    toStatus: "under_review",
+    changedBy: input.changedBy,
+  };
+}
+
+export function mapReviewResumedAuditEventToInsert(input: {
+  readonly complaintId: string;
+  readonly createdBy: string;
+}): typeof complaintAuditEvents.$inferInsert {
+  if (Object.keys(input).some(k => !["complaintId", "createdBy"].includes(k))) {
+     throw new Error("complaint_mapper_input_invalid");
+  }
+  return {
+    complaintId: input.complaintId,
+    eventType: "review_resumed",
+    createdBy: input.createdBy,
+    metadata: { fromStatus: "awaiting_information", toStatus: "under_review" },
+  };
+}

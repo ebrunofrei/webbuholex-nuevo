@@ -218,3 +218,54 @@ export async function requestComplaintInformationRuntime(
     throw error;
   }
 }
+
+export interface ResumeComplaintReviewRuntimeInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "awaiting_information";
+  readonly returnNote: string;
+}
+
+export type ResumeComplaintReviewRuntimeResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" }
+  | { readonly kind: "complaint_no_open_information_request" }
+  | { readonly kind: "complaint_multiple_open_information_requests" }
+  | { readonly kind: "complaint_resume_review_note_required" }
+  | { readonly kind: "complaint_resume_review_note_too_long" };
+
+export async function resumeComplaintReviewRuntime(
+  input: ResumeComplaintReviewRuntimeInput,
+  principal: TrustedAdminPrincipal,
+): Promise<ResumeComplaintReviewRuntimeResult> {
+  const returnNote = input.returnNote.trim();
+  if (returnNote.length === 0) {
+    return { kind: "complaint_resume_review_note_required" };
+  }
+  if (returnNote.length > 2000) {
+    return { kind: "complaint_resume_review_note_too_long" };
+  }
+
+  const db = getComplaintsAdminDatabase();
+  const adapter = createComplaintsAdminPersistenceAdapter(db);
+  const now = new Date();
+  const repo = createComplaintsAdminRepository(adapter, { now: () => now });
+
+  try {
+    const result = await repo.resumeComplaintReview({
+      complaintId: input.complaintId,
+      expectedCurrentStatus: input.expectedCurrentStatus,
+      returnNote: returnNote,
+      operatorId: principal.operatorId,
+    });
+    return result;
+  } catch (error) {
+    if (
+      error instanceof ComplaintPersistenceError ||
+      error instanceof SanitizedDatabaseConstraintError
+    ) {
+      throw new ComplaintsServiceUnavailableError("complaints_admin_persistence_failed");
+    }
+    throw error;
+  }
+}

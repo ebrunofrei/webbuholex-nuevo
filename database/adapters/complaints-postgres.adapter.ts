@@ -287,6 +287,24 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
+  async getOpenInformationRequestsForUpdate(complaintId: string): Promise<{ id: string }[]> {
+    try {
+      const rows = await this.tx
+        .select({ id: schema.complaintInformationRequests.id })
+        .from(schema.complaintInformationRequests)
+        .where(and(
+          eq(schema.complaintInformationRequests.complaintId, complaintId),
+          eq(schema.complaintInformationRequests.status, 'open')
+        ))
+        .orderBy(schema.complaintInformationRequests.requestSequence)
+        .limit(2)
+        .for('update');
+      return rows as { id: string }[];
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
   async insertInformationRequest(
     input: ComplaintInformationRequestInsertInput,
   ): Promise<void> {
@@ -345,6 +363,18 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
+  async updateInformationRequestToReceived(id: string, returnNote: string, receivedAt: Date, receivedBy: string): Promise<number> {
+    try {
+      const result = await this.tx.update(schema.complaintInformationRequests)
+        .set({ status: 'received', returnNote, receivedAt, receivedBy })
+        .where(eq(schema.complaintInformationRequests.id, id))
+        .returning({ id: schema.complaintInformationRequests.id });
+      return result.length;
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
   async updateComplaintStatusToAnswered(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number> {
     try {
       const result = await this.tx.update(schema.complaints)
@@ -360,13 +390,13 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
-  async updateComplaintStatusToUnderReview(complaintId: string, updatedAt: Date): Promise<number> {
+  async updateComplaintStatusToUnderReview(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number> {
     try {
       const result = await this.tx.update(schema.complaints)
         .set({ status: 'under_review', updatedAt })
         .where(and(
           eq(schema.complaints.id, complaintId),
-          eq(schema.complaints.status, 'received')
+          eq(schema.complaints.status, expectedStatus)
         ))
         .returning({ id: schema.complaints.id });
       return result.length;
