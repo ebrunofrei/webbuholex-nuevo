@@ -46,11 +46,11 @@ describe('AdminComplaintCloseAction', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar cierre' }));
 
     expect(screen.getByRole('button', { name: 'Cerrando...' })).toBeDisabled();
-    
+
     await waitFor(() => {
       expect(mockOnRefresh).toHaveBeenCalled();
     });
-    
+
     expect(global.fetch).toHaveBeenCalledWith(`/api/admin/complaints/${mockComplaintId}/close`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

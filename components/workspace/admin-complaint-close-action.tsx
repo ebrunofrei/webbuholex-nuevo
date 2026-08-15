@@ -12,7 +12,7 @@ export function AdminComplaintCloseAction({ complaintId, onRefresh }: AdminCompl
   const [isConfirming, setIsConfirming] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // lock against double submit
   const submitLock = useRef(false);
 
@@ -28,7 +28,7 @@ export function AdminComplaintCloseAction({ complaintId, onRefresh }: AdminCompl
 
   const handleConfirm = async () => {
     if (submitLock.current) return;
-    
+
     submitLock.current = true;
     setIsPending(true);
     setError(null);
@@ -47,7 +47,7 @@ export function AdminComplaintCloseAction({ complaintId, onRefresh }: AdminCompl
           onRefresh(); // safe error, refresh to get latest state
           return;
         }
-        
+
         if (res.status === 404) {
           // Release lock but let UI stay, safe error
           submitLock.current = false;
@@ -93,7 +93,7 @@ export function AdminComplaintCloseAction({ complaintId, onRefresh }: AdminCompl
         Esta acción cerrará administrativamente el reclamo.
         El cierre no registra una nueva respuesta al consumidor.
       </p>
-      
+
       {error && (
         <div className={styles.reviewActionError} role="alert">
           {error}
