@@ -177,6 +177,7 @@ import { AdminComplaintResponseForm } from './admin-complaint-response-form';
 import { AdminComplaintInformationHistory } from './admin-complaint-information-history';
 import { AdminComplaintRequestInformationForm } from './admin-complaint-request-information-form';
 import { AdminComplaintResumeReviewForm } from './admin-complaint-resume-review-form';
+import { AdminComplaintCloseAction } from './admin-complaint-close-action';
 
 export function AdminComplaintDetail({ complaintId, canReview = false, canRespond = false }: AdminComplaintDetailProps) {
   const [uiState, setUiState] = useState<UIState>({ type: 'loading' });
@@ -338,6 +339,9 @@ export function AdminComplaintDetail({ complaintId, canReview = false, canRespon
           canReview={canReview}
           onRefresh={fetchDetail}
         />
+        {canReview && complaint.status === 'answered' && (
+          <AdminComplaintCloseAction complaintId={complaintId} onRefresh={fetchDetail} />
+        )}
       </div>
 
       <div className={styles.grid}>

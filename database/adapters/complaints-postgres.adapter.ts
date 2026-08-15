@@ -420,6 +420,21 @@ class DrizzleComplaintAdminTransactionExecutor implements ComplaintAdminTransact
     }
   }
 
+  async updateComplaintStatusToClosed(complaintId: string, expectedStatus: ComplaintStatus, closedAt: Date, updatedAt: Date): Promise<number> {
+    try {
+      const result = await this.tx.update(schema.complaints)
+        .set({ status: 'closed', closedAt, updatedAt })
+        .where(and(
+          eq(schema.complaints.id, complaintId),
+          eq(schema.complaints.status, expectedStatus)
+        ))
+        .returning({ id: schema.complaints.id });
+      return result.length;
+    } catch(e) {
+      throw translateDatabaseError(e);
+    }
+  }
+
   async insertResponseStatusHistory(
     input: ComplaintStatusHistoryInsertInput,
   ): Promise<void> {

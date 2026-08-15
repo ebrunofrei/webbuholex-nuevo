@@ -151,6 +151,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
                 return 1;
              },
              updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async () => 1,
              insertResponseStatusHistory: async () => {},
              insertResponseAuditEvent: async () => {},
              insertResponseOutbox: async () => {},
@@ -203,6 +204,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
               insertProviderResponse: async () => { if(stepToFail === "insertProviderResponse") throw errorToThrow; },
               updateComplaintStatusToAnswered: async () => { if(stepToFail === "updateComplaintStatusToAnswered") throw errorToThrow; return 1; },
               updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async () => 1,
               insertResponseStatusHistory: async () => { if(stepToFail === "insertResponseStatusHistory") throw errorToThrow; },
               insertResponseAuditEvent: async () => { if(stepToFail === "insertResponseAuditEvent") throw errorToThrow; },
               insertResponseOutbox: async () => { if(stepToFail === "insertResponseOutbox") throw errorToThrow; },
@@ -275,6 +277,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            insertProviderResponse: async () => {},
            updateComplaintStatusToAnswered: async () => 1,
            updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertResponseOutbox: async (input: ComplaintOutboxInsertInput) => { capturedOutbox = input; },
@@ -321,6 +324,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            insertProviderResponse: async (input: ComplaintProviderResponseInsertInput) => { capturedResponse = input; },
            updateComplaintStatusToAnswered: async () => 1,
            updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async () => 1,
            insertResponseStatusHistory: async () => {},
            insertResponseAuditEvent: async () => {},
            insertResponseOutbox: async () => {},
@@ -398,6 +402,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            insertProviderResponse: async () => {},
            updateComplaintStatusToAnswered: async () => 1,
            updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async () => 1,
            insertResponseOutbox: async () => {},
         });
       }
@@ -432,6 +437,7 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
            insertProviderResponse: async () => {},
            updateComplaintStatusToAnswered: async () => 1,
            updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async () => 1,
            insertResponseOutbox: async () => {},
         });
       }
@@ -449,5 +455,116 @@ describe("Complaints Admin Postgres Adapter & Repository", () => {
 
   it("CONCURRENCY CONTRACT TESTED", () => {
     expect(true).toBe(true);
+  });
+
+  // --- H. CLOSURE & ROLLBACK ---
+  const baseClosureInput = {
+    complaintId: "c-123",
+    expectedCurrentStatus: "answered" as const,
+    operatorId: "op-1",
+  };
+
+  it("H.1. Closure transaction updates correctly", async () => {
+    let capturedUpdateVals: { status: string; updated_at: Date; closed_at: Date } & Record<string, unknown>;
+    const adapter: import("@/database/repositories/complaints.types").ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: import("@/database/repositories/complaints.types").ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
+        return cb({
+           getComplaintForUpdate: async () => ({ id: "c-123", status: "answered" as const }),
+           checkInitialResponseExists: async () => false,
+           insertProviderResponse: async () => {},
+           updateComplaintStatusToAnswered: async () => 1,
+           updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async (_id, _expected, updatedAt, closedAt) => {
+              capturedUpdateVals = { status: "closed", updated_at: updatedAt, closed_at: closedAt };
+              return 1;
+           },
+           insertResponseStatusHistory: async () => {},
+           insertResponseAuditEvent: async () => {},
+           insertResponseOutbox: async () => {},
+           checkOpenInformationRequestExists: async () => false,
+           getNextInformationRequestSequence: async () => 1,
+           insertInformationRequest: async () => {},
+           updateComplaintStatusToAwaitingInformation: async () => 1,
+           getOpenInformationRequestsForUpdate: async () => [],
+           updateInformationRequestToReceived: async () => 1,
+        });
+      }
+    };
+    const repo = createComplaintsAdminRepository(adapter, { now: () => new Date("2026-08-11T00:00:00.000Z") });
+    const result = await repo.closeComplaint(baseClosureInput);
+
+    expect(result.kind).toBe("success");
+    expect(capturedUpdateVals!.status).toBe("closed");
+    expect(capturedUpdateVals!.updated_at).toBeDefined();
+    expect(capturedUpdateVals!.closed_at).toBeDefined();
+    expect(capturedUpdateVals!.version).toBeUndefined();
+    expect(capturedUpdateVals!.deadline_at).toBeUndefined();
+  });
+
+  it("H.2. Concurrent close simulation (local orchestration)", async () => {
+    let calls = 0;
+    const adapter: import("@/database/repositories/complaints.types").ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: import("@/database/repositories/complaints.types").ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
+        calls++;
+        return cb({
+           getComplaintForUpdate: async () => {
+             if (calls === 1) return { id: "c-123", status: "answered" as const };
+             return { id: "c-123", status: "closed" as const };
+           },
+           checkInitialResponseExists: async () => false,
+           insertProviderResponse: async () => {},
+           updateComplaintStatusToAnswered: async () => 1,
+           updateComplaintStatusToUnderReview: async () => 1,
+           updateComplaintStatusToClosed: async () => 1,
+           insertResponseStatusHistory: async () => {},
+           insertResponseAuditEvent: async () => {},
+           insertResponseOutbox: async () => {},
+           checkOpenInformationRequestExists: async () => false,
+           getNextInformationRequestSequence: async () => 1,
+           insertInformationRequest: async () => {},
+           updateComplaintStatusToAwaitingInformation: async () => 1,
+           getOpenInformationRequestsForUpdate: async () => [],
+           updateInformationRequestToReceived: async () => 1,
+        });
+      }
+    };
+    const repo = createComplaintsAdminRepository(adapter, { now: () => new Date() });
+
+    const result1 = await repo.closeComplaint(baseClosureInput);
+    expect(result1.kind).toBe("success");
+
+    const result2 = await repo.closeComplaint(baseClosureInput);
+    expect(result2.kind).toBe("complaint_stale_status");
+  });
+
+  it("H.3. Rollback contract on close: audit/history insert fails", async () => {
+    const errorToThrow = new Error("simulated history failure");
+    const adapter: import("@/database/repositories/complaints.types").ComplaintsAdminPersistenceAdapter = {
+      transaction: async <T>(cb: (tx: import("@/database/repositories/complaints.types").ComplaintAdminTransactionExecutor) => Promise<T>): Promise<T> => {
+        try {
+          return await cb({
+             getComplaintForUpdate: async () => ({ id: "c-123", status: "answered" as const }),
+             checkInitialResponseExists: async () => false,
+             insertProviderResponse: async () => {},
+             updateComplaintStatusToAnswered: async () => 1,
+             updateComplaintStatusToUnderReview: async () => 1,
+             updateComplaintStatusToClosed: async () => 1,
+             insertResponseStatusHistory: async () => { throw errorToThrow; },
+             insertResponseAuditEvent: async () => {},
+             insertResponseOutbox: async () => {},
+             checkOpenInformationRequestExists: async () => false,
+             getNextInformationRequestSequence: async () => 1,
+             insertInformationRequest: async () => {},
+             updateComplaintStatusToAwaitingInformation: async () => 1,
+             getOpenInformationRequestsForUpdate: async () => [],
+             updateInformationRequestToReceived: async () => 1,
+          });
+        } catch {
+          throw createComplaintPersistenceError("complaint_transaction_failed");
+        }
+      }
+    };
+    const repo = createComplaintsAdminRepository(adapter, { now: () => new Date() });
+    await expect(repo.closeComplaint(baseClosureInput)).rejects.toThrow("complaint_transaction_failed");
   });
 });

@@ -472,4 +472,33 @@ describe('AdminComplaintDetail Workspace Component', () => {
       });
     });
   });
+
+  describe('Close Complaint Action visibility', () => {
+    it('shows close action when canReview=true and status=answered', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'answered' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={true} />);
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Cerrar reclamo' })).toBeInTheDocument();
+      });
+    });
+
+    it('hides close action when canReview=false and status=answered', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'answered' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={false} />);
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Cerrar reclamo' })).not.toBeInTheDocument();
+      });
+    });
+
+    it('hides close action when canReview=true and status!=answered', async () => {
+      const data = { ...mockData, complaint: { ...mockData.complaint, status: 'closed' as const } };
+      (global.fetch as Mock).mockResolvedValueOnce({ ok: true, json: async () => data });
+      render(<AdminComplaintDetail complaintId="123" canReview={true} />);
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Cerrar reclamo' })).not.toBeInTheDocument();
+      });
+    });
+  });
 });

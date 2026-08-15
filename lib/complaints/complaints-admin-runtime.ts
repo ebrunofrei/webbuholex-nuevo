@@ -269,3 +269,40 @@ export async function resumeComplaintReviewRuntime(
     throw error;
   }
 }
+
+export interface CloseComplaintRuntimeInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "answered";
+}
+
+export type CloseComplaintRuntimeResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" };
+
+export async function closeComplaintRuntime(
+  input: CloseComplaintRuntimeInput,
+  principal: TrustedAdminPrincipal,
+): Promise<CloseComplaintRuntimeResult> {
+  const db = getComplaintsAdminDatabase();
+  const adapter = createComplaintsAdminPersistenceAdapter(db);
+  const now = new Date();
+  const repo = createComplaintsAdminRepository(adapter, { now: () => now });
+
+  try {
+    const result = await repo.closeComplaint({
+      complaintId: input.complaintId,
+      expectedCurrentStatus: input.expectedCurrentStatus,
+      operatorId: principal.operatorId,
+    });
+    return result;
+  } catch (error) {
+    if (
+      error instanceof ComplaintPersistenceError ||
+      error instanceof SanitizedDatabaseConstraintError
+    ) {
+      throw new ComplaintsServiceUnavailableError("complaints_admin_persistence_failed");
+    }
+    throw error;
+  }
+}

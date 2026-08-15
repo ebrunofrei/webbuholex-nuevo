@@ -165,6 +165,17 @@ export type ResumeComplaintReviewResult =
   | { readonly kind: "complaint_no_open_information_request" }
   | { readonly kind: "complaint_multiple_open_information_requests" };
 
+export interface CloseComplaintInput {
+  readonly complaintId: string;
+  readonly expectedCurrentStatus: "answered";
+  readonly operatorId: string;
+}
+
+export type CloseComplaintResult =
+  | { readonly kind: "success" }
+  | { readonly kind: "complaint_not_found" }
+  | { readonly kind: "complaint_stale_status" };
+
 export interface ComplaintAdminTransactionExecutor {
   getComplaintForUpdate(complaintId: string): Promise<{ id: string; status: ComplaintStatus } | null>;
   checkInitialResponseExists(complaintId: string): Promise<boolean>;
@@ -177,6 +188,7 @@ export interface ComplaintAdminTransactionExecutor {
   updateComplaintStatusToAnswered(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number>;
   updateComplaintStatusToUnderReview(complaintId: string, expectedStatus: ComplaintStatus, updatedAt: Date): Promise<number>;
   updateComplaintStatusToAwaitingInformation(complaintId: string, updatedAt: Date): Promise<number>;
+  updateComplaintStatusToClosed(complaintId: string, expectedStatus: ComplaintStatus, closedAt: Date, updatedAt: Date): Promise<number>;
   insertResponseStatusHistory(input: ComplaintStatusHistoryInsertInput): Promise<void>;
   insertResponseAuditEvent(input: ComplaintAuditInsertInput): Promise<void>;
   insertResponseOutbox(input: ComplaintOutboxInsertInput): Promise<void>;

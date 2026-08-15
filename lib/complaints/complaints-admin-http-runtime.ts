@@ -4,7 +4,7 @@ import { getWorkspaceSession } from "@/lib/auth/session";
 import { resolveTrustedAdminPrincipal, type ResolveTrustedAdminPrincipalResult } from "@/lib/authorization/authorization-resolver";
 import { getAuthorizationDatabase } from "@/database/client";
 import { createAuthorizationRepository } from "@/database/repositories/authorization.repository";
-import { submitProviderResponseRuntime, resumeComplaintReviewRuntime, type ProviderResponseRuntimeInput, type ProviderResponseRuntimeResult, type TrustedAdminPrincipal, type ResumeComplaintReviewRuntimeInput, type ResumeComplaintReviewRuntimeResult } from "./complaints-admin-runtime";
+import { submitProviderResponseRuntime, resumeComplaintReviewRuntime, closeComplaintRuntime, type ProviderResponseRuntimeInput, type ProviderResponseRuntimeResult, type TrustedAdminPrincipal, type ResumeComplaintReviewRuntimeInput, type ResumeComplaintReviewRuntimeResult, type CloseComplaintRuntimeInput, type CloseComplaintRuntimeResult } from "./complaints-admin-runtime";
 
 import { ProviderResponseHttpSchema, type ProviderResponseHttpPayload } from "./provider-response.contract";
 
@@ -96,4 +96,31 @@ export async function executeAdminComplaintResumeReview(
   };
 
   return resumeComplaintReviewRuntime(runtimeInput, principal);
+}
+
+export const CloseComplaintHttpSchema = z.object({
+  expectedCurrentStatus: z.literal("answered"),
+}).strict();
+
+export type CloseComplaintHttpPayload = z.infer<typeof CloseComplaintHttpSchema>;
+
+export async function authorizeAdminComplaintClose(): Promise<ResolveTrustedAdminPrincipalResult> {
+  const session = await getWorkspaceSession();
+  const db = getAuthorizationDatabase();
+  const repository = createAuthorizationRepository(db);
+
+  return resolveTrustedAdminPrincipal(session, "complaints:review", repository);
+}
+
+export async function executeAdminComplaintClose(
+  complaintId: string,
+  payload: CloseComplaintHttpPayload,
+  principal: TrustedAdminPrincipal
+): Promise<CloseComplaintRuntimeResult> {
+  const runtimeInput: CloseComplaintRuntimeInput = {
+    complaintId,
+    expectedCurrentStatus: payload.expectedCurrentStatus,
+  };
+
+  return closeComplaintRuntime(runtimeInput, principal);
 }

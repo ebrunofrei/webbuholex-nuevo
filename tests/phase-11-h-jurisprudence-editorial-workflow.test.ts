@@ -416,6 +416,7 @@ describe("publicación, seguridad estática y preservación", () => {
     "app/api/admin/complaints/[complaintId]/review/route.ts",
     "app/api/admin/complaints/[complaintId]/route.ts",
     "app/api/admin/complaints/route.ts",
+    "app/api/admin/complaints/[complaintId]/close/route.ts",
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",

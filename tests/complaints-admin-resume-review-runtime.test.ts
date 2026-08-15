@@ -30,6 +30,7 @@ describe("resumeComplaintReviewRuntime", () => {
       issueInitialProviderResponse: vi.fn(),
       startComplaintReview: vi.fn(),
       requestComplaintInformation: vi.fn(),
+      closeComplaint: vi.fn(),
     };
     vi.mocked(repoModule.createComplaintsAdminRepository).mockReturnValue(mockRepo);
   });
