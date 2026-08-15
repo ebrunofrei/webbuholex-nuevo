@@ -169,7 +169,7 @@ export async function POST(
       );
     }
 
-    const result = await startComplaintReviewRuntime({ 
+    const result = await startComplaintReviewRuntime({
       complaintId,
       expectedCurrentStatus: parsed.data.expectedCurrentStatus,
     }, principal);

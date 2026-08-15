@@ -144,7 +144,6 @@ describe("complaints-admin-review-http-route", () => {
     vi.mocked(createComplaintsAdminRepository).mockReturnValue({
       startComplaintReview: vi.fn().mockResolvedValue({ kind: "success" })
     } as never);
-    
     const validUuid = "123e4567-e89b-42d3-a456-426614174000";
     const res = await POST(createJsonRequest({ expectedCurrentStatus: "received" }), { params: Promise.resolve({ complaintId: validUuid }) });
     expect(res.status).toBe(200);
