@@ -4,7 +4,7 @@ vi.mock("server-only", () => {
   return {};
 });
 
-import { createDatabaseClient, getDatabase, getComplaintsApiDatabase, getComplaintsWorkerDatabase, createComplaintsAdminDatabaseClient, getComplaintsAdminDatabase } from "@/database/client";
+import { createDatabaseClient, getDatabase, getComplaintsApiDatabase, getComplaintsWorkerDatabase, createComplaintsAdminDatabaseClient, getComplaintsAdminDatabase, getAuthorizationDatabase, getComplaintsAdminReadDatabase, getComplaintsAdminDetailReadDatabase } from "@/database/client";
 import * as configModule from "@/database/config";
 import * as schema from "@/database/schema";
 
@@ -84,16 +84,16 @@ describe("complaints-database-client", () => {
     expect(drizzle).toHaveBeenCalledTimes(1);
   });
 
-  it("getDatabase creates new instance per call in production", () => {
+  it("getDatabase reuses instance per call in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("DATABASE_URL", "postgres://user:pass@localhost:5432/db");
 
     const db1 = getDatabase();
     const db2 = getDatabase();
 
-    expect(db1).not.toBe(db2);
-    expect(postgres).toHaveBeenCalledTimes(2);
-    expect(drizzle).toHaveBeenCalledTimes(2);
+    expect(db1).toBe(db2);
+    expect(postgres).toHaveBeenCalledTimes(1);
+    expect(drizzle).toHaveBeenCalledTimes(1);
   });
 
   it("throws config error before attempting to create client", () => {
@@ -191,13 +191,13 @@ describe("complaints-database-client", () => {
     expect(postgres).toHaveBeenCalledTimes(1);
   });
 
-  it("B3. getComplaintsAdminDatabase crea instancia nueva por llamada en production", () => {
+  it("B3. getComplaintsAdminDatabase reutiliza instancia por llamada en production", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("DATABASE_ADMIN_URL", "postgres://admin:pass@localhost:5432/db");
     const db1 = getComplaintsAdminDatabase();
     const db2 = getComplaintsAdminDatabase();
-    expect(db1).not.toBe(db2);
-    expect(postgres).toHaveBeenCalledTimes(2);
+    expect(db1).toBe(db2);
+    expect(postgres).toHaveBeenCalledTimes(1);
   });
 
   it("B4. getComplaintsAdminDatabase lanza si DATABASE_ADMIN_URL falta (sin fallback a DATABASE_API_URL)", () => {
@@ -235,5 +235,59 @@ describe("complaints-database-client", () => {
       expect.anything()
     );
   });
+  });
+
+  describe("Hotfix Client Reuse Verification", () => {
+    it("llamadas repetidas a getAuthorizationDatabase() reutilizan la misma instancia", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DATABASE_AUTHORIZATION_URL", "postgres://auth:pass@localhost:5432/db");
+      const db1 = getAuthorizationDatabase();
+      const db2 = getAuthorizationDatabase();
+      expect(db1).toBe(db2);
+    });
+
+    it("llamadas repetidas a getComplaintsAdminDatabase() reutilizan la misma instancia", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DATABASE_ADMIN_URL", "postgres://admin:pass@localhost:5432/db");
+      const db1 = getComplaintsAdminDatabase();
+      const db2 = getComplaintsAdminDatabase();
+      expect(db1).toBe(db2);
+    });
+
+    it("llamadas repetidas a getComplaintsAdminReadDatabase() reutilizan la misma instancia", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DATABASE_ADMIN_READ_URL", "postgres://admin_read:pass@localhost:5432/db");
+      const db1 = getComplaintsAdminReadDatabase();
+      const db2 = getComplaintsAdminReadDatabase();
+      expect(db1).toBe(db2);
+    });
+
+    it("llamadas repetidas a getComplaintsAdminDetailReadDatabase() reutilizan la misma instancia", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DATABASE_ADMIN_DETAIL_READ_URL", "postgres://admin_detail_read:pass@localhost:5432/db");
+      const db1 = getComplaintsAdminDetailReadDatabase();
+      const db2 = getComplaintsAdminDetailReadDatabase();
+      expect(db1).toBe(db2);
+    });
+
+    it("clientes de identidades distintas NO son la misma instancia", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DATABASE_AUTHORIZATION_URL", "postgres://auth:pass@localhost:5432/db");
+      vi.stubEnv("DATABASE_ADMIN_URL", "postgres://admin:pass@localhost:5432/db");
+      vi.stubEnv("DATABASE_ADMIN_READ_URL", "postgres://admin_read:pass@localhost:5432/db");
+      vi.stubEnv("DATABASE_ADMIN_DETAIL_READ_URL", "postgres://admin_detail_read:pass@localhost:5432/db");
+
+      const dbAuth = getAuthorizationDatabase();
+      const dbAdmin = getComplaintsAdminDatabase();
+      const dbAdminRead = getComplaintsAdminReadDatabase();
+      const dbAdminDetailRead = getComplaintsAdminDetailReadDatabase();
+
+      expect(dbAuth).not.toBe(dbAdmin);
+      expect(dbAuth).not.toBe(dbAdminRead);
+      expect(dbAuth).not.toBe(dbAdminDetailRead);
+      expect(dbAdmin).not.toBe(dbAdminRead);
+      expect(dbAdmin).not.toBe(dbAdminDetailRead);
+      expect(dbAdminRead).not.toBe(dbAdminDetailRead);
+    });
   });
 });

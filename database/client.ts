@@ -49,30 +49,20 @@ type DatabaseGlobal = typeof globalThis & {
 
 export function getDatabase(): PostgresJsDatabase<typeof schema> {
   const config = readDatabaseRuntimeConfig();
-
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexDatabaseClient__) {
-      g.__buholexDatabaseClient__ = createDatabaseClient(config);
-    }
-    return g.__buholexDatabaseClient__.db;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexDatabaseClient__) {
+    g.__buholexDatabaseClient__ = createDatabaseClient(config);
   }
-
-  return createDatabaseClient(config).db;
+  return g.__buholexDatabaseClient__.db;
 }
 
 export function getDatabaseClientBundle(): DatabaseClientBundle {
   const config = readDatabaseRuntimeConfig();
-
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexDatabaseClient__) {
-      g.__buholexDatabaseClient__ = createDatabaseClient(config);
-    }
-    return g.__buholexDatabaseClient__;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexDatabaseClient__) {
+    g.__buholexDatabaseClient__ = createDatabaseClient(config);
   }
-
-  return createDatabaseClient(config);
+  return g.__buholexDatabaseClient__;
 }
 
 export function createComplaintsApiDatabaseClient(config: ComplaintsApiDatabaseRuntimeConfig): DatabaseClientBundle {
@@ -101,30 +91,20 @@ export function createComplaintsWorkerDatabaseClient(config: ComplaintsWorkerDat
 
 export function getComplaintsApiDatabase(): PostgresJsDatabase<typeof schema> {
   const config = readComplaintsApiDatabaseConfig();
-
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexComplaintsApiClient__) {
-      g.__buholexComplaintsApiClient__ = createComplaintsApiDatabaseClient(config);
-    }
-    return g.__buholexComplaintsApiClient__.db;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexComplaintsApiClient__) {
+    g.__buholexComplaintsApiClient__ = createComplaintsApiDatabaseClient(config);
   }
-
-  return createComplaintsApiDatabaseClient(config).db;
+  return g.__buholexComplaintsApiClient__.db;
 }
 
 export function getComplaintsWorkerDatabase(): PostgresJsDatabase<typeof schema> {
   const config = readComplaintsWorkerDatabaseConfig();
-
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexComplaintsWorkerClient__) {
-      g.__buholexComplaintsWorkerClient__ = createComplaintsWorkerDatabaseClient(config);
-    }
-    return g.__buholexComplaintsWorkerClient__.db;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexComplaintsWorkerClient__) {
+    g.__buholexComplaintsWorkerClient__ = createComplaintsWorkerDatabaseClient(config);
   }
-
-  return createComplaintsWorkerDatabaseClient(config).db;
+  return g.__buholexComplaintsWorkerClient__.db;
 }
 
 export function createComplaintsAdminDatabaseClient(config: ComplaintsAdminDatabaseRuntimeConfig): DatabaseClientBundle {
@@ -141,16 +121,11 @@ export function createComplaintsAdminDatabaseClient(config: ComplaintsAdminDatab
 
 export function getComplaintsAdminDatabase(): PostgresJsDatabase<typeof schema> {
   const config = readComplaintsAdminDatabaseConfig();
-
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexComplaintsAdminClient__) {
-      g.__buholexComplaintsAdminClient__ = createComplaintsAdminDatabaseClient(config);
-    }
-    return g.__buholexComplaintsAdminClient__.db;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexComplaintsAdminClient__) {
+    g.__buholexComplaintsAdminClient__ = createComplaintsAdminDatabaseClient(config);
   }
-
-  return createComplaintsAdminDatabaseClient(config).db;
+  return g.__buholexComplaintsAdminClient__.db;
 }
 
 export function createComplaintsAdminReadDatabaseClient(config: ComplaintsAdminReadDatabaseRuntimeConfig): DatabaseClientBundle {
@@ -167,16 +142,11 @@ export function createComplaintsAdminReadDatabaseClient(config: ComplaintsAdminR
 
 export function getComplaintsAdminReadDatabase(): PostgresJsDatabase<typeof schema> {
   const config = readComplaintsAdminReadDatabaseConfig();
-
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexComplaintsAdminReadClient__) {
-      g.__buholexComplaintsAdminReadClient__ = createComplaintsAdminReadDatabaseClient(config);
-    }
-    return g.__buholexComplaintsAdminReadClient__.db;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexComplaintsAdminReadClient__) {
+    g.__buholexComplaintsAdminReadClient__ = createComplaintsAdminReadDatabaseClient(config);
   }
-
-  return createComplaintsAdminReadDatabaseClient(config).db;
+  return g.__buholexComplaintsAdminReadClient__.db;
 }
 
 export function createComplaintsAdminDetailReadDatabaseClient(config: Extract<ComplaintsAdminDetailReadDatabaseRuntimeConfig, { available: true }>): DatabaseClientBundle {
@@ -198,15 +168,11 @@ export function getComplaintsAdminDetailReadDatabase(): PostgresJsDatabase<typeo
     throw new Error("complaints_admin_detail_read_database_unavailable");
   }
 
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexComplaintsAdminDetailReadClient__) {
-      g.__buholexComplaintsAdminDetailReadClient__ = createComplaintsAdminDetailReadDatabaseClient(config);
-    }
-    return g.__buholexComplaintsAdminDetailReadClient__.db;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexComplaintsAdminDetailReadClient__) {
+    g.__buholexComplaintsAdminDetailReadClient__ = createComplaintsAdminDetailReadDatabaseClient(config);
   }
-
-  return createComplaintsAdminDetailReadDatabaseClient(config).db;
+  return g.__buholexComplaintsAdminDetailReadClient__.db;
 }
 
 export function createAuthorizationDatabaseClient(config: AuthorizationDatabaseRuntimeConfig): DatabaseClientBundle {
@@ -223,14 +189,9 @@ export function createAuthorizationDatabaseClient(config: AuthorizationDatabaseR
 
 export function getAuthorizationDatabase(): PostgresJsDatabase<typeof schema> {
   const config = readAuthorizationDatabaseConfig();
-
-  if (process.env.NODE_ENV === "development") {
-    const g = globalThis as DatabaseGlobal;
-    if (!g.__buholexAuthorizationClient__) {
-      g.__buholexAuthorizationClient__ = createAuthorizationDatabaseClient(config);
-    }
-    return g.__buholexAuthorizationClient__.db;
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexAuthorizationClient__) {
+    g.__buholexAuthorizationClient__ = createAuthorizationDatabaseClient(config);
   }
-
-  return createAuthorizationDatabaseClient(config).db;
+  return g.__buholexAuthorizationClient__.db;
 }
