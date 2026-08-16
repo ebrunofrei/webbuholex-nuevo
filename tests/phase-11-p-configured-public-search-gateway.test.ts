@@ -140,7 +140,7 @@ describe("ConfiguredJurisprudencePublicSearchGateway (Fase 11.P)", () => {
           "resolutionNumber",
           "resolutionType",
           "slug",
-          "sourceDocumentId",
+          "caseTitle",
           "sourceName",
           "summary",
           "title",
@@ -254,6 +254,7 @@ describe("ConfiguredJurisprudencePublicSearchGateway (Fase 11.P)", () => {
     it("projectSearchMatchToPublicItem sólo retiene 12 campos autorizados", () => {
       const publicItem: JurisprudencePublicSearchItem = projectSearchMatchToPublicItem(mockSearchMatch);
       expect(Object.keys(publicItem).length).toBe(12);
+      expect(publicItem).not.toHaveProperty("sourceDocumentId");
       expect(publicItem).not.toHaveProperty("searchDocumentId");
       expect(publicItem).not.toHaveProperty("publicRecordId");
       expect(publicItem).not.toHaveProperty("recordId");
@@ -264,6 +265,7 @@ describe("ConfiguredJurisprudencePublicSearchGateway (Fase 11.P)", () => {
     it("projectReadModelToPublicItem sólo retiene 12 campos autorizados", () => {
       const publicItem: JurisprudencePublicSearchItem = projectReadModelToPublicItem(mockReadModel);
       expect(Object.keys(publicItem).length).toBe(12);
+      expect(publicItem).not.toHaveProperty("sourceDocumentId");
       expect(publicItem).not.toHaveProperty("projectionId");
       expect(publicItem).not.toHaveProperty("publicRecordId");
       expect(publicItem).not.toHaveProperty("recordId");

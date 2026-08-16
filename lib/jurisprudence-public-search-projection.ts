@@ -23,9 +23,8 @@ export function projectSearchMatchToPublicItem(
     issuedAt: match.issuedAt,
     summary: match.summary,
     sourceName: match.sourceName,
-    sourceDocumentId: match.sourceDocumentId,
     caseTitle: match.title,
-  });
+  } satisfies JurisprudencePublicSearchItem);
 }
 
 /**
@@ -49,7 +48,6 @@ export function projectReadModelToPublicItem(
     issuedAt: model.issuedAt,
     summary: model.summary,
     sourceName: model.sourceName,
-    sourceDocumentId: model.sourceDocumentId,
     caseTitle: model.title,
-  });
+  } satisfies JurisprudencePublicSearchItem);
 }

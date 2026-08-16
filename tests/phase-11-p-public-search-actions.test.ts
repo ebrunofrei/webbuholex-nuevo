@@ -87,6 +87,25 @@ describe("Jurisprudence Public Search Server Actions & Readiness (Fase 11.P)", (
       const validItem = {
         slug: "resolucion-001",
         title: "Resolución de Prueba",
+        caseTitle: "Resolución de Prueba",
+        caseNumber: "EXP-001",
+        resolutionNumber: "RES-001",
+        resolutionType: "Sentencia",
+        institutionName: "TC",
+        issuingBody: "Pleno",
+        matter: "Constitucional",
+        issuedAt: "2026-01-01",
+        summary: "Resumen",
+        sourceName: "TC Portal",
+      };
+      expect(await validatePublicSearchItem(validItem)).toBe(true);
+    });
+
+    it("rechaza estrictamente un ítem si contiene sourceDocumentId (internal leak)", async () => {
+      const itemWithLeak = {
+        slug: "resolucion-001",
+        title: "Resolución de Prueba",
+        caseTitle: "Resolución de Prueba",
         caseNumber: "EXP-001",
         resolutionNumber: "RES-001",
         resolutionType: "Sentencia",
@@ -98,7 +117,7 @@ describe("Jurisprudence Public Search Server Actions & Readiness (Fase 11.P)", (
         sourceName: "TC Portal",
         sourceDocumentId: "DOC-001",
       };
-      expect(await validatePublicSearchItem(validItem)).toBe(true);
+      expect(await validatePublicSearchItem(itemWithLeak)).toBe(false);
     });
 
     it("rechaza ítems con campos ausentes o tipos incorrectos", async () => {
