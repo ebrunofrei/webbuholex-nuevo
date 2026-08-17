@@ -70,3 +70,16 @@ export async function withComplaintsAdminDetailReadRole<T>(
     return await callback(tx);
   }, { isolationLevel: "repeatable read", accessMode: "read only" });
 }
+
+export type JurisprudenceTransaction = PgTransaction<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
+
+export async function withJurisprudencePublicReadRole<T>(
+  db: PostgresJsDatabase<typeof schema>,
+  callback: (tx: JurisprudenceTransaction) => Promise<T>
+): Promise<T> {
+  return await db.transaction(async (tx) => {
+    // FAIL CLOSED: If SET LOCAL ROLE fails, an error is thrown and callback is NEVER executed.
+    await tx.execute(sql`SET LOCAL ROLE jurisprudence_public_read_runtime`);
+    return await callback(tx);
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
+}

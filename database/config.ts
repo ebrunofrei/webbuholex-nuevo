@@ -223,3 +223,27 @@ export function readAuthorizationDatabaseConfig(
     prepare: false,
   };
 }
+
+export type JurisprudencePublicReadDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readJurisprudencePublicReadDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): JurisprudencePublicReadDatabaseRuntimeConfig {
+  const url = source.DATABASE_JURISPRUDENCE_READ_URL;
+  if (!url) {
+    throw new Error("jurisprudence_public_read_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("jurisprudence_public_read_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false, // Explicitly set prepare: false for transaction pooler compatibility (port 6543)
+  };
+}
