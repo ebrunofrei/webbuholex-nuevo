@@ -14,6 +14,7 @@ import {
 import { sql } from "drizzle-orm";
 
 export const jurisprudenceInternalSchema = pgSchema("jurisprudence_internal");
+export const jurisprudencePublicSchema = pgSchema("jurisprudence_public");
 
 const tsvector = customType<{ data: string }>({
   dataType() {
@@ -76,4 +77,29 @@ export const jurisprudenceIdempotency = jurisprudenceInternalSchema.table("juris
     columns: [table.recordId],
     foreignColumns: [jurisprudenceRecords.id],
   }).onDelete("restrict"),
+]);
+
+export const jurisprudencePublishedRecords = jurisprudencePublicSchema.table("published_records", {
+  id: varchar("id").primaryKey(),
+  recordVersion: integer("record_version").notNull(),
+  slug: varchar("slug").unique(),
+  title: varchar("title").notNull(),
+  caseTitle: varchar("case_title").notNull(),
+  caseNumber: varchar("case_number").notNull(),
+  resolutionNumber: varchar("resolution_number").notNull(),
+  resolutionType: varchar("resolution_type").notNull(),
+  institutionName: varchar("institution_name").notNull(),
+  issuingBody: varchar("issuing_body").notNull(),
+  matter: varchar("matter").notNull(),
+  issuedAt: date("issued_at").notNull(),
+  summary: varchar("summary"),
+  sourceName: varchar("source_name").notNull(),
+  normalizedSearchText: varchar("normalized_search_text").notNull(),
+  searchVector: tsvector("search_vector").generatedAlwaysAs(sql`to_tsvector('spanish', normalized_search_text)`),
+}, (table) => [
+  check("published_record_version_positive", sql`${table.recordVersion} > 0`),
+  index("published_records_case_idx").on(table.caseNumber),
+  index("published_records_resolution_idx").on(table.resolutionNumber),
+  index("published_records_issued_at_idx").on(table.issuedAt),
+  index("published_records_fts_gin_idx").using("gin", table.searchVector)
 ]);
