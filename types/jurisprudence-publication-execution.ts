@@ -235,6 +235,7 @@ export interface JurisprudencePublicationExecutionDependencies {
   readonly publicationAuthorization: JurisprudencePublicationAuthorizationService;
   readonly executionRepository: JurisprudencePublicationExecutionRepository;
   readonly projectionRepository: JurisprudencePublicProjectionRepository;
+  readonly transactionCoordinator: import("./jurisprudence-publication-transaction").JurisprudencePublicationTransactionCoordinator;
   readonly now: () => string;
   readonly generateId: () => string;
   readonly logger?: JurisprudencePublicationExecutionLogger;

@@ -27,8 +27,9 @@ import {
   supersedeJurisprudencePublicationExecutionCommandSchema,
   withdrawJurisprudencePublicationCommandSchema,
 } from "@/lib/schemas/jurisprudence-publication-execution";
+import { SqliteJurisprudencePublicProjectionRepository } from "@/lib/sqlite-jurisprudence-public-projection-repository";
+import { SqliteJurisprudencePublicationTransactionCoordinator } from "@/lib/sqlite-jurisprudence-publication-transaction-coordinator";
 import {
-  SqliteJurisprudencePublicProjectionRepository,
   SqliteJurisprudencePublicationExecutionRepository,
 } from "@/lib/sqlite-jurisprudence-publication-execution-repository";
 import { createFictitiousJurisprudenceRecord } from "@/tests/helpers/jurisprudence-record-fixture";
@@ -102,7 +103,8 @@ function createSystem(kind: "memory" | "sqlite", options: { executionPath?: stri
     projectionRepository = new SqliteJurisprudencePublicProjectionRepository(repository);
   }
   let executionId = 0;
-  const execution = createJurisprudencePublicationExecutionService({ api, editorialWorkflow: editorial, publicationGovernance: governance, publicationAuthorization: authorization, executionRepository, projectionRepository, now: () => clock.value, generateId: () => `ejecucion-ficticia-11k-${++executionId}`, ...(options.logs === undefined ? {} : { logger: { log: (event) => options.logs?.push(event) } }) });
+  const transactionCoordinator = new SqliteJurisprudencePublicationTransactionCoordinator(executionRepository);
+  const execution = createJurisprudencePublicationExecutionService({ api, editorialWorkflow: editorial, publicationGovernance: governance, publicationAuthorization: authorization, executionRepository, projectionRepository, transactionCoordinator, now: () => clock.value, generateId: () => `ejecucion-ficticia-11k-${++executionId}`, ...(options.logs === undefined ? {} : { logger: { log: (event) => options.logs?.push(event) } }) });
   let closed = false;
   const system: TestSystem = { api, editorial, governance, authorization, execution, executionRepository, projectionRepository, clock, close: async () => { if (closed) return; closed = true; await execution.close(); await authorization.close(); await governance.close(); await api.close(applicationContext(999)); } };
   systems.push(system);

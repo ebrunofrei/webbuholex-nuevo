@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { toPublicProjectionRecord } from "@/lib/jurisprudence/jurisprudence-public-projection-mapper";
 import { buildJurisprudencePublicProjection } from "@/lib/jurisprudence-public-projection-builder";
 import {
   clonePublicationExecutionEvent,
@@ -206,7 +207,13 @@ export class DefaultJurisprudencePublicationExecutionService implements Jurispru
       const projection = buildJurisprudencePublicProjection({ record: foundation.record, projectionId, executionId, authorizationCaseId: command.authorizationCaseId, generatedAt: occurredAt });
       const result: JurisprudencePublicationExecutionView = { execution, projection, current: true, publicationExecuted: true, publicProjectionExposed: false, deployed: false };
       const event = this.event(execution, "publication_executed", occurredAt, { authorizationCaseId: command.authorizationCaseId, projectionId, publicationExecuted: true, deployed: false });
-      await this.#dependencies.executionRepository.createExecution({ execution, projection, event, idempotency: { idempotencyKey: command.idempotencyKey, commandFingerprint: fingerprint, result } });
+
+      const publicRecord = toPublicProjectionRecord(foundation.record, projection);
+      await this.#dependencies.transactionCoordinator.withTransaction(async (tx) => {
+        await tx.executionRepository.createExecution({ execution, projection, event, idempotency: { idempotencyKey: command.idempotencyKey, commandFingerprint: fingerprint, result } });
+        await tx.outboxWriter.enqueuePublish(execution, publicRecord);
+      });
+
       this.emit(command.context, "publication_executed", "OK", occurredAt, execution);
       return clonePublicationExecutionView(result);
     } catch (error) { return this.reject(command.context, "execute_publication", error); }
@@ -243,7 +250,14 @@ export class DefaultJurisprudencePublicationExecutionService implements Jurispru
     const event = this.event(next, type, occurredAt, withdrawing
       ? { reason: command.reason, publicationExecuted: false }
       : { newRecordVersion: command.newRecordVersion, publicationExecuted: false });
-    await this.#dependencies.executionRepository.updateExecution({ execution: next, projection: nextProjection, event, expectedVersion: current.version, idempotency: { idempotencyKey: command.idempotencyKey, commandFingerprint: fingerprint, result } });
+
+    await this.#dependencies.transactionCoordinator.withTransaction(async (tx) => {
+      await tx.executionRepository.updateExecution({ execution: next, projection: nextProjection, event, expectedVersion: current.version, idempotency: { idempotencyKey: command.idempotencyKey, commandFingerprint: fingerprint, result } });
+      if (withdrawing) {
+        await tx.outboxWriter.enqueueWithdraw(next);
+      }
+    });
+
     this.emit(command.context, type, "OK", occurredAt, next);
     return clonePublicationExecutionView(result);
   }
