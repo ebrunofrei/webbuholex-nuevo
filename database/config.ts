@@ -295,3 +295,27 @@ export function readJurisprudenceInternalDatabaseConfig(
     prepare: false,
   };
 }
+
+export type JurisprudenceOutboxDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readJurisprudenceOutboxDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): JurisprudenceOutboxDatabaseRuntimeConfig {
+  const url = source.DATABASE_JURISPRUDENCE_OUTBOX_URL;
+  if (!url) {
+    throw new Error("jurisprudence_outbox_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("jurisprudence_outbox_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}
