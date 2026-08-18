@@ -247,3 +247,27 @@ export function readJurisprudencePublicReadDatabaseConfig(
     prepare: false, // Explicitly set prepare: false for transaction pooler compatibility (port 6543)
   };
 }
+
+export type JurisprudencePublicWriteDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readJurisprudencePublicWriteDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): JurisprudencePublicWriteDatabaseRuntimeConfig {
+  const url = source.DATABASE_JURISPRUDENCE_WRITE_URL;
+  if (!url) {
+    throw new Error("jurisprudence_public_write_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("jurisprudence_public_write_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}

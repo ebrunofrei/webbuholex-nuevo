@@ -141,6 +141,13 @@
       "when": 1786725405000,
       "tag": "0019_jurisprudence_public_read_security",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786735405000,
+      "tag": "0020_jurisprudence_public_write_security",
+      "breakpoints": true
     }
   ]
 }

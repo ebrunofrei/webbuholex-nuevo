@@ -1,0 +1,21 @@
+export interface JurisprudencePublicProjectionRecord {
+  readonly id: string;
+  readonly recordVersion: number;
+  readonly slug: string | null;
+  readonly title: string;
+  readonly caseTitle: string;
+  readonly caseNumber: string;
+  readonly resolutionNumber: string;
+  readonly resolutionType: string;
+  readonly institutionName: string;
+  readonly issuingBody: string;
+  readonly matter: string;
+  readonly issuedAt: string;
+  readonly summary: string | null;
+  readonly sourceName: string;
+}
+
+export interface JurisprudencePublicProjectionWriter {
+  upsert(record: JurisprudencePublicProjectionRecord): Promise<void>;
+  removeById(recordId: string): Promise<void>;
+}
