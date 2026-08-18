@@ -176,6 +176,13 @@
       "when": 1786775405000,
       "tag": "0024_jurisprudence_public_projection_barrier",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786785405000,
+      "tag": "0025_jurisprudence_public_write_login_hardening",
+      "breakpoints": true
     }
   ]
 }
