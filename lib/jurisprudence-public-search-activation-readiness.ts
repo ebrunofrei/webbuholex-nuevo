@@ -30,9 +30,9 @@ export function isJurisprudencePublicSearchActivationReady(
   readiness: JurisprudencePublicSearchActivationReadiness,
 ): boolean {
   return (
+    readiness.adapterCodeImplemented &&
     readiness.activationAuthorized &&
-    readiness.realPublicExposurePresent &&
-    readiness.realSearchIndexPresent &&
-    readiness.realPublicSearchGatewayConfigured
+    readiness.realPublicSearchGatewayConfigured &&
+    readiness.publicSearchConnectedToRealData
   );
 }

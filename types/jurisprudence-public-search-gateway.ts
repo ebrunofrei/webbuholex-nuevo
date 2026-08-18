@@ -13,7 +13,7 @@ export type JurisprudencePublicDetailResponse=
   |{readonly status:"error"};
 
 export interface JurisprudencePublicSearchGateway{
-  readonly kind:"not_configured"|"test_fixture"|"configured"|"local_verified_catalog";
+  readonly kind:"not_configured"|"test_fixture"|"configured"|"local_verified_catalog"|"postgres";
   search(query:JurisprudencePublicSearchQuery):Promise<JurisprudencePublicSearchResponse>;
   getBySlug(slug:string):Promise<JurisprudencePublicDetailResponse>;
 }

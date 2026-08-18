@@ -21,6 +21,8 @@ import type { JurisprudencePublicDetailDto } from "@/types/jurisprudence";
  * Configured gateway that connects public search UI to the internal
  * search index service (11.M) and read model repository (11.L).
  *
+ * @deprecated This legacy gateway requires internal metadata. Replaced by PostgresJurisprudencePublicSearchGateway.
+ *
  * This gateway is only instantiated when activation readiness is true.
  * In the current dormant state, the server actions never construct this class.
  */

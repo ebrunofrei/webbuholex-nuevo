@@ -49,18 +49,17 @@ export async function searchPublicJurisprudenceAction(
     // Only reached when activation readiness is true (currently never in dormant state).
     // Dynamic import prevents the configured gateway from being bundled
     // into the client or instantiated unnecessarily.
-    const { ConfiguredJurisprudencePublicSearchGateway } = await import(
-      "@/lib/configured-jurisprudence-public-search-gateway"
+    const { PostgresJurisprudencePublicSearchGateway } = await import(
+      "@/lib/jurisprudence/postgres-jurisprudence-public-search-gateway"
+    );
+    const { PostgresJurisprudencePublicReadRepository } = await import(
+      "@/lib/jurisprudence/postgres-jurisprudence-public-read-repository"
     );
 
-    // These imports would only be resolved when readiness is true.
-    // In dormant state, this code path is unreachable.
-    void ConfiguredJurisprudencePublicSearchGateway;
-    return {
-      status: "not_configured",
-      message:
-        "El buscador jurisprudencial todavía no se encuentra habilitado para consultas públicas.",
-    };
+    const repository = new PostgresJurisprudencePublicReadRepository();
+    const gateway = new PostgresJurisprudencePublicSearchGateway(repository);
+
+    return await gateway.search(parsed.data);
   } catch {
     return {
       status: "error",
@@ -90,12 +89,17 @@ export async function getPublicJurisprudenceBySlugAction(
     }
 
     // Only reached when activation readiness is true (currently never in dormant state).
-    const { ConfiguredJurisprudencePublicSearchGateway } = await import(
-      "@/lib/configured-jurisprudence-public-search-gateway"
+    const { PostgresJurisprudencePublicSearchGateway } = await import(
+      "@/lib/jurisprudence/postgres-jurisprudence-public-search-gateway"
+    );
+    const { PostgresJurisprudencePublicReadRepository } = await import(
+      "@/lib/jurisprudence/postgres-jurisprudence-public-read-repository"
     );
 
-    void ConfiguredJurisprudencePublicSearchGateway;
-    return { status: "not_configured" };
+    const repository = new PostgresJurisprudencePublicReadRepository();
+    const gateway = new PostgresJurisprudencePublicSearchGateway(repository);
+
+    return await gateway.getBySlug(parsed.data);
   } catch {
     return { status: "error" };
   }

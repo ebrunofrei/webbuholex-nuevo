@@ -6,9 +6,33 @@ describe("Complaints Database Migration", () => {
   it("should have a generated sql migration file and meta files", () => {
     const files = readdirSync(join(process.cwd(), "database", "migrations"));
     const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
+    const EXPECTED_COMPLAINTS_MIGRATION_TAGS = [
+      "0000_lowly_kat_farrell",
+      "0001_complaints_security",
+      "0002_complaints_role_assumption",
+      "0003_complaints_runtime_logins",
+      "0004_complaints_runtime_column_privileges",
+      "0005_complaints_closed_at_insert_privilege",
+      "0006_complaints_history_audit_insert_privileges",
+      "0007_complaints_drizzle_insert_privileges",
+      "0008_complaints_environment_marker_contract",
+      "0009_complaints_admin_runtime",
+      "0010_optimal_doctor_strange",
+      "0011_admin_read_runtime",
+      "0012_admin_detail_read_runtime",
+      "0013_admin_detail_safe_unsupported_schema",
+      "0014_admin_detail_safe_payload_projection",
+      "0015_regular_justice",
+      "0016_complaints_admin_closed_at_privilege",
+      "0017_admin_read_login_roles"
+    ];
 
-    // There must be exactly 18 migrations now
-    expect(sqlFiles.length).toBe(18);
+    const complaintsSqlFiles = sqlFiles.filter((f) =>
+      EXPECTED_COMPLAINTS_MIGRATION_TAGS.includes(f.replace(".sql", ""))
+    );
+
+    // There must be exactly 18 complaints/base migrations now
+    expect(complaintsSqlFiles.length).toBe(18);
     expect(sqlFiles[0]?.startsWith("0000")).toBe(true);
     expect(sqlFiles[1]).toBe("0001_complaints_security.sql");
     expect(sqlFiles[2]).toBe("0002_complaints_role_assumption.sql");
@@ -42,8 +66,12 @@ describe("Complaints Database Migration", () => {
         "utf8",
       ),
     );
-    expect(journalContent.entries.length).toBe(18);
-    expect(journalContent.entries[0]?.tag).toBe(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const complaintsJournalEntries = journalContent.entries.filter((e: any) =>
+      EXPECTED_COMPLAINTS_MIGRATION_TAGS.includes(e.tag)
+    );
+    expect(complaintsJournalEntries.length).toBe(18);
+    expect(complaintsJournalEntries[0]?.tag).toBe(
       sqlFiles[0]?.replace(".sql", ""),
     );
     expect(journalContent.entries[1]?.tag).toBe("0001_complaints_security");
