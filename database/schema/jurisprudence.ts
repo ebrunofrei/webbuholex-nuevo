@@ -194,3 +194,15 @@ export const jurisprudencePublicationOutbox = jurisprudenceInternalSchema.table(
   index("jurisprudence_publication_outbox_status_available_idx").on(table.status, table.availableAt),
   index("jurisprudence_publication_outbox_record_idx").on(table.recordId, table.recordVersion),
 ]);
+
+export const jurisprudencePublicProjectionBarriers = jurisprudencePublicSchema.table("projection_barriers", {
+  recordId: varchar("record_id").primaryKey(),
+  recordVersion: integer("record_version").notNull(),
+  executionVersion: integer("execution_version").notNull(),
+  projectionState: varchar("projection_state", { enum: ["published", "withdrawn"] }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("projection_barrier_record_version_positive", sql`${table.recordVersion} > 0`),
+  check("projection_barrier_execution_version_positive", sql`${table.executionVersion} > 0`),
+  check("valid_projection_state", sql`${table.projectionState} IN ('published', 'withdrawn')`),
+]);
