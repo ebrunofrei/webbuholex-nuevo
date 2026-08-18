@@ -25,6 +25,8 @@ import {
   readJurisprudenceInternalDatabaseConfig,
   JurisprudenceOutboxDatabaseRuntimeConfig,
   readJurisprudenceOutboxDatabaseConfig,
+  JurisprudenceInternalWriteDatabaseRuntimeConfig,
+  readJurisprudenceInternalWriteDatabaseConfig,
 } from "./config";
 
 export interface DatabaseClientBundle {
@@ -57,6 +59,7 @@ type DatabaseGlobal = typeof globalThis & {
   __buholexJurisprudencePublicWriteClient__?: DatabaseClientBundle;
   __buholexJurisprudenceInternalClient__?: DatabaseClientBundle;
   __buholexJurisprudenceOutboxClient__?: DatabaseClientBundle;
+  __buholexJurisprudenceInternalWriteClient__?: DatabaseClientBundle;
 };
 
 export function getDatabase(): PostgresJsDatabase<typeof schema> {
@@ -290,4 +293,25 @@ export function getJurisprudenceOutboxDatabase(): PostgresJsDatabase<typeof sche
     g.__buholexJurisprudenceOutboxClient__ = createJurisprudenceOutboxDatabaseClient(config);
   }
   return g.__buholexJurisprudenceOutboxClient__.db;
+}
+
+export function createJurisprudenceInternalWriteDatabaseClient(config: JurisprudenceInternalWriteDatabaseRuntimeConfig): DatabaseClientBundle {
+  const sql = postgres(config.url, {
+    max: config.maxConnections,
+    idle_timeout: config.idleTimeoutSeconds,
+    connect_timeout: config.connectTimeoutSeconds,
+    prepare: config.prepare,
+    ssl: "require",
+  });
+  const db = drizzle(sql, { schema });
+  return { sql, db };
+}
+
+export function getJurisprudenceInternalWriteDatabase(): PostgresJsDatabase<typeof schema> {
+  const config = readJurisprudenceInternalWriteDatabaseConfig();
+  const g = globalThis as DatabaseGlobal;
+  if (!g.__buholexJurisprudenceInternalWriteClient__) {
+    g.__buholexJurisprudenceInternalWriteClient__ = createJurisprudenceInternalWriteDatabaseClient(config);
+  }
+  return g.__buholexJurisprudenceInternalWriteClient__.db;
 }

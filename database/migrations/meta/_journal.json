@@ -183,6 +183,13 @@
       "when": 1786785405000,
       "tag": "0025_jurisprudence_public_write_login_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786795405000,
+      "tag": "0026_jurisprudence_internal_write_security",
+      "breakpoints": true
     }
   ]
 }
