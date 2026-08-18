@@ -271,3 +271,27 @@ export function readJurisprudencePublicWriteDatabaseConfig(
     prepare: false,
   };
 }
+
+export type JurisprudenceInternalDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readJurisprudenceInternalDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): JurisprudenceInternalDatabaseRuntimeConfig {
+  const url = source.DATABASE_JURISPRUDENCE_INTERNAL_URL;
+  if (!url) {
+    throw new Error("jurisprudence_internal_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("jurisprudence_internal_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}
