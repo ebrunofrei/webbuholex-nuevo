@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { JurisprudencePublicDetail } from "@/components/jurisprudence/jurisprudence-public-detail";
 import { createPageMetadata } from "@/lib/metadata";
-import { getLocalVerifiedJurisprudenceBySlugAction } from "@/lib/jurisprudence/local-verified-jurisprudence-public-actions";
+import { getJurisprudencePublicBySlugAction } from "@/lib/jurisprudence/postgres-jurisprudence-public-actions";
 
 export async function generateMetadata({
   params,
@@ -29,7 +29,7 @@ export default async function JurisprudenceDetailPage({
   return (
     <JurisprudencePublicDetail
       slug={slug}
-      getBySlugAction={getLocalVerifiedJurisprudenceBySlugAction}
+      getBySlugAction={getJurisprudencePublicBySlugAction}
       {...(resolvedSearchParams !== undefined ? { rawSearchParams: resolvedSearchParams } : {})}
     />
   );

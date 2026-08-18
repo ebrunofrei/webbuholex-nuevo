@@ -6,12 +6,12 @@ import { JurisprudenceAssistedDemo } from "@/components/jurisprudence/jurisprude
 import { JurisprudencePublicPage } from "@/components/jurisprudence/jurisprudence-public-page";
 
 vi.mock(
-  "@/lib/jurisprudence/local-verified-jurisprudence-public-actions",
+  "@/lib/jurisprudence/postgres-jurisprudence-public-actions",
   () => ({
-    searchLocalVerifiedJurisprudenceAction: async () => ({
+    searchJurisprudencePublicAction: async () => ({
       status: "not_configured",
     }),
-    getLocalVerifiedJurisprudenceBySlugAction: async () => ({
+    getJurisprudencePublicBySlugAction: async () => ({
       status: "not_configured",
     }),
   }),

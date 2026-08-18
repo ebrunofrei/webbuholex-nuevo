@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { createPageMetadata } from "@/lib/metadata";
 import { JurisprudencePublicPage } from "@/components/jurisprudence/jurisprudence-public-page";
-import { searchLocalVerifiedJurisprudenceAction } from "@/lib/jurisprudence/local-verified-jurisprudence-public-actions";
+import { searchJurisprudencePublicAction } from "@/lib/jurisprudence/postgres-jurisprudence-public-actions";
 
 export const metadata: Metadata = createPageMetadata(
   "Jurisprudencia",
@@ -10,5 +10,5 @@ export const metadata: Metadata = createPageMetadata(
 );
 
 export default function JurisprudencePage() {
-  return <JurisprudencePublicPage searchAction={searchLocalVerifiedJurisprudenceAction} />;
+  return <JurisprudencePublicPage searchAction={searchJurisprudencePublicAction} />;
 }

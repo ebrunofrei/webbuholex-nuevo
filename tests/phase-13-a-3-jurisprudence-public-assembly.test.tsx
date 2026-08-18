@@ -7,17 +7,14 @@ vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>
 }));
 
-vi.mock(
-  "@/lib/jurisprudence/local-verified-jurisprudence-public-actions",
-  () => ({
-    searchLocalVerifiedJurisprudenceAction: async () => ({
-      status: "not_configured",
-    }),
-    getLocalVerifiedJurisprudenceBySlugAction: async () => ({
-      status: "not_configured",
-    }),
+vi.mock("@/lib/jurisprudence/postgres-jurisprudence-public-actions", () => ({
+  searchJurisprudencePublicAction: async () => ({
+    status: "not_configured",
   }),
-);
+  getJurisprudencePublicBySlugAction: async () => ({
+    status: "not_configured",
+  }),
+}));
 
 // Simulamos replaceState para que el componente JurisprudencePublicSearch no falle al intentarlo.
 beforeEach(() => {
