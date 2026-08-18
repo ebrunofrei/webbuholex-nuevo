@@ -105,3 +105,14 @@ export async function withJurisprudencePublicationOutboxRole<T>(
     return await callback(tx);
   });
 }
+
+export async function withJurisprudencePublicationCommandRole<T>(
+  db: PostgresJsDatabase<typeof schema>,
+  callback: (tx: JurisprudenceTransaction) => Promise<T>
+): Promise<T> {
+  return await db.transaction(async (tx) => {
+    // FAIL CLOSED: If SET LOCAL ROLE fails, an error is thrown and callback is NEVER executed.
+    await tx.execute(sql`SET LOCAL ROLE jurisprudence_publication_command_runtime`);
+    return await callback(tx);
+  });
+}

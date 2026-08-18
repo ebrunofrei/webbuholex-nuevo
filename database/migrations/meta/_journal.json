@@ -162,6 +162,13 @@
       "when": 1786755405000,
       "tag": "0022_jurisprudence_publication_outbox_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786765405000,
+      "tag": "0023_jurisprudence_publication_command_security",
+      "breakpoints": true
     }
   ]
 }
