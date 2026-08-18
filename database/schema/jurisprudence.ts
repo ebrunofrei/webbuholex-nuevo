@@ -10,7 +10,8 @@ import {
   unique,
   foreignKey,
   check,
-  boolean
+  boolean,
+  uuid
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -169,3 +170,27 @@ export const jurisprudencePublicationIdempotency = jurisprudenceInternalSchema.t
   resultJson: jsonb("result_json").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const jurisprudencePublicationOutbox = jurisprudenceInternalSchema.table("jurisprudence_publication_outbox", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  recordId: varchar("record_id").notNull().references(() => jurisprudenceRecords.id, { onDelete: 'restrict' }),
+  recordVersion: integer("record_version").notNull(),
+  executionId: varchar("execution_id").notNull().references(() => jurisprudencePublicationExecutions.executionId, { onDelete: 'restrict' }),
+  executionVersion: integer("execution_version").notNull(),
+  eventType: varchar("event_type", { enum: ["publish_projection", "withdraw_projection"] }).notNull(),
+  payload: jsonb("payload").notNull(),
+  status: varchar("status", { enum: ["pending", "processing", "sent", "failed", "dead_letter"] }).notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+  processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  lastErrorCode: varchar("last_error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("attempts_positive", sql`${table.attempts} >= 0`),
+  check("valid_event_type", sql`${table.eventType} IN ('publish_projection', 'withdraw_projection')`),
+  check("valid_status", sql`${table.status} IN ('pending', 'processing', 'sent', 'failed', 'dead_letter')`),
+  index("jurisprudence_publication_outbox_status_available_idx").on(table.status, table.availableAt),
+  index("jurisprudence_publication_outbox_record_idx").on(table.recordId, table.recordVersion),
+]);
