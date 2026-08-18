@@ -18,15 +18,45 @@ describe("PostgresJurisprudencePublicProjectionWriter", () => {
   let mockDb: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockTx: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockSelect: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockInsert: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockUpdate: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockDelete: any;
 
   beforeEach(() => {
     writer = new PostgresJurisprudencePublicProjectionWriter();
-    mockTx = {
-      insert: vi.fn().mockReturnThis(),
+
+    mockSelect = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      for: vi.fn().mockResolvedValue([]),
+    };
+
+    mockInsert = {
       values: vi.fn().mockReturnThis(),
-      onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-      delete: vi.fn().mockReturnThis(),
+      onConflictDoNothing: vi.fn().mockReturnThis(),
+      onConflictDoUpdate: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{ recordId: "proj-1" }]),
+    };
+
+    mockUpdate = {
+      set: vi.fn().mockReturnThis(),
       where: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockDelete = {
+      where: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockTx = {
+      select: vi.fn().mockReturnValue(mockSelect),
+      insert: vi.fn().mockReturnValue(mockInsert),
+      update: vi.fn().mockReturnValue(mockUpdate),
+      delete: vi.fn().mockReturnValue(mockDelete),
     };
     mockDb = {};
 
@@ -40,7 +70,7 @@ describe("PostgresJurisprudencePublicProjectionWriter", () => {
 
   const baseRecord: JurisprudencePublicProjectionRecord = {
     id: "proj-1",
-    recordVersion: 1,
+    recordVersion: 5,
     slug: "slug-1",
     title: "Title 1",
     caseTitle: "Case 1",
@@ -55,48 +85,116 @@ describe("PostgresJurisprudencePublicProjectionWriter", () => {
     sourceName: "Source",
   };
 
-  it("should generate normalized search text using only public fields", async () => {
-    await writer.upsert(baseRecord);
+  describe("when NO barrier exists", () => {
+    it("first publish returns APPLIED and materializes public row", async () => {
+      mockSelect.for.mockResolvedValueOnce([]); // barrier not found
+      mockInsert.returning.mockResolvedValueOnce([{ recordId: "proj-1" }]); // insert won
 
-    expect(mockTx.values).toHaveBeenCalledWith(
-      expect.objectContaining({
-        normalizedSearchText: "Title 1 Case 1 123-2023 RES-1 Auto Inst Body Civil A summary Source",
-      })
-    );
+      const result = await writer.upsert(baseRecord, 1);
+
+      expect(result).toBe("APPLIED");
+      // Should have inserted public record
+      expect(mockInsert.values).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-1" }));
+    });
+
+    it("first withdraw returns APPLIED and creates durable tombstone", async () => {
+      mockSelect.for.mockResolvedValueOnce([]); // barrier not found
+      mockInsert.returning.mockResolvedValueOnce([{ recordId: "proj-1" }]); // insert won
+
+      const result = await writer.removeById("proj-1", 5, 2);
+
+      expect(result).toBe("APPLIED");
+      // Should have deleted public record
+      expect(mockDelete.where).toHaveBeenCalled();
+    });
+
+    it("losing concurrent insert rereads locked barrier and processes normally", async () => {
+      mockSelect.for
+        .mockResolvedValueOnce([]) // First read: not found
+        .mockResolvedValueOnce([{ recordVersion: 6, executionVersion: 1, projectionState: "published" }]); // Reread: found concurrent insert!
+
+      mockInsert.returning.mockResolvedValueOnce([]); // Insert returned 0 rows (lost race)
+
+      const result = await writer.upsert(baseRecord, 1); // We try to insert (5,1)
+
+      // Since concurrent inserted (6,1), ours is STALE
+      expect(result).toBe("STALE");
+      expect(mockSelect.for).toHaveBeenCalledTimes(2); // Verify reread occurred
+      expect(mockUpdate.set).not.toHaveBeenCalled(); // No mutation
+    });
   });
 
-  it("should handle null summary when generating search text", async () => {
-    const record = { ...baseRecord, summary: null };
-    await writer.upsert(record);
+  describe("when barrier EXISTS", () => {
+    it("newer publish returns APPLIED", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 4, executionVersion: 1, projectionState: "published" }]);
 
-    expect(mockTx.values).toHaveBeenCalledWith(
-      expect.objectContaining({
-        normalizedSearchText: "Title 1 Case 1 123-2023 RES-1 Auto Inst Body Civil Source",
-      })
-    );
-  });
+      const result = await writer.upsert(baseRecord, 1);
 
-  it("should call upsert with the correct values and onConflictDoUpdate", async () => {
-    await writer.upsert(baseRecord);
+      expect(result).toBe("APPLIED");
+      expect(mockUpdate.set).toHaveBeenCalledWith(expect.objectContaining({ projectionState: "published" }));
+    });
 
-    expect(getJurisprudencePublicWriteDatabase).toHaveBeenCalled();
-    expect(withJurisprudencePublicWriteRole).toHaveBeenCalledWith(mockDb, expect.any(Function));
-    
-    expect(mockTx.insert).toHaveBeenCalled();
-    expect(mockTx.values).toHaveBeenCalledWith(expect.objectContaining({
-      id: "proj-1",
-      recordVersion: 1,
-    }));
-    expect(mockTx.onConflictDoUpdate).toHaveBeenCalled();
-  });
+    it("newer withdraw returns APPLIED", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 5, executionVersion: 1, projectionState: "published" }]);
 
-  it("should call removeById correctly", async () => {
-    await writer.removeById("proj-1");
+      const result = await writer.removeById("proj-1", 5, 2);
 
-    expect(getJurisprudencePublicWriteDatabase).toHaveBeenCalled();
-    expect(withJurisprudencePublicWriteRole).toHaveBeenCalledWith(mockDb, expect.any(Function));
-    
-    expect(mockTx.delete).toHaveBeenCalled();
-    expect(mockTx.where).toHaveBeenCalled();
+      expect(result).toBe("APPLIED");
+      expect(mockUpdate.set).toHaveBeenCalledWith(expect.objectContaining({ projectionState: "withdrawn" }));
+    });
+
+    it("older publish returns STALE", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 6, executionVersion: 1, projectionState: "published" }]);
+
+      const result = await writer.upsert(baseRecord, 1);
+
+      expect(result).toBe("STALE");
+      expect(mockUpdate.set).not.toHaveBeenCalled();
+    });
+
+    it("older withdraw returns STALE", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 5, executionVersion: 3, projectionState: "published" }]);
+
+      const result = await writer.removeById("proj-1", 5, 2);
+
+      expect(result).toBe("STALE");
+      expect(mockDelete.where).not.toHaveBeenCalled();
+    });
+
+    it("same tuple publish + published returns IDEMPOTENT", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 5, executionVersion: 1, projectionState: "published" }]);
+
+      const result = await writer.upsert(baseRecord, 1);
+
+      expect(result).toBe("IDEMPOTENT");
+      expect(mockUpdate.set).not.toHaveBeenCalled();
+    });
+
+    it("same tuple withdraw + withdrawn returns IDEMPOTENT", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 5, executionVersion: 1, projectionState: "withdrawn" }]);
+
+      const result = await writer.removeById("proj-1", 5, 1);
+
+      expect(result).toBe("IDEMPOTENT");
+      expect(mockDelete.where).not.toHaveBeenCalled();
+    });
+
+    it("same tuple withdraw + published returns APPLIED (defensive advance)", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 5, executionVersion: 1, projectionState: "published" }]);
+
+      const result = await writer.removeById("proj-1", 5, 1);
+
+      expect(result).toBe("APPLIED");
+      expect(mockUpdate.set).toHaveBeenCalledWith(expect.objectContaining({ projectionState: "withdrawn" }));
+    });
+
+    it("same tuple publish + withdrawn returns STALE (withdrawn dominates)", async () => {
+      mockSelect.for.mockResolvedValueOnce([{ recordVersion: 5, executionVersion: 1, projectionState: "withdrawn" }]);
+
+      const result = await writer.upsert(baseRecord, 1);
+
+      expect(result).toBe("STALE");
+      expect(mockUpdate.set).not.toHaveBeenCalled();
+    });
   });
 });

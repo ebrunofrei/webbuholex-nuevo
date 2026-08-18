@@ -1,11 +1,17 @@
 import { sql, eq } from "drizzle-orm";
 import { getJurisprudencePublicWriteDatabase } from "@/database/client";
 import { withJurisprudencePublicWriteRole } from "@/database/roles";
-import { jurisprudencePublishedRecords } from "@/database/schema/jurisprudence";
+import {
+  jurisprudencePublishedRecords,
+  jurisprudencePublicProjectionBarriers,
+} from "@/database/schema/jurisprudence";
 import type {
   JurisprudencePublicProjectionRecord,
   JurisprudencePublicProjectionWriter,
+  PublicProjectionMutationResult,
 } from "@/types/jurisprudence-public-projection-writer";
+
+type Tx = Parameters<Parameters<typeof withJurisprudencePublicWriteRole>[1]>[0];
 
 export class PostgresJurisprudencePublicProjectionWriter implements JurisprudencePublicProjectionWriter {
   private generateNormalizedSearchText(record: JurisprudencePublicProjectionRecord): string {
@@ -29,10 +35,132 @@ export class PostgresJurisprudencePublicProjectionWriter implements Jurisprudenc
       .replace(/\s+/g, " ");
   }
 
-  async upsert(record: JurisprudencePublicProjectionRecord): Promise<void> {
+  private evaluateIncomingStatus(
+    incomingRecordVersion: number,
+    incomingExecutionVersion: number,
+    incomingState: "published" | "withdrawn",
+    storedRecordVersion: number,
+    storedExecutionVersion: number,
+    storedState: "published" | "withdrawn"
+  ): PublicProjectionMutationResult {
+    if (incomingRecordVersion < storedRecordVersion) {
+      return "STALE";
+    }
+
+    if (incomingRecordVersion === storedRecordVersion) {
+      if (incomingExecutionVersion < storedExecutionVersion) {
+        return "STALE";
+      }
+
+      if (incomingExecutionVersion === storedExecutionVersion) {
+        if (incomingState === storedState) {
+          return "IDEMPOTENT";
+        }
+
+        if (incomingState === "published" && storedState === "withdrawn") {
+          return "STALE";
+        }
+
+        if (incomingState === "withdrawn" && storedState === "published") {
+          return "APPLIED";
+        }
+      }
+    }
+
+    return "APPLIED";
+  }
+
+  private async acquireAndEvaluateBarrier(
+    tx: Tx,
+    recordId: string,
+    incomingRecordVersion: number,
+    incomingExecutionVersion: number,
+    incomingState: "published" | "withdrawn"
+  ): Promise<{ status: PublicProjectionMutationResult; isNew: boolean }> {
+    let [barrier] = await tx
+      .select()
+      .from(jurisprudencePublicProjectionBarriers)
+      .where(eq(jurisprudencePublicProjectionBarriers.recordId, recordId))
+      .for("update");
+
+    if (!barrier) {
+      const inserted = await tx
+        .insert(jurisprudencePublicProjectionBarriers)
+        .values({
+          recordId,
+          recordVersion: incomingRecordVersion,
+          executionVersion: incomingExecutionVersion,
+          projectionState: incomingState,
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      if (inserted.length === 0) {
+        const [rereadBarrier] = await tx
+          .select()
+          .from(jurisprudencePublicProjectionBarriers)
+          .where(eq(jurisprudencePublicProjectionBarriers.recordId, recordId))
+          .for("update");
+
+        if (!rereadBarrier) {
+           throw new Error("Concurrency failure: Barrier row expected but not found after conflicting insert.");
+        }
+        barrier = rereadBarrier;
+      } else {
+        return { status: "APPLIED", isNew: true };
+      }
+    }
+
+    const status = this.evaluateIncomingStatus(
+      incomingRecordVersion,
+      incomingExecutionVersion,
+      incomingState,
+      barrier.recordVersion,
+      barrier.executionVersion,
+      barrier.projectionState as "published" | "withdrawn"
+    );
+
+    return { status, isNew: false };
+  }
+
+  private async updateBarrier(
+    tx: Tx,
+    recordId: string,
+    recordVersion: number,
+    executionVersion: number,
+    projectionState: "published" | "withdrawn"
+  ): Promise<void> {
+    await tx
+      .update(jurisprudencePublicProjectionBarriers)
+      .set({
+        recordVersion,
+        executionVersion,
+        projectionState,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(jurisprudencePublicProjectionBarriers.recordId, recordId));
+  }
+
+  async upsert(record: JurisprudencePublicProjectionRecord, executionVersion: number): Promise<PublicProjectionMutationResult> {
     const db = getJurisprudencePublicWriteDatabase();
 
-    await withJurisprudencePublicWriteRole(db, async (tx) => {
+    return await withJurisprudencePublicWriteRole(db, async (tx) => {
+      const { status, isNew } = await this.acquireAndEvaluateBarrier(
+        tx as Tx,
+        record.id,
+        record.recordVersion,
+        executionVersion,
+        "published"
+      );
+
+      if (status === "STALE" || status === "IDEMPOTENT") {
+        return status;
+      }
+
+      if (!isNew) {
+        await this.updateBarrier(tx as Tx, record.id, record.recordVersion, executionVersion, "published");
+      }
+
       const normalizedSearchText = this.generateNormalizedSearchText(record);
 
       await tx
@@ -72,18 +200,37 @@ export class PostgresJurisprudencePublicProjectionWriter implements Jurisprudenc
             sourceName: record.sourceName,
             normalizedSearchText,
           },
-          where: sql`${jurisprudencePublishedRecords.recordVersion} <= ${record.recordVersion}`,
         });
+
+      return "APPLIED";
     });
   }
 
-  async removeById(recordId: string): Promise<void> {
+  async removeById(recordId: string, recordVersion: number, executionVersion: number): Promise<PublicProjectionMutationResult> {
     const db = getJurisprudencePublicWriteDatabase();
 
-    await withJurisprudencePublicWriteRole(db, async (tx) => {
+    return await withJurisprudencePublicWriteRole(db, async (tx) => {
+      const { status, isNew } = await this.acquireAndEvaluateBarrier(
+        tx as Tx,
+        recordId,
+        recordVersion,
+        executionVersion,
+        "withdrawn"
+      );
+
+      if (status === "STALE" || status === "IDEMPOTENT") {
+        return status;
+      }
+
+      if (!isNew) {
+        await this.updateBarrier(tx as Tx, recordId, recordVersion, executionVersion, "withdrawn");
+      }
+
       await tx
         .delete(jurisprudencePublishedRecords)
         .where(eq(jurisprudencePublishedRecords.id, recordId));
+
+      return "APPLIED";
     });
   }
 }

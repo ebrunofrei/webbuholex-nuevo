@@ -15,7 +15,9 @@ export interface JurisprudencePublicProjectionRecord {
   readonly sourceName: string;
 }
 
+export type PublicProjectionMutationResult = "APPLIED" | "IDEMPOTENT" | "STALE";
+
 export interface JurisprudencePublicProjectionWriter {
-  upsert(record: JurisprudencePublicProjectionRecord): Promise<void>;
-  removeById(recordId: string): Promise<void>;
+  upsert(record: JurisprudencePublicProjectionRecord, executionVersion: number): Promise<PublicProjectionMutationResult>;
+  removeById(recordId: string, recordVersion: number, executionVersion: number): Promise<PublicProjectionMutationResult>;
 }
