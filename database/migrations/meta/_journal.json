@@ -148,6 +148,13 @@
       "when": 1786735405000,
       "tag": "0020_jurisprudence_public_write_security",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786745405000,
+      "tag": "0021_jurisprudence_publication_execution_foundation",
+      "breakpoints": true
     }
   ]
 }

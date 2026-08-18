@@ -9,7 +9,8 @@ import {
   index,
   unique,
   foreignKey,
-  check
+  check,
+  boolean
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -103,3 +104,68 @@ export const jurisprudencePublishedRecords = jurisprudencePublicSchema.table("pu
   index("published_records_issued_at_idx").on(table.issuedAt),
   index("published_records_fts_gin_idx").using("gin", table.searchVector)
 ]);
+
+export const jurisprudencePublicationExecutions = jurisprudenceInternalSchema.table("jurisprudence_publication_executions", {
+  executionId: varchar("execution_id").primaryKey(),
+  recordId: varchar("record_id").notNull(),
+  recordVersion: integer("record_version").notNull(),
+  editorialCaseId: varchar("editorial_case_id").notNull(),
+  publicationDossierId: varchar("publication_dossier_id").notNull(),
+  authorizationCaseId: varchar("authorization_case_id").notNull(),
+  projectionId: varchar("projection_id").notNull(),
+  status: varchar("status", { enum: ["pending", "executed", "withdrawn", "superseded", "failed"] }).notNull(),
+  version: integer("version").notNull(),
+  executedAt: timestamp("executed_at", { withTimezone: true }).notNull(),
+  executedByReference: varchar("executed_by_reference").notNull(),
+  withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+  withdrawalReason: varchar("withdrawal_reason", { enum: ["authorization_revoked", "record_corrected", "rights_reassessment_required", "privacy_reassessment_required", "institutional_withdrawal"] }),
+  supersededAt: timestamp("superseded_at", { withTimezone: true }),
+  supersededByRecordVersion: integer("superseded_by_record_version"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  publicationExecuted: boolean("publication_executed").notNull(),
+  deployed: boolean("deployed").notNull(),
+}, (table) => [
+  check("publication_execution_version_positive", sql`${table.version} > 0`),
+  check("publication_execution_record_version_positive", sql`${table.recordVersion} > 0`),
+  check("publication_execution_deployed_false", sql`${table.deployed} = false`),
+  foreignKey({
+    columns: [table.recordId],
+    foreignColumns: [jurisprudenceRecords.id],
+  }).onDelete("restrict"),
+  index("jurisprudence_pub_exec_record_version_idx").on(table.recordId, table.recordVersion),
+  index("jurisprudence_pub_exec_status_idx").on(table.status),
+]);
+
+export const jurisprudencePublicationExecutionEvents = jurisprudenceInternalSchema.table("jurisprudence_publication_execution_events", {
+  eventId: varchar("event_id").primaryKey(),
+  executionId: varchar("execution_id").notNull(),
+  recordId: varchar("record_id").notNull(),
+  recordVersion: integer("record_version").notNull(),
+  executionVersion: integer("execution_version").notNull(),
+  sequence: integer("sequence").notNull(),
+  type: varchar("type", { enum: ["publication_executed", "publication_withdrawn", "publication_execution_superseded"] }).notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+}, (table) => [
+  check("pub_exec_event_record_version_positive", sql`${table.recordVersion} > 0`),
+  check("pub_exec_event_exec_version_positive", sql`${table.executionVersion} > 0`),
+  check("pub_exec_event_sequence_positive", sql`${table.sequence} > 0`),
+  foreignKey({
+    columns: [table.executionId],
+    foreignColumns: [jurisprudencePublicationExecutions.executionId],
+  }).onDelete("restrict"),
+  foreignKey({
+    columns: [table.recordId],
+    foreignColumns: [jurisprudenceRecords.id],
+  }).onDelete("restrict"),
+  unique("jurisprudence_pub_exec_events_seq_unique").on(table.executionId, table.sequence),
+  index("jurisprudence_pub_exec_events_record_idx").on(table.recordId),
+]);
+
+export const jurisprudencePublicationIdempotency = jurisprudenceInternalSchema.table("jurisprudence_publication_idempotency", {
+  idempotencyKey: varchar("idempotency_key").primaryKey(),
+  commandFingerprint: varchar("command_fingerprint").notNull(),
+  resultJson: jsonb("result_json").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
