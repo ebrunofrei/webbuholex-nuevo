@@ -63,6 +63,8 @@ describe("Phase J1-G.2R.2 - Publication Source Read Foundation", () => {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([]),
+        transaction: vi.fn().mockImplementation(async (cb) => cb(fakeDb)),
+        execute: vi.fn(),
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,6 +98,8 @@ describe("Phase J1-G.2R.2 - Publication Source Read Foundation", () => {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([{ snapshotJson: snapshot }]),
+        transaction: vi.fn().mockImplementation(async (cb) => cb(fakeDb)),
+        execute: vi.fn(),
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

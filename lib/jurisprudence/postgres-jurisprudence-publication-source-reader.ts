@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { JurisprudencePublicationSourceReader, JurisprudencePublicationSourceReaderQuery } from "@/types/jurisprudence-publication-source-reader";
 import type { JurisprudenceProjectionSourceRecord } from "@/types/jurisprudence-publication-execution";
 import type { JurisprudenceInternalRecordDto } from "@/types/jurisprudence-application";
+import { withJurisprudenceInternalReadRole } from "@/database/roles/with-jurisprudence-internal-read-role";
 
 export class PostgresJurisprudencePublicationSourceReader implements JurisprudencePublicationSourceReader {
   readonly #db: PostgresJsDatabase<Record<string, never>>;
@@ -13,19 +14,20 @@ export class PostgresJurisprudencePublicationSourceReader implements Jurispruden
   }
 
   async getPublicationSource(query: JurisprudencePublicationSourceReaderQuery): Promise<JurisprudenceProjectionSourceRecord | null> {
-    const rows = await this.#db.select()
-      .from(jurisprudenceRecordVersions)
-      .where(and(
-        eq(jurisprudenceRecordVersions.recordId, query.recordId),
-        eq(jurisprudenceRecordVersions.version, query.recordVersion)
-      ))
-      .limit(1);
+    return await withJurisprudenceInternalReadRole(this.#db, async (tx) => {
+      const rows = await tx.select()
+        .from(jurisprudenceRecordVersions)
+        .where(and(
+          eq(jurisprudenceRecordVersions.recordId, query.recordId),
+          eq(jurisprudenceRecordVersions.version, query.recordVersion)
+        ))
+        .limit(1);
 
-    if (rows.length === 0) return null;
+      if (rows.length === 0) return null;
 
-    const snapshot = rows[0]!.snapshotJson as unknown as JurisprudenceInternalRecordDto;
+      const snapshot = rows[0]!.snapshotJson as unknown as JurisprudenceInternalRecordDto;
 
-    return {
+      return {
       id: snapshot.id,
       recordVersion: snapshot.recordVersion,
       slug: snapshot.slug,
@@ -40,5 +42,6 @@ export class PostgresJurisprudencePublicationSourceReader implements Jurispruden
       officialContent: snapshot.officialContent,
       source: snapshot.source,
     };
+    });
   }
 }

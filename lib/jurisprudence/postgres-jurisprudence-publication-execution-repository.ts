@@ -1,5 +1,6 @@
 import { eq, and, desc, asc } from "drizzle-orm";
 import { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
+import { withJurisprudencePublicationCommandRole } from "@/database/roles";
 import { PgTransaction } from "drizzle-orm/pg-core";
 import { ExtractTablesWithRelations } from "drizzle-orm";
 import * as schema from "@/database/schema";
@@ -117,8 +118,8 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
   }
 
   async findActiveByRecordVersion(recordId: string, recordVersion: number): Promise<JurisprudencePublicationExecution | null> {
-    return this.safely(async () => {
-      const results = await this.#executor.select()
+    return this.safely(async () => withJurisprudencePublicationCommandRole(this.#executor, async (tx) => {
+      const results = await tx.select()
         .from(schema.jurisprudencePublicationExecutions)
         .where(
           and(
@@ -130,12 +131,12 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
 
       const mapped = results.map(mapExecutionFromRow);
       return mapped.find(isPublicationExecutionCurrent) ?? null;
-    });
+    }));
   }
 
   async findLatestByRecordVersion(recordId: string, recordVersion: number): Promise<JurisprudencePublicationExecution | null> {
-    return this.safely(async () => {
-      const result = await this.#executor.select()
+    return this.safely(async () => withJurisprudencePublicationCommandRole(this.#executor, async (tx) => {
+      const result = await tx.select()
         .from(schema.jurisprudencePublicationExecutions)
         .where(
           and(
@@ -147,9 +148,8 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
         .limit(1);
 
       if (result.length === 0) return null;
-      if (result.length === 0) return null;
       return mapExecutionFromRow(result[0] as typeof schema.jurisprudencePublicationExecutions.$inferSelect);
-    });
+    }));
   }
 
   async listHistory(recordId: string): Promise<readonly JurisprudencePublicationExecutionEvent[]> {
@@ -164,8 +164,8 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
   }
 
   async findIdempotencyResult(idempotencyKey: string): Promise<JurisprudencePublicationExecutionIdempotencyEntry | null> {
-    return this.safely(async () => {
-      const result = await this.#executor.select()
+    return this.safely(async () => withJurisprudencePublicationCommandRole(this.#executor, async (tx) => {
+      const result = await tx.select()
         .from(schema.jurisprudencePublicationIdempotency)
         .where(eq(schema.jurisprudencePublicationIdempotency.idempotencyKey, idempotencyKey))
         .limit(1);
@@ -175,13 +175,13 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
       const row = result[0] as typeof schema.jurisprudencePublicationIdempotency.$inferSelect;
       const parsed = jurisprudencePublicationExecutionViewSchema.safeParse(parseJson(row.resultJson));
       if (!parsed.success) throw new JurisprudencePublicationExecutionError("REPOSITORY_UNAVAILABLE", "El resultado idempotente es inválido.");
-      
+
       return clonePublicationExecutionIdempotency({
         idempotencyKey,
         commandFingerprint: row.commandFingerprint,
         result: parsed.data
       });
-    });
+    }));
   }
 
   async createExecution(commit: JurisprudencePublicationExecutionCreateCommit): Promise<void> {
@@ -195,7 +195,7 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
             eq(schema.jurisprudencePublicationExecutions.status, 'executed')
           )
         );
-      
+
       const active = activeResults.map(mapExecutionFromRow).some(isPublicationExecutionCurrent);
       if (active) throw new JurisprudencePublicationExecutionError("EXECUTION_ALREADY_ACTIVE", "Ya existe una ejecución vigente.");
 
@@ -261,7 +261,7 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
             eq(schema.jurisprudencePublicationExecutions.version, commit.expectedVersion)
           )
         );
-      
+
       // In Postgres driver, we can't always check count easily if no returning, but drizzle lets us check row count?
       // Wait, updateResult could be the raw postgres result. `updateResult.count` or `updateResult.rowCount`?
       // For drizzle with postgres, `updateResult` is typically the postgres Result object, which has `count` or `rowCount` depending on driver.
