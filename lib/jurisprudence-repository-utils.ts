@@ -1,5 +1,6 @@
 import { jurisprudenceRecordSchema } from "@/lib/schemas/jurisprudence";
 import { jurisprudenceRepositoryQuerySchema } from "@/lib/schemas/jurisprudence-repository";
+import { canonicalizeJson } from "@/lib/core/canonical-json";
 import type { JurisprudenceRecord } from "@/types/jurisprudence";
 import type {
   JurisprudenceNewRecord,
@@ -20,6 +21,29 @@ export function cloneJurisprudenceNewRecord(record: JurisprudenceNewRecord): Jur
 
 export function validateJurisprudenceRecordForPersistence(record: JurisprudenceRecord): JurisprudenceRecord {
   return jurisprudenceRecordSchema.parse(record) as JurisprudenceRecord;
+}
+
+export function normalizeJurisprudenceIdempotencyPayload(payload: unknown): string {
+  return canonicalizeJson(payload);
+}
+
+export function normalizeJurisprudenceTimestamp(value: unknown): string {
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new TypeError("timestamp_invalid_string");
+    }
+    return parsed.toISOString();
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new TypeError("timestamp_invalid_date");
+    }
+    return value.toISOString();
+  }
+
+  throw new TypeError("timestamp_invalid_type");
 }
 
 export function nextRepositoryTimestamp(now: string, previous: string | null = null): string {

@@ -10,6 +10,8 @@ import {
   nextRepositoryTimestamp,
   normalizeJurisprudenceRepositoryQuery,
   validateJurisprudenceRecordForPersistence,
+  normalizeJurisprudenceIdempotencyPayload,
+  normalizeJurisprudenceTimestamp,
 } from "@/lib/jurisprudence-repository-utils";
 import { jurisprudenceCreateInputSchema, jurisprudenceUpdateInputSchema } from "@/lib/schemas/jurisprudence-repository";
 import { buildJurisprudenceDeduplicationKey, getJurisprudenceExternalIdentity, normalizeJurisprudenceExternalIdentity } from "@/lib/jurisprudence-identity";
@@ -100,7 +102,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
         const idempotency = idempotencyRows[0]!;
         // PostgreSQL jsonb equivalence check using JSON.stringify for deep equal is risky if keys reorder,
         // but since we stringified above, we should do the same. SQLite does strict string comparison.
-        if (JSON.stringify(idempotency.inputJson) !== JSON.stringify(inputJson)) {
+        if (normalizeJurisprudenceIdempotencyPayload(idempotency.inputJson) !== normalizeJurisprudenceIdempotencyPayload(inputJson)) {
           throw new JurisprudenceRepositoryError("IDEMPOTENCY_CONFLICT", "La clave de idempotencia ya fue usada con otro contenido.", { recordId: idempotency.recordId });
         }
         const existingRows = await tx.select().from(jurisprudenceRecords).where(eq(jurisprudenceRecords.id, idempotency.recordId)).limit(1);
@@ -188,7 +190,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
         throw new JurisprudenceRepositoryError("NOT_FOUND", "No existe el registro jurisprudencial solicitado.", { recordId: parsed.id });
       }
 
-      const current = lockRows[0] as { id: string; recordVersion: number; createdAt: Date; updatedAt: Date; };
+      const current = lockRows[0] as { id: string; recordVersion: number; createdAt: Date | string; updatedAt: Date | string; };
 
       // Validate optimistic version
       if (current.recordVersion !== parsed.expectedVersion) {
@@ -200,8 +202,8 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
         ...cloneJurisprudenceNewRecord(parsed.record),
         id: current.id,
         recordVersion: nextVersion,
-        createdAt: current.createdAt.toISOString(),
-        updatedAt: nextRepositoryTimestamp(this.dependencies.now(), current.updatedAt.toISOString()),
+        createdAt: normalizeJurisprudenceTimestamp(current.createdAt),
+        updatedAt: nextRepositoryTimestamp(this.dependencies.now(), normalizeJurisprudenceTimestamp(current.updatedAt)),
       });
 
       const key = buildJurisprudenceDeduplicationKey(getJurisprudenceExternalIdentity(candidate));
@@ -344,7 +346,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
           recordId: row.recordId,
           version: row.version,
           changeKind: row.changeKind as JurisprudenceVersionChangeKind,
-          recordedAt: row.recordedAt.toISOString(),
+          recordedAt: normalizeJurisprudenceTimestamp(row.recordedAt),
           snapshot,
         };
       });
