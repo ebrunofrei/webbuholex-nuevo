@@ -136,7 +136,17 @@ export class DefaultJurisprudencePublicationExecutionService implements Jurispru
       else if (!authorization.authorizationCurrent || !authorization.publicationAuthorizationGranted) blockers.push("authorization_not_current");
     } catch { blockers.push("authorization_missing"); }
 
-    if (record !== null && (record.editorialContent.editorialTitle.trim() === "" || record.source.name.trim() === "")) blockers.push("public_projection_unavailable");
+    if (record !== null && (
+      !record.editorialContent.editorialTitle?.trim() ||
+      !record.source.name?.trim() ||
+      !record.institutionName?.trim() ||
+      !record.issuingBody?.trim() ||
+      !record.matter?.trim() ||
+      !record.caseNumber?.trim() ||
+      !record.resolutionNumber?.trim() ||
+      !record.resolutionType?.trim() ||
+      !record.issuedAt?.trim()
+    )) blockers.push("public_projection_unavailable");
     return { record, blockers: unique(blockers) };
   }
 
