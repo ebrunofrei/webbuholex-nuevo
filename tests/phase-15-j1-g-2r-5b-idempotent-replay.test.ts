@@ -336,6 +336,7 @@ describe("J1-G.2R.5B: Idempotent Replay Contract Integrity", () => {
         outboxWriter: {
           enqueuePublish: async () => {},
           enqueueWithdraw: async () => { throw new Error("not impl"); },
+          enqueuePublishRecovery: async () => "dummy",
         }
       })
     };

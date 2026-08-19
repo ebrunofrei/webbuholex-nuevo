@@ -71,10 +71,11 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
   beforeEach(() => {
     repository = {
       claimNext: vi.fn(),
+      findById: vi.fn(),
       markSent: vi.fn(),
       markFailed: vi.fn(),
       markDeadLetter: vi.fn(),
-    };
+    } as unknown as Mocked<JurisprudencePublicationOutboxProcessorRepository>;
 
     writer = {
       upsert: vi.fn(),

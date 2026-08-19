@@ -9,6 +9,20 @@ export class NoopJurisprudencePublicationOutboxWriter implements JurisprudencePu
     return Promise.resolve();
   }
 
+  async enqueuePublishRecovery(
+    _executionId: string,
+    _executionVersion: number,
+    _recordId: string,
+    _recordVersion: number,
+    _projection: JurisprudencePublicProjectionRecord,
+    _recoveryOfOutboxId: string,
+    _idempotencyKey: string,
+    _commandFingerprint: string
+  ): Promise<string> {
+    // SQLite remains LOCAL_PROTOTYPE / TEST_ONLY and does not implement a Production outbox
+    return "dummy-sqlite-outbox-id";
+  }
+
   async enqueueWithdraw(_execution: JurisprudencePublicationExecution): Promise<void> {
     // SQLite remains LOCAL_PROTOTYPE / TEST_ONLY and does not implement a Production outbox
     return Promise.resolve();

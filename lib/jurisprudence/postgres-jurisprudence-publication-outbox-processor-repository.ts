@@ -11,6 +11,35 @@ import { JURISPRUDENCE_OUTBOX_PROCESSING_STALE_MS } from "./jurisprudence-public
 export class PostgresJurisprudencePublicationOutboxProcessorRepository
   implements JurisprudencePublicationOutboxProcessorRepository
 {
+  async findById(id: string): Promise<JurisprudencePublicationOutboxClaim | null> {
+    const db = getJurisprudenceOutboxDatabase();
+
+    return await withJurisprudencePublicationOutboxRole(db, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(jurisprudencePublicationOutbox)
+        .where(eq(jurisprudencePublicationOutbox.id, id));
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        id: row.id,
+        recordId: row.recordId,
+        recordVersion: row.recordVersion,
+        executionId: row.executionId,
+        executionVersion: row.executionVersion,
+        eventType: row.eventType as "publish_projection" | "withdraw_projection",
+        payload: row.payload,
+        status: row.status as "pending" | "processing" | "sent" | "failed" | "dead_letter",
+        attempts: row.attempts,
+        availableAt: row.availableAt,
+        processingStartedAt: row.processingStartedAt,
+      };
+    });
+  }
+
   async claimNext(now: Date): Promise<JurisprudencePublicationOutboxClaim | null> {
     const db = getJurisprudenceOutboxDatabase();
 

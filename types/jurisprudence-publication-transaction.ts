@@ -6,6 +6,16 @@ import type { JurisprudencePublicProjectionRecord } from "./jurisprudence-public
 
 export interface JurisprudencePublicationOutboxWriter {
   enqueuePublish(execution: JurisprudencePublicationExecution, projection: JurisprudencePublicProjectionRecord): Promise<void>;
+  enqueuePublishRecovery(
+    executionId: string,
+    executionVersion: number,
+    recordId: string,
+    recordVersion: number,
+    projection: JurisprudencePublicProjectionRecord,
+    recoveryOfOutboxId: string,
+    idempotencyKey: string,
+    commandFingerprint: string
+  ): Promise<string>; // Returns the NEW_OUTBOX_ID
   enqueueWithdraw(execution: JurisprudencePublicationExecution): Promise<void>;
 }
 

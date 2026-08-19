@@ -15,6 +15,7 @@ export interface JurisprudencePublicationOutboxClaim {
 export type ProcessNextResult = "NO_WORK" | "SENT" | "FAILED" | "DEAD_LETTER";
 
 export interface JurisprudencePublicationOutboxProcessorRepository {
+  findById(id: string): Promise<JurisprudencePublicationOutboxClaim | null>;
   claimNext(now: Date): Promise<JurisprudencePublicationOutboxClaim | null>;
   markSent(id: string, processedAt: Date): Promise<void>;
   markFailed(

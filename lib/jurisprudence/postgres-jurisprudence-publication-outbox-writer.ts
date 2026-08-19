@@ -27,6 +27,38 @@ export class PostgresJurisprudencePublicationOutboxWriter implements Jurispruden
     });
   }
 
+  async enqueuePublishRecovery(
+    executionId: string,
+    executionVersion: number,
+    recordId: string,
+    recordVersion: number,
+    projection: JurisprudencePublicProjectionRecord,
+    recoveryOfOutboxId: string,
+    idempotencyKey: string,
+    commandFingerprint: string
+  ): Promise<string> {
+    const [row] = await this.#tx.insert(schema.jurisprudencePublicationOutbox).values({
+      recordId: recordId,
+      recordVersion: recordVersion,
+      executionId: executionId,
+      executionVersion: executionVersion,
+      eventType: "publish_projection",
+      payload: projection,
+      status: "pending",
+      recoveryOfOutboxId: recoveryOfOutboxId,
+    }).returning({ id: schema.jurisprudencePublicationOutbox.id });
+
+    const newOutboxId = row!.id;
+
+    await this.#tx.insert(schema.jurisprudencePublicationIdempotency).values({
+      idempotencyKey,
+      commandFingerprint,
+      resultJson: { recoveredOutboxId: newOutboxId },
+    });
+
+    return newOutboxId;
+  }
+
   async enqueueWithdraw(execution: JurisprudencePublicationExecution): Promise<void> {
     await this.#tx.insert(schema.jurisprudencePublicationOutbox).values({
       recordId: execution.recordId,

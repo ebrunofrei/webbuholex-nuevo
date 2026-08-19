@@ -185,6 +185,7 @@ export const jurisprudencePublicationOutbox = jurisprudenceInternalSchema.table(
   processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
   processedAt: timestamp("processed_at", { withTimezone: true }),
   lastErrorCode: varchar("last_error_code"),
+  recoveryOfOutboxId: uuid("recovery_of_outbox_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -193,6 +194,12 @@ export const jurisprudencePublicationOutbox = jurisprudenceInternalSchema.table(
   check("valid_status", sql`${table.status} IN ('pending', 'processing', 'sent', 'failed', 'dead_letter')`),
   index("jurisprudence_publication_outbox_status_available_idx").on(table.status, table.availableAt),
   index("jurisprudence_publication_outbox_record_idx").on(table.recordId, table.recordVersion),
+  foreignKey({
+    columns: [table.recoveryOfOutboxId],
+    foreignColumns: [table.id],
+  }).onDelete("restrict"),
+  // Note: the unique partial index `jurisprudence_publication_outbox_recovery_unique` is created in raw SQL migration
+  // because Drizzle unique().on() doesn't currently fully support WHERE clauses cleanly across all PG versions in the type system.
 ]);
 
 export const jurisprudencePublicProjectionBarriers = jurisprudencePublicSchema.table("projection_barriers", {
