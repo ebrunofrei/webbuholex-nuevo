@@ -1,9 +1,9 @@
 import type { JurisprudencePublicProjectionRecord } from "@/types/jurisprudence-public-projection-writer";
 import type { JurisprudencePublicProjection } from "@/types/jurisprudence-publication-execution";
-import type { JurisprudenceInternalRecordDto } from "@/types/jurisprudence-application";
+import type { JurisprudenceProjectionSourceRecord } from "@/types/jurisprudence-publication-execution";
 
 export function toPublicProjectionRecord(
-  record: JurisprudenceInternalRecordDto,
+  record: JurisprudenceProjectionSourceRecord,
   projection: JurisprudencePublicProjection
 ): JurisprudencePublicProjectionRecord {
   return {

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { PostgresJurisprudencePublicationSourceReader } from "@/lib/jurisprudence/postgres-jurisprudence-publication-source-reader";
-import { getJurisprudenceInternalReadDatabase } from "@/database/jurisprudence-internal-read-database";
 import { withJurisprudenceInternalReadRole } from "@/database/roles/with-jurisprudence-internal-read-role";
 
 describe("Phase J1-G.2R.2 - Publication Source Read Foundation", () => {
@@ -22,8 +21,8 @@ describe("Phase J1-G.2R.2 - Publication Source Read Foundation", () => {
 
     it("throws an error if environment variable is missing upon initialization", async () => {
       delete process.env.DATABASE_JURISPRUDENCE_INTERNAL_READ_URL;
-      const module = await import("@/database/jurisprudence-internal-read-database");
-      expect(() => module.getJurisprudenceInternalReadDatabase()).toThrow("DATABASE_JURISPRUDENCE_INTERNAL_READ_URL must be set in environment to initialize internal read database connection");
+      const dbModule = await import("@/database/jurisprudence-internal-read-database");
+      expect(() => dbModule.getJurisprudenceInternalReadDatabase()).toThrow("DATABASE_JURISPRUDENCE_INTERNAL_READ_URL must be set in environment to initialize internal read database connection");
     });
   });
 
@@ -31,16 +30,19 @@ describe("Phase J1-G.2R.2 - Publication Source Read Foundation", () => {
     it("starts a READ ONLY transaction and sets local role", async () => {
       const executedQueries: string[] = [];
       const fakeTx = {
-        execute: async (query: any) => {
+        execute: async (query: unknown) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           executedQueries.push((query as any).queryChunks[0].value[0]);
         }
       };
       const fakeDb = {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         transaction: async (callback: (tx: any) => Promise<any>) => {
           return await callback(fakeTx);
         }
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await withJurisprudenceInternalReadRole(fakeDb as any, async (tx) => {
         expect(tx).toBe(fakeTx);
         return "success";
@@ -63,6 +65,7 @@ describe("Phase J1-G.2R.2 - Publication Source Read Foundation", () => {
         limit: vi.fn().mockResolvedValue([]),
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const reader = new PostgresJurisprudencePublicationSourceReader(fakeDb as any);
       const result = await reader.getPublicationSource({ recordId: "rec-1", recordVersion: 2 });
 
@@ -95,6 +98,7 @@ describe("Phase J1-G.2R.2 - Publication Source Read Foundation", () => {
         limit: vi.fn().mockResolvedValue([{ snapshotJson: snapshot }]),
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const reader = new PostgresJurisprudencePublicationSourceReader(fakeDb as any);
       const result = await reader.getPublicationSource({ recordId: "rec-1", recordVersion: 2 });
 

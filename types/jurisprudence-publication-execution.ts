@@ -1,4 +1,4 @@
-import type { JurisprudenceInternalApi, JurisprudenceInternalRecordDto } from "@/types/jurisprudence-application";
+import type { JurisprudenceInternalRecordDto } from "@/types/jurisprudence-application";
 import type { JurisprudenceEditorialWorkflow } from "@/types/jurisprudence-editorial-workflow";
 import type { JurisprudencePublicationAuthorizationService } from "@/types/jurisprudence-publication-authorization";
 import type { JurisprudencePublicationGovernanceService } from "@/types/jurisprudence-publication-governance";
@@ -229,7 +229,7 @@ export interface JurisprudencePublicationExecutionLogger {
 }
 
 export interface JurisprudencePublicationExecutionDependencies {
-  readonly api: JurisprudenceInternalApi;
+  readonly sourceReader: import("./jurisprudence-publication-source-reader").JurisprudencePublicationSourceReader;
   readonly editorialWorkflow: JurisprudenceEditorialWorkflow;
   readonly publicationGovernance: JurisprudencePublicationGovernanceService;
   readonly publicationAuthorization: JurisprudencePublicationAuthorizationService;

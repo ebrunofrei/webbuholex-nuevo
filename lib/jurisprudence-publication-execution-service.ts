@@ -15,7 +15,6 @@ import {
   supersedeJurisprudencePublicationExecutionCommandSchema,
   withdrawJurisprudencePublicationCommandSchema,
 } from "@/lib/schemas/jurisprudence-publication-execution";
-import type { JurisprudenceApplicationContext, JurisprudenceInternalRecordDto } from "@/types/jurisprudence-application";
 import type {
   EvaluateJurisprudencePublicationExecutionCommand,
   ExecuteJurisprudencePublicationCommand,
@@ -23,6 +22,7 @@ import type {
   JurisprudencePublicationExecution,
   JurisprudencePublicationExecutionBlocker,
   JurisprudencePublicationExecutionContext,
+  JurisprudenceProjectionSourceRecord,
   JurisprudencePublicationExecutionDependencies,
   JurisprudencePublicationExecutionEvaluation,
   JurisprudencePublicationExecutionEvent,
@@ -44,13 +44,11 @@ function commandFingerprint(operation: string, command: { readonly context: Juri
   const { context, ...payload } = command;
   return createHash("sha256").update(JSON.stringify(stableValue({ operation, actorReference: context.actorReference, payload }))).digest("hex");
 }
-function applicationContext(context: JurisprudencePublicationExecutionContext, requestedAt: string): JurisprudenceApplicationContext {
-  return { requestId: context.requestId, actor: { kind: "editorial_operator", id: context.actorReference }, operationSource: "editorial_workflow", requestedAt };
-}
+
 function unique<T>(values: readonly T[]): readonly T[] { return [...new Set(values)]; }
 
 interface ExecutionFoundation {
-  readonly record: JurisprudenceInternalRecordDto | null;
+  readonly record: JurisprudenceProjectionSourceRecord | null;
   readonly blockers: readonly JurisprudencePublicationExecutionBlocker[];
 }
 
@@ -103,10 +101,12 @@ export class DefaultJurisprudencePublicationExecutionService implements Jurispru
     this.assertOpen();
     const blockers: JurisprudencePublicationExecutionBlocker[] = [];
     const time = this.timestamp();
-    let record: JurisprudenceInternalRecordDto | null = null;
-    try { record = (await this.#dependencies.api.getInternalRecord({ context: applicationContext(command.context, time), id: command.recordId })).record; }
+    let record: JurisprudenceProjectionSourceRecord | null = null;
+    try {
+      record = await this.#dependencies.sourceReader.getPublicationSource({ recordId: command.recordId, recordVersion: command.expectedRecordVersion });
+      if (record === null) blockers.push("record_not_found");
+    }
     catch { blockers.push("record_not_found"); }
-    if (record !== null && record.recordVersion !== command.expectedRecordVersion) blockers.push("record_version_mismatch");
 
     try {
       const editorial = await this.#dependencies.editorialWorkflow.getCase({ context: command.context, caseId: command.editorialCaseId });

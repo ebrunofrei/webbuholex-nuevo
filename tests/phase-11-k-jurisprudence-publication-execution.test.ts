@@ -87,7 +87,8 @@ interface TestSystem {
 
 function createSystem(kind: "memory" | "sqlite", options: { executionPath?: string; logs?: JurisprudencePublicationExecutionLogEvent[] } = {}): TestSystem {
   const clock: TestClock = { value: INITIAL_NOW };
-  const api = createJurisprudenceInternalApi({ repository: new InMemoryJurisprudenceRepository(repositoryDependencies(`juris-${kind}`)), now: () => INITIAL_NOW });
+  const baseRepository = new InMemoryJurisprudenceRepository(repositoryDependencies(`juris-${kind}`));
+  const api = createJurisprudenceInternalApi({ repository: baseRepository, now: () => INITIAL_NOW });
   const editorial = createJurisprudenceEditorialWorkflow({ api, repository: new InMemoryJurisprudenceEditorialCaseRepository(), now: () => INITIAL_NOW, generateId: (() => { let value = 0; return () => `editorial-ficticio-11k-${++value}`; })() });
   const governance = createJurisprudencePublicationGovernanceService({ api, editorialWorkflow: editorial, repository: new InMemoryJurisprudencePublicationDossierRepository(), now: () => INITIAL_NOW, generateId: (() => { let value = 0; return () => `gobierno-ficticio-11k-${++value}`; })() });
   const authorization = createJurisprudencePublicationAuthorizationService({ api, editorialWorkflow: editorial, publicationGovernance: governance, repository: new InMemoryJurisprudencePublicationAuthorizationRepository(), now: () => clock.value, generateId: (() => { let value = 0; return () => `autorizacion-ficticia-11k-${++value}`; })() });
@@ -104,7 +105,34 @@ function createSystem(kind: "memory" | "sqlite", options: { executionPath?: stri
   }
   let executionId = 0;
   const transactionCoordinator = new SqliteJurisprudencePublicationTransactionCoordinator(executionRepository);
-  const execution = createJurisprudencePublicationExecutionService({ api, editorialWorkflow: editorial, publicationGovernance: governance, publicationAuthorization: authorization, executionRepository, projectionRepository, transactionCoordinator, now: () => clock.value, generateId: () => `ejecucion-ficticia-11k-${++executionId}`, ...(options.logs === undefined ? {} : { logger: { log: (event) => options.logs?.push(event) } }) });
+
+  const sourceReader: import("@/types/jurisprudence-publication-source-reader").JurisprudencePublicationSourceReader = {
+    getPublicationSource: async (query) => {
+      try {
+        const history = await baseRepository.getVersionHistory(query.recordId);
+        const entry = history.find((e) => e.version === query.recordVersion);
+        if (!entry) return null;
+        const snapshot = entry.snapshot;
+        return {
+          id: snapshot.id,
+          recordVersion: snapshot.recordVersion,
+          slug: snapshot.slug,
+          caseNumber: snapshot.caseNumber,
+          resolutionNumber: snapshot.resolutionNumber,
+          resolutionType: snapshot.resolutionType,
+          institutionName: snapshot.institution.name,
+          issuingBody: snapshot.issuingBody,
+          matter: snapshot.matter,
+          issuedAt: snapshot.issuedAt,
+          editorialContent: snapshot.editorialContent,
+          officialContent: snapshot.officialContent,
+          source: snapshot.source,
+        };
+      } catch { return null; }
+    }
+  };
+
+  const execution = createJurisprudencePublicationExecutionService({ sourceReader, editorialWorkflow: editorial, publicationGovernance: governance, publicationAuthorization: authorization, executionRepository, projectionRepository, transactionCoordinator, now: () => clock.value, generateId: () => `ejecucion-ficticia-11k-${++executionId}`, ...(options.logs === undefined ? {} : { logger: { log: (event) => options.logs?.push(event) } }) });
   let closed = false;
   const system: TestSystem = { api, editorial, governance, authorization, execution, executionRepository, projectionRepository, clock, close: async () => { if (closed) return; closed = true; await execution.close(); await authorization.close(); await governance.close(); await api.close(applicationContext(999)); } };
   systems.push(system);
