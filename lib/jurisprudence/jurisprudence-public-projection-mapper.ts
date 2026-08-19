@@ -7,7 +7,7 @@ export function toPublicProjectionRecord(
   projection: JurisprudencePublicProjection
 ): JurisprudencePublicProjectionRecord {
   return {
-    id: projection.projectionId,
+    id: record.id,
     recordVersion: record.recordVersion,
     slug: projection.slug,
     title: projection.title,

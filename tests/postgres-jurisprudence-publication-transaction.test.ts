@@ -119,7 +119,7 @@ describe("PostgresJurisprudencePublicationTransaction", () => {
 
     const publicRecord = toPublicProjectionRecord(record, projection);
 
-    expect(publicRecord.id).toBe("proj_1");
+    expect(publicRecord.id).toBe("rec_1");
     expect(publicRecord.recordVersion).toBe(2);
     expect(publicRecord.caseTitle).toBe("Test Title");
 
