@@ -190,6 +190,13 @@
       "when": 1786795405000,
       "tag": "0026_jurisprudence_internal_write_security",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1787091387000,
+      "tag": "0027_jurisprudence_internal_read_security",
+      "breakpoints": true
     }
   ]
 }
