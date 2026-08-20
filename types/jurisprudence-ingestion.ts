@@ -55,6 +55,7 @@ export interface JurisprudenceIngestionBatch {
 export type JurisprudenceIngestionIssueCode =
   | "INVALID_BATCH"
   | "INVALID_ITEM"
+  | "INVALID_RECORD"
   | "PERSONAL_DATA_FIELD_FORBIDDEN"
   | "ABSOLUTE_PATH_FORBIDDEN"
   | "BATCH_LIMIT_EXCEEDED"

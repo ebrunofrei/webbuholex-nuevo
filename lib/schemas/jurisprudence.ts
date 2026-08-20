@@ -171,6 +171,18 @@ const internalControlSchema = z.object({
   generatedContentOnly: z.boolean(),
 }).strict();
 
+export interface JurisprudenceBusinessRulesTarget {
+  officialContent: { documentAvailability: string };
+  officialFile: { available: boolean } | null;
+  internal: { generatedContentOnly: boolean };
+  generatedContent: { internalDraft: string | null };
+}
+
+export function applyJurisprudenceBusinessRules(record: JurisprudenceBusinessRulesTarget, context: z.RefinementCtx) {
+  if (record.officialContent.documentAvailability === "official_file_available" && !record.officialFile?.available) context.addIssue({ code: "custom", path: ["officialFile"], message: "La disponibilidad de archivo oficial requiere un archivo verificado." });
+  if (record.internal.generatedContentOnly && record.generatedContent.internalDraft === null) context.addIssue({ code: "custom", path: ["internal", "generatedContentOnly"], message: "El indicador de contenido generado requiere un borrador interno identificable." });
+}
+
 export const jurisprudenceRecordSchema = z.object({
   id: z.string().trim().min(1).max(160),
   slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).nullable(),
@@ -203,8 +215,7 @@ export const jurisprudenceRecordSchema = z.object({
   internal: internalControlSchema,
 }).strict().superRefine((record, context) => {
   if (new Date(record.updatedAt).getTime() < new Date(record.createdAt).getTime()) context.addIssue({ code: "custom", path: ["updatedAt"], message: "La actualización no puede preceder a la creación." });
-  if (record.officialContent.documentAvailability === "official_file_available" && !record.officialFile?.available) context.addIssue({ code: "custom", path: ["officialFile"], message: "La disponibilidad de archivo oficial requiere un archivo verificado." });
-  if (record.internal.generatedContentOnly && record.generatedContent.internalDraft === null) context.addIssue({ code: "custom", path: ["internal", "generatedContentOnly"], message: "El indicador de contenido generado requiere un borrador interno identificable." });
+  applyJurisprudenceBusinessRules(record, context);
 });
 
 const normalizeOptionalSearchText = (maximum: number) => z.preprocess((value) => {

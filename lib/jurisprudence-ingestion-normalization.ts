@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { buildJurisprudenceDeduplicationKey } from "@/lib/jurisprudence-identity";
 import { jurisprudenceIngestionRawRecordSchema } from "@/lib/schemas/jurisprudence-ingestion";
-import { jurisprudenceNewRecordSchema } from "@/lib/schemas/jurisprudence-repository";
 import type { JurisprudenceNormalizedIngestionRecord, JurisprudenceIngestionRawRecord } from "@/types/jurisprudence-ingestion";
 import type { JurisprudenceNewRecord } from "@/types/jurisprudence-repository";
 
@@ -46,7 +45,7 @@ export function normalizeJurisprudenceIngestionRecord(
   sourceChecksum: string,
 ): JurisprudenceNormalizedIngestionRecord {
   const parsed = jurisprudenceIngestionRawRecordSchema.parse(rawRecord);
-  const record = jurisprudenceNewRecordSchema.parse({
+  const record = {
     ...structuredClone(parsed),
     caseNumber: normalizeText(parsed.caseNumber),
     resolutionNumber: parsed.resolutionNumber === undefined ? null : normalizeText(parsed.resolutionNumber),
@@ -90,7 +89,7 @@ export function normalizeJurisprudenceIngestionRecord(
       jurisdiction: normalizeText(parsed.search.jurisdiction),
       tags: normalizedSortedList(parsed.search.tags, true),
     },
-  });
+  };
   const identity = {
     sourceType: record.source.type,
     sourceDocumentId: record.source.documentId,

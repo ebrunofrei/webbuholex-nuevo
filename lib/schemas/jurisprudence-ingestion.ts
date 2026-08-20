@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jurisprudenceApplicationContextSchema } from "@/lib/schemas/jurisprudence-application";
-import { jurisprudenceNewRecordSchema } from "@/lib/schemas/jurisprudence-repository";
+import { jurisprudenceRecordSchema } from "@/lib/schemas/jurisprudence";
 import type {
   ConfirmJurisprudenceIngestionPreviewCommand,
   JurisprudenceIngestionBatch,
@@ -28,9 +28,14 @@ export const jurisprudenceIngestionSourceSchema = z.object({
   sourceSystem: opaqueReferenceSchema.optional(),
 }).strict();
 
-export const jurisprudenceIngestionRawRecordSchema = jurisprudenceNewRecordSchema.extend({
+export const jurisprudenceIngestionRawRecordSchema = jurisprudenceRecordSchema.omit({
+  id: true,
+  recordVersion: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
   resolutionNumber: z.string().trim().min(1).max(200).optional(),
-});
+}).strict();
 
 export const jurisprudenceIngestionItemSchema = z.object({
   ingestionItemId: opaqueReferenceSchema,

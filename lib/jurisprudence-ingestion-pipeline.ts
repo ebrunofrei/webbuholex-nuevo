@@ -8,6 +8,7 @@ import {
   confirmJurisprudenceIngestionPreviewCommandSchema,
   jurisprudenceIngestionBatchSchema,
 } from "@/lib/schemas/jurisprudence-ingestion";
+import { jurisprudenceNewRecordSchema } from "@/lib/schemas/jurisprudence-repository";
 import type {
   JurisprudenceApplicationContext,
   JurisprudenceInternalRecordDto,
@@ -283,6 +284,17 @@ export class DefaultJurisprudenceIngestionPipeline implements JurisprudenceInges
         { map: fingerprints, key: normalized.normalizedRecordFingerprint, reason: "normalized_fingerprint" as const },
         { map: identities, key: normalized.jurisprudenceIdentityKey, reason: "identity" as const },
       ];
+
+      const canonicalCheck = jurisprudenceNewRecordSchema.safeParse(normalized.record);
+      if (!canonicalCheck.success) {
+        results.push({
+          status: "rejected",
+          ingestionItemId: item.ingestionItemId,
+          issues: canonicalCheck.error.issues.map((entry) => issue("INVALID_RECORD", `rawRecord.${entry.path.join(".")}`, entry.message)),
+        });
+        continue;
+      }
+
       const duplicate = duplicateChecks.find((entry) => entry.map.has(entry.key));
       if (duplicate !== undefined) {
         results.push({

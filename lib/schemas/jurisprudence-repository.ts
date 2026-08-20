@@ -5,6 +5,7 @@ import {
   jurisprudenceRecordSourceTypeSchema,
   jurisprudenceVerificationStatusSchema,
   jurisprudenceRecordSchema,
+  applyJurisprudenceBusinessRules,
 } from "@/lib/schemas/jurisprudence";
 
 const normalizedOptionalText = (maximum: number) => z.preprocess((value) => {
@@ -49,7 +50,7 @@ export const jurisprudenceNewRecordSchema = jurisprudenceRecordSchema.omit({
   recordVersion: true,
   createdAt: true,
   updatedAt: true,
-});
+}).strict().superRefine(applyJurisprudenceBusinessRules);
 
 export const jurisprudenceCreateInputSchema = z.object({
   record: jurisprudenceNewRecordSchema,
