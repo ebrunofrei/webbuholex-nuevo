@@ -112,7 +112,7 @@ export interface JurisprudenceInternalSummaryDto {
   publicationStatus: JurisprudencePublicationStatus;
   verificationStatus: JurisprudenceVerificationStatus;
   caseNumber: string;
-  resolutionNumber: string;
+  resolutionNumber: string | null;
   resolutionType: string;
   institutionId: string;
   institutionName: string;

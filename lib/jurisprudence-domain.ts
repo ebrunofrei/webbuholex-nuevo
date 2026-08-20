@@ -14,7 +14,6 @@ function hasIdentifiableSource(record: JurisprudenceRecord): boolean {
 function hasMinimumLegalIdentification(record: JurisprudenceRecord): boolean {
   return [
     record.caseNumber,
-    record.resolutionNumber,
     record.resolutionType,
     record.institution.name,
     record.issuingBody,
@@ -22,7 +21,8 @@ function hasMinimumLegalIdentification(record: JurisprudenceRecord): boolean {
     record.specialty,
     record.matter,
     record.issuedAt,
-  ].every((value) => value.trim().length > 0);
+  ].every((value) => value.trim().length > 0) &&
+    (record.resolutionNumber === null || record.resolutionNumber.trim().length > 0);
 }
 
 export function getJurisprudencePublicationBlockers(record: JurisprudenceRecord): readonly JurisprudencePublicationBlocker[] {

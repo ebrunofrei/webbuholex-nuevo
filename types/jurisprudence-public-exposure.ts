@@ -39,7 +39,7 @@ export interface JurisprudencePublicReadModel {
   readonly slug: string;
   readonly title: string;
   readonly caseNumber: string;
-  readonly resolutionNumber: string;
+  readonly resolutionNumber: string | null;
   readonly resolutionType: string;
   readonly institutionName: string;
   readonly issuingBody: string;

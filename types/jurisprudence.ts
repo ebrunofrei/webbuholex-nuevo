@@ -73,7 +73,7 @@ export interface JurisprudenceDocument {
   issuingBody: string;
   chamber: string | null;
   resolutionType: string;
-  resolutionNumber: string;
+  resolutionNumber: string | null;
   caseNumber: string;
   date: string;
   publicationDate: string | null;
@@ -294,7 +294,7 @@ export interface JurisprudenceRecord {
   createdAt: string;
   updatedAt: string;
   caseNumber: string;
-  resolutionNumber: string;
+  resolutionNumber: string | null;
   resolutionType: string;
   institution: JurisprudenceInstitution;
   issuingBody: string;
@@ -349,7 +349,7 @@ export interface JurisprudenceSearchItem {
   slug: string | null;
   title: string;
   caseNumber: string;
-  resolutionNumber: string;
+  resolutionNumber: string | null;
   resolutionType: string;
   issuingBody: string;
   matter: string;
@@ -454,7 +454,7 @@ export interface JurisprudencePublicDetailDtoBase {
   readonly caseNumber: string;
   readonly slug: string;
   readonly title: string;
-  readonly resolutionNumber: string;
+  readonly resolutionNumber: string | null;
   readonly resolutionType: string;
   readonly institutionName: string;
   readonly issuingBody: string;

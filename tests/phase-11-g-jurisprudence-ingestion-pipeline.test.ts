@@ -24,7 +24,7 @@ import type {
   JurisprudenceIngestionPipeline,
   JurisprudenceIngestionRequestedAction,
 } from "@/types/jurisprudence-ingestion";
-import type { JurisprudenceNewRecord, JurisprudenceRepositoryDependencies } from "@/types/jurisprudence-repository";
+import type { JurisprudenceRepositoryDependencies } from "@/types/jurisprudence-repository";
 
 const NOW = "2026-07-29T20:00:00.000Z";
 
@@ -37,7 +37,7 @@ function context(seed = 1): JurisprudenceApplicationContext {
   };
 }
 
-function record(seed = 1): JurisprudenceNewRecord {
+function record(seed = 1): import("@/types/jurisprudence-ingestion").JurisprudenceIngestionRawRecord {
   const base = createFictitiousJurisprudenceRecord(seed);
   const marker = String(seed).padStart(3, "0");
   return {
@@ -473,5 +473,39 @@ describe("seguridad estática y preservación", () => {
     });
     expect(rentalHousingContract.commercialFiles.every((file) => !file.publicDownloadAuthorized)).toBe(true);
     expect(rentalHousingContract.annexFiles.every((file) => !file.publicDownloadAuthorized)).toBe(true);
+  });
+});
+
+describe("contrato expl�cito de resolutionNumber (J2-A.2J)", () => {
+  it("omitted o undefined se aceptan en ingestion y se normalizan a null can�nico", () => {
+    const rawOmitted = { ...record() };
+    delete (rawOmitted as any).resolutionNumber;
+    expect(normalizeJurisprudenceIngestionRecord(rawOmitted, "a").record.resolutionNumber).toBeNull();
+    const rawUndefined = { ...record(), resolutionNumber: undefined };
+    expect(normalizeJurisprudenceIngestionRecord(rawUndefined, "a").record.resolutionNumber).toBeNull();
+  });
+
+  it("rechaza ingreso de null directo, vac�o o puros espacios", async () => {
+    const inputNull = { ...batch(), items: [{ ...batch().items[0], rawRecord: { ...record(), resolutionNumber: null as any } }] };
+    await expect(system("memory").pipeline.previewBatch(inputNull)).resolves.toMatchObject({ status: "rejected" });
+    const inputEmpty = { ...batch(), items: [{ ...batch().items[0], rawRecord: { ...record(), resolutionNumber: "" } }] };
+    await expect(system("memory").pipeline.previewBatch(inputEmpty)).resolves.toMatchObject({ status: "rejected" });
+    const inputWhitespace = { ...batch(), items: [{ ...batch().items[0], rawRecord: { ...record(), resolutionNumber: "   " } }] };
+    await expect(system("memory").pipeline.previewBatch(inputWhitespace)).resolves.toMatchObject({ status: "rejected" });
+  });
+
+  it("normaliza un resolutionNumber v�lido conserv�ndolo", () => {
+    const rawValid = { ...record(), resolutionNumber: "  NUM-VALIDO-123  " };
+    expect(normalizeJurisprudenceIngestionRecord(rawValid, "a").record.resolutionNumber).toBe("NUM-VALIDO-123");
+  });
+
+  it("fingerprint es determinista para null, no escapa literal undefined y distingue null de '<NULL>'", () => {
+    const recNull = normalizeJurisprudenceIngestionRecord({ ...record(), resolutionNumber: undefined }, "a").record;
+    const f1 = normalizeJurisprudenceIngestionRecord({ ...record(), resolutionNumber: undefined }, "a").jurisprudenceIdentityKey;
+    const f2 = normalizeJurisprudenceIngestionRecord({ ...record(), resolutionNumber: undefined }, "b").jurisprudenceIdentityKey;
+    expect(f1).toBe(f2);
+    expect(f1).not.toContain("undefined");
+    const recLiteral = normalizeJurisprudenceIngestionRecord({ ...record(), resolutionNumber: "<NULL>" }, "a");
+    expect(f1).not.toBe(recLiteral.jurisprudenceIdentityKey);
   });
 });

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { buildJurisprudenceDeduplicationKey } from "@/lib/jurisprudence-identity";
+import { jurisprudenceIngestionRawRecordSchema } from "@/lib/schemas/jurisprudence-ingestion";
 import { jurisprudenceNewRecordSchema } from "@/lib/schemas/jurisprudence-repository";
-import type { JurisprudenceNormalizedIngestionRecord } from "@/types/jurisprudence-ingestion";
+import type { JurisprudenceNormalizedIngestionRecord, JurisprudenceIngestionRawRecord } from "@/types/jurisprudence-ingestion";
 import type { JurisprudenceNewRecord } from "@/types/jurisprudence-repository";
 
 function normalizeText(value: string): string {
@@ -41,14 +42,14 @@ export function fingerprintNormalizedJurisprudenceRecord(record: JurisprudenceNe
 }
 
 export function normalizeJurisprudenceIngestionRecord(
-  rawRecord: JurisprudenceNewRecord,
+  rawRecord: JurisprudenceIngestionRawRecord,
   sourceChecksum: string,
 ): JurisprudenceNormalizedIngestionRecord {
-  const parsed = jurisprudenceNewRecordSchema.parse(rawRecord);
+  const parsed = jurisprudenceIngestionRawRecordSchema.parse(rawRecord);
   const record = jurisprudenceNewRecordSchema.parse({
     ...structuredClone(parsed),
     caseNumber: normalizeText(parsed.caseNumber),
-    resolutionNumber: normalizeText(parsed.resolutionNumber),
+    resolutionNumber: parsed.resolutionNumber === undefined ? null : normalizeText(parsed.resolutionNumber),
     resolutionType: normalizeText(parsed.resolutionType),
     institution: {
       ...parsed.institution,

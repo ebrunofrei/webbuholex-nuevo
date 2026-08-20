@@ -17,7 +17,7 @@ export const jurisprudenceExternalIdentitySchema = z.object({
   sourceType: jurisprudenceRecordSourceTypeSchema,
   sourceDocumentId: z.string().trim().min(1).max(300).nullable(),
   caseNumber: z.string().trim().min(1).max(200),
-  resolutionNumber: z.string().trim().min(1).max(200),
+  resolutionNumber: z.string().trim().min(1).max(200).nullable(),
   institutionId: z.string().trim().min(1).max(160),
   issuedAt: z.string().date(),
 }).strict();

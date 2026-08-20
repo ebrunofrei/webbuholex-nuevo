@@ -27,14 +27,15 @@ export function normalizeJurisprudenceExternalIdentity(identity: JurisprudenceEx
     sourceType: parsed.sourceType,
     sourceDocumentId: parsed.sourceDocumentId === null ? null : normalizeIdentityText(parsed.sourceDocumentId),
     caseNumber: normalizeIdentityText(parsed.caseNumber),
-    resolutionNumber: normalizeIdentityText(parsed.resolutionNumber),
+    resolutionNumber: parsed.resolutionNumber === null ? null : normalizeIdentityText(parsed.resolutionNumber),
     institutionId: normalizeIdentityText(parsed.institutionId),
     issuedAt: parsed.issuedAt,
   };
 }
 
 function explainablePart(label: string, value: string | null): string {
-  return `${label}=${encodeURIComponent(value ?? "-")}`;
+  if (value === null) return `${label}=<NULL>`;
+  return `${label}=${encodeURIComponent(value)}`;
 }
 
 export function buildJurisprudenceDeduplicationKey(identity: JurisprudenceExternalIdentity): string {

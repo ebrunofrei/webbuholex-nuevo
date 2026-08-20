@@ -251,7 +251,11 @@ export class SqliteJurisprudenceRepository implements JurisprudenceRepository {
       parameters.push(normalizeSqlText(value));
     };
     addExact("normalized_case_number", query.filters.caseNumber);
-    addExact("normalized_resolution_number", query.filters.resolutionNumber);
+    if (query.filters.resolutionNumber === null) {
+      clauses.push("normalized_resolution_number IS NULL");
+    } else {
+      addExact("normalized_resolution_number", query.filters.resolutionNumber);
+    }
     addExact("institution_id", query.filters.institutionId);
     addExact("normalized_matter", query.filters.matter);
     if (query.filters.editorialStatus) { clauses.push("editorial_status = ?"); parameters.push(query.filters.editorialStatus); }

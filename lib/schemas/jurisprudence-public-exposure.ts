@@ -38,7 +38,7 @@ export const jurisprudencePublicReadModelSchema = z.object({
   slug: slugSchema,
   title: z.string().trim().min(1).max(300),
   caseNumber: z.string().trim().min(1).max(160),
-  resolutionNumber: z.string().trim().min(1).max(160),
+  resolutionNumber: z.string().trim().min(1).max(160).nullable(),
   resolutionType: z.string().trim().min(1).max(120),
   institutionName: z.string().trim().min(1).max(240),
   issuingBody: z.string().trim().min(1).max(240),

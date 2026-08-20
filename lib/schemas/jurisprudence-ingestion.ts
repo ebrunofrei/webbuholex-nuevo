@@ -28,10 +28,14 @@ export const jurisprudenceIngestionSourceSchema = z.object({
   sourceSystem: opaqueReferenceSchema.optional(),
 }).strict();
 
+export const jurisprudenceIngestionRawRecordSchema = jurisprudenceNewRecordSchema.extend({
+  resolutionNumber: z.string().trim().min(1).max(200).optional(),
+});
+
 export const jurisprudenceIngestionItemSchema = z.object({
   ingestionItemId: opaqueReferenceSchema,
   source: jurisprudenceIngestionSourceSchema,
-  rawRecord: jurisprudenceNewRecordSchema,
+  rawRecord: jurisprudenceIngestionRawRecordSchema,
   requestedAction: z.enum([
     "preview_create",
     "preview_update",

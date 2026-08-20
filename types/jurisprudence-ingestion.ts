@@ -8,6 +8,10 @@ import type {
   JurisprudenceVersionChangeKind,
 } from "@/types/jurisprudence-repository";
 
+export type JurisprudenceIngestionRawRecord = Omit<JurisprudenceNewRecord, "resolutionNumber"> & {
+  readonly resolutionNumber?: string | undefined;
+};
+
 export type JurisprudenceIngestionSourceKind =
   | "local_json"
   | "local_structured_record"
@@ -34,7 +38,7 @@ export interface JurisprudenceIngestionSource {
 export interface JurisprudenceIngestionItem {
   readonly ingestionItemId: string;
   readonly source: JurisprudenceIngestionSource;
-  readonly rawRecord: JurisprudenceNewRecord;
+  readonly rawRecord: JurisprudenceIngestionRawRecord;
   readonly requestedAction: JurisprudenceIngestionRequestedAction;
   readonly idempotencyKey: string;
   readonly targetRecordId?: string;

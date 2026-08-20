@@ -84,8 +84,14 @@ export function normalizeJurisprudenceRepositoryQuery(
 
 export function recordMatchesJurisprudenceFilters(record: JurisprudenceRecord, filters: JurisprudenceRepositoryFilters): boolean {
   const equals = (actual: string, expected: string | undefined) => expected === undefined || normalizeFilterText(actual) === normalizeFilterText(expected);
+  const equalsNullable = (actual: string | null, expected: string | null | undefined) => {
+    if (expected === undefined) return true;
+    if (expected === null) return actual === null;
+    if (actual === null) return false;
+    return normalizeFilterText(actual) === normalizeFilterText(expected);
+  };
   return equals(record.caseNumber, filters.caseNumber)
-    && equals(record.resolutionNumber, filters.resolutionNumber)
+    && equalsNullable(record.resolutionNumber, filters.resolutionNumber)
     && equals(record.institution.id, filters.institutionId)
     && equals(record.matter, filters.matter)
     && (filters.editorialStatus === undefined || record.editorialStatus === filters.editorialStatus)

@@ -141,18 +141,18 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
   it("permite almacenar el texto íntegro adquirido aunque la publicación no esté autorizada (J2-A.2G)", () => {
     const draftRecord = {
       ...createVerifiedRecord(),
-      editorialStatus: "draft",
-      publicationStatus: "private",
+      editorialStatus: "draft" as const,
+      publicationStatus: "private" as const,
       officialContent: {
         ...createVerifiedRecord().officialContent,
         officialFullText: "CONTENIDO ÍNTEGRO ADQUIRIDO DESDE FUENTE OFICIAL",
         fullTextAvailable: true,
-        documentAvailability: "full_text_available",
+        documentAvailability: "full_text_available" as const,
         publicationAllowed: false,
       },
       source: {
         ...createVerifiedRecord().source,
-        verificationStatus: "unverified",
+        verificationStatus: "unverified" as const,
       }
     };
 
@@ -241,5 +241,13 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
     const source = files.map((file) => readFileSync(path.join(process.cwd(), file), "utf8")).join("\n");
     expect(source).not.toMatch(/\bany\b/);
     expect(source).not.toMatch(/[A-Z]:\\|product-assets|CONTRATO-CESION/);
+  });
+
+  it("valida el contrato estricto de resolutionNumber (J2-A.2J)", () => {
+    const recordNull = { ...createVerifiedRecord(), resolutionNumber: null };
+    expect(jurisprudenceRecordSchema.safeParse(recordNull).success).toBe(true);
+
+    const recordUndefined = { ...createVerifiedRecord(), resolutionNumber: undefined };
+    expect(jurisprudenceRecordSchema.safeParse(recordUndefined).success).toBe(false);
   });
 });

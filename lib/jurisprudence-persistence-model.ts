@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS jurisprudence_records (
   source_type TEXT NOT NULL,
   source_document_id TEXT,
   normalized_case_number TEXT NOT NULL,
-  normalized_resolution_number TEXT NOT NULL,
+  normalized_resolution_number TEXT,
   institution_id TEXT NOT NULL,
   normalized_matter TEXT NOT NULL,
   normalized_search_text TEXT NOT NULL,

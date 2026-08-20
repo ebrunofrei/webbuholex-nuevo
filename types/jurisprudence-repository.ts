@@ -14,7 +14,7 @@ export interface JurisprudenceExternalIdentity {
   sourceType: JurisprudenceRecordSourceType;
   sourceDocumentId: string | null;
   caseNumber: string;
-  resolutionNumber: string;
+  resolutionNumber: string | null;
   institutionId: string;
   issuedAt: string;
 }
@@ -23,7 +23,7 @@ export interface NormalizedJurisprudenceExternalIdentity {
   sourceType: JurisprudenceRecordSourceType;
   sourceDocumentId: string | null;
   caseNumber: string;
-  resolutionNumber: string;
+  resolutionNumber: string | null;
   institutionId: string;
   issuedAt: string;
 }
@@ -47,7 +47,7 @@ export interface JurisprudenceUpdateInput {
 
 export interface JurisprudenceRepositoryFilters {
   caseNumber?: string;
-  resolutionNumber?: string;
+  resolutionNumber?: string | null;
   institutionId?: string;
   matter?: string;
   editorialStatus?: JurisprudenceEditorialStatus;
@@ -132,7 +132,7 @@ export interface JurisprudencePersistedRecordRow {
   sourceType: JurisprudenceRecordSourceType;
   sourceDocumentId: string | null;
   normalizedCaseNumber: string;
-  normalizedResolutionNumber: string;
+  normalizedResolutionNumber: string | null;
   institutionId: string;
   normalizedMatter: string;
   normalizedSearchText: string;

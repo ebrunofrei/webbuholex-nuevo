@@ -205,10 +205,12 @@ export function JurisprudencePublicDetail({
                     <dt>Expediente</dt>
                     <dd>{state.item.caseNumber}</dd>
                   </div>
-                  <div>
-                    <dt>Resolución</dt>
-                    <dd>{state.item.resolutionNumber}</dd>
-                  </div>
+                  {state.item.resolutionNumber !== null && (
+                    <div>
+                      <dt>Resolución</dt>
+                      <dd>{state.item.resolutionNumber}</dd>
+                    </div>
+                  )}
                   <div>
                     <dt>Tipo</dt>
                     <dd>{state.item.resolutionType}</dd>
