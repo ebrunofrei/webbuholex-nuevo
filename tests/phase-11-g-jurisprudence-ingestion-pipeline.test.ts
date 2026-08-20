@@ -163,6 +163,7 @@ describe("contratos estrictos y privacidad preventiva", () => {
     ["fecha inválida", { ...batch(), items: [{ ...batch().items[0], source: { ...batch().items[0]?.source, acquiredAt: "fecha" } }] }],
     ["media type no autorizado", { ...batch(), items: [{ ...batch().items[0], source: { ...batch().items[0]?.source, mediaType: "text/plain" } }] }],
     ["campo personal", { ...batch(), items: [{ ...batch().items[0], rawRecord: { ...record(), dni: "00000000" } }] }],
+    ["autorización de publicación prohibida", { ...batch(), items: [{ ...batch().items[0], rawRecord: { ...record(), officialContent: { ...record().officialContent, publicationAllowed: true } } }] }],
     ["ruta absoluta", { ...batch(), items: [{ ...batch().items[0], source: { ...batch().items[0]?.source, sourceReference: "C:\\privado\\fixture.json" } }] }],
   ])("rechaza %s sin lanzar error nativo", async (_label, input) => {
     await expect(system("memory").pipeline.previewBatch(input)).resolves.toMatchObject({ status: "rejected" });

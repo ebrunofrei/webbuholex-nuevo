@@ -79,7 +79,6 @@ const officialContentSchema = z.object({
 }).strict().superRefine((content, context) => {
   if (content.fullTextAvailable && content.officialFullText === null) context.addIssue({ code: "custom", path: ["officialFullText"], message: "La disponibilidad de texto completo requiere texto oficial." });
   if (content.documentAvailability === "full_text_available" && !content.fullTextAvailable) context.addIssue({ code: "custom", path: ["documentAvailability"], message: "El estado de texto completo requiere disponibilidad confirmada." });
-  if (!content.publicationAllowed && content.officialFullText !== null) context.addIssue({ code: "custom", path: ["publicationAllowed"], message: "El texto oficial no autorizado no debe incorporarse al registro publicable." });
 });
 
 const editorialContentSchema = z.object({

@@ -138,6 +138,32 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
     expect(jurisprudenceRecordSchema.parse(record).officialContent.officialSummary).toContain("Sumilla oficial");
   });
 
+  it("permite almacenar el texto íntegro adquirido aunque la publicación no esté autorizada (J2-A.2G)", () => {
+    const draftRecord = {
+      ...createVerifiedRecord(),
+      editorialStatus: "draft",
+      publicationStatus: "private",
+      officialContent: {
+        ...createVerifiedRecord().officialContent,
+        officialFullText: "CONTENIDO ÍNTEGRO ADQUIRIDO DESDE FUENTE OFICIAL",
+        fullTextAvailable: true,
+        documentAvailability: "full_text_available",
+        publicationAllowed: false,
+      },
+      source: {
+        ...createVerifiedRecord().source,
+        verificationStatus: "unverified",
+      }
+    };
+
+    // CASE A: Debe aceptar validación estricta de schema de registro
+    expect(jurisprudenceRecordSchema.safeParse(draftRecord).success).toBe(true);
+
+    // CASE C: La simple presencia de texto íntegro NO autoriza la proyección pública
+    expect(isJurisprudenceRecordPublic(draftRecord)).toBe(false);
+    expect(getJurisprudencePublicationBlockers(draftRecord)).not.toHaveLength(0);
+  });
+
   it("normaliza espacios, elimina filtros vacíos y aplica paginación acotada", () => {
     const input = normalizeJurisprudenceSearchInput({ q: "  pericia   grafotécnica ", materia: "   ", page: 2, pageSize: 25 });
     expect(input.q).toBe("pericia grafotécnica");
