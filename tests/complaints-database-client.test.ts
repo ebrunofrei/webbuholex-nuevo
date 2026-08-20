@@ -203,6 +203,7 @@ describe("complaints-database-client", () => {
   it("B4. getComplaintsAdminDatabase lanza si DATABASE_ADMIN_URL falta (sin fallback a DATABASE_API_URL)", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("DATABASE_API_URL", "postgres://api:pass@localhost:5432/db");
+    vi.stubEnv("DATABASE_ADMIN_URL", ""); // Hardening de aislamiento
     // Sin DATABASE_ADMIN_URL
     expect(() => getComplaintsAdminDatabase())
       .toThrow("complaints_admin_database_configuration_missing");
