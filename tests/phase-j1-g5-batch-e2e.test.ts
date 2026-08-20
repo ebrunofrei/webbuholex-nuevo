@@ -334,4 +334,3 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
     expect(Number(barrierRes[0].c)).toBe(2);
   }, 30000);
 });
-
