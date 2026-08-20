@@ -127,9 +127,13 @@ describe("Jurisprudence Publication Cron Route", () => {
     expect(outboxHost.runJurisprudencePublicationOutboxHost).toHaveBeenCalledTimes(1);
 
     // Bounds are provided by default in runJurisprudencePublicationOutboxHost internally
-    expect(outboxHost.runJurisprudencePublicationOutboxHost).toHaveBeenCalledWith({
-      env: process.env,
-    });
+    expect(outboxHost.runJurisprudencePublicationOutboxHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: process.env,
+        logger: expect.anything(),
+        runIdFactory: expect.any(Function),
+      })
+    );
   });
 
   it("safe HTTP failure on unexpected infrastructure error", async () => {
