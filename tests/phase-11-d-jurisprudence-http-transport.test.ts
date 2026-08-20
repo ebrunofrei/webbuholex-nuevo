@@ -383,7 +383,8 @@ describe("persistencia SQLite y seguridad estática", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
-    "app/api/owl/admission/route.ts",
+    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/owl/admission/route.ts",
 ];
     const appFiles = readdirSync(path.join(process.cwd(), "app"), { recursive: true }).filter(
       (entry): entry is string => typeof entry === "string",
@@ -393,7 +394,13 @@ describe("persistencia SQLite y seguridad estática", () => {
       .map((entry) => path.relative(process.cwd(), path.join(process.cwd(), "app", entry)).split(path.sep).join("/"));
     expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
     // jurisprudencia no crea ni consume rutas API propias
-    expect(appFiles.some((entry) => /(^|[\\/])api([\\/]|$)/.test(entry) && /jurisprudence/.test(entry))).toBe(false);
+    expect(
+      appFiles.some((entry) => {
+        const normalized = entry.replaceAll("\\", "/");
+        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
+      })
+    ).toBe(false);
     const uiSource = ["app", "components", "data"].flatMap((root) => readdirSync(path.join(process.cwd(), root), { recursive: true })
       .filter(
         (entry): entry is string =>

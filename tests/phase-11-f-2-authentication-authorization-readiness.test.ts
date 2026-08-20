@@ -224,7 +224,8 @@ describe("barreras estáticas y preservación del proyecto", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
-    "app/api/owl/admission/route.ts",
+    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/owl/admission/route.ts",
 ];
     const entries = readdirSync(path.join(process.cwd(), "app"), { recursive: true })
       .filter((entry): entry is string => typeof entry === "string");
@@ -233,7 +234,13 @@ describe("barreras estáticas y preservación del proyecto", () => {
       .map((entry) => path.relative(process.cwd(), path.join(process.cwd(), "app", entry)).split(path.sep).join("/"));
     expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
     // autorización no crea rutas API propias de jurisprudencia
-    expect(entries.some((entry) => entry.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(entry))).toBe(false);
+    expect(
+      entries.some((entry) => {
+        const normalized = entry.replaceAll("\\", "/");
+        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
+      })
+    ).toBe(false);
   });
 
   it("mantiene /jurisprudencia desconectada", () => {

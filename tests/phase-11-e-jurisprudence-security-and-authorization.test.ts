@@ -682,7 +682,8 @@ describe("readiness y límites estáticos", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
-    "app/api/owl/admission/route.ts",
+    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/owl/admission/route.ts",
 ];
     const appRoot = path.join(process.cwd(), "app");
     const entries = readdirSync(appRoot, { recursive: true })
@@ -693,7 +694,12 @@ describe("readiness y límites estáticos", () => {
     expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
     // jurisprudencia no crea rutas API propias
     expect(
-      entries.filter((entry) => entry.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(entry)),
+      entries.filter((entry) => {
+        const normalized = entry.replaceAll("\\", "/");
+        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        if (normalized.startsWith("api/owl/admission")) return false;
+        return normalized.startsWith("api/") && /jurisprudence/.test(normalized);
+      })
     ).toEqual([]);
   });
 

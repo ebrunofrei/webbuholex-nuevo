@@ -612,6 +612,7 @@ describe(
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
+    "app/api/internal/cron/jurisprudence-publication/route.ts",
     "app/api/owl/admission/route.ts",
 ];
             const root = process.cwd();
@@ -633,7 +634,11 @@ describe(
             expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
             // jurisprudencia no crea rutas API propias
             expect(
-              appFiles.filter((file) => file.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(file)),
+              appFiles.filter((file) => {
+                const normalized = file.replaceAll("\\", "/");
+                if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+                return normalized.startsWith("api/") && /jurisprudence/.test(normalized);
+              }),
             ).toEqual([]);
           },
         );

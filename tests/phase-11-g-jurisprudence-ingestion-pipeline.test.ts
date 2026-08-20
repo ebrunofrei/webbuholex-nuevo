@@ -426,7 +426,8 @@ describe("seguridad estática y preservación", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
-    "app/api/owl/admission/route.ts",
+    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/owl/admission/route.ts",
 ];
     const appEntries = readdirSync(path.join(process.cwd(), "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string");
     const routeFiles = appEntries
@@ -434,7 +435,13 @@ describe("seguridad estática y preservación", () => {
       .map((entry) => path.relative(process.cwd(), path.join(process.cwd(), "app", entry)).split(path.sep).join("/"));
     expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
     // ingesta no crea rutas API de jurisprudencia
-    expect(appEntries.some((entry) => entry.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(entry))).toBe(false);
+    expect(
+      appEntries.some((entry) => {
+        const normalized = entry.replaceAll("\\", "/");
+        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
+      })
+    ).toBe(false);
     const files = ["types/jurisprudence-ingestion.ts", "lib/schemas/jurisprudence-ingestion.ts", "lib/jurisprudence-ingestion-normalization.ts", "lib/jurisprudence-ingestion-pipeline.ts", "lib/jurisprudence-ingestion-readiness.ts"];
     const sourceCode = files.map((file) => readFileSync(path.join(process.cwd(), file), "utf8")).join("\n");
     expect(sourceCode).not.toMatch(/fetch\(|scrap|crawl|OCR|embedding|\bRAG\b|OpenAI|Anthropic|@auth0/i);

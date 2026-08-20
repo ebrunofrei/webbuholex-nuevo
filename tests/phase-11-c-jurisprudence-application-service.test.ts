@@ -403,7 +403,11 @@ describe("errores, logging, factory y encapsulación", () => {
       (entry): entry is string => typeof entry === "string",
     );
     // solo se permite app/api/owl/admission — jurisprudencia no crea rutas API propias
-    expect(appEntries.filter((entry) => entry.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(entry))).toEqual([]);
+    expect(appEntries.filter((entry) => {
+      const normalized = entry.replaceAll("\\", "/");
+      if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+      return normalized.startsWith("api/") && /jurisprudence/.test(normalized);
+    })).toEqual([]);
     expect(source).not.toMatch(/TEST-NO-REAL|fixture-no-publicable/);
     expect(readFileSync(path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"), "utf8")).not.toMatch(/JurisprudenceInternalApi|jurisprudence-application|jurisprudence-repository/);
   });

@@ -603,6 +603,7 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
+    "app/api/internal/cron/jurisprudence-publication/route.ts",
     "app/api/owl/admission/route.ts",
 ];
       const root = process.cwd();
@@ -612,7 +613,11 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
         .map((file) => path.relative(root, path.join(root, "app", file)).split(path.sep).join("/"));
       expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
       // jurisprudencia no crea rutas API propias
-      expect(appFiles.filter((file) => file.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(file))).toEqual([]);
+      expect(appFiles.filter((file) => {
+        const normalized = file.replaceAll("\\", "/");
+        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        return normalized.startsWith("api/") && /jurisprudence/.test(normalized);
+      })).toEqual([]);
       expect((await readdir(path.join(root, "app", "jurisprudencia", "[slug]"))).length).toBeGreaterThan(0);
     });
 

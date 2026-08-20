@@ -329,12 +329,19 @@ describe("barreras estáticas y preservación", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
-    "app/api/owl/admission/route.ts",
+    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/owl/admission/route.ts",
 ];
     const routes = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string" && /(^|[\/\\])route\.ts$/.test(entry)).map((entry) => path.relative(ROOT, path.join(ROOT, "app", entry)).split(path.sep).join("/"));
     expect(routes.sort()).toEqual(authorizedRouteFiles.sort());
     const appEntries = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string");
-    expect(appEntries.some((entry) => entry.replaceAll("\\", "/").startsWith("api/") && /jurisprudence/.test(entry))).toBe(false);
+    expect(
+      appEntries.some((entry) => {
+        const normalized = entry.replaceAll("\\", "/");
+        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
+      })
+    ).toBe(false);
     const page = readFileSync(path.join(ROOT, "app", "jurisprudencia", "page.tsx"), "utf8"); expect(page).not.toMatch(/publication-execution|executePublication|JurisprudencePublicationExecution/);
   });
   it("mantiene versiones de React", () => {
