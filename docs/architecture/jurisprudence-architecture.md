@@ -40,4 +40,4 @@ Arquitectura efectiva del dominio de Jurisprudencia basada en evidencia del cód
 - **J2:** ACTIVE
 - **J2-A.2J:** CLOSED/COMMITTED
 - **J2-A.2K-F2:** CLOSED/COMMITTED
-- **J2-A.3:** TECHNICALLY_VERIFIED (persistencia física, idempotencia y semántica validada en STAGING). Documentation sync pending human Git review.
+- **J2-A.3:** CLOSED/COMMITTED (persistencia física, idempotencia y semántica validada en STAGING).
