@@ -28,7 +28,7 @@ Este documento define el estado del roadmap técnico del proyecto.
 | **J2-A.2G** | CLOSED / COMMITTED | El texto oficial puede existir privadamente antes de publicación; su presencia no constituye autorización de publicación. |
 | **J2-A.2J** | CLOSED / COMMITTED | resolutionNumber nullable en modelo canónico/persistencia cuando no existe número independiente. |
 | **J2-A.2K-F2** | CLOSED / COMMITTED | Preview valida el objeto normalizado contra el contrato persistible exacto. |
-| **J2-A.3** | NEXT / PLANNED | Persistencia física controlada en STAGING de los tres registros oficiales piloto; no ejecutada. |
+| **J2-A.3** | TECHNICALLY_VERIFIED | Persistencia física controlada en STAGING verificada (tres pilotos). Documentation sync pending human Git review. |
 
 ## Carril B — Owl / Hermes
 

@@ -14,5 +14,4 @@ La justificación fundamental es representar fielmente la ausencia real de un n�
 
 ## Proyección Pública y Base de Datos
 - `public detail omits resolutionNumber when canonical value is null`
-- `migration 0029 = CODE_AVAILABLE`
-- `APPLIED_TO_STAGING = NOT_CONFIRMED`
+- `migration 0029 = APPLIED_TO_STAGING (verificado durante J2-A.3)`

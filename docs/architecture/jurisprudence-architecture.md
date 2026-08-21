@@ -19,10 +19,11 @@ Arquitectura efectiva del dominio de Jurisprudencia basada en evidencia del cód
 - **preview:** Validación en memoria.
 - **exact persistibility validation:** El preview valida que el contrato canónico sea exacto antes de inserción (CODE_AVAILABLE, TESTED).
 - **confirm:** Intento de persistencia final.
-- **idempotency:** idempotency keys, replay semantics and durable database constraints participate in duplicate/replay protection.
-- **durable duplicate protection:** enforced through durable database constraints and repository checks in the audited flow.
+- **idempotency:** idempotency keys and replay semantics protect against duplicate ingestion execution; verified as independent from legal identity deduplication during J2-A.3.
+- **durable duplicate protection:** enforced via deterministic `deduplication_key` database constraint; successfully rejects new-key replays with duplicate identities.
+- **sourceReference:** transport-only metadata identifier accepted by the ingestion contract; it is not mapped into `JurisprudenceNewRecord` and is NOT a persisted canonical field.
 - **resolutionNumber nullable:** CODE_AVAILABLE.
-- **migration 0029:** CODE_AVAILABLE (no se afirma `APPLIED_TO_STAGING` sin confirmación de entorno).
+- **migration 0029:** APPLIED_TO_STAGING (verificado durante J2-A.3).
 
 ## Publication Pipeline
 - **publication command:** valida la versión fuente y crea durablemente execution/event/idempotency/outbox; no escribe por sí mismo la proyección pública.
@@ -39,4 +40,4 @@ Arquitectura efectiva del dominio de Jurisprudencia basada en evidencia del cód
 - **J2:** ACTIVE
 - **J2-A.2J:** CLOSED/COMMITTED
 - **J2-A.2K-F2:** CLOSED/COMMITTED
-- **J2-A.3:** PLANNED/NEXT, no ejecutado (persistencia física).
+- **J2-A.3:** TECHNICALLY_VERIFIED (persistencia física, idempotencia y semántica validada en STAGING). Documentation sync pending human Git review.

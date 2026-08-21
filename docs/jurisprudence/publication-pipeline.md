@@ -28,9 +28,13 @@ La existencia del host o processor en código no equivale a cron activado ni a p
   - `bounded batch processing with controlled concurrency`
 
 - **Recovery / Dead-letter:**
-  - `migration 0028 provides durable recovery linkage`
+  - `migration 0028 provides durable recovery linkage (fully physically applied in STAGING and journal reconciled)`
   - `a recovery handoff references the prior outbox item`
   - `durable constraints prevent duplicate recovery linkage where defined`
+
+- **Public Exposure Barrier:**
+  - `public exposure barrier = CODE_AVAILABLE / TESTED`
+  - Verificado en STAGING durante J2-A.3: Los registros no se publican automáticamente. El recuento global de 17 registros en la proyección pública se concilió y ninguno pertenece a los pilotos de prueba, confirmando la barrera pública final.
 
 - **Cron Host:**
   - `protected cron host = CODE_AVAILABLE / TESTED`
