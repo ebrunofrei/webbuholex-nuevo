@@ -1,147 +1,87 @@
 # BúhoLex v2
 
-BúhoLex es una plataforma jurídica digital desarrollada por EMCCON, organizada en una zona pública de información jurídica y un espacio inteligente reservado para futuras capacidades avanzadas.
+BúhoLex es una plataforma jurídica digital desarrollada por EMCCON. Se organiza en una zona pública orientada a información y un espacio inteligente (Owl/Hermes) que proveerá capacidades analíticas avanzadas.
 
-## Estado actual
+## Estado Técnico Actual
+- **Despliegue (Production):** Frozen (sin despliegue activo, trabajo en entorno local/STAGING).
+- **Indexación:** noIndex configurado (default-deny para buscadores).
+- **Entorno:** Node.js 22, pnpm 11, Next.js, PostgreSQL/Supabase, Drizzle ORM, Zod, Vitest.
 
-- **Fase consolidada:** 13.A.6
-- **Estado técnico:** Estable.
-- **Repositorio:** Privado.
-- **Despliegue:** La aplicación no se encuentra desplegada; el trabajo se realiza en entorno local.
-- **Indexación:** El estado de no publicación (noIndex) está configurado y comprobado en el proyecto.
-- **Último commit funcional estable:** c955602
+## Arquitectura Resumida
+La arquitectura se basa en una separación estricta entre el cliente (interfaz de usuario) y el servidor (lógica de dominio y acceso a datos).
+- **Dominio:** Separación arquitectónica basada en responsabilidades delimitadas (bounded contexts).
+- **Persistencia:** Repositorios y Gateways que conectan con esquemas de bases de datos públicos o internos.
+- **Feature Switches:** Determinadas capacidades sensibles del runtime utilizan configuración explícita y comportamiento fail-closed antes de su activación.
 
-## Arquitectura funcional
+Para un detalle exhaustivo, revisar la [Documentación Técnica](#documentación-técnica).
 
-### Información pública
+## Módulos Principales
+- **Zona Pública:** Inicio, Institución, Servicios, Consulta Profesional, Plantillas, Explorar.
+- **Jurisprudencia:** Núcleo de datos legales con ingestion pipeline y public projection.
+- **Asistente (Owl):** Interfaz para capacidades inteligentes, actualmente estructural.
 
-La zona pública incluye las siguientes áreas:
-- Inicio
-- Servicios
-- Nosotros o Institución
-- Consulta profesional
-- Jurisprudencia
-- Asistente Jurídico BúhoLex
-- Contacto
-- Explorar
-- Plantillas y productos informativos
+### Estado de Jurisprudencia
+- **Interfaz Pública:** Implementada y probada; su disponibilidad efectiva depende de la activación controlada del runtime. Jurisprudencia permanece sin activación en Production.
+- **Gateway de Búsqueda Pública:** Implemented y tested, integrado a nivel de código.
+- **Ingestión Oficial:** Soporta preview y canonical validation.
+- **Publicación:** Protegida mediante Outbox y Processor para aislar registros internos de la vista pública. No activada públicamente.
 
-### Espacio inteligente
+### Estado de Owl
+- Interfaz (Owl) implementada.
+- **real LLM provider:** NOT_IMPLEMENTED
+- **RAG:** NOT_IMPLEMENTED
+- Flujo actual restringido a validación estructural (simulación de orquestación).
 
-El espacio inteligente está diseñado como un entorno separado de la zona pública. Actualmente:
-- La autenticación real aún no está activa.
-- No existen cuentas operativas.
-- No existen pagos.
-- No existen planes comerciales activos.
-- No existe persistencia personal real todavía.
+## Seguridad Básica
+- Operación actual sin pagos, checkout, descargas públicas ni autenticación comercial.
+- Principio fundamental: `Untrusted content never becomes system policy`.
+- Controles observados en la superficie auditada: validación estructural mediante Zod, acceso parametrizado a PostgreSQL mediante Drizzle, escape de renderizado proporcionado por React y separación server-side de secretos/configuración sensible cuando corresponde.
 
-## Módulo Explorar
-
-El módulo Explorar presenta 9 destinos. Sus estados actuales son:
-
-1. **Jurisprudencia**: Interfaz pública ensamblada, buscador dormant.
-2. **Manuales y guías**: En preparación.
-3. **Legislación**: En preparación.
-4. **Plantillas y productos**: Vista informativa.
-5. **Servicios**: Disponible en modalidad consultiva.
-6. **Herramientas públicas**: En preparación.
-7. **Artículos**: En preparación.
-8. **Institución**: Disponible.
-9. **Contacto**: Disponible.
-
-## Plantillas y productos
-
-- **Producto de referencia**: BL-LEG-CON-001
-- **Vista**: Vista previa editorial.
-- **Estado comercial**: Sin precio activo, sin licencia activa, sin compra, sin pago, sin descarga pública.
-- **Llamada a la acción (CTA)**: “Solicitar personalización”
-- **Destino**: /consulta-profesional/
-
-## Servicios
-
-Los servicios son visibles como un catálogo público en modalidad consultiva.
-- No existe pago inmediato.
-- SRV-WEB-001 mantiene:
-  - `allowsImmediatePayment: false`
-  - `published: false`
-La visibilidad pública no equivale a transacción o publicación comercial.
-
-## Jurisprudencia pública
-
-- **Ruta**: /jurisprudencia/
-- **Interfaz**: Interfaz pública ensamblada en estado default-deny.
-- **Gateway**: No configurado.
-- **Readiness**: Inactivo.
-- **Corpus**: Sin corpus real habilitado; sin resultados ficticios.
-- **Control de búsqueda**:
-  - Botón: “BÚSQUEDA EN PREPARACIÓN”
-  - Estado: `disabled`, con `aria-disabled="true"`
-  - Mensaje del estado público: “Búsqueda pública no disponible”
-- Los filtros son visibles únicamente como presentación de la experiencia futura; no se ejecutan búsquedas reales ni se altera la URL al pulsar, porque el control está deshabilitado.
-
-## Seguridad comercial y operativa
-
-Se establece expresamente:
-- Sin pagos activos.
-- Sin checkout.
-- Sin descarga pública.
-- Sin licencias comerciales activas.
-- Sin autenticación real.
-- Sin despliegue.
-- Sin GitHub Pages.
-- Sin workflows.
-- Sin releases.
-- Sin deployments.
-- Sin datos jurídicos simulados presentados como reales.
-
-## Validación técnica
-
-Resultados vigentes de las validaciones:
-- **ESLint**: Aprobado.
-- **TypeScript typecheck**: Aprobado.
-- **Test Files**: 61/61
-- **Tests**: 808/808
-- **Build**: Aprobado.
-- **Rutas generadas**: 46/46
-- **Última validación funcional**: Commit c955602.
-
-## Repositorio y respaldo
-
-- **Repositorio privado**: https://github.com/ebrunofrei/buholex-v2
-- **Rama**: master
-- **Upstream**: origin/master
-- **Visibilidad**: PRIVATE
-- **GitHub Pages**: Desactivado
-
-## Desarrollo local
-
-Requisitos: Node.js 22 o superior y pnpm 11.
+## Instalación y Ejecución Local
+Se requiere **Node.js 22+** y **pnpm 11+**.
 
 ```bash
 pnpm install
 pnpm dev
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
 ```
 
-## Reglas de desarrollo
+### Comandos de Testing y Verificación
+Existen scripts configurados para asegurar la estabilidad:
+```bash
+pnpm lint          # Verificación de código estático
+pnpm typecheck     # Verificación de tipos TypeScript
+pnpm test          # Pruebas unitarias
+pnpm build         # Construcción del bundle de producción
+```
 
-- No inventar jurisprudencia.
-- No activar funcionalidades comerciales sin autorización.
-- No publicar ni desplegar sin autorización.
-- Validar escritorio, tablet y móvil.
-- Ejecutar lint, typecheck, tests y build.
-- Crear commit y push después de cada fase estable.
-- Mantener el default-deny en integraciones externas.
+## Roadmap Inmediato
+Ambos carriles evolucionan en paralelo. Owl/Hermes no bloquea Jurisprudencia ni el release general de BúhoLex.
 
-## Próximas fases
+### Carril A — Jurisprudencia
+- **NEXT:** J2-A.3 — Persistencia física controlada de los tres registros oficiales piloto en STAGING.
 
-Pendientes por implementar:
-- Incorporación controlada de corpus jurisprudencial real y verificable.
-- Configuración futura de gateway real.
-- Activación futura de autenticación.
-- Memoria documental.
-- Funcionalidades inteligentes.
-- Publicación, solo después de revisión jurídica, técnica y comercial.
+### Carril B — Owl/Hermes
+- **NEXT:** HERMES-A1 — Trust Boundary + Prompt/Output Contracts
+
+## Documentación Técnica
+
+Toda la documentación arquitectónica detallada y las decisiones tomadas se encuentran en el directorio `docs/`:
+
+### Arquitectura
+- [System Overview](docs/architecture/system-overview.md)
+- [Jurisprudence Architecture](docs/architecture/jurisprudence-architecture.md)
+- [Owl & Hermes Architecture](docs/architecture/owl-hermes-architecture.md)
+- [Security Boundaries](docs/architecture/security-boundaries.md)
+
+### Jurisprudencia
+- [Official Ingestion](docs/jurisprudence/official-ingestion.md)
+- [Publication Pipeline](docs/jurisprudence/publication-pipeline.md)
+
+### Decisiones Arquitectónicas (ADRs)
+- [ADR-001: Jurisprudence Public Boundary](docs/decisions/ADR-001-jurisprudence-public-boundary.md)
+- [ADR-002: Resolution Number Nullable](docs/decisions/ADR-002-resolution-number-nullable.md)
+- [ADR-003: Preview Persistibility](docs/decisions/ADR-003-preview-persistibility.md)
+- [ADR-004: Owl / Hermes Boundary](docs/decisions/ADR-004-owl-hermes-boundary.md)
+
+### Roadmap
+- [Technical Roadmap](docs/roadmap/technical-roadmap.md)
