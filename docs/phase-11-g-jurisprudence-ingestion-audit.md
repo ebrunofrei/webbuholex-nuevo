@@ -53,3 +53,11 @@ Durante la fase J2-A.3 se ejecutó y documentó la persistencia física controla
 - **Same-Key Replay:** El pipeline demostró soporte exitoso de replays idempotentes con la misma llave. La operación se resolvió con `success` sin crear una segunda identidad o versión (`VERSIONING_DELTA = 0`).
 - **New-Key + Same Identity:** El uso de una nueva clave de idempotencia con la misma identidad legal fue rechazado (`rejected_duplicate / DUPLICATE_CONFLICT`). Esto verificó que, en los escenarios ensayados de J2-A.3, la protección de idempotencia y la deduplicación por identidad jurídica operan como controles distintos: el same-key replay se resolvió sin nuevas escrituras durables, mientras que una nueva idempotency key con la misma identidad jurídica produjo `DUPLICATE_CONFLICT` sin crear una segunda identidad.
 - **Semántica de `sourceReference`:** Quedó resuelto que `sourceReference` actúa exclusivamente como metadato de transporte y no se mapea en el registro canónico de dominio (`JurisprudenceNewRecord`), resolviéndose favorablemente el "Semantic Gate".
+
+## Higiene de STAGING (J2-WEB-HYGIENE-A1)
+
+Tras la fase de auditoría e ingesta, se documentó y completó un saneamiento controlado de STAGING:
+- Se removieron 17 registros públicos que eran artefactos de prueba (16 de contrato, 1 sintético) para dejar la proyección pública vacía (0 registros).
+- Se removieron 21 filas `pending` de `publish_projection` creadas como artefactos de batch E2E sobre el fixture sintético `19bdd9bd-6a3b-4a16-b021-0699c790deab`. Tenían payloads parciales/malformados, `attempts = 0`, no eran recoveries y no correspondían a handoffs pendientes de publicación oficial.
+- Se preservó el historial durable relevante: filas `sent` y `dead_letter` del outbox, recovery, publication executions/events y los registros canónicos internos.
+- La proyección pública (jurisprudence_public.published_records) está intencionalmente vacía de datos reales y de prueba. Ningún registro oficial de piloto fue publicado y Production se mantiene intacto (FROZEN).

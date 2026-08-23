@@ -50,5 +50,6 @@ Los únicos tres pilotos oficiales vigentes documentados son:
 - `00002-2010-PI/TC`
 
 Respecto al entorno:
-- `J2-A.3 NOT_EXECUTED`
-- `physical persistence in STAGING NOT_YET_VERIFIED`
+- `J2-A.3 CLOSED / COMMITTED`
+- `physical persistence in STAGING VERIFIED`
+- Tras J2-WEB-HYGIENE-A1, la proyección pública de STAGING está intencionalmente vacía (0 registros), y estos tres pilotos oficiales se mantienen privados/internos (`publicationAllowed = false`, `draft`, `unverified`).

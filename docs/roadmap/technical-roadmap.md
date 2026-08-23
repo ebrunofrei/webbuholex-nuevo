@@ -29,6 +29,7 @@ Este documento define el estado del roadmap técnico del proyecto.
 | **J2-A.2J** | CLOSED / COMMITTED | resolutionNumber nullable en modelo canónico/persistencia cuando no existe número independiente. |
 | **J2-A.2K-F2** | CLOSED / COMMITTED | Preview valida el objeto normalizado contra el contrato persistible exacto. |
 | **J2-A.3** | CLOSED / COMMITTED | Persistencia física controlada en STAGING de los tres pilotos verificada; replay/idempotencia, deduplicación jurídica y barrera pública validadas. |
+| **J2-WEB-HYGIENE-A1** | CLOSED / VERIFIED | Auditoría y saneamiento controlado de la superficie pública de Jurisprudencia en STAGING; removidos 17 fixtures públicos y 21 handoffs `pending` malformados de batch E2E, preservando historial terminal, registros canónicos internos y privacidad de los tres pilotos. |
 
 ## Carril B — Owl / Hermes
 

@@ -34,8 +34,7 @@ La existencia del host o processor en código no equivale a cron activado ni a p
 
 - **Public Exposure Barrier:**
   - `public exposure barrier = CODE_AVAILABLE / TESTED`
-  - Verificado en STAGING durante J2-A.3: Los registros no se publican automáticamente. El recuento global de 17 registros en la proyección pública se concilió y ninguno pertenece a los pilotos de prueba, confirmando la barrera pública final.
-
+  - Verificado en STAGING durante J2-A.3: los tres pilotos oficiales no se publican automáticamente y permanecen privados. La auditoría posterior J2-WEB-HYGIENE-A1 determinó que las 17 filas entonces existentes en `jurisprudence_public.published_records` eran fixtures de prueba. El saneamiento controlado removió esas 17 proyecciones y 21 filas `pending` de `publish_projection` con payloads parciales/malformados de batch E2E (`attempts = 0`), asociadas únicamente al fixture sintético `19bdd9bd-6a3b-4a16-b021-0699c790deab`. Se preservaron los estados terminales del outbox, recovery, executions/events y los registros canónicos internos. La proyección pública de STAGING quedó en 0 registros y ningún piloto oficial fue publicado.
 - **Cron Host:**
   - `protected cron host = CODE_AVAILABLE / TESTED`
   - `activation/schedule = separate operational concern`

@@ -4,7 +4,7 @@ Arquitectura efectiva del dominio de Jurisprudencia basada en evidencia del cód
 
 ## Estructura de Datos
 - **jurisprudence_internal:** Separación arquitectónica.
-- **jurisprudence_public:** Esquema / proyección pública.
+- **jurisprudence_public:** Esquema / proyección pública. La proyección pública de STAGING no contiene actualmente registros reales de jurisprudencia publicados tras el saneamiento controlado de fixtures.
 - **PostgreSQL FTS:** CODE_AVAILABLE
 
 ## Componentes y Gateways
@@ -41,3 +41,4 @@ Arquitectura efectiva del dominio de Jurisprudencia basada en evidencia del cód
 - **J2-A.2J:** CLOSED/COMMITTED
 - **J2-A.2K-F2:** CLOSED/COMMITTED
 - **J2-A.3:** CLOSED/COMMITTED (persistencia física, idempotencia y semántica validada en STAGING).
+- **J2-WEB-HYGIENE-A1:** CLOSED/VERIFIED (saneamiento controlado de fixtures; la proyección pública de STAGING quedó vacía y los tres pilotos oficiales permanecen privados).
