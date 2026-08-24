@@ -233,6 +233,8 @@ export interface JurisprudenceRecordSource {
   type: JurisprudenceRecordSourceType;
   name: string;
   url: string | null;
+  officialHtmlUrl?: string | null | undefined;
+  officialPdfUrl?: string | null | undefined;
   documentId: string | null;
   publishedAt: string | null;
   retrievedAt: string | null;

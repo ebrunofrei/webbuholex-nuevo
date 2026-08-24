@@ -66,6 +66,7 @@ const canonicalInstitutionSchema = z.object({
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/i, "El checksum debe ser un SHA-256 hexadecimal.");
 const nullableText = (minimum = 1, maximum = 5_000) => z.string().trim().min(minimum).max(maximum).nullable();
+const safeUrlSchema = z.string().url().refine((url) => /^https?:\/\//i.test(url), "Solo se aceptan URLs con protocolo http o https.");
 
 const officialContentSchema = z.object({
   officialSummary: nullableText(3, 10_000),
@@ -107,6 +108,8 @@ const canonicalSourceSchema = z.object({
   type: jurisprudenceRecordSourceTypeSchema,
   name: z.string().trim().min(2).max(300),
   url: z.string().url().nullable(),
+  officialHtmlUrl: safeUrlSchema.nullable().optional(),
+  officialPdfUrl: safeUrlSchema.nullable().optional(),
   documentId: nullableText(1, 300),
   publishedAt: z.string().datetime().nullable(),
   retrievedAt: z.string().datetime().nullable(),
