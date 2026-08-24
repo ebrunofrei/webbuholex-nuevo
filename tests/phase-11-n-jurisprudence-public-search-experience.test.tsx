@@ -209,7 +209,7 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
       const { container } = render(<JurisprudencePublicPage />);
       expect(container.querySelectorAll("main")).toHaveLength(1);
       expect(container.querySelectorAll("h1")).toHaveLength(1);
-      expect(screen.getByLabelText("Problema jurídico")).toHaveAccessibleDescription();
+      expect(screen.getByLabelText(/Buscar en jurisprudencia/i)).toHaveAccessibleDescription();
       expect(screen.getByLabelText("Ordenar por")).toBeInTheDocument();
       expect(screen.getByText(/todavía no se encuentra habilitado/i)).toBeInTheDocument();
     });
@@ -224,7 +224,7 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
     it("muestra resultados ficticios exclusivamente de lista blanca y cumple estructura semántica", async () => {
       const gateway = new FixturePublicSearchGateway();
       const { container } = render(<JurisprudencePublicSearch gateway={gateway} />);
-      fireEvent.change(screen.getByLabelText("Problema jurídico"), {
+      fireEvent.change(screen.getByLabelText(/Buscar en jurisprudencia/i), {
         target: { value: "contrato" },
       });
       fireEvent.click(screen.getByRole("button", { name: "BUSCAR" }));
@@ -269,7 +269,7 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
     it("envía orden y paginación validados y actualiza una URL determinista", async () => {
       const gateway = new FixturePublicSearchGateway([fictitiousItem], false, 11);
       render(<JurisprudencePublicSearch gateway={gateway} />);
-      fireEvent.change(screen.getByLabelText("Problema jurídico"), { target: { value: "contrato" } });
+      fireEvent.change(screen.getByLabelText(/Buscar en jurisprudencia/i), { target: { value: "contrato" } });
       fireEvent.change(screen.getByLabelText("Ordenar por"), { target: { value: "issued_desc" } });
       fireEvent.click(screen.getByRole("button", { name: "BUSCAR" }));
       await screen.findByText(fictitiousItem.title);
@@ -377,7 +377,7 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
 
         await waitFor(() => expect(searchAction).toHaveBeenCalledTimes(1));
 
-        fireEvent.change(screen.getByLabelText("Problema jurídico"), { target: { value: "despido" } });
+        fireEvent.change(screen.getByLabelText(/Buscar en jurisprudencia/i), { target: { value: "despido" } });
         fireEvent.click(screen.getByRole("button", { name: "BUSCAR" }));
 
         await waitFor(() => expect(searchAction).toHaveBeenCalledTimes(2));
@@ -418,7 +418,7 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
         await waitFor(() => expect(searchAction).toHaveBeenCalledTimes(1));
         searchAction.mockClear();
 
-        fireEvent.change(screen.getByLabelText("Problema jurídico"), { target: { value: "contrato civil" } });
+        fireEvent.change(screen.getByLabelText(/Buscar en jurisprudencia/i), { target: { value: "contrato civil" } });
         fireEvent.click(screen.getByRole("button", { name: "BUSCAR" }));
 
         await waitFor(() => expect(searchAction).toHaveBeenCalledTimes(1));
@@ -506,14 +506,14 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
         await waitFor(() => expect(searchAction).toHaveBeenCalledTimes(1));
         searchAction.mockClear();
 
-        fireEvent.change(screen.getByLabelText("Problema jurídico"), { target: { value: "primera" } });
+        fireEvent.change(screen.getByLabelText(/Buscar en jurisprudencia/i), { target: { value: "primera" } });
         fireEvent.click(screen.getByRole("button", { name: "BUSCAR" }));
 
         expect(await screen.findByText("Sin resultados")).toBeInTheDocument();
         expect(searchAction).toHaveBeenCalledTimes(1);
         searchAction.mockClear();
 
-        fireEvent.change(screen.getByLabelText("Problema jurídico"), { target: { value: "segunda" } });
+        fireEvent.change(screen.getByLabelText(/Buscar en jurisprudencia/i), { target: { value: "segunda" } });
         fireEvent.click(screen.getByRole("button", { name: "BUSCAR" }));
 
         await waitFor(() => expect(searchAction).toHaveBeenCalledTimes(1));

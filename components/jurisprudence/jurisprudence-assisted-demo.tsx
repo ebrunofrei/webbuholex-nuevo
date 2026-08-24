@@ -12,11 +12,13 @@ export function JurisprudenceAssistedDemo() {
 
   return (
     <section className={styles.assistedDemo} aria-labelledby="assisted-demo-title">
-      <div className={styles.demoIntro}><p>DEMOSTRACIÓN LOCAL</p><h2 id="assisted-demo-title">Jurisprudencia Asistida</h2><span>Estos modos describen el flujo futuro. No ejecutan análisis ni muestran resoluciones simuladas.</span></div>
-      <div className={styles.modeTabs} role="tablist" aria-label="Modos de jurisprudencia asistida">
-        {jurisprudenceDemoModes.map((mode) => <button key={mode.id} id={`mode-${mode.id}`} type="button" role="tab" aria-selected={activeMode === mode.id} aria-controls="mode-panel" onClick={() => setActiveMode(mode.id)}>{mode.label}</button>)}
+      <div className={styles.container}>
+        <div className={styles.demoIntro}><p>DEMOSTRACIÓN LOCAL</p><h2 id="assisted-demo-title">Jurisprudencia Asistida</h2><span>Estos modos describen el flujo futuro. No ejecutan análisis ni muestran resoluciones simuladas.</span></div>
+        <div className={styles.modeTabs} role="tablist" aria-label="Modos de jurisprudencia asistida">
+          {jurisprudenceDemoModes.map((mode) => <button key={mode.id} id={`mode-${mode.id}`} type="button" role="tab" aria-selected={activeMode === mode.id} aria-controls="mode-panel" onClick={() => setActiveMode(mode.id)}>{mode.label}{mode.id !== "search" ? " (Próximamente)" : ""}</button>)}
+        </div>
+        {active ? <div id="mode-panel" role="tabpanel" aria-labelledby={`mode-${active.id}`} className={styles.modePanel}><div><span>{active.premium ? "CAPACIDAD AVANZADA" : "ACCESO PÚBLICO"}</span><h3>{active.label}</h3><p>{active.description}</p><small>{active.example}</small></div>{active.premium ? <span aria-disabled="true" className={styles.modeSelectorBtnDisabled}>PRÓXIMAMENTE</span> : <Link href="/jurisprudencia/#buscar">IR A BÚSQUEDA PÚBLICA</Link>}</div> : null}
       </div>
-      {active ? <div id="mode-panel" role="tabpanel" aria-labelledby={`mode-${active.id}`} className={styles.modePanel}><div><span>{active.premium ? "CAPACIDAD AVANZADA" : "ACCESO PÚBLICO"}</span><h3>{active.label}</h3><p>{active.description}</p><small>{active.example}</small></div>{active.premium ? <Link href="/iniciar-sesion/">CONOCER EL ACCESO FUTURO</Link> : <Link href="/jurisprudencia/#buscar">IR A BÚSQUEDA PÚBLICA</Link>}</div> : null}
     </section>
   );
 }

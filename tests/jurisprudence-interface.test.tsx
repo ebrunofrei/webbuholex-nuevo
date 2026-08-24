@@ -21,7 +21,7 @@ describe("interfaces jurisprudenciales", () => {
   it("informa que el buscador no está habilitado y mantiene el estado dormant", async () => {
     const { container } = render(<JurisprudencePage />);
     expect(screen.getByRole("heading", { name: /^Jurisprudencia$/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Problema jurídico/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Buscar en jurisprudencia/i)).toBeInTheDocument();
 
     const action = screen.getByRole("button", { name: "BUSCAR" });
     await import("@testing-library/react").then(({ waitFor }) => waitFor(() => expect(action).not.toBeDisabled()));
@@ -36,22 +36,25 @@ describe("interfaces jurisprudenciales", () => {
   it("presenta exactamente cinco modos y cambia el panel", () => {
     render(<JurisprudenceAssistedDemo />);
     expect(screen.getAllByRole("tab")).toHaveLength(5);
-    fireEvent.click(screen.getByRole("tab", { name: "Comparar sentencias" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Comparar sentencias (Próximamente)" }));
     expect(screen.getByRole("tabpanel")).toHaveTextContent("coincidencias, diferencias, evolución");
     expect(screen.getByRole("tabpanel")).toHaveTextContent("CAPACIDAD AVANZADA");
   });
 
   it("ofrece búsqueda pública sin fabricar resultados", () => {
     const { container } = render(<JurisprudencePublicPage />);
-    fireEvent.change(screen.getByLabelText("Problema jurídico"), { target: { value: "valoración de pericia" } });
+    fireEvent.change(screen.getByLabelText(/Buscar en jurisprudencia/i), { target: { value: "valoración de pericia" } });
     expect(screen.getByRole("status")).toHaveTextContent("no existen resoluciones verificadas publicadas");
     expect(container.textContent).not.toMatch(/EXP\.\s*\d|Casación\s+N/i);
     expect(container.querySelector("[download], a[href*='product-assets'], a[href*='iniciar-sesion'] [download]")).toBeNull();
   });
 
-  it("dirige las cuatro acciones avanzadas a inicio de sesión", () => {
-    render(<JurisprudencePublicPage />);
-    for (const label of ["Analizar una sentencia", "Comparar resoluciones", "Preguntar al Asistente", "Evaluar aplicabilidad"]) expect(screen.getByRole("link", { name: new RegExp(label) })).toHaveAttribute("href", "/iniciar-sesion");
+  it("no ofrece enlaces de inicio de sesión para los modos avanzados futuros", () => {
+    const { container } = render(<JurisprudencePublicPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Comparar sentencias (Próximamente)" }));
+    expect(screen.getByText("PRÓXIMAMENTE")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /PRÓXIMAMENTE/i })).not.toBeInTheDocument();
+    expect(container.querySelector('a[href="/iniciar-sesion/"]')).toBeNull();
   });
 
   it("hace visibles límites y separa acceso público del avanzado", () => {

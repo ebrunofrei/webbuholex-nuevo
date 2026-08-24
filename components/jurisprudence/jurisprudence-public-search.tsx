@@ -221,9 +221,9 @@ export function JurisprudencePublicSearch({
           <form className={styles.catalogForm} onSubmit={submitSearch} noValidate>
             <div className={styles.catalogFormRow}>
               <div>
-                <label htmlFor="jurisprudence-query">Problema jurídico</label>
+                <label htmlFor="jurisprudence-query">Buscar en jurisprudencia</label>
                 <span id="jurisprudence-query-help">
-                  Puede buscar por título, materia o número de expediente. Máximo 160 caracteres.
+                  Puede buscar por texto, título, materia o número de expediente. Máximo 160 caracteres.
                 </span>
                 <input
                   id="jurisprudence-query"
@@ -322,6 +322,7 @@ export function JurisprudencePublicSearch({
                         </h3>
                         <dl className={styles.catalogCardDl}>
                           <div><dt>Expediente</dt><dd>{item.caseNumber}</dd></div>
+                          {item.resolutionNumber ? <div><dt>Resolución</dt><dd>{item.resolutionNumber}</dd></div> : null}
                           <div><dt>Materia</dt><dd>{item.matter}</dd></div>
                           <div><dt>Fecha</dt><dd>{item.issuedAt}</dd></div>
                         </dl>
