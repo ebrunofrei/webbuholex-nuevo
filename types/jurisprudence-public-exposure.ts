@@ -47,6 +47,8 @@ export interface JurisprudencePublicReadModel {
   readonly issuedAt: string;
   readonly summary: string;
   readonly sourceName: string;
+  readonly officialHtmlUrl: string | null;
+  readonly officialPdfUrl: string | null;
   readonly sourceDocumentId: string | null;
   readonly publicStatus: JurisprudencePublicReadModelStatus;
   readonly preparedAt: string;

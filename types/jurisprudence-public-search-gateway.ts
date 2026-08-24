@@ -4,10 +4,10 @@ export interface JurisprudencePublicSearchQuery{readonly text?:string;readonly f
 export interface JurisprudencePublicSearchItem{readonly slug:string;readonly title:string;readonly caseTitle:string;readonly caseNumber:string;readonly resolutionNumber:string|null;readonly resolutionType:string;readonly institutionName:string;readonly issuingBody:string;readonly matter:string;readonly issuedAt:string;readonly summary:string;readonly sourceName:string;}
 export interface JurisprudencePublicSearchPage{readonly items:readonly JurisprudencePublicSearchItem[];readonly total:number;readonly page:number;readonly pageSize:number;readonly totalPages:number}
 export type JurisprudencePublicSearchResponse=|{readonly status:"success";readonly page:JurisprudencePublicSearchPage}|{readonly status:"empty";readonly page:JurisprudencePublicSearchPage}|{readonly status:"not_configured";readonly message:string}|{readonly status:"invalid_query";readonly message:string}|{readonly status:"error";readonly message:string};
-import type { JurisprudencePublicDetailDto } from "./jurisprudence";
+import type { JurisprudencePublicProjectionDetail } from "./jurisprudence";
 
 export type JurisprudencePublicDetailResponse=
-  |{readonly status:"success";readonly item:JurisprudencePublicDetailDto}
+  |{readonly status:"success";readonly item: JurisprudencePublicProjectionDetail}
   |{readonly status:"not_found"}
   |{readonly status:"not_configured"}
   |{readonly status:"error"};

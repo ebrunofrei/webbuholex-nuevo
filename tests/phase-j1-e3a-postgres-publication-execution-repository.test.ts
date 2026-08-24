@@ -43,6 +43,8 @@ describe("J1-E.3A.2 PostgresJurisprudencePublicationExecutionRepository", () => 
       issuedAt: "2026-08-01",
       summary: null,
       sourceName: "source",
+      officialHtmlUrl: null,
+      officialPdfUrl: null,
       sourceDocumentId: null,
       generatedAt: "2026-08-17T12:00:00.000Z",
       updatedAt: "2026-08-17T12:00:00.000Z",

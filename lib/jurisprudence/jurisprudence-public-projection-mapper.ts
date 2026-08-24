@@ -21,5 +21,7 @@ export function toPublicProjectionRecord(
     issuedAt: projection.issuedAt,
     summary: projection.summary,
     sourceName: projection.sourceName,
+    officialHtmlUrl: projection.officialHtmlUrl,
+    officialPdfUrl: projection.officialPdfUrl,
   };
 }

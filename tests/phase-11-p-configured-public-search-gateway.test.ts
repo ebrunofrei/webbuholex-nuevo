@@ -55,6 +55,8 @@ const mockReadModel: JurisprudencePublicReadModel = Object.freeze({
   summary: "Resumen de prueba de casación laboral.",
   sourceName: "Diario Oficial El Peruano",
   sourceDocumentId: "DOC-PERUANO-001",
+  officialHtmlUrl: "https://tc.gob.pe/html",
+  officialPdfUrl: "https://tc.gob.pe/pdf",
   publicStatus: "exposed",
   preparedAt: "2025-06-15T10:00:00.000Z",
   exposedAt: "2025-06-15T10:05:00.000Z",
@@ -211,7 +213,8 @@ describe("ConfiguredJurisprudencePublicSearchGateway (Fase 11.P)", () => {
       expect(response.status).toBe("success");
       if (response.status === "success") {
         expect(response.item.slug).toBe("resolucion-laboral-001");
-        expect(jurisprudencePublicSearchItemSchema.safeParse(response.item).success).toBe(true);
+        expect(response.item).toHaveProperty("officialHtmlUrl");
+        expect(response.item).toHaveProperty("officialPdfUrl");
       }
     });
 

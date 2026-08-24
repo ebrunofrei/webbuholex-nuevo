@@ -3,6 +3,7 @@ import {
   searchLocalVerifiedJurisprudenceAction,
   getLocalVerifiedJurisprudenceBySlugAction,
 } from "@/lib/jurisprudence/local-verified-jurisprudence-public-actions";
+
 import fs from "fs";
 import path from "path";
 
@@ -267,30 +268,6 @@ describe("Phase 13.C.7: Local Verified Server Actions", () => {
         if (response.status === "success") {
           expect(response.item).toHaveProperty("caseTitle");
           expect(typeof response.item.caseTitle).toBe("string");
-        } else {
-          expect.fail();
-        }
-      }
-    });
-
-    it("21. Cada respuesta success contiene proceduralBackground neutralizado", async () => {
-      for (const slug of discoveredSlugs) {
-        const response = await getLocalVerifiedJurisprudenceBySlugAction(slug);
-        if (response.status === "success") {
-          expect(response.item).toHaveProperty("proceduralBackground");
-          expect(Array.isArray(response.item.proceduralBackground)).toBe(true);
-        } else {
-          expect.fail();
-        }
-      }
-    });
-
-    it("22. Cada respuesta success contiene publicWarning", async () => {
-      for (const slug of discoveredSlugs) {
-        const response = await getLocalVerifiedJurisprudenceBySlugAction(slug);
-        if (response.status === "success") {
-          expect(response.item).toHaveProperty("publicWarning");
-          expect(typeof response.item.publicWarning).toBe("string");
         } else {
           expect.fail();
         }

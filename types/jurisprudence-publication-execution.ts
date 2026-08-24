@@ -89,6 +89,8 @@ export interface JurisprudencePublicProjection {
   readonly summary: string | null;
   readonly sourceName: string;
   readonly sourceDocumentId: string | null;
+  readonly officialHtmlUrl: string | null;
+  readonly officialPdfUrl: string | null;
   readonly generatedAt: string;
   readonly updatedAt: string;
   readonly exposedPublicly: false;

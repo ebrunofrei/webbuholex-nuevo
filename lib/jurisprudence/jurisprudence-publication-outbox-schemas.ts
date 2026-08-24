@@ -8,7 +8,7 @@ export const jurisprudencePublishOutboxPayloadSchema = z
     title: z.string(),
     caseTitle: z.string(),
     caseNumber: z.string(),
-    resolutionNumber: z.string(),
+    resolutionNumber: z.string().nullable(),
     resolutionType: z.string(),
     institutionName: z.string(),
     issuingBody: z.string(),
@@ -16,6 +16,8 @@ export const jurisprudencePublishOutboxPayloadSchema = z
     issuedAt: z.string(),
     summary: z.string().nullable(),
     sourceName: z.string(),
+    officialHtmlUrl: z.string().url().refine(val => val.startsWith("http://") || val.startsWith("https://")).nullable(),
+    officialPdfUrl: z.string().url().refine(val => val.startsWith("http://") || val.startsWith("https://")).nullable(),
   })
   .strict();
 

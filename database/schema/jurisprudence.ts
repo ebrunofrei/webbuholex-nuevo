@@ -96,6 +96,8 @@ export const jurisprudencePublishedRecords = jurisprudencePublicSchema.table("pu
   issuedAt: date("issued_at").notNull(),
   summary: varchar("summary"),
   sourceName: varchar("source_name").notNull(),
+  officialHtmlUrl: varchar("official_html_url"),
+  officialPdfUrl: varchar("official_pdf_url"),
   normalizedSearchText: varchar("normalized_search_text").notNull(),
   searchVector: tsvector("search_vector").generatedAlwaysAs(sql`to_tsvector('spanish', normalized_search_text)`),
 }, (table) => [

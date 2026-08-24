@@ -14,12 +14,7 @@ import type {
   JurisprudencePublicSearchQuery,
   JurisprudencePublicSearchResponse,
 } from "@/types/jurisprudence-public-search-gateway";
-import type { JurisprudencePublicDetailDto } from "@/types/jurisprudence";
-
-type ProspectiveRuleDetailDto = Extract<
-  JurisprudencePublicDetailDto,
-  { kind: "prospective_rule" }
->;
+import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
 
 type GetBySlugAction = NonNullable<
   React.ComponentProps<
@@ -27,11 +22,10 @@ type GetBySlugAction = NonNullable<
   >["getBySlugAction"]
 >;
 
-const fictitiousItem = {
-  kind: "prospective_rule",
-
+const fictitiousItem: import("@/types/jurisprudence").JurisprudencePublicProjectionDetail = {
   slug: "resolucion-ficticia-11o-001",
   title: "Resolución ficticia para prueba de detalle 11.O",
+  caseTitle: "Título público ficticio 11.O",
   caseNumber: "EXP-FICTICIO-11O-001",
   resolutionNumber: "RESOLUCION-FICTICIA-11O-001",
   resolutionType: "sentencia de prueba",
@@ -39,113 +33,11 @@ const fictitiousItem = {
   issuingBody: "ORGANO-JURISDICCIONAL-DE-PRUEBA",
   matter: "materia ficticia",
   issuedAt: "2026-07-30",
-  summary:
-    "Resumen público estrictamente ficticio para validar el detalle de jurisprudencia.",
+  summary: "Resumen público estrictamente ficticio para validar el detalle de jurisprudencia.",
   sourceName: "Tribunal Constitucional",
-
-  caseTitle: "Título público ficticio 11.O",
-  editorialTitle:
-    "Criterio jurisprudencial ficticio para prueba pública",
-  processType: "Proceso constitucional de prueba",
-  court: "TRIBUNAL-JURISDICCIONAL-DE-PRUEBA",
-  chamber: "SALA-JURISDICCIONAL-DE-PRUEBA",
-  decisionDate: "2026-07-30",
-  publicationDate: "2026-07-31",
-  jurisdiction: "Perú",
-  specialty: "Derecho constitucional",
-  matterArray: ["materia ficticia"],
-
-  officialHtmlUrl:
-    "https://example.test/resolucion-ficticia-11o-001",
-  officialPdfUrl:
-    "https://example.test/resolucion-ficticia-11o-001.pdf",
-
-  relevantFacts: [
-    "Hecho público ficticio destinado exclusivamente a probar el componente.",
-  ],
-
-  proceduralBackground: [
-    "Un antecedente procesal público ficticio sin datos sensibles.",
-  ],
-
-  legalIssue:
-    "Determinar el alcance jurídico de una regla ficticia dentro de una prueba de interfaz.",
-
-  subIssues: [
-    "Precisar los límites públicos de la regla ficticia.",
-  ],
-
-  decision:
-    "La pretensión ficticia fue resuelta conforme al criterio público de prueba.",
-
-  operativeOrders: [
-    "Disposición pública ficticia destinada a la validación del componente.",
-  ],
-
-  caseSpecificRatio:
-    "La decisión ficticia se sustenta en una razón jurídica pública utilizada únicamente para pruebas.",
-
-  caseSpecificRatioSupportingParagraphs: [1],
-
-  decisiveGrounds: [
-    {
-      ground:
-        "Fundamento decisivo público ficticio para validar el contrato de detalle.",
-      officialParagraphs: [1],
-      sourceType: "fundamento",
-    },
-  ],
-
-  interpretedRules: [
-    {
-      rule:
-        "Norma pública ficticia interpretada en el escenario de prueba.",
-      article: "Artículo ficticio 1",
-      roleInDecision:
-        "Sustenta la regla prospectiva utilizada exclusivamente en la prueba.",
-      officialParagraphs: [1],
-    },
-  ],
-
-  citedPrecedents: [
-    {
-      caseNumber: "EXP-FICTICIO-PRECEDENTE-001",
-      role:
-        "Precedente de referencia utilizado exclusivamente para la prueba.",
-    },
-  ],
-
-  dissentingOrSeparateOpinions: [],
-
-  applicability: [
-    "Aplicable únicamente al supuesto público ficticio descrito.",
-  ],
-
-  limits: [
-    "No resulta trasladable automáticamente a situaciones distintas.",
-  ],
-
-  nonHoldingObservations: [
-    "Observación pública ficticia que no integra la razón decisoria.",
-  ],
-
-  editorialSummary:
-    "Síntesis editorial pública ficticia para probar la presentación estructurada.",
-
-  keywords: [
-    "jurisprudencia",
-    "prueba",
-    "regla prospectiva",
-  ],
-
-  publicWarning:
-    "Contenido ficticio de prueba. No constituye asesoría jurídica ni reproduce una resolución real.",
-
-  prospectiveJurisprudentialRule:
-    "La regla ficticia tendrá efectos prospectivos únicamente dentro del escenario de prueba.",
-
-  prospectiveRuleSupportingParagraphs: [1],
-} satisfies JurisprudencePublicDetailDto;
+  officialHtmlUrl: "https://example.test/resolucion-ficticia-11o-001",
+  officialPdfUrl: "https://example.test/resolucion-ficticia-11o-001.pdf",
+};
 
 const forbiddenPublicDomTerms = [
   "recordId",
@@ -186,7 +78,7 @@ class FixturePublicDetailGateway
       | "not_configured"
       | "error"
       | "reject" = "success",
-    private readonly item: JurisprudencePublicDetailDto = fictitiousItem,
+    private readonly item: JurisprudencePublicProjectionDetail = fictitiousItem,
   ) {}
 
   async search(
@@ -297,12 +189,23 @@ describe(
           ).toBeInTheDocument();
 
           expect(
-            screen.getByText(fictitiousItem.resolutionNumber),
+            screen.getByText(fictitiousItem.resolutionNumber!),
           ).toBeInTheDocument();
 
           expect(
-            screen.getByText(fictitiousItem.summary),
+            screen.getByText(fictitiousItem.summary!),
           ).toBeInTheDocument();
+
+          expect(
+            screen.getByText("Ver fuente oficial"),
+          ).toHaveAttribute(
+            "href",
+            fictitiousItem.officialHtmlUrl,
+          );
+
+          expect(
+            screen.getByText("Ver PDF oficial"),
+          ).toHaveAttribute("href", fictitiousItem.officialPdfUrl);
 
           for (const forbidden of forbiddenPublicDomTerms) {
             expect(container).not.toHaveTextContent(forbidden);
@@ -520,54 +423,7 @@ describe(
         },
       );
 
-      it(
-        "86-91. renderiza caseTitle y antecedentes en lista accesible sin datos sensibles",
-        async () => {
-          const itemWithBackground: ProspectiveRuleDetailDto = {
-            ...fictitiousItem,
-            proceduralBackground: [
-              "Antecedente neutralizado de prueba",
-            ],
-          };
 
-          const gateway = new FixturePublicDetailGateway(
-            "success",
-            itemWithBackground,
-          );
-
-          const { container } = render(
-            <JurisprudencePublicDetail
-              slug={fictitiousItem.slug}
-              searchGateway={gateway}
-            />,
-          );
-
-          expect(
-            await screen.findByText(fictitiousItem.caseTitle),
-          ).toBeInTheDocument();
-
-          expect(
-            screen.getByRole("heading", {
-              name: /Antecedentes procesales/i,
-            }),
-          ).toBeInTheDocument();
-
-          const list = screen.getByRole("list");
-
-          expect(list).toBeInTheDocument();
-          expect(
-            screen.getAllByRole("listitem").length,
-          ).toBeGreaterThan(0);
-
-          expect(list).toHaveTextContent(
-            "Antecedente neutralizado de prueba",
-          );
-
-          for (const forbidden of forbiddenPublicDomTerms) {
-            expect(container).not.toHaveTextContent(forbidden);
-          }
-        },
-      );
     });
 
     describe(
@@ -806,22 +662,10 @@ describe(
           ).toBeInTheDocument();
 
           expect(
-            screen.getByText(fictitiousItem.summary),
+            screen.getByText(fictitiousItem.summary!),
           ).toBeInTheDocument();
 
-          expect(
-            screen.getByRole("heading", {
-              name: /Antecedentes procesales/i,
-            }),
-          ).toBeInTheDocument();
 
-          const list = screen.getByRole("list");
-
-          expect(list).toBeInTheDocument();
-
-          expect(list).toHaveTextContent(
-            "Un antecedente procesal público ficticio",
-          );
         },
       );
 
@@ -1061,6 +905,7 @@ describe(
         render(<JurisprudencePublicDetail slug={fictitiousItem.slug} getBySlugAction={action} />);
 
         expect(await screen.findByText(fictitiousItem.resolutionType)).toBeInTheDocument();
+        expect(screen.getByText("Ver fuente oficial")).toBeInTheDocument();
         expect(screen.getByText(fictitiousItem.sourceName)).toBeInTheDocument();
         expect(screen.getByText("Tipo")).toBeInTheDocument();
         expect(screen.getByText("Fuente pública")).toBeInTheDocument();
@@ -1071,6 +916,55 @@ describe(
         render(<JurisprudencePublicDetail slug="slug-desconocido" getBySlugAction={action} />);
 
         expect(await screen.findByText("Resolución no encontrada")).toBeInTheDocument();
+      });
+    });
+
+    describe("Provenance URL Behavior (D1-R2)", () => {
+      it("renders official URLs safely with target and rel attributes", async () => {
+        const item = { ...fictitiousItem, officialHtmlUrl: "https://tc.gob.pe/html", officialPdfUrl: "https://tc.gob.pe/pdf" };
+        const action: GetBySlugAction = async () => ({ status: "success", item });
+        render(<JurisprudencePublicDetail slug={item.slug} getBySlugAction={action} />);
+
+        const htmlLink = await screen.findByRole("link", { name: /ver fuente oficial/i });
+        expect(htmlLink).toHaveAttribute("href", "https://tc.gob.pe/html");
+        expect(htmlLink).toHaveAttribute("target", "_blank");
+        expect(htmlLink).toHaveAttribute("rel", "noopener noreferrer");
+
+        const pdfLink = screen.getByRole("link", { name: /ver pdf oficial/i });
+        expect(pdfLink).toHaveAttribute("href", "https://tc.gob.pe/pdf");
+        expect(pdfLink).toHaveAttribute("target", "_blank");
+        expect(pdfLink).toHaveAttribute("rel", "noopener noreferrer");
+      });
+
+      it("renders only HTML URL if PDF is null", async () => {
+        const item = { ...fictitiousItem, officialHtmlUrl: "https://tc.gob.pe/html", officialPdfUrl: null };
+        const action: GetBySlugAction = async () => ({ status: "success", item });
+        render(<JurisprudencePublicDetail slug={item.slug} getBySlugAction={action} />);
+
+        const htmlLink = await screen.findByRole("link", { name: /ver fuente oficial/i });
+        expect(htmlLink).toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /ver pdf oficial/i })).not.toBeInTheDocument();
+      });
+
+      it("renders only PDF URL if HTML is null", async () => {
+        const item = { ...fictitiousItem, officialHtmlUrl: null, officialPdfUrl: "https://tc.gob.pe/pdf" };
+        const action: GetBySlugAction = async () => ({ status: "success", item });
+        render(<JurisprudencePublicDetail slug={item.slug} getBySlugAction={action} />);
+
+        const pdfLink = await screen.findByRole("link", { name: /ver pdf oficial/i });
+        expect(pdfLink).toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /ver fuente oficial/i })).not.toBeInTheDocument();
+      });
+
+      it("omits Enlaces oficiales entirely if both are null", async () => {
+        const item = { ...fictitiousItem, officialHtmlUrl: null, officialPdfUrl: null };
+        const action: GetBySlugAction = async () => ({ status: "success", item });
+        render(<JurisprudencePublicDetail slug={item.slug} getBySlugAction={action} />);
+
+        await screen.findByText(item.caseTitle);
+        expect(screen.queryByRole("heading", { name: /enlaces oficiales/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /ver fuente oficial/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /ver pdf oficial/i })).not.toBeInTheDocument();
       });
     });
   },

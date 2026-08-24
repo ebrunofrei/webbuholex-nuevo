@@ -3,9 +3,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/database/client", () => ({
+  getJurisprudencePublicReadDatabase: vi.fn(),
+}));
 
 import { readJurisprudencePublicReadDatabaseConfig } from "@/database/config";
+import * as roles from "@/database/roles";
 import { withJurisprudencePublicReadRole } from "@/database/roles";
+import { getJurisprudencePublicReadDatabase } from "@/database/client";
 import { PostgresJurisprudencePublicReadRepository } from "@/lib/jurisprudence/postgres-jurisprudence-public-read-repository";
 
 describe("J1-C Postgres Public Read Repository", () => {
@@ -74,6 +79,107 @@ describe("J1-C Postgres Public Read Repository", () => {
       const repo = new PostgresJurisprudencePublicReadRepository();
       expect(typeof repo.search).toBe("function");
       expect(typeof repo.getBySlug).toBe("function");
+    });
+  });
+
+  describe("Provenance and Null Mapping in getBySlug (D1-R2)", () => {
+    async function executeMockTx(
+      cb: Function | undefined,
+      mockSelect: unknown
+    ): Promise<import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null> {
+      const mockTx = {
+        select: mockSelect,
+        execute: vi.fn().mockResolvedValue(true),
+      };
+      return cb!(mockTx);
+    }
+
+    it("maps official URLs exactly and preserves null summary and null provenance", async () => {
+      let capturedTxCallback: Parameters<typeof withJurisprudencePublicReadRole>[1] | undefined;
+
+      vi.mocked(getJurisprudencePublicReadDatabase).mockReturnValue({
+        transaction: async (cb: Parameters<typeof withJurisprudencePublicReadRole>[1]) => {
+          capturedTxCallback = cb;
+          return null;
+        }
+      } as ReturnType<typeof getJurisprudencePublicReadDatabase>);
+
+      const repo = new PostgresJurisprudencePublicReadRepository();
+      repo.getBySlug("test-slug").catch(() => {});
+      await Promise.resolve();
+
+      expect(capturedTxCallback).toBeDefined();
+
+      const mockLimit = vi.fn().mockResolvedValue([
+        {
+          slug: "test-slug",
+          title: "Title",
+          caseTitle: "Case Title",
+          caseNumber: "EXP",
+          resolutionNumber: "RES",
+          resolutionType: "TYPE",
+          institutionName: "INST",
+          issuingBody: "BODY",
+          matter: "MATTER",
+          issuedAt: "2026",
+          summary: null,
+          sourceName: "Source",
+          officialHtmlUrl: "https://tc.gob.pe/html",
+          officialPdfUrl: "https://tc.gob.pe/pdf",
+        }
+      ]);
+      const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+      const result = await executeMockTx(capturedTxCallback, mockSelect);
+
+      expect(result).toBeDefined();
+      expect(result?.summary).toBeNull();
+      expect(result?.officialHtmlUrl).toBe("https://tc.gob.pe/html");
+      expect(result?.officialPdfUrl).toBe("https://tc.gob.pe/pdf");
+    });
+
+    it("maps null provenance to null", async () => {
+      let capturedTxCallback: Parameters<typeof withJurisprudencePublicReadRole>[1] | undefined;
+
+      vi.mocked(getJurisprudencePublicReadDatabase).mockReturnValue({
+        transaction: async (cb: Parameters<typeof withJurisprudencePublicReadRole>[1]) => {
+          capturedTxCallback = cb;
+          return null;
+        }
+      } as ReturnType<typeof getJurisprudencePublicReadDatabase>);
+
+      const repo = new PostgresJurisprudencePublicReadRepository();
+      repo.getBySlug("test-slug").catch(() => {});
+      await Promise.resolve();
+
+      const mockLimit = vi.fn().mockResolvedValue([
+        {
+          slug: "test-slug",
+          title: "Title",
+          caseTitle: "Case Title",
+          caseNumber: "EXP",
+          resolutionNumber: "RES",
+          resolutionType: "TYPE",
+          institutionName: "INST",
+          issuingBody: "BODY",
+          matter: "MATTER",
+          issuedAt: "2026",
+          summary: "Summary",
+          sourceName: "Source",
+          officialHtmlUrl: null,
+          officialPdfUrl: null,
+        }
+      ]);
+      const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+      const result = await executeMockTx(capturedTxCallback, mockSelect);
+
+      expect(result?.officialHtmlUrl).toBeNull();
+      expect(result?.officialPdfUrl).toBeNull();
     });
   });
 });

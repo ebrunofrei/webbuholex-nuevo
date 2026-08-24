@@ -42,6 +42,8 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
       issuedAt: "2026-01-01",
       summary: null,
       sourceName: "source",
+      officialHtmlUrl: null,
+      officialPdfUrl: null,
     });
 
   const createClaim = (
@@ -568,5 +570,89 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
         expect(writer.removeById).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe("Provenance Propagation (D1-R2)", () => {
+    it("propagates non-null official URLs and null resolutionNumber correctly", async () => {
+      const claim = createClaim({
+        eventType: "publish_projection",
+        payload: {
+          id: "rec-1",
+          recordVersion: 1,
+          slug: "test-slug-prov",
+          title: "Title Prov",
+          caseTitle: "Case Title Prov",
+          caseNumber: "EXP-PROV",
+          resolutionNumber: null,
+          resolutionType: "Sentencia",
+          institutionName: "TC",
+          issuingBody: "Pleno",
+          matter: "Constitucional",
+          issuedAt: "2026-08-01",
+          summary: "Summary Prov",
+          sourceName: "TC",
+          officialHtmlUrl: "https://tc.gob.pe/html",
+          officialPdfUrl: "https://tc.gob.pe/pdf",
+        },
+      });
+
+      repository.claimNext.mockResolvedValueOnce(claim);
+      writer.upsert.mockResolvedValueOnce("APPLIED");
+      repository.markSent.mockResolvedValueOnce(undefined);
+
+      const result = await processor.processNext();
+      expect(result).toBe("SENT");
+
+      expect(writer.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: "test-slug-prov",
+          resolutionNumber: null,
+          officialHtmlUrl: "https://tc.gob.pe/html",
+          officialPdfUrl: "https://tc.gob.pe/pdf",
+        }),
+        1
+      );
+    });
+
+    it("propagates null official URLs correctly", async () => {
+      const claim = createClaim({
+        eventType: "publish_projection",
+        payload: {
+          id: "rec-1",
+          recordVersion: 1,
+          slug: "test-slug-prov-null",
+          title: "Title Prov Null",
+          caseTitle: "Case Title Prov",
+          caseNumber: "EXP-PROV",
+          resolutionNumber: "RES-PROV",
+          resolutionType: "Sentencia",
+          institutionName: "TC",
+          issuingBody: "Pleno",
+          matter: "Constitucional",
+          issuedAt: "2026-08-01",
+          summary: "Summary Prov",
+          sourceName: "TC",
+          officialHtmlUrl: null,
+          officialPdfUrl: null,
+        },
+      });
+
+      repository.claimNext.mockResolvedValueOnce(claim);
+      writer.upsert.mockResolvedValueOnce("APPLIED");
+      repository.markSent.mockResolvedValueOnce(undefined);
+
+      const result = await processor.processNext();
+      expect(result).toBe("SENT");
+
+      expect(writer.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: "test-slug-prov-null",
+          resolutionNumber: "RES-PROV",
+          officialHtmlUrl: null,
+          officialPdfUrl: null,
+        }),
+        1
+      );
+    });
   });
 });

@@ -106,7 +106,11 @@ export class ConfiguredJurisprudencePublicSearchGateway
 
       return Object.freeze({
         status: "success" as const,
-        item: projectReadModelToPublicItem(model) as unknown as JurisprudencePublicDetailDto,
+        item: {
+          ...projectReadModelToPublicItem(model),
+          officialHtmlUrl: model.officialHtmlUrl ?? null,
+          officialPdfUrl: model.officialPdfUrl ?? null,
+        }
       });
     } catch {
       return { status: "error" };

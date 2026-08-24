@@ -129,6 +129,8 @@ export const jurisprudencePublicProjectionSchema = z.object({
   summary: z.string().trim().min(1).max(4000).nullable(),
   sourceName: z.string().trim().min(1).max(240),
   sourceDocumentId: z.string().trim().min(1).max(240).nullable(),
+  officialHtmlUrl: z.string().url().refine(val => val.startsWith("http://") || val.startsWith("https://")).nullable(),
+  officialPdfUrl: z.string().url().refine(val => val.startsWith("http://") || val.startsWith("https://")).nullable(),
   generatedAt: isoDateSchema,
   updatedAt: isoDateSchema,
   exposedPublicly: z.literal(false),

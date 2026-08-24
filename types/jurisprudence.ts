@@ -452,6 +452,23 @@ export interface EmergencyDecreeRequirement {
   readonly officialReference: string;
 }
 
+export interface JurisprudencePublicProjectionDetail {
+  readonly slug: string;
+  readonly title: string;
+  readonly caseTitle: string;
+  readonly caseNumber: string;
+  readonly resolutionNumber: string | null;
+  readonly resolutionType: string;
+  readonly institutionName: string;
+  readonly issuingBody: string;
+  readonly matter: string;
+  readonly issuedAt: string;
+  readonly summary: string | null;
+  readonly sourceName: string;
+  readonly officialHtmlUrl: string | null;
+  readonly officialPdfUrl: string | null;
+}
+
 export interface JurisprudencePublicDetailDtoBase {
   readonly caseNumber: string;
   readonly slug: string;

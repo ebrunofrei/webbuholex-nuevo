@@ -5,7 +5,7 @@ vi.mock('server-only', () => ({}));
 import { PostgresJurisprudencePublicSearchGateway } from "@/lib/jurisprudence/postgres-jurisprudence-public-search-gateway";
 import { PostgresJurisprudencePublicReadRepository } from "@/lib/jurisprudence/postgres-jurisprudence-public-read-repository";
 import type { JurisprudencePublicSearchQuery } from "@/types/jurisprudence-public-search-gateway";
-import type { JurisprudencePublicDetailDto } from "@/types/jurisprudence";
+import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
 
 const mockRepository = {
   search: vi.fn(),
@@ -88,7 +88,22 @@ describe("PostgresJurisprudencePublicSearchGateway (Fase J1.D)", () => {
   describe("getBySlug()", () => {
     it("retorna 'success' cuando el registro existe", async () => {
       const gateway = new PostgresJurisprudencePublicSearchGateway(mockRepository);
-      const mockItem = { slug: "test-slug" } as JurisprudencePublicDetailDto;
+      const mockItem = {
+        slug: "test-slug",
+        title: "Test Title",
+        caseTitle: "Test Case Title",
+        caseNumber: "EXP",
+        resolutionNumber: "RES",
+        resolutionType: "Sentencia",
+        institutionName: "TC",
+        issuingBody: "Pleno",
+        matter: "Constitucional",
+        issuedAt: "2026-08-01",
+        summary: "Summary",
+        sourceName: "TC",
+        officialHtmlUrl: null,
+        officialPdfUrl: null,
+      } satisfies JurisprudencePublicProjectionDetail;
       vi.spyOn(mockRepository, "getBySlug").mockResolvedValueOnce(mockItem);
       const response = await gateway.getBySlug("test-slug");
       expect(response.status).toBe("success");

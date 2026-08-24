@@ -13,7 +13,7 @@ import type {
   JurisprudencePublicDetailResponse,
   JurisprudencePublicSearchGateway,
 } from "@/types/jurisprudence-public-search-gateway";
-import type { JurisprudencePublicDetailDto } from "@/types/jurisprudence";
+import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
 import styles from "./jurisprudence.module.css";
 
 export interface JurisprudencePublicDetailProps {
@@ -26,7 +26,7 @@ export interface JurisprudencePublicDetailProps {
 type DetailUiState =
   | { readonly kind: "invalid_slug"; readonly message: string }
   | { readonly kind: "loading" }
-  | { readonly kind: "success"; readonly item: JurisprudencePublicDetailDto }
+  | { readonly kind: "success"; readonly item: JurisprudencePublicProjectionDetail }
   | { readonly kind: "not_found" }
   | { readonly kind: "not_configured" }
   | { readonly kind: "controlled_error"; readonly message: string };
@@ -252,16 +252,24 @@ export function JurisprudencePublicDetail({
                   <p>{state.item.summary}</p>
                 </div>
 
-                {state.item.proceduralBackground && state.item.proceduralBackground.length > 0 && (
+                {state.item.officialHtmlUrl || state.item.officialPdfUrl ? (
                   <div className={styles.detailSummary} style={{ marginTop: "2rem" }}>
-                    <h3>Antecedentes procesales</h3>
-                    <ul style={{ paddingLeft: "1.5rem", marginTop: "1rem" }}>
-                      {state.item.proceduralBackground.map((item, index) => (
-                        <li key={index} style={{ marginBottom: "0.5rem" }}>{item}</li>
-                      ))}
-                    </ul>
+                    <h3>Enlaces oficiales</h3>
+                    <div className={styles.officialLinksContainer}>
+                      {state.item.officialHtmlUrl && (
+                        <a href={state.item.officialHtmlUrl} target="_blank" rel="noopener noreferrer" className={styles.button}>
+                          Ver fuente oficial
+                        </a>
+                      )}
+                      {state.item.officialPdfUrl && (
+                        <a href={state.item.officialPdfUrl} target="_blank" rel="noopener noreferrer" className={styles.button}>
+                          Ver PDF oficial
+                        </a>
+                      )}
+                    </div>
                   </div>
-                )}
+                ) : null}
+
               </article>
             ) : null}
           </div>

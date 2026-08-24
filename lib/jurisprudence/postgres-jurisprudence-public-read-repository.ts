@@ -8,7 +8,7 @@ import type {
   JurisprudencePublicSearchPage,
   JurisprudencePublicSearchItem,
 } from "@/types/jurisprudence-public-search-gateway";
-import type { JurisprudencePublicDetailDto } from "@/types/jurisprudence";
+import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
 
 export class PostgresJurisprudencePublicReadRepository {
   async search(query: JurisprudencePublicSearchQuery): Promise<JurisprudencePublicSearchPage> {
@@ -133,7 +133,7 @@ export class PostgresJurisprudencePublicReadRepository {
     });
   }
 
-  async getBySlug(slug: string): Promise<JurisprudencePublicDetailDto | null> {
+  async getBySlug(slug: string): Promise<JurisprudencePublicProjectionDetail | null> {
     const db = getJurisprudencePublicReadDatabase();
 
     return await withJurisprudencePublicReadRole(db, async (tx) => {
@@ -151,6 +151,8 @@ export class PostgresJurisprudencePublicReadRepository {
           issuedAt: jurisprudencePublishedRecords.issuedAt,
           summary: jurisprudencePublishedRecords.summary,
           sourceName: jurisprudencePublishedRecords.sourceName,
+          officialHtmlUrl: jurisprudencePublishedRecords.officialHtmlUrl,
+          officialPdfUrl: jurisprudencePublishedRecords.officialPdfUrl,
         })
         .from(jurisprudencePublishedRecords)
         .where(eq(jurisprudencePublishedRecords.slug, slug))
@@ -173,9 +175,11 @@ export class PostgresJurisprudencePublicReadRepository {
         issuingBody: row.issuingBody,
         matter: row.matter,
         issuedAt: row.issuedAt,
-        summary: row.summary ?? "",
+        summary: row.summary ?? null,
         sourceName: row.sourceName,
-      } as unknown as JurisprudencePublicDetailDto;
+        officialHtmlUrl: row.officialHtmlUrl ?? null,
+        officialPdfUrl: row.officialPdfUrl ?? null,
+      };
     });
   }
 }

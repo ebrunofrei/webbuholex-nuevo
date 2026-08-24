@@ -46,6 +46,8 @@ export const jurisprudencePublicReadModelSchema = z.object({
   issuedAt: z.string().date(),
   summary: z.string().trim().min(1).max(4000),
   sourceName: z.string().trim().min(1).max(240),
+  officialHtmlUrl: z.string().url().max(1024).nullable(),
+  officialPdfUrl: z.string().url().max(1024).nullable(),
   sourceDocumentId: z.string().trim().min(1).max(240).nullable(),
   publicStatus: jurisprudencePublicReadModelStatusSchema,
   preparedAt: isoDateTimeSchema,

@@ -6,6 +6,7 @@ import path from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { JurisprudencePublicPage } from "@/components/jurisprudence/jurisprudence-public-page";
+import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
 import { JurisprudencePublicSearch, type JurisprudencePublicSearchAction } from "@/components/jurisprudence/jurisprudence-public-search";
 import {
   parseJurisprudencePublicSearchParameters,
@@ -66,7 +67,24 @@ class FixturePublicSearchGateway implements JurisprudencePublicSearchGateway {
 
   async getBySlug(slug: string): Promise<JurisprudencePublicDetailResponse> {
     const item = this.items.find((candidate) => candidate.slug === slug);
-    return item === undefined ? { status: "not_found" } : { status: "success", item: item as unknown as JurisprudencePublicDetailDto };
+    if (!item) return { status: "not_found" };
+    const detail: JurisprudencePublicProjectionDetail = {
+      slug: item.slug,
+      title: item.title,
+      caseTitle: item.caseTitle,
+      caseNumber: item.caseNumber,
+      resolutionNumber: item.resolutionNumber,
+      resolutionType: item.resolutionType,
+      institutionName: item.institutionName,
+      issuingBody: item.issuingBody,
+      matter: item.matter,
+      issuedAt: item.issuedAt,
+      summary: item.summary,
+      sourceName: item.sourceName,
+      officialHtmlUrl: null,
+      officialPdfUrl: null,
+    };
+    return { status: "success", item: detail };
   }
 }
 
@@ -178,7 +196,7 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
       const gateway = new FixturePublicSearchGateway();
       await expect(gateway.getBySlug(fictitiousItem.slug)).resolves.toEqual({
         status: "success",
-        item: fictitiousItem,
+        item: { ...fictitiousItem, officialHtmlUrl: null, officialPdfUrl: null },
       });
       await expect(gateway.getBySlug("slug-ficticio-inexistente")).resolves.toEqual({
         status: "not_found",

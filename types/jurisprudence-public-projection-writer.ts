@@ -13,6 +13,8 @@ export interface JurisprudencePublicProjectionRecord {
   readonly issuedAt: string;
   readonly summary: string | null;
   readonly sourceName: string;
+  readonly officialHtmlUrl: string | null;
+  readonly officialPdfUrl: string | null;
 }
 
 export type PublicProjectionMutationResult = "APPLIED" | "IDEMPOTENT" | "STALE";

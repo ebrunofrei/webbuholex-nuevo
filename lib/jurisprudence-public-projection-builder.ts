@@ -36,6 +36,8 @@ export function buildJurisprudencePublicProjection(
     summary: summary ?? null,
     sourceName: input.record.source.name,
     sourceDocumentId: input.record.source.documentId ?? null,
+    officialHtmlUrl: input.record.source.officialHtmlUrl ?? null,
+    officialPdfUrl: input.record.source.officialPdfUrl ?? null,
     generatedAt: input.generatedAt,
     updatedAt: input.generatedAt,
     exposedPublicly: false,

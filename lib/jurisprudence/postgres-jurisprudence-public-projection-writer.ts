@@ -180,6 +180,8 @@ export class PostgresJurisprudencePublicProjectionWriter implements Jurisprudenc
           issuedAt: record.issuedAt,
           summary: record.summary,
           sourceName: record.sourceName,
+          officialHtmlUrl: record.officialHtmlUrl,
+          officialPdfUrl: record.officialPdfUrl,
           normalizedSearchText,
         })
         .onConflictDoUpdate({
@@ -198,6 +200,8 @@ export class PostgresJurisprudencePublicProjectionWriter implements Jurisprudenc
             issuedAt: record.issuedAt,
             summary: record.summary,
             sourceName: record.sourceName,
+            officialHtmlUrl: record.officialHtmlUrl,
+            officialPdfUrl: record.officialPdfUrl,
             normalizedSearchText,
           },
         });

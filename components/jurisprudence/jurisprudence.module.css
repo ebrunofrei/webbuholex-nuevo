@@ -107,6 +107,7 @@
 .detailGrid dd { margin: 3px 0 0; overflow-wrap: anywhere; font-weight: 600; }
 .detailSummary h3 { margin: 0 0 10px; font-size: 1.1rem; }
 .detailSummary p { margin: 0; line-height: 1.6; color: var(--ink-soft); }
+.officialLinksContainer { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
 @media (max-width: 800px) { .searchSection > .container, .sourcesSection > .container, .spacePreview > .container { grid-template-columns: minmax(0, 1fr); gap: 34px; } .searchStatus, .publicNotice { grid-column: auto; } .criteriaSection ol { grid-template-columns: repeat(2, 1fr); } .sourcesSection > .container > p { grid-column: auto; } }
 @media (max-width: 560px) { .container { width: min(100% - 28px, 1160px); } .hero { padding: 58px 0; } .hero h1 { font-size: clamp(2.65rem, 13vw, 4rem); } .heroActions, .heroActions a { display: grid; width: 100%; } .searchSection form > div, .filterGrid, .resultList dl, .modePanel, .intelligentActions > .container > div, .detailGrid { grid-template-columns: minmax(0, 1fr) !important; } .searchSection button { min-height: 46px; } .pagination, .pagination button { width: 100%; } .pagination { text-align: center; } .criteriaSection ol { grid-template-columns: 1fr; } .criteriaSection li { min-height: auto; } .sourcesSection li { display: grid; } .modePanel a { width: 100%; text-align: center; } }
 @media (prefers-reduced-motion: reduce) { .modeTabs button, .intelligentActions a { transition: none; } }

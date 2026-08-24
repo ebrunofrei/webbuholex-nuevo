@@ -83,6 +83,8 @@ describe("PostgresJurisprudencePublicProjectionWriter", () => {
     issuedAt: "2023-01-01",
     summary: "A summary",
     sourceName: "Source",
+    officialHtmlUrl: null,
+    officialPdfUrl: null,
   };
 
   describe("when NO barrier exists", () => {
@@ -195,6 +197,68 @@ describe("PostgresJurisprudencePublicProjectionWriter", () => {
 
       expect(result).toBe("STALE");
       expect(mockUpdate.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Provenance mapping (D1-R2)", () => {
+    it("maps official URLs exactly to INSERT and UPSERT values", async () => {
+      const recordWithUrls = {
+        ...baseRecord,
+        officialHtmlUrl: "https://tc.gob.pe/html",
+        officialPdfUrl: "https://tc.gob.pe/pdf",
+        resolutionNumber: null,
+      };
+
+      mockSelect.for.mockResolvedValueOnce([]); // New record
+
+      await writer.upsert(recordWithUrls, 1);
+
+      expect(mockInsert.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          officialHtmlUrl: "https://tc.gob.pe/html",
+          officialPdfUrl: "https://tc.gob.pe/pdf",
+          resolutionNumber: null,
+        }),
+      );
+
+      const onConflictDoUpdateCall = mockInsert.onConflictDoUpdate.mock.calls[0][0];
+      expect(onConflictDoUpdateCall.set).toEqual(
+        expect.objectContaining({
+          officialHtmlUrl: "https://tc.gob.pe/html",
+          officialPdfUrl: "https://tc.gob.pe/pdf",
+          resolutionNumber: null,
+        }),
+      );
+    });
+
+    it("maps null official URLs exactly to INSERT and UPSERT values", async () => {
+      const recordWithNulls = {
+        ...baseRecord,
+        officialHtmlUrl: null,
+        officialPdfUrl: null,
+        resolutionNumber: "RES-NULL",
+      };
+
+      mockSelect.for.mockResolvedValueOnce([]); // New record
+
+      await writer.upsert(recordWithNulls, 1);
+
+      expect(mockInsert.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          officialHtmlUrl: null,
+          officialPdfUrl: null,
+          resolutionNumber: "RES-NULL",
+        }),
+      );
+
+      const onConflictDoUpdateCall = mockInsert.onConflictDoUpdate.mock.calls[0][0];
+      expect(onConflictDoUpdateCall.set).toEqual(
+        expect.objectContaining({
+          officialHtmlUrl: null,
+          officialPdfUrl: null,
+          resolutionNumber: "RES-NULL",
+        }),
+      );
     });
   });
 });
