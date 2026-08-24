@@ -1034,5 +1034,44 @@ describe(
         },
       );
     });
+
+    describe("fase J2-B2: estabilización pública (identificación y metadatos)", () => {
+      it("B2.A y B2.C. Muestra resolución y expediente cuando están presentes", async () => {
+        const item = { ...fictitiousItem, caseNumber: "EXP-123", resolutionNumber: "RES-456" };
+        const action: GetBySlugAction = async () => ({ status: "success", item });
+        render(<JurisprudencePublicDetail slug={item.slug} getBySlugAction={action} />);
+
+        expect(await screen.findByText("EXP-123")).toBeInTheDocument();
+        expect(screen.getByText("RES-456")).toBeInTheDocument();
+        expect(screen.getByText("Expediente")).toBeInTheDocument();
+        expect(screen.getByText("Resolución")).toBeInTheDocument();
+      });
+
+      it("B2.B. Omite resolución limpiamente cuando es nula", async () => {
+        const item = { ...fictitiousItem, resolutionNumber: null };
+        const action: GetBySlugAction = async () => ({ status: "success", item });
+        render(<JurisprudencePublicDetail slug={item.slug} getBySlugAction={action} />);
+
+        await screen.findByText(item.caseTitle);
+        expect(screen.queryByText("Resolución")).not.toBeInTheDocument();
+      });
+
+      it("B2.D y B2.E. Muestra tipo de resolución y fuente pública", async () => {
+        const action: GetBySlugAction = async () => ({ status: "success", item: fictitiousItem });
+        render(<JurisprudencePublicDetail slug={fictitiousItem.slug} getBySlugAction={action} />);
+
+        expect(await screen.findByText(fictitiousItem.resolutionType)).toBeInTheDocument();
+        expect(screen.getByText(fictitiousItem.sourceName)).toBeInTheDocument();
+        expect(screen.getByText("Tipo")).toBeInTheDocument();
+        expect(screen.getByText("Fuente pública")).toBeInTheDocument();
+      });
+
+      it("B2.F. Renderiza el estado público not_found para un slug no encontrado", async () => {
+        const action: GetBySlugAction = async () => ({ status: "not_found" });
+        render(<JurisprudencePublicDetail slug="slug-desconocido" getBySlugAction={action} />);
+
+        expect(await screen.findByText("Resolución no encontrada")).toBeInTheDocument();
+      });
+    });
   },
 );

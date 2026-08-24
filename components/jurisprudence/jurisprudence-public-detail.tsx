@@ -202,10 +202,24 @@ export function JurisprudencePublicDetail({
               <article className={styles.detailArticle}>
                 <dl className={styles.detailGrid}>
                   <div>
+                    <dt>Institución</dt>
+                    <dd>{state.item.institutionName}</dd>
+                  </div>
+                  <div>
+                    <dt>Órgano emisor</dt>
+                    <dd>{state.item.issuingBody}</dd>
+                  </div>
+                  {state.item.title && state.item.title !== state.item.caseTitle && (
+                    <div>
+                      <dt>Título</dt>
+                      <dd>{state.item.title}</dd>
+                    </div>
+                  )}
+                  <div>
                     <dt>Expediente</dt>
                     <dd>{state.item.caseNumber}</dd>
                   </div>
-                  {state.item.resolutionNumber !== null && (
+                  {state.item.resolutionNumber !== null && state.item.resolutionNumber !== "" && (
                     <div>
                       <dt>Resolución</dt>
                       <dd>{state.item.resolutionNumber}</dd>
@@ -214,14 +228,6 @@ export function JurisprudencePublicDetail({
                   <div>
                     <dt>Tipo</dt>
                     <dd>{state.item.resolutionType}</dd>
-                  </div>
-                  <div>
-                    <dt>Institución</dt>
-                    <dd>{state.item.institutionName}</dd>
-                  </div>
-                  <div>
-                    <dt>Órgano emisor</dt>
-                    <dd>{state.item.issuingBody}</dd>
                   </div>
                   <div>
                     <dt>Materia</dt>
@@ -239,7 +245,6 @@ export function JurisprudencePublicDetail({
                     <dt>Fuente pública</dt>
                     <dd>{state.item.sourceName}</dd>
                   </div>
-
                 </dl>
 
                 <div className={styles.detailSummary}>
