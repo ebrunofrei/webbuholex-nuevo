@@ -7,6 +7,7 @@ import {
   jsonb,
   customType,
   index,
+  uniqueIndex,
   unique,
   foreignKey,
   check,
@@ -214,4 +215,165 @@ export const jurisprudencePublicProjectionBarriers = jurisprudencePublicSchema.t
   check("projection_barrier_record_version_positive", sql`${table.recordVersion} > 0`),
   check("projection_barrier_execution_version_positive", sql`${table.executionVersion} > 0`),
   check("valid_projection_state", sql`${table.projectionState} IN ('published', 'withdrawn')`),
+]);
+
+
+export const jurisprudenceEditorialCases = jurisprudenceInternalSchema.table("jurisprudence_editorial_cases", {
+  caseId: varchar("case_id").primaryKey(),
+  recordId: varchar("record_id").notNull(),
+  recordVersion: integer("record_version").notNull(),
+  caseVersion: integer("case_version").notNull(),
+  active: boolean("active").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("editorial_case_record_version_positive", sql`${table.recordVersion} > 0`),
+  check("editorial_case_version_positive", sql`${table.caseVersion} > 0`),
+  uniqueIndex("jurisprudence_editorial_cases_active_idx").on(table.recordId, table.recordVersion).where(sql`active = true`),
+  foreignKey({
+    columns: [table.recordId, table.recordVersion],
+    foreignColumns: [jurisprudenceRecordVersions.recordId, jurisprudenceRecordVersions.version],
+  }).onDelete("restrict"),
+]);
+
+export const jurisprudenceEditorialEvents = jurisprudenceInternalSchema.table("jurisprudence_editorial_events", {
+  eventId: varchar("event_id").primaryKey(),
+  caseId: varchar("case_id").notNull(),
+  sequence: integer("sequence").notNull(),
+  eventType: varchar("event_type").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  check("editorial_event_sequence_positive", sql`${table.sequence} > 0`),
+  foreignKey({
+    columns: [table.caseId],
+    foreignColumns: [jurisprudenceEditorialCases.caseId],
+  }).onDelete("restrict"),
+  unique("jurisprudence_editorial_events_seq_unique").on(table.caseId, table.sequence),
+]);
+
+export const jurisprudenceEditorialIdempotency = jurisprudenceInternalSchema.table("jurisprudence_editorial_idempotency", {
+  idempotencyKey: varchar("idempotency_key").primaryKey(),
+  commandFingerprint: varchar("command_fingerprint").notNull(),
+  resultJson: jsonb("result_json").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jurisprudenceGovernedSources = jurisprudenceInternalSchema.table("jurisprudence_governed_sources", {
+  sourceId: varchar("source_id").primaryKey(),
+  payloadJson: jsonb("payload_json").notNull(),
+});
+
+export const jurisprudenceSourceBindings = jurisprudenceInternalSchema.table("jurisprudence_source_bindings", {
+  bindingId: varchar("binding_id").primaryKey(),
+  recordId: varchar("record_id").notNull(),
+  recordVersion: integer("record_version").notNull(),
+  bindingStatus: varchar("binding_status").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+}, (table) => [
+  check("source_binding_record_version_positive", sql`${table.recordVersion} > 0`),
+  foreignKey({
+    columns: [table.recordId, table.recordVersion],
+    foreignColumns: [jurisprudenceRecordVersions.recordId, jurisprudenceRecordVersions.version],
+  }).onDelete("restrict"),
+]);
+
+export const jurisprudencePublicationDossiers = jurisprudenceInternalSchema.table("jurisprudence_publication_dossiers", {
+  dossierId: varchar("dossier_id").primaryKey(),
+  recordId: varchar("record_id").notNull(),
+  recordVersion: integer("record_version").notNull(),
+  dossierVersion: integer("dossier_version").notNull(),
+  active: boolean("active").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("publication_dossier_record_version_positive", sql`${table.recordVersion} > 0`),
+  check("publication_dossier_version_positive", sql`${table.dossierVersion} > 0`),
+  uniqueIndex("jurisprudence_publication_dossiers_active_idx").on(table.recordId, table.recordVersion).where(sql`active = true`),
+  foreignKey({
+    columns: [table.recordId, table.recordVersion],
+    foreignColumns: [jurisprudenceRecordVersions.recordId, jurisprudenceRecordVersions.version],
+  }).onDelete("restrict"),
+]);
+
+export const jurisprudencePublicationDossierEvents = jurisprudenceInternalSchema.table("jurisprudence_publication_dossier_events", {
+  eventId: varchar("event_id").primaryKey(),
+  dossierId: varchar("dossier_id").notNull(),
+  sequence: integer("sequence").notNull(),
+  eventType: varchar("event_type").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  check("dossier_event_sequence_positive", sql`${table.sequence} > 0`),
+  foreignKey({
+    columns: [table.dossierId],
+    foreignColumns: [jurisprudencePublicationDossiers.dossierId],
+  }).onDelete("restrict"),
+  unique("jurisprudence_pub_dossier_events_seq_unique").on(table.dossierId, table.sequence),
+]);
+
+export const jurisprudencePublicationGovernanceIdempotency = jurisprudenceInternalSchema.table("jurisprudence_publication_governance_idempotency", {
+  idempotencyKey: varchar("idempotency_key").primaryKey(),
+  commandFingerprint: varchar("command_fingerprint").notNull(),
+  resultJson: jsonb("result_json").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jurisprudencePublicationAuthorizationCases = jurisprudenceInternalSchema.table("jurisprudence_publication_authorization_cases", {
+  authorizationCaseId: varchar("authorization_case_id").primaryKey(),
+  recordId: varchar("record_id").notNull(),
+  recordVersion: integer("record_version").notNull(),
+  authorizationVersion: integer("authorization_version").notNull(),
+  status: varchar("status").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+}, (table) => [
+  check("auth_case_record_version_positive", sql`${table.recordVersion} > 0`),
+  check("auth_case_version_positive", sql`${table.authorizationVersion} > 0`),
+  foreignKey({
+    columns: [table.recordId, table.recordVersion],
+    foreignColumns: [jurisprudenceRecordVersions.recordId, jurisprudenceRecordVersions.version],
+  }).onDelete("restrict"),
+]);
+
+export const jurisprudencePublicationAuthorizationEvents = jurisprudenceInternalSchema.table("jurisprudence_publication_authorization_events", {
+  eventId: varchar("event_id").primaryKey(),
+  authorizationCaseId: varchar("authorization_case_id").notNull(),
+  sequence: integer("sequence").notNull(),
+  eventType: varchar("event_type").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  check("auth_event_sequence_positive", sql`${table.sequence} > 0`),
+  foreignKey({
+    columns: [table.authorizationCaseId],
+    foreignColumns: [jurisprudencePublicationAuthorizationCases.authorizationCaseId],
+  }).onDelete("restrict"),
+  unique("jurisprudence_auth_events_seq_unique").on(table.authorizationCaseId, table.sequence),
+]);
+
+export const jurisprudencePublicationAuthorizationIdempotency = jurisprudenceInternalSchema.table("jurisprudence_publication_authorization_idempotency", {
+  idempotencyKey: varchar("idempotency_key").primaryKey(),
+  commandFingerprint: varchar("command_fingerprint").notNull(),
+  resultJson: jsonb("result_json").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jurisprudencePublicProjections = jurisprudenceInternalSchema.table("jurisprudence_public_projections", {
+  projectionId: varchar("projection_id").primaryKey(),
+  executionId: varchar("execution_id").notNull(),
+  recordId: varchar("record_id").notNull(),
+  recordVersion: integer("record_version").notNull(),
+  status: varchar("status").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+}, (table) => [
+  check("public_projection_record_version_positive", sql`${table.recordVersion} > 0`),
+  uniqueIndex("jurisprudence_public_projections_active_idx").on(table.recordId, table.recordVersion).where(sql`status = 'active_internal'`),
+  foreignKey({
+    columns: [table.executionId],
+    foreignColumns: [jurisprudencePublicationExecutions.executionId],
+  }).onDelete("restrict"),
+  foreignKey({
+    columns: [table.recordId, table.recordVersion],
+    foreignColumns: [jurisprudenceRecordVersions.recordId, jurisprudenceRecordVersions.version],
+  }).onDelete("restrict"),
 ]);
