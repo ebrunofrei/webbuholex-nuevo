@@ -35,6 +35,18 @@ function parseJson(value: unknown): unknown {
   return value;
 }
 
+function isPostgresError(
+  error: unknown
+): error is { code: string; constraint_name?: string } {
+  if (typeof error !== "object" || error === null) return false;
+
+  const code = Reflect.get(error, "code");
+  if (typeof code !== "string") return false;
+
+  const constraint = Reflect.get(error, "constraint_name");
+  return constraint === undefined || typeof constraint === "string";
+}
+
 function parseEvent(payloadJson: unknown): JurisprudencePublicationExecutionEvent {
   const parsed = jurisprudencePublicationExecutionEventSchema.safeParse(parseJson(payloadJson));
   if (!parsed.success) throw new JurisprudencePublicationExecutionError("REPOSITORY_UNAVAILABLE", "El evento persistido es inválido.");
@@ -85,9 +97,22 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
       return await operation();
     } catch (error) {
       if (error instanceof JurisprudencePublicationExecutionError) throw error;
-      if (typeof error === 'object' && error !== null && 'code' in error) {
-        if ((error as { code?: string }).code === '23505') {
-          throw new JurisprudencePublicationExecutionError("VERSION_CONFLICT", "Conflicto de versión detectado.");
+      if (isPostgresError(error) && error.code === '23505') {
+        const constraint = error.constraint_name;
+        if (constraint === 'jurisprudence_publication_executions_pkey') {
+          throw new JurisprudencePublicationExecutionError("VERSION_CONFLICT", "Conflicto de versión detectado en ejecución.");
+        }
+        if (constraint === 'jurisprudence_public_projections_pkey') {
+          throw new JurisprudencePublicationExecutionError("VERSION_CONFLICT", "Conflicto de versión detectado en proyección.");
+        }
+        if (constraint === 'jurisprudence_public_projections_active_idx') {
+          throw new JurisprudencePublicationExecutionError("VERSION_CONFLICT", "Ya existe una proyección activa.");
+        }
+        if (constraint === 'jurisprudence_pub_exec_events_seq_unique') {
+          throw new JurisprudencePublicationExecutionError("VERSION_CONFLICT", "Conflicto de secuencia en eventos.");
+        }
+        if (constraint === 'jurisprudence_publication_idempotency_pkey') {
+          throw new JurisprudencePublicationExecutionError("IDEMPOTENCY_CONFLICT", "Conflicto de idempotencia.");
         }
       }
       throw new JurisprudencePublicationExecutionError("REPOSITORY_UNAVAILABLE", "No fue posible completar la persistencia de ejecución.");
@@ -111,7 +136,6 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
         .where(eq(schema.jurisprudencePublicationExecutions.executionId, executionId))
         .limit(1);
 
-      if (result.length === 0) return null;
       if (result.length === 0) return null;
       return mapExecutionFromRow(result[0] as typeof schema.jurisprudencePublicationExecutions.$inferSelect);
     });
@@ -221,6 +245,15 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
         deployed: false,
       });
 
+      await tx.insert(schema.jurisprudencePublicProjections).values({
+        projectionId: commit.projection.projectionId,
+        executionId: commit.projection.executionId,
+        recordId: commit.projection.recordId,
+        recordVersion: commit.projection.recordVersion,
+        status: commit.projection.status,
+        payloadJson: commit.projection,
+      });
+
       await tx.insert(schema.jurisprudencePublicationExecutionEvents).values({
         eventId: commit.event.eventId,
         executionId: commit.event.executionId,
@@ -262,12 +295,24 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
           )
         );
 
-      // In Postgres driver, we can't always check count easily if no returning, but drizzle lets us check row count?
-      // Wait, updateResult could be the raw postgres result. `updateResult.count` or `updateResult.rowCount`?
-      // For drizzle with postgres, `updateResult` is typically the postgres Result object, which has `count` or `rowCount` depending on driver.
-      // Drizzle with `postgres` (postgres.js) returns `postgres.RowList<T[]>`. The `count` property has the rows affected!
       if (updateResult.count !== 1) {
         throw new JurisprudencePublicationExecutionError("VERSION_CONFLICT", "La versión de ejecución cambió.");
+      }
+
+      const projectionUpdateResult = await tx.update(schema.jurisprudencePublicProjections)
+        .set({
+          status: commit.projection.status,
+          payloadJson: commit.projection,
+        })
+        .where(
+          and(
+            eq(schema.jurisprudencePublicProjections.projectionId, commit.projection.projectionId),
+            eq(schema.jurisprudencePublicProjections.executionId, commit.execution.executionId)
+          )
+        );
+
+      if (projectionUpdateResult.count !== 1) {
+        throw new JurisprudencePublicationExecutionError("REPOSITORY_UNAVAILABLE", "La proyección vinculada no existe.");
       }
 
       await tx.insert(schema.jurisprudencePublicationExecutionEvents).values({
