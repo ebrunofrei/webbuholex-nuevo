@@ -4,8 +4,11 @@ import {
   varchar,
   timestamp,
   unique,
-  primaryKey
+  primaryKey,
+  integer,
+  check
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const authorizationSchema = pgSchema("authorization");
 
@@ -31,4 +34,20 @@ export const operatorCapabilities = authorizationSchema.table("operator_capabili
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   primaryKey({ columns: [table.operatorId, table.capability] }),
+]);
+
+export const operatorJurisprudenceRoles = authorizationSchema.table("operator_jurisprudence_roles", {
+  operatorId: uuid("operator_id").notNull().references(() => operators.id, { onDelete: 'restrict' }),
+  role: varchar("role").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.operatorId, table.role] }),
+]);
+
+export const operatorJurisprudenceRoleSets = authorizationSchema.table("operator_jurisprudence_role_sets", {
+  operatorId: uuid("operator_id").notNull().primaryKey().references(() => operators.id, { onDelete: 'restrict' }),
+  version: integer("version").notNull().default(1),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("operator_jurisprudence_role_sets_version_check", sql`${table.version} >= 1`),
 ]);

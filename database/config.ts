@@ -224,6 +224,30 @@ export function readAuthorizationDatabaseConfig(
   };
 }
 
+export type JurisprudenceAuthorizationDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readJurisprudenceAuthorizationDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): JurisprudenceAuthorizationDatabaseRuntimeConfig {
+  const url = source.DATABASE_JURISPRUDENCE_AUTHORIZATION_URL;
+  if (!url) {
+    throw new Error("jurisprudence_authorization_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("jurisprudence_authorization_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}
+
 export type JurisprudencePublicReadDatabaseRuntimeConfig = DatabaseRuntimeConfig;
 
 export function readJurisprudencePublicReadDatabaseConfig(
