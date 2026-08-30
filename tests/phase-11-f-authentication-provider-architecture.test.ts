@@ -435,3 +435,52 @@ describe("sesión, revocación y controles estáticos", () => {
     expect(catalog).toMatch(/publicDownloadAuthorized\s*:\s*false/);
   });
 });
+
+describe("J2-WEB-PROVENANCE-D3-B7-B2-B0 - Identidad de repositorio", () => {
+  it("reenvía providerKind y subjectId a todas las consultas del repositorio de roles", async () => {
+    const { instance, roles, provider } = authenticator();
+
+    const capturedIdentities: Parameters<typeof roles.getRolesForSubject>[0][] = [];
+
+    const originalIsActive = roles.isSubjectActive.bind(roles);
+    const originalGetRoles = roles.getRolesForSubject.bind(roles);
+    const originalGetVersion = roles.getRoleAssignmentVersion.bind(roles);
+
+    roles.isSubjectActive = async (identity) => {
+      capturedIdentities.push(identity);
+      return originalIsActive(identity);
+    };
+
+    roles.getRolesForSubject = async (identity) => {
+      capturedIdentities.push(identity);
+      return originalGetRoles(identity);
+    };
+
+    roles.getRoleAssignmentVersion = async (identity) => {
+      capturedIdentities.push(identity);
+      return originalGetVersion(identity);
+    };
+
+    const result = await instance.authenticate(
+      new Request("https://app.example.invalid/private"),
+    );
+
+    expect(result.status).toBe("authenticated");
+    expect(provider.resolution.status).toBe("verified");
+
+    if (provider.resolution.status !== "verified") {
+      throw new Error("Expected verified external identity resolution");
+    }
+
+    const expectedIdentity = {
+      providerKind: provider.resolution.providerKind,
+      subjectId: provider.resolution.subjectId,
+    };
+
+    expect(capturedIdentities).toHaveLength(3);
+
+    for (const identity of capturedIdentities) {
+      expect(identity).toEqual(expectedIdentity);
+    }
+  });
+});

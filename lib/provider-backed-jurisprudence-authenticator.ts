@@ -74,15 +74,17 @@ export class ProviderBackedJurisprudenceAuthenticator implements JurisprudenceAu
         && expiresAt > now - this.#clockSkewMilliseconds;
       if (!validProviderClaims) return { status: "rejected", reason: "invalid_principal" };
 
+      const identityKey = { providerKind: identity.providerKind, subjectId: identity.subjectId };
+
       const status = await this.#dependencies.provider.getIdentityStatus(identity.subjectId);
       if (status.status === "unavailable") return { status: "unavailable", reason: "infrastructure_error" };
-      if (status.status !== "active" || !await this.#dependencies.roles.isSubjectActive(identity.subjectId)) {
+      if (status.status !== "active" || !await this.#dependencies.roles.isSubjectActive(identityKey)) {
         return { status: "rejected", reason: "invalid_principal" };
       }
 
       const [roles, roleAssignmentVersion] = await Promise.all([
-        this.#dependencies.roles.getRolesForSubject(identity.subjectId),
-        this.#dependencies.roles.getRoleAssignmentVersion(identity.subjectId),
+        this.#dependencies.roles.getRolesForSubject(identityKey),
+        this.#dependencies.roles.getRoleAssignmentVersion(identityKey),
       ]);
       if (roleAssignmentVersion !== identity.roleAssignmentVersion) {
         return { status: "rejected", reason: "invalid_principal" };

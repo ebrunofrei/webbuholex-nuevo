@@ -4,6 +4,7 @@ import type {
   ExternalIdentityStatus,
   JurisprudenceRoleAssignmentRepository,
   SessionRevocationResult,
+  JurisprudenceExternalIdentityKey,
 } from "@/types/authentication-configuration";
 import type { JurisprudenceRole } from "@/types/jurisprudence-security";
 
@@ -51,15 +52,15 @@ export class TestJurisprudenceRoleAssignmentRepository implements JurisprudenceR
     this.roles = roles;
   }
 
-  async getRolesForSubject(): Promise<readonly JurisprudenceRole[]> {
+  async getRolesForSubject(identity: JurisprudenceExternalIdentityKey): Promise<readonly JurisprudenceRole[]> {
     return [...this.roles];
   }
 
-  async isSubjectActive(): Promise<boolean> {
+  async isSubjectActive(identity: JurisprudenceExternalIdentityKey): Promise<boolean> {
     return this.active;
   }
 
-  async getRoleAssignmentVersion(): Promise<number> {
+  async getRoleAssignmentVersion(identity: JurisprudenceExternalIdentityKey): Promise<number> {
     return this.version;
   }
 }

@@ -86,10 +86,15 @@ export interface ExternalIdentityProviderAdapter {
   close(): Promise<void>;
 }
 
+export interface JurisprudenceExternalIdentityKey {
+  readonly providerKind: AuthenticationProviderKind;
+  readonly subjectId: string;
+}
+
 export interface JurisprudenceRoleAssignmentRepository {
-  getRolesForSubject(subjectId: string): Promise<readonly JurisprudenceRole[]>;
-  isSubjectActive(subjectId: string): Promise<boolean>;
-  getRoleAssignmentVersion(subjectId: string): Promise<number>;
+  getRolesForSubject(identity: JurisprudenceExternalIdentityKey): Promise<readonly JurisprudenceRole[]>;
+  isSubjectActive(identity: JurisprudenceExternalIdentityKey): Promise<boolean>;
+  getRoleAssignmentVersion(identity: JurisprudenceExternalIdentityKey): Promise<number>;
 }
 
 export type AuthenticationSecretResolution =
