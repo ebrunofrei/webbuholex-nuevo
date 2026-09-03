@@ -1,4 +1,4 @@
-import type { JurisprudenceAuthenticationLevel, JurisprudenceRole } from "@/types/jurisprudence-security";
+import type { JurisprudenceRole } from "@/types/jurisprudence-security";
 
 export type AuthenticationProviderKind = "auth0_oidc";
 export type AuthenticationEnvironment = "test" | "development" | "staging" | "production";
@@ -59,11 +59,7 @@ export type ExternalIdentityResolution =
       readonly issuer: string;
       readonly audiences: readonly string[];
       readonly issuedAt: string;
-      readonly expiresAt: string;
-      readonly authenticationLevel: Exclude<JurisprudenceAuthenticationLevel, "anonymous" | "test_only">;
-      readonly roleAssignmentVersion: number;
-      readonly signatureVerified: true;
-      readonly claimsValidated: true;
+      readonly expiresAt: string | null;
     };
 
 export type ExternalIdentityStatus =
@@ -80,8 +76,6 @@ export type SessionRevocationResult =
 
 export interface ExternalIdentityProviderAdapter {
   resolveAuthentication(request: Request): Promise<ExternalIdentityResolution>;
-  revokeSession(sessionReference: string): Promise<SessionRevocationResult>;
-  revokeAllSessions(subjectId: string): Promise<SessionRevocationResult>;
   getIdentityStatus(subjectId: string): Promise<ExternalIdentityStatus>;
   close(): Promise<void>;
 }

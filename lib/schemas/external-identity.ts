@@ -21,10 +21,6 @@ export const externalIdentityResolutionSchema = z.discriminatedUnion("status", [
     issuer: z.string().url().max(500),
     audiences: z.array(z.string().trim().min(3).max(500)).min(1).max(10),
     issuedAt: z.string().datetime({ offset: true }),
-    expiresAt: z.string().datetime({ offset: true }),
-    authenticationLevel: z.enum(["authenticated", "strong_authenticated"]),
-    roleAssignmentVersion: z.number().int().positive(),
-    signatureVerified: z.literal(true),
-    claimsValidated: z.literal(true),
+    expiresAt: z.string().datetime({ offset: true }).nullable(),
   }).strict(),
 ]);

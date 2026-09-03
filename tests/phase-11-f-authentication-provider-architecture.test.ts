@@ -63,10 +63,6 @@ function verifiedIdentity(overrides: Partial<Extract<ExternalIdentityResolution,
     audiences: ["https://api.example.invalid"],
     issuedAt: "2026-07-29T17:00:00.000Z",
     expiresAt: "2026-07-29T19:00:00.000Z",
-    authenticationLevel: "authenticated",
-    roleAssignmentVersion: 1,
-    signatureVerified: true,
-    claimsValidated: true,
     ...overrides,
   };
 }
@@ -239,10 +235,27 @@ describe("adaptación neutral del proveedor al principal 11.E", () => {
       },
     });
     if (result.status === "authenticated") {
+      expect(result.principal.authenticationLevel).toBe("authenticated");
       expect(result.principal.expiresAt).toBe("2026-07-29T19:00:00.000Z");
       expect(Object.hasOwn(result.principal, "expiresAt")).toBe(true);
       expect(jurisprudencePrincipalSchema.safeParse(result.principal).success).toBe(true);
       expect(JSON.stringify(result.principal)).not.toMatch(/@|email|DNI|phone|token|cookie/i);
+    }
+  });
+
+  it("sigue evaluando expiresAt no nulo y lo rechaza si expiró", async () => {
+    const expired = verifiedIdentity({ expiresAt: "2026-07-29T17:30:00.000Z" });
+    expect(await authenticator(expired).instance.authenticate(new Request("https://app.example.invalid")))
+      .toEqual({ status: "rejected", reason: "invalid_principal" });
+  });
+
+  it("permite expiresAt nulo sin sintetizar uno falso", async () => {
+    const nullableExpiresAt = verifiedIdentity({ expiresAt: null });
+    const { instance } = authenticator(nullableExpiresAt);
+    const result = await instance.authenticate(new Request("https://app.example.invalid/private"));
+    expect(result.status).toBe("authenticated");
+    if (result.status === "authenticated") {
+      expect(Object.hasOwn(result.principal, "expiresAt")).toBe(false);
     }
   });
 
@@ -275,7 +288,6 @@ describe("adaptación neutral del proveedor al principal 11.E", () => {
   it.each([
     ["issuer incorrecto", verifiedIdentity({ issuer: "https://wrong.example.invalid/" })],
     ["audience incorrecta", verifiedIdentity({ audiences: ["https://wrong.example.invalid"] })],
-    ["identidad expirada", verifiedIdentity({ expiresAt: "2026-07-29T17:30:00.000Z" })],
   ] as const)("rechaza %s", async (_label, resolution) => {
     expect(await authenticator(resolution).instance.authenticate(new Request("https://app.example.invalid")))
       .toEqual({ status: "rejected", reason: "invalid_principal" });
@@ -302,11 +314,15 @@ describe("adaptación neutral del proveedor al principal 11.E", () => {
       .toEqual({ status: "rejected", reason: "invalid_principal" });
   });
 
-  it("rechaza una versión de roles obsoleta", async () => {
+  it("no consume la versión de asignación de roles durante la autenticación", async () => {
     const setup = authenticator();
-    setup.roles.version = 2;
-    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
-      .toEqual({ status: "rejected", reason: "invalid_principal" });
+    let versionCalled = false;
+    setup.roles.getRoleAssignmentVersion = async () => {
+      versionCalled = true;
+      return 1;
+    };
+    await setup.instance.authenticate(new Request("https://app.example.invalid"));
+    expect(versionCalled).toBe(false);
   });
 
   it("traduce caída del proveedor a unavailable sin filtrar errores", async () => {
@@ -341,12 +357,10 @@ describe("sesión, revocación y controles estáticos", () => {
     });
   });
 
-  it("permite revocación individual y global mediante el puerto", async () => {
-    const setup = authenticator();
-    expect(await setup.provider.revokeSession("opaque-session-11f")).toEqual({ status: "revoked" });
-    expect(await setup.provider.revokeAllSessions("opaque-subject-11f")).toEqual({ status: "revoked" });
-    expect(setup.provider.revokedSessions).toEqual(["opaque-session-11f"]);
-    expect(setup.provider.revokedSubjects).toEqual(["opaque-subject-11f"]);
+  it("se han eliminado revokeSession y revokeAllSessions por segregación de contrato", () => {
+    const adapterKeys = Object.getOwnPropertyNames(TestExternalIdentityProviderAdapter.prototype);
+    expect(adapterKeys).not.toContain("revokeSession");
+    expect(adapterKeys).not.toContain("revokeAllSessions");
   });
 
   it("la estrategia CSRF exige SameSite y orígenes exactos", () => {
@@ -477,7 +491,7 @@ describe("J2-WEB-PROVENANCE-D3-B7-B2-B0 - Identidad de repositorio", () => {
       subjectId: provider.resolution.subjectId,
     };
 
-    expect(capturedIdentities).toHaveLength(3);
+    expect(capturedIdentities).toHaveLength(2);
 
     for (const identity of capturedIdentities) {
       expect(identity).toEqual(expectedIdentity);

@@ -66,12 +66,13 @@ export class ProviderBackedJurisprudenceAuthenticator implements JurisprudenceAu
 
       const now = Date.parse(this.#dependencies.now());
       const issuedAt = Date.parse(identity.issuedAt);
-      const expiresAt = Date.parse(identity.expiresAt);
+      const expiresAt = identity.expiresAt !== null ? Date.parse(identity.expiresAt) : null;
+      const validExpiration = expiresAt === null || expiresAt > now - this.#clockSkewMilliseconds;
       const validProviderClaims = identity.providerKind === this.#dependencies.configuration.providerKind
         && identity.issuer === this.#dependencies.configuration.issuer
         && identity.audiences.includes(this.#dependencies.configuration.audience)
         && issuedAt <= now + this.#clockSkewMilliseconds
-        && expiresAt > now - this.#clockSkewMilliseconds;
+        && validExpiration;
       if (!validProviderClaims) return { status: "rejected", reason: "invalid_principal" };
 
       const identityKey = { providerKind: identity.providerKind, subjectId: identity.subjectId };
@@ -82,20 +83,14 @@ export class ProviderBackedJurisprudenceAuthenticator implements JurisprudenceAu
         return { status: "rejected", reason: "invalid_principal" };
       }
 
-      const [roles, roleAssignmentVersion] = await Promise.all([
-        this.#dependencies.roles.getRolesForSubject(identityKey),
-        this.#dependencies.roles.getRoleAssignmentVersion(identityKey),
-      ]);
-      if (roleAssignmentVersion !== identity.roleAssignmentVersion) {
-        return { status: "rejected", reason: "invalid_principal" };
-      }
+      const roles = await this.#dependencies.roles.getRolesForSubject(identityKey);
       const principal = jurisprudencePrincipalSchema.safeParse({
         kind: "human",
         subjectId: identity.subjectId,
         roles: [...roles],
-        authenticationLevel: identity.authenticationLevel,
+        authenticationLevel: "authenticated",
         issuedAt: identity.issuedAt,
-        expiresAt: identity.expiresAt,
+        expiresAt: identity.expiresAt ?? undefined,
         provider: "future_identity_provider",
       });
       if (!principal.success) return { status: "rejected", reason: "invalid_principal" };
