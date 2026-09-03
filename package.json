@@ -17,6 +17,7 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate:staging": "node --env-file-if-exists=.env.local scripts/complaints-migrate-staging.mjs",
+    "db:migrate:jurisprudence:staging": "node --env-file-if-exists=.env.local scripts/jurisprudence-migrate-staging.mjs",
     "db:migrate:production": "node scripts/complaints-migrate-production.mjs"
   },
   "dependencies": {
