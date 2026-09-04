@@ -7,8 +7,8 @@ describe("Migration 0032 Static Security", () => {
   const content = fs.readFileSync(migrationPath, "utf-8").toUpperCase();
 
   it("contains exactly two Jurisprudence authorization tables", () => {
-    expect(content).toContain("CREATE TABLE AUTHORIZATION.OPERATOR_JURISPRUDENCE_ROLES");
-    expect(content).toContain("CREATE TABLE AUTHORIZATION.OPERATOR_JURISPRUDENCE_ROLE_SETS");
+    expect(content).toContain("CREATE TABLE \"AUTHORIZATION\".OPERATOR_JURISPRUDENCE_ROLES");
+    expect(content).toContain("CREATE TABLE \"AUTHORIZATION\".OPERATOR_JURISPRUDENCE_ROLE_SETS");
     const createTableCount = (content.match(/CREATE TABLE/g) || []).length;
     expect(createTableCount).toBe(2);
   });
@@ -26,14 +26,14 @@ describe("Migration 0032 Static Security", () => {
   });
 
   it("grants USAGE on authorization schema", () => {
-    expect(content).toContain("GRANT USAGE ON SCHEMA AUTHORIZATION TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
+    expect(content).toContain("GRANT USAGE ON SCHEMA \"AUTHORIZATION\" TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
   });
 
   it("grants SELECT on exact four tables", () => {
-    expect(content).toContain("GRANT SELECT ON AUTHORIZATION.OPERATORS TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
-    expect(content).toContain("GRANT SELECT ON AUTHORIZATION.EXTERNAL_IDENTITY_BINDINGS TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
-    expect(content).toContain("GRANT SELECT ON AUTHORIZATION.OPERATOR_JURISPRUDENCE_ROLES TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
-    expect(content).toContain("GRANT SELECT ON AUTHORIZATION.OPERATOR_JURISPRUDENCE_ROLE_SETS TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
+    expect(content).toContain("GRANT SELECT ON \"AUTHORIZATION\".OPERATORS TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
+    expect(content).toContain("GRANT SELECT ON \"AUTHORIZATION\".EXTERNAL_IDENTITY_BINDINGS TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
+    expect(content).toContain("GRANT SELECT ON \"AUTHORIZATION\".OPERATOR_JURISPRUDENCE_ROLES TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
+    expect(content).toContain("GRANT SELECT ON \"AUTHORIZATION\".OPERATOR_JURISPRUDENCE_ROLE_SETS TO JURISPRUDENCE_AUTHORIZATION_RUNTIME;");
 
     const grantSelectCount = (content.match(/GRANT SELECT ON/g) || []).length;
     expect(grantSelectCount).toBe(4);
@@ -47,7 +47,7 @@ describe("Migration 0032 Static Security", () => {
 
   it("contains NO password and NO real identity seed", () => {
     expect(content).not.toContain("PASSWORD");
-    expect(content).not.toContain("INSERT INTO AUTHORIZATION.EXTERNAL_IDENTITY_BINDINGS");
+    expect(content).not.toContain("INSERT INTO \"AUTHORIZATION\".EXTERNAL_IDENTITY_BINDINGS");
   });
 
   it("contains CHECK version >= 1 and ON DELETE RESTRICT", () => {
@@ -58,5 +58,10 @@ describe("Migration 0032 Static Security", () => {
   it("contains NO RLS statements", () => {
     expect(content).not.toContain("ROW LEVEL SECURITY");
     expect(content).not.toContain("CREATE POLICY");
+  });
+  it("contains ZERO unquoted authorization schema references", () => {
+    const unquotedCount1 = (content.match(/(?<!")AUTHORIZATION\./g) || []).length;
+    const unquotedCount2 = (content.match(/SCHEMA (?!")AUTHORIZATION/g) || []).length;
+    expect(unquotedCount1 + unquotedCount2).toBe(0);
   });
 });
