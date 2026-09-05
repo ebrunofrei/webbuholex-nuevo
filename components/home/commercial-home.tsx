@@ -29,7 +29,7 @@ export function CommercialHome() {
           <p className={styles.owlSlogan}>Derecho, tecnología y criterio profesional en un solo espacio.</p>
         </div>
 
-        <Link className={`${styles.choice} ${styles.intelligentChoice}`} href="/asistente/">
+        <Link className={`${styles.choice} ${styles.intelligentChoice}`} href="/app">
           <div className={styles.choiceContent}>
             <p>INNOVACIÓN INTERNA</p>
             <h2>Espacio IA legal</h2>

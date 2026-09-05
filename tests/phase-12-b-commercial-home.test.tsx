@@ -31,9 +31,9 @@ describe("CommercialHome - Arquitectura de Compuerta 12.B.3", () => {
     const exploreLink = screen.getByRole("link", { name: /Explorar/i });
     expect(exploreLink).toHaveAttribute("href", expect.stringMatching(/^\/explorar\/?$/));
 
-    // 5. “Espacio inteligente” enlaza a /asistente/
+    // 5. “Espacio inteligente” enlaza a /app
     const aiLink = screen.getByRole("link", { name: /Espacio IA legal/i });
-    expect(aiLink).toHaveAttribute("href", expect.stringMatching(/^\/asistente\/?$/));
+    expect(aiLink).toHaveAttribute("href", expect.stringMatching(/^\/app\/?$/));
   });
 
   it("ausencia de CTA comerciales adicionales y rutas prohibidas", () => {
@@ -52,8 +52,8 @@ describe("CommercialHome - Arquitectura de Compuerta 12.B.3", () => {
     // 9. No existe enlace a /iniciar-sesion/
     expect(container.querySelector('a[href*="/iniciar-sesion"]')).toBeNull();
 
-    // 10. No existe enlace a /app/
-    expect(container.querySelector('a[href*="/app"]')).toBeNull();
+    // 10. No existe enlace a /asistente/
+    expect(container.querySelector('a[href*="/asistente"]')).toBeNull();
   });
 
   it("búho decorativo, accesibilidad y estado “en desarrollo”", () => {
