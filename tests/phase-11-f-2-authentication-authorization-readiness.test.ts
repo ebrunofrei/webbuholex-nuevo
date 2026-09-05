@@ -224,6 +224,7 @@ describe("barreras estáticas y preservación del proyecto", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
+    "app/api/diagnostic/auth-smoke/route.ts",
     "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
 ];
