@@ -2,6 +2,7 @@ import { z } from "zod";
 import { authenticationProviderKindSchema } from "@/lib/schemas/authentication-configuration";
 
 const opaqueReferenceSchema = z.string().min(8).max(200).regex(/^[A-Za-z0-9._:-]+$/);
+const externalSubjectSchema = z.string().min(8).max(200).regex(/^[A-Za-z0-9._:|-]+$/);
 
 export const externalIdentityResolutionSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("anonymous") }).strict(),
@@ -16,7 +17,7 @@ export const externalIdentityResolutionSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("verified"),
     providerKind: authenticationProviderKindSchema,
-    subjectId: opaqueReferenceSchema,
+    subjectId: externalSubjectSchema,
     sessionReference: opaqueReferenceSchema,
     issuer: z.string().url().max(500),
     audiences: z.array(z.string().trim().min(3).max(500)).min(1).max(10),

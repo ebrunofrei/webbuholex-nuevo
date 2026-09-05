@@ -14,6 +14,7 @@ import {
   authenticationSecretReferenceSchema,
 } from "@/lib/schemas/authentication-configuration";
 import { jurisprudencePrincipalSchema } from "@/lib/schemas/jurisprudence-security";
+import { externalIdentityResolutionSchema } from "@/lib/schemas/external-identity";
 import {
   TestExternalIdentityProviderAdapter,
   TestJurisprudenceRoleAssignmentRepository,
@@ -81,6 +82,39 @@ function authenticator(
   });
   return { instance, provider, roles };
 }
+
+describe("externalIdentityResolutionSchema y validación de sujeto externo", () => {
+  it("acepta auth0|12345 y google-oauth2|12345", () => {
+    const valid = verifiedIdentity({ subjectId: "auth0|12345" });
+    expect(externalIdentityResolutionSchema.safeParse(valid).success).toBe(true);
+    const valid2 = verifiedIdentity({ subjectId: "google-oauth2|12345" });
+    expect(externalIdentityResolutionSchema.safeParse(valid2).success).toBe(true);
+    const valid3 = verifiedIdentity({ subjectId: "opaque-subject-11f" });
+    expect(externalIdentityResolutionSchema.safeParse(valid3).success).toBe(true);
+  });
+
+  it("rechaza subjectId inválidos", () => {
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "" })).success).toBe(false);
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "   " })).success).toBe(false);
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "auth0|123\n45" })).success).toBe(false);
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "auth0|123\r45" })).success).toBe(false);
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "auth0|123\t45" })).success).toBe(false);
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "auth0|123 45" })).success).toBe(false);
+  });
+
+  it("rechaza subjectId que excede la longitud máxima (200 caracteres)", () => {
+    const tooLong = "auth0|" + "a".repeat(195); // 6 + 195 = 201
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: tooLong })).success).toBe(false);
+    const exactlyMax = "auth0|" + "a".repeat(194); // 6 + 194 = 200
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: exactlyMax })).success).toBe(true);
+  });
+
+  it("rechaza subjectId con caracteres prohibidos distintos a pipe", () => {
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "auth0/12345" })).success).toBe(false);
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "auth0?12345" })).success).toBe(false);
+    expect(externalIdentityResolutionSchema.safeParse(verifiedIdentity({ subjectId: "person@example" })).success).toBe(false);
+  });
+});
 
 describe("configuración neutral de autenticación", () => {
   it("representa configuración ausente sin simular identidad", () => {
@@ -249,7 +283,19 @@ describe("adaptación neutral del proveedor al principal 11.E", () => {
       .toEqual({ status: "rejected", reason: "invalid_principal" });
   });
 
-  it("permite expiresAt nulo sin sintetizar uno falso", async () => {
+  it("acepta una identidad de proveedor con prefijo y pipe (ej. auth0|12345) sin rechazarla por schema", async () => {
+    const resolution = verifiedIdentity({ subjectId: "auth0|12345" });
+    const { instance } = authenticator(resolution);
+    const result = await instance.authenticate(new Request("https://app.example.invalid/private"));
+    expect(result).toMatchObject({
+      status: "authenticated",
+      principal: {
+        subjectId: "auth0|12345",
+      },
+    });
+  });
+
+  it("acepta expiresAt nulo sin sintetizar uno falso", async () => {
     const nullableExpiresAt = verifiedIdentity({ expiresAt: null });
     const { instance } = authenticator(nullableExpiresAt);
     const result = await instance.authenticate(new Request("https://app.example.invalid/private"));

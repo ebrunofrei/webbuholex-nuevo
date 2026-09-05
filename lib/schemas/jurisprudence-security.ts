@@ -44,7 +44,7 @@ export const jurisprudenceSecurityOperationSchema = z.enum([
   "close",
 ]);
 
-const opaqueSubjectSchema = z.string().min(8).max(160).regex(/^[A-Za-z0-9._:-]+$/);
+const opaqueSubjectSchema = z.string().min(8).max(160).regex(/^[A-Za-z0-9._:|-]+$/);
 
 export const jurisprudencePrincipalSchema = z.object({
   kind: jurisprudencePrincipalKindSchema,

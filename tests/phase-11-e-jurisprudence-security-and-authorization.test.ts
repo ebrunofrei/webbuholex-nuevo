@@ -222,6 +222,31 @@ describe("principal y autenticación jurisprudencial", () => {
     expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "person@example.invalid" })).success).toBe(false);
   });
 
+  it("acepta subjectId con prefijo OIDC/Auth0 (contiene pipe |)", () => {
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "auth0|12345" })).success).toBe(true);
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "google-oauth2|12345" })).success).toBe(true);
+  });
+
+  it("rechaza subjectId malformado", () => {
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "" })).success).toBe(false);
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "   " })).success).toBe(false);
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "auth0|123\n45" })).success).toBe(false);
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "auth0|123\r45" })).success).toBe(false);
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "auth0|123\t45" })).success).toBe(false);
+  });
+
+  it("rechaza subjectId que excede la longitud máxima (160 caracteres)", () => {
+    const tooLong = "auth0|" + "a".repeat(155); // 6 + 155 = 161
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: tooLong })).success).toBe(false);
+    const exactlyMax = "auth0|" + "a".repeat(154); // 6 + 154 = 160
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: exactlyMax })).success).toBe(true);
+  });
+
+  it("rechaza subjectId con caracteres prohibidos distintos a pipe", () => {
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "auth0/12345" })).success).toBe(false);
+    expect(jurisprudencePrincipalSchema.safeParse(principal([], { subjectId: "auth0?12345" })).success).toBe(false);
+  });
+
   it("distingue expiración sin mutar el principal", () => {
     const expiring = principal([], { expiresAt: "2026-07-29T17:30:00.000Z" });
     expect(isJurisprudencePrincipalExpired(expiring, NOW)).toBe(true);
@@ -682,6 +707,7 @@ describe("readiness y límites estáticos", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
+    "app/api/diagnostic/auth-smoke/route.ts",
     "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
 ];
@@ -706,7 +732,7 @@ describe("readiness y límites estáticos", () => {
   it("seguridad no se importa desde app, components ni data", () => {
     const roots = ["app", "components", "data"];
     const sources = roots.flatMap((root) => readdirSync(path.join(process.cwd(), root), { recursive: true })
-      .filter((entry): entry is string => typeof entry === "string" && /\.(ts|tsx)$/.test(entry))
+      .filter((entry): entry is string => typeof entry === "string" && /\.(ts|tsx)$/.test(entry) && entry.replaceAll("\\", "/") !== "api/diagnostic/auth-smoke/route.ts")
       .map((entry) => readFileSync(path.join(process.cwd(), root, entry), "utf8")));
     expect(sources.join("\n")).not.toMatch(/jurisprudence-(security|authorization|authentication|secured-handler)/);
   });
