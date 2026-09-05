@@ -445,7 +445,6 @@ describe("sesión, revocación y controles estáticos", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
-    "app/api/diagnostic/auth-smoke/route.ts",
     "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
 ];
@@ -470,7 +469,7 @@ describe("sesión, revocación y controles estáticos", () => {
   it("no importa contratos de autenticación desde UI ni barrels públicos", () => {
     const roots = ["app", "components", "data"];
     const source = roots.flatMap((root) => readdirSync(path.join(process.cwd(), root), { recursive: true })
-      .filter((entry): entry is string => typeof entry === "string" && /\.(ts|tsx)$/.test(entry) && entry.replaceAll("\\", "/") !== "api/diagnostic/auth-smoke/route.ts")
+      .filter((entry): entry is string => typeof entry === "string" && /\.(ts|tsx)$/.test(entry))
       .map((entry) => readFileSync(path.join(process.cwd(), root, entry), "utf8"))).join("\n");
     expect(source).not.toMatch(/authentication-configuration|provider-backed-jurisprudence-authenticator/);
   });

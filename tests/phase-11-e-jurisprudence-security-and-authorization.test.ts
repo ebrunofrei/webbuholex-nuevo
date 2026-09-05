@@ -707,7 +707,6 @@ describe("readiness y límites estáticos", () => {
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
     "app/api/complaints/route.ts",
-    "app/api/diagnostic/auth-smoke/route.ts",
     "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
 ];
@@ -732,7 +731,7 @@ describe("readiness y límites estáticos", () => {
   it("seguridad no se importa desde app, components ni data", () => {
     const roots = ["app", "components", "data"];
     const sources = roots.flatMap((root) => readdirSync(path.join(process.cwd(), root), { recursive: true })
-      .filter((entry): entry is string => typeof entry === "string" && /\.(ts|tsx)$/.test(entry) && entry.replaceAll("\\", "/") !== "api/diagnostic/auth-smoke/route.ts")
+      .filter((entry): entry is string => typeof entry === "string" && /\.(ts|tsx)$/.test(entry))
       .map((entry) => readFileSync(path.join(process.cwd(), root, entry), "utf8")));
     expect(sources.join("\n")).not.toMatch(/jurisprudence-(security|authorization|authentication|secured-handler)/);
   });
