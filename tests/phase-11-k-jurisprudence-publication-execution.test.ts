@@ -328,6 +328,7 @@ describe("barreras estáticas y preservación", () => {
     "app/api/admin/complaints/[complaintId]/close/route.ts",
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
+    "app/api/admin/jurisprudence/publication/execution/route.ts",
     "app/api/complaints/route.ts",
     "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
@@ -339,6 +340,13 @@ describe("barreras estáticas y preservación", () => {
       appEntries.some((entry) => {
         const normalized = entry.replaceAll("\\", "/");
         if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        const exactExemptions = [
+          "api/admin/jurisprudence",
+          "api/admin/jurisprudence/publication",
+          "api/admin/jurisprudence/publication/execution",
+          "api/admin/jurisprudence/publication/execution/route.ts"
+        ];
+        if (exactExemptions.includes(normalized)) return false;
         return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
       })
     ).toBe(false);

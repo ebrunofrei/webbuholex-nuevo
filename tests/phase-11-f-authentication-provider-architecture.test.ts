@@ -444,6 +444,7 @@ describe("sesión, revocación y controles estáticos", () => {
     "app/api/admin/complaints/[complaintId]/close/route.ts",
     "app/api/admin/complaints/[complaintId]/request-information/route.ts",
     "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
+    "app/api/admin/jurisprudence/publication/execution/route.ts",
     "app/api/complaints/route.ts",
     "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
@@ -454,11 +455,18 @@ describe("sesión, revocación y controles estáticos", () => {
       .filter((entry) => path.basename(entry) === "route.ts")
       .map((entry) => path.relative(process.cwd(), path.join(process.cwd(), "app", entry)).split(path.sep).join("/"));
     expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
-    // autenticación no crea rutas API propias de jurisprudencia
+    // the only authorized permanent Jurisprudence application route is the secured publication execution route, plus the already-existing internal cron host where applicable.
     expect(
       entries.some((entry) => {
         const normalized = entry.replaceAll("\\", "/");
         if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
+        const exactExemptions = [
+          "api/admin/jurisprudence",
+          "api/admin/jurisprudence/publication",
+          "api/admin/jurisprudence/publication/execution",
+          "api/admin/jurisprudence/publication/execution/route.ts"
+        ];
+        if (exactExemptions.includes(normalized)) return false;
         return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
       })
     ).toBe(false);
