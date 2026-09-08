@@ -7,9 +7,13 @@ import * as authPolicyModule from "@/lib/jurisprudence-authorization-policy";
 import * as authConfigModule from "@/lib/authentication-configuration";
 import { JurisprudencePublicationExecutionError } from "@/lib/jurisprudence-publication-execution-repository";
 import { randomUUID } from "node:crypto";
-import type { JurisprudencePrincipal } from "@/types/jurisprudence-security";
-import type { JurisprudencePublicationExecutionView } from "@/types/jurisprudence-publication-execution";
+import type { JurisprudencePrincipal, JurisprudenceAuthenticator } from "@/types/jurisprudence-security";
+import type { JurisprudencePublicationExecutionView, JurisprudencePublicationExecutionService } from "@/types/jurisprudence-publication-execution";
+import type { JurisprudenceAuthenticationRuntimeResult } from "@/lib/jurisprudence/jurisprudence-authentication-runtime";
+import type { JurisprudencePublicationExecutionRuntimeContainer } from "@/lib/jurisprudence/jurisprudence-publication-execution-runtime";
+import type { AuthenticationConfiguration } from "@/types/authentication-configuration";
 
+type NodeRequestInit = RequestInit & { duplex?: "half" };
 vi.mock("@/lib/jurisprudence/jurisprudence-publication-execution-config", () => ({
   isJurisprudencePublicationExecutionEnabled: vi.fn()
 }));
@@ -74,11 +78,11 @@ describe("Jurisprudence Publication Execution HTTP Handler", () => {
       status: "configured",
       runtime: {
         authenticator: {
-          authenticate: mockAuthenticate
-        } as any,
-        close: mockAuthClose
+          authenticate: mockAuthenticate as unknown as JurisprudenceAuthenticator["authenticate"]
+        },
+        close: mockAuthClose as unknown as () => Promise<void>
       }
-    } as any);
+    } as JurisprudenceAuthenticationRuntimeResult);
 
     mockExecutePublication = vi.fn().mockResolvedValue({
       publicationExecuted: true,
@@ -88,10 +92,10 @@ describe("Jurisprudence Publication Execution HTTP Handler", () => {
 
     vi.mocked(executionRuntimeModule.createJurisprudencePublicationExecutionRuntime).mockReturnValue({
       service: {
-        executePublication: mockExecutePublication
-      } as any,
-      close: mockExecutionClose
-    } as any);
+        executePublication: mockExecutePublication as unknown as JurisprudencePublicationExecutionService["executePublication"]
+      },
+      close: mockExecutionClose as unknown as () => Promise<void>
+    } as JurisprudencePublicationExecutionRuntimeContainer);
 
     vi.mocked(authPolicyModule.validateJurisprudencePrincipal).mockReturnValue(true);
     vi.mocked(authPolicyModule.isJurisprudencePrincipalExpired).mockReturnValue(false);
@@ -100,7 +104,7 @@ describe("Jurisprudence Publication Execution HTTP Handler", () => {
     vi.mocked(authConfigModule.loadAuthenticationConfiguration).mockReturnValue({
       status: "configured_for_test",
       allowedOrigins: ["https://example.com", "https://admin.example.com"]
-    } as any);
+    } as unknown as AuthenticationConfiguration);
   });
 
   const validPayload = {
@@ -112,7 +116,7 @@ describe("Jurisprudence Publication Execution HTTP Handler", () => {
     idempotencyKey: "idem-123"
   };
 
-  const createRequest = (payload: any = validPayload, headers: Record<string, string> = {}) => {
+  const createRequest = (payload: unknown = validPayload, headers: Record<string, string> = {}) => {
     const reqHeaders = new Headers(headers);
     if (!reqHeaders.has("content-type")) {
       reqHeaders.set("content-type", "application/json");
@@ -126,7 +130,7 @@ describe("Jurisprudence Publication Execution HTTP Handler", () => {
         headers: reqHeaders,
         body: payload,
         duplex: "half"
-      } as any);
+      } as NodeRequestInit);
     }
     const bodyStr = payload ? JSON.stringify(payload) : "";
     if (payload && !reqHeaders.has("content-length")) {
@@ -140,7 +144,7 @@ describe("Jurisprudence Publication Execution HTTP Handler", () => {
   };
 
   it("1. auth runtime not configured returns 503", async () => {
-    vi.mocked(authRuntimeModule.createJurisprudenceAuthenticationRuntime).mockReturnValue({ status: "not_configured" } as any);
+    vi.mocked(authRuntimeModule.createJurisprudenceAuthenticationRuntime).mockReturnValue({ status: "not_configured" } as JurisprudenceAuthenticationRuntimeResult);
     const response = await handleJurisprudencePublicationExecutionPost(createRequest());
     expect(response.status).toBe(503);
     const data = await response.json();

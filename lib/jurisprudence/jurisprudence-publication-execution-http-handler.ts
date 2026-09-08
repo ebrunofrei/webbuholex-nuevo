@@ -117,8 +117,8 @@ export async function handleJurisprudencePublicationExecutionPost(
   let payload;
   try {
     payload = await readLimitedJurisprudenceJson(request.clone(), MAX_BODY_BYTES);
-  } catch (err: any) {
-    if (err.status === 413) {
+  } catch (err: unknown) {
+    if (typeof err === "object" && err !== null && "status" in err && (err as { status?: unknown }).status === 413) {
       return NextResponse.json({ success: false, error: { code: "PAYLOAD_TOO_LARGE" } }, { status: 413, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
     }
     return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
