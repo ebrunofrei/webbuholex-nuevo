@@ -41,6 +41,7 @@ export class Auth0ManagementApiIdentityStatusClient {
     try {
       token = await this.getAccessToken();
     } catch {
+      console.error("jurisprudence_auth_management_token_unavailable");
       return { status: "unavailable" };
     }
 
@@ -60,6 +61,7 @@ export class Auth0ManagementApiIdentityStatusClient {
         signal: controller.signal,
       });
     } catch {
+      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     } finally {
       clearTimeout(timeoutId);
@@ -67,6 +69,7 @@ export class Auth0ManagementApiIdentityStatusClient {
 
     if (response.status === 401 || response.status === 403) {
       this.cachedToken = null;
+      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
@@ -75,6 +78,7 @@ export class Auth0ManagementApiIdentityStatusClient {
     }
 
     if (response.status !== 200) {
+      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
@@ -82,16 +86,19 @@ export class Auth0ManagementApiIdentityStatusClient {
     try {
       data = await response.json();
     } catch {
+      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if (typeof data !== "object" || data === null || Array.isArray(data)) {
+      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if ("blocked" in data) {
       const blocked = data.blocked;
       if (blocked !== undefined && typeof blocked !== "boolean") {
+        console.error("jurisprudence_auth_management_lookup_unavailable");
         return { status: "unavailable" };
       }
       if (blocked === true) {

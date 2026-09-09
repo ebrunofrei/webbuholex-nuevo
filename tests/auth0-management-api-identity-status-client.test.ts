@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { Auth0ManagementApiIdentityStatusClient } from "../lib/auth0-management-api-identity-status-client";
 import type { Auth0ManagementApiRuntimeConfig } from "../types/auth0-management-api-configuration";
 import type { ExternalIdentityStatus } from "../types/authentication-configuration";
@@ -14,15 +14,21 @@ const config: Auth0ManagementApiRuntimeConfig = {
 describe("Auth0ManagementApiIdentityStatusClient", () => {
   let fetchMock: Mock<typeof globalThis.fetch>;
   let nowMock: Mock<() => number>;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let client: Auth0ManagementApiIdentityStatusClient;
 
   beforeEach(() => {
     fetchMock = vi.fn();
     nowMock = vi.fn(() => 1000000); // stable time
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     client = new Auth0ManagementApiIdentityStatusClient(config, {
       fetch: fetchMock,
       now: nowMock,
     });
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
   });
 
   const validTokenResponse = {
@@ -95,9 +101,13 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
   });
 
   it("9: token network error => unavailable", async () => {
-    fetchMock.mockRejectedValueOnce(new Error("Network failed"));
+    fetchMock.mockRejectedValueOnce(new Error("Network failed with secret XYZ"));
     const result = await client.getIdentityStatus("sub|123");
     expect(result).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith("jurisprudence_auth_management_token_unavailable");
+    expect(consoleErrorSpy.mock.calls[0].length).toBe(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_management_lookup_unavailable");
   });
 
   it("10: token timeout => unavailable", async () => {
@@ -208,18 +218,27 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
       json: async () => ({ blocked: "yes" }),
     } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith("jurisprudence_auth_management_lookup_unavailable");
+    expect(consoleErrorSpy.mock.calls[0].length).toBe(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_management_token_unavailable");
   });
 
   it("23: 404 => not_found", async () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 404 } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "not_found" });
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
   it("24: 401 => unavailable", async () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401 } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith("jurisprudence_auth_management_lookup_unavailable");
+    expect(consoleErrorSpy.mock.calls[0].length).toBe(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_management_token_unavailable");
   });
 
   it("25: 403 => unavailable", async () => {
@@ -244,6 +263,10 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockRejectedValueOnce(new Error("network failure"));
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith("jurisprudence_auth_management_lookup_unavailable");
+    expect(consoleErrorSpy.mock.calls[0].length).toBe(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_management_token_unavailable");
   });
 
   it("29: timeout => unavailable", async () => {
@@ -349,10 +372,8 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
   });
 
   it("failed single flight token request clears in-flight state", async () => {
-    let resolveToken: (v: Response) => void;
     let rejectToken: (r: unknown) => void;
-    const tokenPromise = new Promise<Response>((res, rej) => {
-      resolveToken = res;
+    const tokenPromise = new Promise<Response>((_, rej) => {
       rejectToken = rej;
     });
     fetchMock.mockReturnValueOnce(tokenPromise);
