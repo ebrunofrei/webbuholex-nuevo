@@ -12,24 +12,50 @@ interface CachedToken {
   readonly expiresAt: number;
 }
 
+interface CachedStatus {
+  readonly status: ExternalIdentityStatus;
+  readonly expiresAt: number;
+}
+
+export interface Auth0ManagementCacheStore {
+  readonly tokens: Map<string, CachedToken>;
+  readonly tokenPromises: Map<string, Promise<string>>;
+  readonly statuses: Map<string, CachedStatus>;
+  readonly statusPromises: Map<string, Promise<ExternalIdentityStatus>>;
+}
+
+const defaultCacheStore: Auth0ManagementCacheStore = {
+  tokens: new Map(),
+  tokenPromises: new Map(),
+  statuses: new Map(),
+  statusPromises: new Map(),
+};
+
+const MAX_CACHE_SIZE = 1000;
+const ACTIVE_TTL_MS = 15000;
+const SUSPENDED_TTL_MS = 30000;
+const NOT_FOUND_TTL_MS = 30000;
+
 export class Auth0ManagementApiIdentityStatusClient {
   private readonly config: Auth0ManagementApiRuntimeConfig;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly nowImpl: () => number;
-
-  private cachedToken: CachedToken | null = null;
-  private tokenRequestPromise: Promise<string> | null = null;
+  private readonly cacheStore: Auth0ManagementCacheStore;
+  private readonly tokenCacheKey: string;
 
   constructor(
     config: Auth0ManagementApiRuntimeConfig,
     options?: {
       fetch?: typeof globalThis.fetch;
       now?: () => number;
+      cacheStore?: Auth0ManagementCacheStore;
     }
   ) {
     this.config = config;
     this.fetchImpl = options?.fetch ?? globalThis.fetch.bind(globalThis);
     this.nowImpl = options?.now ?? Date.now;
+    this.cacheStore = options?.cacheStore ?? defaultCacheStore;
+    this.tokenCacheKey = JSON.stringify([config.domain, config.clientId, config.audience]);
   }
 
   async getIdentityStatus(subjectId: string): Promise<ExternalIdentityStatus> {
@@ -37,6 +63,34 @@ export class Auth0ManagementApiIdentityStatusClient {
       return { status: "unavailable" };
     }
 
+    const identityCacheKey = JSON.stringify([this.tokenCacheKey, "auth0", subjectId]);
+    const now = this.nowImpl();
+
+    const cached = this.cacheStore.statuses.get(identityCacheKey);
+    if (cached) {
+      if (cached.expiresAt > now) {
+        return cached.status;
+      }
+      this.cacheStore.statuses.delete(identityCacheKey);
+    }
+
+    const existingPromise = this.cacheStore.statusPromises.get(identityCacheKey);
+    if (existingPromise) {
+      return existingPromise;
+    }
+
+    const requestPromise = this.fetchAndCacheIdentityStatus(subjectId, identityCacheKey);
+    this.cacheStore.statusPromises.set(identityCacheKey, requestPromise);
+
+    try {
+      const result = await requestPromise;
+      return result;
+    } finally {
+      this.cacheStore.statusPromises.delete(identityCacheKey);
+    }
+  }
+
+  private async fetchAndCacheIdentityStatus(subjectId: string, cacheKey: string): Promise<ExternalIdentityStatus> {
     let token: string;
     try {
       token = await this.getAccessToken();
@@ -70,19 +124,20 @@ export class Auth0ManagementApiIdentityStatusClient {
 
     if (response.status === 401) {
       console.error("jurisprudence_auth_management_lookup_401");
-      this.cachedToken = null;
+      this.cacheStore.tokens.delete(this.tokenCacheKey);
       console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if (response.status === 403) {
       console.error("jurisprudence_auth_management_lookup_403");
-      this.cachedToken = null;
+      this.cacheStore.tokens.delete(this.tokenCacheKey);
       console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if (response.status === 404) {
+      this.setIdentityStatusCache(cacheKey, { status: "not_found" }, NOT_FOUND_TTL_MS);
       return { status: "not_found" };
     }
 
@@ -127,30 +182,52 @@ export class Auth0ManagementApiIdentityStatusClient {
         return { status: "unavailable" };
       }
       if (blocked === true) {
+        this.setIdentityStatusCache(cacheKey, { status: "suspended" }, SUSPENDED_TTL_MS);
         return { status: "suspended" };
       }
     }
 
+    this.setIdentityStatusCache(cacheKey, { status: "active" }, ACTIVE_TTL_MS);
     return { status: "active" };
+  }
+
+  private setIdentityStatusCache(key: string, status: ExternalIdentityStatus, ttl: number): void {
+    const now = this.nowImpl();
+    for (const [k, v] of this.cacheStore.statuses.entries()) {
+      if (v.expiresAt <= now) {
+        this.cacheStore.statuses.delete(k);
+      }
+    }
+    if (this.cacheStore.statuses.size >= MAX_CACHE_SIZE) {
+      const firstKey = this.cacheStore.statuses.keys().next().value;
+      if (firstKey !== undefined) this.cacheStore.statuses.delete(firstKey);
+    }
+    this.cacheStore.statuses.set(key, {
+      status,
+      expiresAt: now + ttl,
+    });
   }
 
   private async getAccessToken(): Promise<string> {
     const now = this.nowImpl();
-    if (this.cachedToken && this.cachedToken.expiresAt > now + TOKEN_EXPIRY_SAFETY_MARGIN_MS) {
-      return this.cachedToken.accessToken;
+    const cachedToken = this.cacheStore.tokens.get(this.tokenCacheKey);
+    if (cachedToken && cachedToken.expiresAt > now + TOKEN_EXPIRY_SAFETY_MARGIN_MS) {
+      return cachedToken.accessToken;
     }
 
-    if (this.tokenRequestPromise) {
-      return this.tokenRequestPromise;
+    const tokenRequestPromise = this.cacheStore.tokenPromises.get(this.tokenCacheKey);
+    if (tokenRequestPromise) {
+      return tokenRequestPromise;
     }
 
-    this.tokenRequestPromise = this.requestNewAccessToken();
+    const newPromise = this.requestNewAccessToken();
+    this.cacheStore.tokenPromises.set(this.tokenCacheKey, newPromise);
 
     try {
-      const token = await this.tokenRequestPromise;
+      const token = await newPromise;
       return token;
     } finally {
-      this.tokenRequestPromise = null;
+      this.cacheStore.tokenPromises.delete(this.tokenCacheKey);
     }
   }
 
@@ -174,7 +251,7 @@ export class Auth0ManagementApiIdentityStatusClient {
         }),
         signal: controller.signal,
       });
-    } catch (e) {
+    } catch {
       throw new Error("Token network error");
     } finally {
       clearTimeout(timeoutId);
@@ -225,10 +302,10 @@ export class Auth0ManagementApiIdentityStatusClient {
       throw new Error("Invalid absolute expiry");
     }
 
-    this.cachedToken = {
+    this.cacheStore.tokens.set(this.tokenCacheKey, {
       accessToken: access_token,
       expiresAt: expiresAt,
-    };
+    });
 
     return access_token;
   }

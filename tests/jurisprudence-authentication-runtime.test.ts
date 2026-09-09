@@ -113,11 +113,11 @@ describe("JurisprudenceAuthenticationRuntime", () => {
       expect(authResult.principal.roles.length).toBeGreaterThan(0);
     }
 
-    // Status client reuse test (cache should hit, so no extra token fetch)
+    // Status client reuse test (cache should hit, so no extra token fetch and no extra user status fetch)
     const initialFetchCount = fetchCalls;
     await result.runtime.authenticator.authenticate(request);
-    // 1 user status fetch, 0 token fetch
-    expect(fetchCalls).toBe(initialFetchCount + 1);
+    // 0 user status fetch, 0 token fetch
+    expect(fetchCalls).toBe(initialFetchCount);
 
     // Close idempotency
     await result.runtime.close();
