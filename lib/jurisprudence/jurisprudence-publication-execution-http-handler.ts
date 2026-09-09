@@ -47,10 +47,17 @@ export async function handleJurisprudencePublicationExecutionPost(
   try {
     const authResult = await authRuntimeInit.runtime.authenticator.authenticate(request);
     if (authResult.status !== "authenticated") {
+      // TEMPORARY R11-B3-A2 DIAGNOSTIC — REMOVE AFTER LIVE CAUSE IDENTIFIED
+      console.error("jurisprudence_publication_auth_rejected", {
+        status: authResult.status,
+        reason: "reason" in authResult ? authResult.reason : undefined
+      });
       return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED" } }, { status: 401, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
     }
     principal = authResult.principal;
   } catch (err) {
+    // TEMPORARY R11-B3-A2 DIAGNOSTIC — REMOVE AFTER LIVE CAUSE IDENTIFIED
+    console.error("jurisprudence_publication_auth_exception");
     return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED" } }, { status: 401, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
   } finally {
     try {
