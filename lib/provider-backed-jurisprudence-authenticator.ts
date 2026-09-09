@@ -78,12 +78,33 @@ export class ProviderBackedJurisprudenceAuthenticator implements JurisprudenceAu
       const identityKey = { providerKind: identity.providerKind, subjectId: identity.subjectId };
 
       const status = await this.#dependencies.provider.getIdentityStatus(identity.subjectId);
-      if (status.status === "unavailable") return { status: "unavailable", reason: "infrastructure_error" };
-      if (status.status !== "active" || !await this.#dependencies.roles.isSubjectActive(identityKey)) {
+      if (status.status === "unavailable") {
+        console.error("jurisprudence_auth_stage_identity_status_unavailable");
+        return { status: "unavailable", reason: "infrastructure_error" };
+      }
+      if (status.status !== "active") {
         return { status: "rejected", reason: "invalid_principal" };
       }
 
-      const roles = await this.#dependencies.roles.getRolesForSubject(identityKey);
+      let subjectActive: boolean;
+      try {
+        subjectActive = await this.#dependencies.roles.isSubjectActive(identityKey);
+      } catch {
+        console.error("jurisprudence_auth_stage_role_repository_unavailable");
+        return { status: "unavailable", reason: "infrastructure_error" };
+      }
+
+      if (!subjectActive) {
+        return { status: "rejected", reason: "invalid_principal" };
+      }
+
+      let roles;
+      try {
+        roles = await this.#dependencies.roles.getRolesForSubject(identityKey);
+      } catch {
+        console.error("jurisprudence_auth_stage_role_repository_unavailable");
+        return { status: "unavailable", reason: "infrastructure_error" };
+      }
       const principal = jurisprudencePrincipalSchema.safeParse({
         kind: "human",
         subjectId: identity.subjectId,

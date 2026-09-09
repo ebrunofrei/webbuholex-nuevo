@@ -34,10 +34,12 @@ export class Auth0ExternalIdentityProviderAdapter implements ExternalIdentityPro
     try {
       session = await this.getSession();
     } catch {
+      console.error("jurisprudence_auth_stage_session_unavailable");
       return { status: "unavailable", reason: "infrastructure_error" };
     }
 
     if (session.status === "not_configured") {
+      console.error("jurisprudence_auth_stage_session_unavailable");
       return { status: "unavailable", reason: "infrastructure_error" };
     }
 
@@ -46,11 +48,13 @@ export class Auth0ExternalIdentityProviderAdapter implements ExternalIdentityPro
     }
 
     if (session.status === "loading") {
+      console.error("jurisprudence_auth_stage_session_unavailable");
       return { status: "unavailable", reason: "infrastructure_error" };
     }
 
     if (session.status === "authenticated") {
       if (session.provider !== "auth0") {
+        console.error("jurisprudence_auth_stage_session_unavailable");
         return { status: "unavailable", reason: "infrastructure_error" };
       }
 
@@ -63,11 +67,13 @@ export class Auth0ExternalIdentityProviderAdapter implements ExternalIdentityPro
         session.issuedAt.trim() === "" ||
         Number.isNaN(Date.parse(session.issuedAt))
       ) {
+        console.error("jurisprudence_auth_stage_session_unavailable");
         return { status: "unavailable", reason: "infrastructure_error" };
       }
 
       if (session.expiresAt !== null) {
         if (session.expiresAt.trim() === "" || Number.isNaN(Date.parse(session.expiresAt))) {
+          console.error("jurisprudence_auth_stage_session_unavailable");
           return { status: "unavailable", reason: "infrastructure_error" };
         }
       }
@@ -85,6 +91,7 @@ export class Auth0ExternalIdentityProviderAdapter implements ExternalIdentityPro
     }
 
     // Fallback for any unknown status
+    console.error("jurisprudence_auth_stage_session_unavailable");
     return { status: "unavailable", reason: "infrastructure_error" };
   }
 
