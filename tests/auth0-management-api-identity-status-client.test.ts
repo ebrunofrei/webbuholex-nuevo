@@ -218,8 +218,9 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
       json: async () => ({ blocked: "yes" }),
     } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-    expect(consoleErrorSpy).toHaveBeenCalledWith("jurisprudence_auth_management_lookup_unavailable");
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_invalid_response");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
     expect(consoleErrorSpy.mock.calls[0].length).toBe(1);
     expect(consoleErrorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_management_token_unavailable");
   });
@@ -235,8 +236,9 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401 } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-    expect(consoleErrorSpy).toHaveBeenCalledWith("jurisprudence_auth_management_lookup_unavailable");
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_401");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
     expect(consoleErrorSpy.mock.calls[0].length).toBe(1);
     expect(consoleErrorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_management_token_unavailable");
   });
@@ -245,26 +247,45 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 403 } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_403");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
   });
 
   it("26: 429 => unavailable", async () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 429 } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_429");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
   });
 
   it("27: 500 => unavailable", async () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_5xx");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
+  });
+
+  it("other non-200 (400) => unavailable", async () => {
+    fetchMock.mockResolvedValueOnce(validTokenResponse);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 400 } as Response);
+    expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_other_non_200");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
   });
 
   it("28: network failure => unavailable", async () => {
     fetchMock.mockResolvedValueOnce(validTokenResponse);
     fetchMock.mockRejectedValueOnce(new Error("network failure"));
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-    expect(consoleErrorSpy).toHaveBeenCalledWith("jurisprudence_auth_management_lookup_unavailable");
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_network");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
     expect(consoleErrorSpy.mock.calls[0].length).toBe(1);
     expect(consoleErrorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_management_token_unavailable");
   });
@@ -327,6 +348,9 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
       json: async () => ([]),
     } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_invalid_response");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
   });
 
   it("user HTTP 200 + null => unavailable", async () => {
@@ -337,6 +361,22 @@ describe("Auth0ManagementApiIdentityStatusClient", () => {
       json: async () => (null),
     } as Response);
     expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_invalid_response");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
+  });
+
+  it("user HTTP 200 + json throws => unavailable", async () => {
+    fetchMock.mockResolvedValueOnce(validTokenResponse as Response);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => { throw new Error("JSON Parse Error"); },
+    } as unknown as Response);
+    expect(await client.getIdentityStatus("sub|123")).toEqual({ status: "unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe("jurisprudence_auth_management_lookup_invalid_response");
+    expect(consoleErrorSpy.mock.calls[1][0]).toBe("jurisprudence_auth_management_lookup_unavailable");
   });
 
   it("short-lived token with expires_in <= 60 => no stale token reuse occurs", async () => {
