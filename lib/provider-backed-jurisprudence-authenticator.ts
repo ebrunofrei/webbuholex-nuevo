@@ -79,7 +79,6 @@ export class ProviderBackedJurisprudenceAuthenticator implements JurisprudenceAu
 
       const status = await this.#dependencies.provider.getIdentityStatus(identity.subjectId);
       if (status.status === "unavailable") {
-        console.error("jurisprudence_auth_stage_identity_status_unavailable");
         return { status: "unavailable", reason: "infrastructure_error" };
       }
       if (status.status !== "active") {
@@ -90,7 +89,6 @@ export class ProviderBackedJurisprudenceAuthenticator implements JurisprudenceAu
       try {
         subjectActive = await this.#dependencies.roles.isSubjectActive(identityKey);
       } catch {
-        console.error("jurisprudence_auth_stage_role_repository_unavailable");
         return { status: "unavailable", reason: "infrastructure_error" };
       }
 
@@ -102,7 +100,6 @@ export class ProviderBackedJurisprudenceAuthenticator implements JurisprudenceAu
       try {
         roles = await this.#dependencies.roles.getRolesForSubject(identityKey);
       } catch {
-        console.error("jurisprudence_auth_stage_role_repository_unavailable");
         return { status: "unavailable", reason: "infrastructure_error" };
       }
       const principal = jurisprudencePrincipalSchema.safeParse({

@@ -95,7 +95,6 @@ export class Auth0ManagementApiIdentityStatusClient {
     try {
       token = await this.getAccessToken();
     } catch {
-      console.error("jurisprudence_auth_management_token_unavailable");
       return { status: "unavailable" };
     }
 
@@ -115,24 +114,18 @@ export class Auth0ManagementApiIdentityStatusClient {
         signal: controller.signal,
       });
     } catch {
-      console.error("jurisprudence_auth_management_lookup_network");
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     } finally {
       clearTimeout(timeoutId);
     }
 
     if (response.status === 401) {
-      console.error("jurisprudence_auth_management_lookup_401");
       this.cacheStore.tokens.delete(this.tokenCacheKey);
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if (response.status === 403) {
-      console.error("jurisprudence_auth_management_lookup_403");
       this.cacheStore.tokens.delete(this.tokenCacheKey);
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
@@ -142,20 +135,14 @@ export class Auth0ManagementApiIdentityStatusClient {
     }
 
     if (response.status === 429) {
-      console.error("jurisprudence_auth_management_lookup_429");
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if (response.status >= 500 && response.status <= 599) {
-      console.error("jurisprudence_auth_management_lookup_5xx");
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if (response.status !== 200) {
-      console.error("jurisprudence_auth_management_lookup_other_non_200");
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
@@ -163,22 +150,16 @@ export class Auth0ManagementApiIdentityStatusClient {
     try {
       data = await response.json();
     } catch {
-      console.error("jurisprudence_auth_management_lookup_invalid_response");
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if (typeof data !== "object" || data === null || Array.isArray(data)) {
-      console.error("jurisprudence_auth_management_lookup_invalid_response");
-      console.error("jurisprudence_auth_management_lookup_unavailable");
       return { status: "unavailable" };
     }
 
     if ("blocked" in data) {
       const blocked = data.blocked;
       if (blocked !== undefined && typeof blocked !== "boolean") {
-        console.error("jurisprudence_auth_management_lookup_invalid_response");
-        console.error("jurisprudence_auth_management_lookup_unavailable");
         return { status: "unavailable" };
       }
       if (blocked === true) {

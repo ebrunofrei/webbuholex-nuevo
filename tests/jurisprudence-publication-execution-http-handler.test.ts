@@ -179,43 +179,21 @@ describe("Jurisprudence Publication Execution HTTP Handler", () => {
     expect(response.status).toBe(401);
   });
 
-  it("3b. TEMPORARY DIAGNOSTIC - rejected identity logs safe status/reason enum and remains 401 without feature gate", async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it("3b. rejected identity short-circuits execution", async () => {
     mockAuthenticate.mockResolvedValue({ status: "rejected", reason: "invalid_credentials" });
     const response = await handleJurisprudencePublicationExecutionPost(createRequest());
     expect(response.status).toBe(401);
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("jurisprudence_publication_auth_rejected", {
-      status: "rejected",
-      reason: "invalid_credentials"
-    });
-    const loggedArgs = JSON.stringify(errorSpy.mock.calls);
-    expect(loggedArgs).not.toContain("auth0|test-publisher");
-    expect(loggedArgs).not.toContain("principal");
-
     expect(configModule.isJurisprudencePublicationExecutionEnabled).not.toHaveBeenCalled();
     expect(executionRuntimeModule.createJurisprudencePublicationExecutionRuntime).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
   });
 
-  it("3c. TEMPORARY DIAGNOSTIC - thrown exception logs fixed marker and remains 401", async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it("3c. authentication exception short-circuits execution", async () => {
     mockAuthenticate.mockRejectedValue(new Error("SECRET_TOKEN_DO_NOT_LOG"));
     const response = await handleJurisprudencePublicationExecutionPost(createRequest());
     expect(response.status).toBe(401);
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("jurisprudence_publication_auth_exception");
-    const loggedArgs = JSON.stringify(errorSpy.mock.calls);
-    expect(loggedArgs).not.toContain("SECRET_TOKEN_DO_NOT_LOG");
-    expect(loggedArgs).not.toContain("Error");
-
     expect(configModule.isJurisprudencePublicationExecutionEnabled).not.toHaveBeenCalled();
     expect(executionRuntimeModule.createJurisprudencePublicationExecutionRuntime).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
   });
-
   it("4. non-human denied", async () => {
     mockPrincipal = { ...mockPrincipal!, kind: "service" };
     const response = await handleJurisprudencePublicationExecutionPost(createRequest());

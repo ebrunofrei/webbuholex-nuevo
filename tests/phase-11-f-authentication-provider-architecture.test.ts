@@ -339,11 +339,17 @@ describe("adaptación neutral del proveedor al principal 11.E", () => {
       .toEqual({ status: "rejected", reason: "invalid_principal" });
   });
 
-  it("rechaza una identidad suspendida", async () => {
+  it("rechaza una identidad suspendida y no consulta el repositorio de roles", async () => {
     const setup = authenticator();
     setup.provider.identityStatus = { status: "suspended" };
+    setup.roles.isSubjectActive = vi.fn();
+    setup.roles.getRolesForSubject = vi.fn();
+
     expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
       .toEqual({ status: "rejected", reason: "invalid_principal" });
+
+    expect(setup.roles.isSubjectActive).not.toHaveBeenCalled();
+    expect(setup.roles.getRolesForSubject).not.toHaveBeenCalled();
   });
 
   it("rechaza un sujeto desactivado internamente", async () => {
@@ -373,6 +379,27 @@ describe("adaptación neutral del proveedor al principal 11.E", () => {
 
   it("traduce caída del proveedor a unavailable sin filtrar errores", async () => {
     const setup = authenticator({ status: "unavailable", reason: "infrastructure_error" });
+    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
+      .toEqual({ status: "unavailable", reason: "infrastructure_error" });
+  });
+
+  it("traduce error de consulta de estado de identidad a unavailable", async () => {
+    const setup = authenticator();
+    setup.provider.identityStatus = { status: "unavailable" };
+    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
+      .toEqual({ status: "unavailable", reason: "infrastructure_error" });
+  });
+
+  it("traduce error de conexión de isSubjectActive a unavailable sin filtrar errores explícitamente", async () => {
+    const setup = authenticator();
+    setup.roles.isSubjectActive = vi.fn().mockRejectedValue(new Error("SECRET_CONNECTION_ERROR"));
+    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
+      .toEqual({ status: "unavailable", reason: "infrastructure_error" });
+  });
+
+  it("traduce error de conexión de getRolesForSubject a unavailable sin filtrar errores explícitamente", async () => {
+    const setup = authenticator();
+    setup.roles.getRolesForSubject = vi.fn().mockRejectedValue(new Error("SECRET_CONNECTION_ERROR"));
     expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
       .toEqual({ status: "unavailable", reason: "infrastructure_error" });
   });
@@ -550,66 +577,5 @@ describe("J2-WEB-PROVENANCE-D3-B7-B2-B0 - Identidad de repositorio", () => {
     for (const identity of capturedIdentities) {
       expect(identity).toEqual(expectedIdentity);
     }
-  });
-});
-
-describe("Temporary diagnostics", () => {
-  it("logs diagnostic jurisprudence_auth_stage_identity_status_unavailable when identity status is unavailable", async () => {
-    const setup = authenticator();
-    setup.provider.identityStatus = { status: "unavailable" };
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
-      .toEqual({ status: "unavailable", reason: "infrastructure_error" });
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("jurisprudence_auth_stage_identity_status_unavailable");
-    errorSpy.mockRestore();
-  });
-
-  it("logs diagnostic jurisprudence_auth_stage_role_repository_unavailable when isSubjectActive throws", async () => {
-    const setup = authenticator();
-    setup.roles.isSubjectActive = vi.fn().mockRejectedValue(new Error("SECRET_CONNECTION_ERROR"));
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
-      .toEqual({ status: "unavailable", reason: "infrastructure_error" });
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("jurisprudence_auth_stage_role_repository_unavailable");
-    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("SECRET_CONNECTION_ERROR");
-    errorSpy.mockRestore();
-  });
-
-  it("logs diagnostic jurisprudence_auth_stage_role_repository_unavailable when getRolesForSubject throws", async () => {
-    const setup = authenticator();
-    setup.roles.getRolesForSubject = vi.fn().mockRejectedValue(new Error("SECRET_CONNECTION_ERROR"));
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
-      .toEqual({ status: "unavailable", reason: "infrastructure_error" });
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("jurisprudence_auth_stage_role_repository_unavailable");
-    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("SECRET_CONNECTION_ERROR");
-    errorSpy.mockRestore();
-  });
-
-  it("short-circuits and does not call role repository or emit marker when identity is suspended", async () => {
-    const setup = authenticator();
-    setup.provider.identityStatus = { status: "suspended" };
-
-    setup.roles.isSubjectActive = vi.fn();
-    setup.roles.getRolesForSubject = vi.fn();
-
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    expect(await setup.instance.authenticate(new Request("https://app.example.invalid")))
-      .toEqual({ status: "rejected", reason: "invalid_principal" });
-
-    expect(setup.roles.isSubjectActive).not.toHaveBeenCalled();
-    expect(setup.roles.getRolesForSubject).not.toHaveBeenCalled();
-    expect(errorSpy).not.toHaveBeenCalledWith("jurisprudence_auth_stage_role_repository_unavailable");
-    errorSpy.mockRestore();
   });
 });

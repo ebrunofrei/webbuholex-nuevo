@@ -75,15 +75,8 @@ describe("Auth0ExternalIdentityProviderAdapter", () => {
       getIdentityStatus: vi.fn(),
     }, sessionResolver);
 
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const result = await adapter.resolveAuthentication(dummyRequest);
     expect(result).toEqual({ status: "unavailable", reason: "infrastructure_error" });
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("jurisprudence_auth_stage_session_unavailable");
-    const loggedArgs = JSON.stringify(errorSpy.mock.calls);
-    expect(loggedArgs).not.toContain("Network failure");
-    errorSpy.mockRestore();
   });
 
   it("should map not_configured to infrastructure_error", async () => {
