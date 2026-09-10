@@ -63,10 +63,6 @@ export function CommercialBlocks() {
               <dt>¿Atienden de manera virtual?</dt>
               <dd>Sí, coordinamos evaluaciones mediante videoconferencia programada y seguimiento digital, dependiendo de la naturaleza del caso.</dd>
             </div>
-            <div>
-              <dt>¿LitisBot ya está disponible?</dt>
-              <dd>No, actualmente LitisBot es un desarrollo interno en preparación y no procesa documentos externos.</dd>
-            </div>
           </dl>
         </div>
       </section>

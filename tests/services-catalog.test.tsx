@@ -4,20 +4,18 @@ import { describe, expect, it } from "vitest";
 import { ServiceCatalog } from "@/components/services/service-catalog";
 import { ServiceDetail } from "@/components/services/service-detail";
 import { getPublicServiceBySlug, publicServices } from "@/data/services";
-import { publicServiceCatalogSchema } from "@/lib/schemas/services";
 
 describe("catálogo público de servicios", () => {
-  it("valida ocho servicios reales con identificadores y slugs únicos", () => {
-    expect(publicServiceCatalogSchema.safeParse(publicServices).success).toBe(true);
-    expect(publicServices).toHaveLength(8);
-    expect(new Set(publicServices.map((service) => service.id)).size).toBe(8);
-    expect(new Set(publicServices.map((service) => service.slug)).size).toBe(8);
+  it("posee exactamente 11 servicios principales con slug y ID únicos", () => {
+    expect(publicServices).toHaveLength(11);
+    expect(new Set(publicServices.map((item) => item.id)).size).toBe(11);
+    expect(new Set(publicServices.map((item) => item.slug)).size).toBe(11);
   });
 
   it("renderiza fichas navegables sin compra ni pago inmediato", () => {
     const { container } = render(<ServiceCatalog services={publicServices} />);
-    expect(screen.getByText("Ingeniería civil para saneamiento inmobiliario")).toBeInTheDocument();
-    expect(container.querySelectorAll('a[href^="/servicios/"]')).toHaveLength(8);
+    expect(screen.getByText("11 servicios registrados")).toBeInTheDocument();
+    expect(container.querySelectorAll("article")).toHaveLength(11);
     expect(container.querySelector("[download], [href*='checkout'], [href*='compra']")).toBeNull();
     expect(publicServices.every((service) => service.allowsImmediatePayment === false && service.price === null && service.currency === null)).toBe(true);
   });

@@ -14,9 +14,9 @@ const service = getPublicServiceBySlug(slug);
 describe("fase 10.I: consolidación de SRV-WEB-001", () => {
   it("conserva ocho servicios válidos con códigos y slugs únicos", () => {
     expect(publicServiceCatalogSchema.safeParse(publicServices).success).toBe(true);
-    expect(publicServices).toHaveLength(8);
-    expect(new Set(publicServices.map((item) => item.id)).size).toBe(8);
-    expect(new Set(publicServices.map((item) => item.slug)).size).toBe(8);
+    expect(publicServices).toHaveLength(11);
+    expect(new Set(publicServices.map((item) => item.id)).size).toBe(11);
+    expect(new Set(publicServices.map((item) => item.slug)).size).toBe(11);
     expect(service).toMatchObject({
       id: "SRV-WEB-001",
       slug,
@@ -32,11 +32,12 @@ describe("fase 10.I: consolidación de SRV-WEB-001", () => {
 
   it("mantiene el orden y la simetría del catálogo de ocho tarjetas", () => {
     const { container } = render(<ServiceCatalog services={publicServices} />);
-    expect(container.querySelectorAll("article")).toHaveLength(8);
-    expect(screen.getByText("8 servicios registrados")).toBeInTheDocument();
+    expect(container.querySelectorAll("article")).toHaveLength(11);
+    expect(screen.getByText("11 servicios registrados")).toBeInTheDocument();
     expect(publicServices.map((item) => item.id)).toEqual([
-      "SRV-LEGAL-001", "SRV-DOC-001", "SRV-DEF-001", "SRV-CONS-001",
-      "SRV-EMP-001", "SRV-ADM-001", "SRV-ING-001", "SRV-WEB-001",
+      "SRV-LEGAL-001", "SRV-BUHODOC-001", "SRV-TESIS-001", "SRV-ARB-001",
+      "SRV-DEF-001", "SRV-CONS-001", "SRV-EMP-001", "SRV-ACC-001",
+      "SRV-GOV-001", "SRV-ING-001", "SRV-WEB-001"
     ]);
   });
 

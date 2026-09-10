@@ -43,14 +43,16 @@ export function ServiceDetail({ service }: { service: PublicService }) {
           </section>
           {service.stages ? <section><h2>Etapas de trabajo</h2><ol className={styles.stages}>{service.stages.map((stage, index) => <li key={stage}><span>{String(index + 1).padStart(2, "0")}</span><strong>{stage}</strong></li>)}</ol></section> : null}
           {service.prerequisites ? <section><h2>Condiciones previas</h2><ul>{service.prerequisites.map((item) => <li key={item}>{item}</li>)}</ul></section> : null}
+          {service.subOffers ? <section><h2>Líneas de servicio y referencias iniciales</h2><div className={styles.subOffers}>{service.subOffers.map((offer) => <article key={offer.title}><h3>{offer.title}</h3><dl><div><dt>Modalidad</dt><dd>{offer.requiresEvaluation ? (offer.professionalLevel === "senior" ? "Evaluación senior obligatoria" : "Requiere evaluación") : "Compra directa"}</dd></div><div><dt>Honorarios</dt><dd>{offer.pricingMode === "from" || offer.pricingMode === "quote_required" ? "Según evaluación y complejidad" : "Por definir previa evaluación"}</dd></div>{offer.professionalLevel ? <div><dt>Nivel profesional</dt><dd>{offer.professionalLevel === "senior" ? "Senior / Estratégico" : offer.professionalLevel === "professional" ? "Profesional" : "Estándar"}</dd></div> : null}</dl></article>)}</div></section> : null}
         </div>
         <aside className={styles.summary} aria-label="Resumen del servicio">
           <h2>{hasExtendedDetail ? "Solicitud de evaluación" : "Antes de solicitar"}</h2>
           <dl>
             <div><dt>Disponibilidad</dt><dd>{service.availabilityLabel}</dd></div>
             <div><dt>Modalidad</dt><dd>{service.modalities.join(" · ")}</dd></div>
-            <div><dt>Precio y plazo</dt><dd>Se definen después de aprobar el alcance</dd></div>
-            <div><dt>Pago inmediato</dt><dd>No disponible</dd></div>
+            <div><dt>Honorarios</dt><dd>{service.category === "buhodoc" ? "Se determinan luego de evaluar la complejidad, alcance, documentación y plazo del encargo." : service.pricingMode === "from" ? "Se determina después de evaluar la complejidad y alcance" : service.pricingMode === "quote_required" ? "Se determina después de evaluar el alcance" : service.pricingMode === "not_defined" ? "Por definir previa evaluación" : "Según evaluación"}</dd></div>
+            <div><dt>Pago inmediato</dt><dd>{service.allowsImmediatePayment ? "Disponible" : "No disponible"}</dd></div>
+            {service.professionalLevel ? <div><dt>Nivel profesional</dt><dd>{service.professionalLevel === "senior" ? "Senior / Estratégico" : service.professionalLevel === "professional" ? "Profesional" : "Estándar"}</dd></div> : null}
             <div><dt>Responsable</dt><dd>Pendiente de asignación institucional</dd></div>
           </dl>
           <ActionLink href={`/consulta-profesional?service=${service.slug}`}>{service.ctaLabel}</ActionLink>

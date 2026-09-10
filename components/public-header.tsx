@@ -24,7 +24,7 @@ export function PublicHeader() {
   }, [open]);
 
   return <header className="site-header public-header" data-shell="public">
-    <div className="top-ribbon"><div className="container ribbon-inner"><span>Plataforma jurídica de EMCCON</span><span className="ribbon-note">Información pública · Acceso libre</span></div></div>
+    <div className="top-ribbon"><div className="container ribbon-inner"><span>Plataforma de servicios profesionales de EMCCON</span><span className="ribbon-note">Información pública · Acceso libre</span></div></div>
     <div className="container nav-shell">
       <Link className="brand" href="/" aria-label="BúhoLex, ir al portal"><Image src="/brand/buho-institucional.png" alt="" width={54} height={54} /><span><strong>BúhoLex</strong><small>Información pública</small></span></Link>
       <button className="menu-toggle" type="button" aria-expanded={open} aria-controls="public-navigation" onClick={() => setOpen((current) => !current)}><span className="sr-only">{open ? "Cerrar menú" : "Abrir menú"}</span><span aria-hidden="true">{open ? "×" : "☰"}</span></button>
