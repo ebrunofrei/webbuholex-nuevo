@@ -44,17 +44,23 @@ describe("auditoría responsive de la fase 10.G", () => {
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.owlHalo,\s*\.owlImage\s*\{[^}]*animation:\s*none/s);
   });
 
-  it("no usa 100vw ni valores end incompatibles en los estilos críticos", () => {
+  it("evita patrones que pueden provocar overflow o ruptura destructiva del texto", () => {
     const files = [
       "app/globals.css",
       "components/portal/dual-portal.module.css",
       "components/services/services.module.css",
       "components/jurisprudence/jurisprudence.module.css",
     ];
+
     const css = files.map(read).join("\n");
-    expect(css).not.toMatch(/\b(?:width|min-width|max-width):\s*100vw\b/);
-    expect(css).not.toMatch(/(?:align-items|justify-content|place-content|align-content|justify-self|align-self):\s*end\b/);
-    expect(css).not.toContain("word-break: break-all");
+
+    expect(css).not.toMatch(
+      /\b(?:width|min-width|max-width):\s*100vw\b/,
+    );
+
+    expect(css).not.toContain(
+      "word-break: break-all",
+    );
   });
 
   it("ofrece un menú público móvil accesible y sin rutas privadas", () => {

@@ -457,20 +457,31 @@ describe(
         );
 
         it(
-          "15. no existen directorios app/api ni archivos route.ts",
+          "15. limita las rutas API de jurisprudencia a las expresamente autorizadas",
           async () => {
             const authorizedRouteFiles = [
-    "app/api/admin/complaints/[complaintId]/responses/route.ts",
-    "app/api/admin/complaints/[complaintId]/review/route.ts",
-    "app/api/admin/complaints/[complaintId]/route.ts",
-    "app/api/admin/complaints/route.ts",
-    "app/api/admin/complaints/[complaintId]/close/route.ts",
-    "app/api/admin/complaints/[complaintId]/request-information/route.ts",
-    "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
-    "app/api/complaints/route.ts",
-    "app/api/internal/cron/jurisprudence-publication/route.ts",
-    "app/api/owl/admission/route.ts",
-];
+              "app/api/admin/complaints/[complaintId]/responses/route.ts",
+              "app/api/admin/complaints/[complaintId]/review/route.ts",
+              "app/api/admin/complaints/[complaintId]/route.ts",
+              "app/api/admin/complaints/route.ts",
+              "app/api/admin/complaints/[complaintId]/close/route.ts",
+              "app/api/admin/complaints/[complaintId]/request-information/route.ts",
+              "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
+              "app/api/admin/jurisprudence/publication/execution/route.ts",
+              "app/api/complaints/route.ts",
+              "app/api/internal/cron/jurisprudence-publication/route.ts",
+              "app/api/owl/admission/route.ts",
+            ];
+
+            const authorizedJurisprudenceApiEntries = new Set([
+              "api/admin/jurisprudence",
+              "api/admin/jurisprudence/publication",
+              "api/admin/jurisprudence/publication/execution",
+              "api/admin/jurisprudence/publication/execution/route.ts",
+              "api/internal/cron/jurisprudence-publication",
+              "api/internal/cron/jurisprudence-publication/route.ts",
+            ]);
+
             const root = process.cwd();
 
             const appFiles = await readdir(
@@ -485,15 +496,27 @@ describe(
                   file.endsWith("\\route.ts") ||
                   file.endsWith("/route.ts"),
               )
-              .map((file) => path.relative(root, path.join(root, "app", file)).split(path.sep).join("/"));
+              .map((file) =>
+                path
+                  .relative(root, path.join(root, "app", file))
+                  .split(path.sep)
+                  .join("/"),
+              );
 
             expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
-            // jurisprudencia no crea rutas API propias
+
             expect(
               appFiles.filter((file) => {
                 const normalized = file.replaceAll("\\", "/");
-                if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
-                return normalized.startsWith("api/") && /jurisprudence/.test(normalized);
+
+                if (
+                  !normalized.startsWith("api/") ||
+                  !/jurisprudence/.test(normalized)
+                ) {
+                  return false;
+                }
+
+                return !authorizedJurisprudenceApiEntries.has(normalized);
               }),
             ).toEqual([]);
           },

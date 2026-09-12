@@ -24,34 +24,53 @@ describe("CP-2R-R2 Validations", () => {
     }
   });
 
-  it("B. BúhoDoc subOffers preserve internal structured prices", () => {
-    const buhodoc = publicServices.find((s) => s.id === "SRV-BUHODOC-001");
+  it("B. BúhoDoc subOffers keep complex appeals subject to quotation without public price", () => {
+    const buhodoc = publicServices.find(
+      (service) => service.id === "SRV-BUHODOC-001",
+    );
+
     expect(buhodoc).toBeDefined();
-    const auto = buhodoc?.subOffers?.find((o) => o.title.includes("Apelación de Auto"));
-    const sentencia = buhodoc?.subOffers?.find((o) => o.title.includes("Apelación de Sentencia"));
-    const casacion = buhodoc?.subOffers?.find((o) => o.title.includes("Recurso de Casación"));
 
-    expect(auto?.price).toBe(250);
-    expect(auto?.pricingMode).toBe("from");
+    const auto = buhodoc?.subOffers?.find((offer) =>
+      offer.title.includes("Apelación de Auto"),
+    );
 
-    expect(sentencia?.price).toBe(500);
-    expect(sentencia?.pricingMode).toBe("from");
+    const sentencia = buhodoc?.subOffers?.find((offer) =>
+      offer.title.includes("Apelación de Sentencia"),
+    );
 
-    expect(casacion?.price).toBe(2000);
-    expect(casacion?.pricingMode).toBe("from");
+    const casacion = buhodoc?.subOffers?.find((offer) =>
+      offer.title.includes("Recurso de Casación"),
+    );
+
+    for (const offer of [auto, sentencia, casacion]) {
+      expect(offer).toBeDefined();
+      expect(offer?.pricingMode).toBe("quote_required");
+      expect(offer?.price).toBeNull();
+      expect(offer?.currency).toBeNull();
+      expect(offer?.requiresEvaluation).toBe(true);
+      expect(offer?.allowsImmediatePayment).toBe(false);
+    }
   });
 
-  it("C & D. public BúhoDoc UI does NOT render numeric prices", () => {
-    const buhodoc = publicServices.find((s) => s.id === "SRV-BUHODOC-001")!;
-    const { container } = render(<ServiceDetail service={buhodoc} />);
+  it("C & D. public BúhoDoc UI does not expose numeric prices and keeps honorarios subject to evaluation", () => {
+    const buhodoc = publicServices.find(
+      (service) => service.id === "SRV-BUHODOC-001",
+    )!;
+
+    const { container } = render(
+      <ServiceDetail service={buhodoc} />,
+    );
 
     expect(container.textContent).not.toMatch(/250/);
     expect(container.textContent).not.toMatch(/500/);
     expect(container.textContent).not.toMatch(/2000/);
     expect(container.textContent).not.toMatch(/2,000/);
 
-    // Check D: "Honorarios según evaluación"
-    expect(container.textContent).toMatch(/Según evaluación y complejidad/);
+    expect(container.textContent).toMatch(/Honorarios/);
+    expect(container.textContent).toMatch(
+      /Se determinan después de revisar el caso y el alcance/,
+    );
   });
 
   it("E. Casation remains senior, evaluation required, no immediate payment", () => {

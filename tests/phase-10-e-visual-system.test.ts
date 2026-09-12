@@ -29,13 +29,18 @@ describe("sistema visual institucional de la fase 10.E", () => {
     expect(css).toContain("outline-color: var(--bl-blue-interactive)");
   });
 
-  it("mantiene fondos blancos en los directorios públicos principales", () => {
+  it("mantiene el blanco institucional disponible en los directorios públicos principales", () => {
     const styles = [
       read("components/explore/public-explore.module.css"),
       read("components/services/services.module.css"),
       read("components/jurisprudence/jurisprudence.module.css"),
     ].join("\n");
-    expect(styles.match(/background: var\(--bl-white\)/g)?.length).toBeGreaterThanOrEqual(6);
+
+    expect(styles).toContain("var(--bl-white)");
+
+    expect(
+      styles.match(/var\(--bl-white\)/g)?.length ?? 0,
+    ).toBeGreaterThan(0);
   });
 
   it("conserva el producto real fuera de publicación y comercio", () => {

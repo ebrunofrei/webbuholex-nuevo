@@ -390,26 +390,66 @@ describe("errores, logging, factory y encapsulación", () => {
     expect(outputs[1]).toBe(outputs[0]);
   });
 
-  it("mantiene seguridad de importaciones y ausencia de transporte", () => {
+  it("mantiene seguridad de importaciones y limita el transporte a rutas autorizadas", () => {
     const productionRoots = ["app", "components", "data"];
-    const source = productionRoots.flatMap((root) => readdirSync(path.join(process.cwd(), root), { recursive: true })
-      .filter(
-        (entry): entry is string =>
-          typeof entry === "string" && /\.(ts|tsx)$/.test(entry),
+
+    const source = productionRoots
+      .flatMap((root) =>
+        readdirSync(path.join(process.cwd(), root), { recursive: true })
+          .filter(
+            (entry): entry is string =>
+              typeof entry === "string" && /\.(ts|tsx)$/.test(entry),
+          )
+          .map((entry) =>
+            readFileSync(path.join(process.cwd(), root, entry), "utf8"),
+          ),
       )
-      .map((entry) => readFileSync(path.join(process.cwd(), root, entry), "utf8"))).join("\n");
-    expect(source).not.toMatch(/jurisprudence-(?:internal-api|application-service|application-factory|repository)|sqlite-jurisprudence/);
-    const appEntries = readdirSync(path.join(process.cwd(), "app"), { recursive: true }).filter(
+      .join("\n");
+
+    expect(source).not.toMatch(
+      /jurisprudence-(?:internal-api|application-service|application-factory|repository)|sqlite-jurisprudence/,
+    );
+
+    const appEntries = readdirSync(path.join(process.cwd(), "app"), {
+      recursive: true,
+    }).filter(
       (entry): entry is string => typeof entry === "string",
     );
-    // solo se permite app/api/owl/admission — jurisprudencia no crea rutas API propias
-    expect(appEntries.filter((entry) => {
-      const normalized = entry.replaceAll("\\", "/");
-      if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
-      return normalized.startsWith("api/") && /jurisprudence/.test(normalized);
-    })).toEqual([]);
+
+    const authorizedJurisprudenceApiEntries = new Set([
+      "api/admin/jurisprudence",
+      "api/admin/jurisprudence/publication",
+      "api/admin/jurisprudence/publication/execution",
+      "api/admin/jurisprudence/publication/execution/route.ts",
+      "api/internal/cron/jurisprudence-publication",
+      "api/internal/cron/jurisprudence-publication/route.ts",
+    ]);
+
+    expect(
+      appEntries.filter((entry) => {
+        const normalized = entry.replaceAll("\\", "/");
+
+        if (
+          !normalized.startsWith("api/") ||
+          !/jurisprudence/.test(normalized)
+        ) {
+          return false;
+        }
+
+        return !authorizedJurisprudenceApiEntries.has(normalized);
+      }),
+    ).toEqual([]);
+
     expect(source).not.toMatch(/TEST-NO-REAL|fixture-no-publicable/);
-    expect(readFileSync(path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"), "utf8")).not.toMatch(/JurisprudenceInternalApi|jurisprudence-application|jurisprudence-repository/);
+
+    expect(
+      readFileSync(
+        path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"),
+        "utf8",
+      ),
+    ).not.toMatch(
+      /JurisprudenceInternalApi|jurisprudence-application|jurisprudence-repository/,
+    );
   });
 
   it("no incorpora any explícito ni exporta infraestructura desde barrels públicos", () => {

@@ -373,42 +373,102 @@ describe("persistencia SQLite y seguridad estática", () => {
     expect(JSON.stringify(await json(response))).not.toMatch(/internalLocation|SELECT|sqlite|stack/i);
   });
 
-  it("mantiene el transporte sin montar y desconectado de UI", () => {
+  it("mantiene el transporte limitado a rutas autorizadas y desconectado de UI", () => {
     const authorizedRouteFiles = [
-    "app/api/admin/complaints/[complaintId]/responses/route.ts",
-    "app/api/admin/complaints/[complaintId]/review/route.ts",
-    "app/api/admin/complaints/[complaintId]/route.ts",
-    "app/api/admin/complaints/route.ts",
-    "app/api/admin/complaints/[complaintId]/close/route.ts",
-    "app/api/admin/complaints/[complaintId]/request-information/route.ts",
-    "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
-    "app/api/complaints/route.ts",
-    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/admin/complaints/[complaintId]/responses/route.ts",
+      "app/api/admin/complaints/[complaintId]/review/route.ts",
+      "app/api/admin/complaints/[complaintId]/route.ts",
+      "app/api/admin/complaints/route.ts",
+      "app/api/admin/complaints/[complaintId]/close/route.ts",
+      "app/api/admin/complaints/[complaintId]/request-information/route.ts",
+      "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
+      "app/api/admin/jurisprudence/publication/execution/route.ts",
+      "app/api/complaints/route.ts",
+      "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
-];
-    const appFiles = readdirSync(path.join(process.cwd(), "app"), { recursive: true }).filter(
+    ];
+
+    const authorizedJurisprudenceApiEntries = new Set([
+      "api/admin/jurisprudence",
+      "api/admin/jurisprudence/publication",
+      "api/admin/jurisprudence/publication/execution",
+      "api/admin/jurisprudence/publication/execution/route.ts",
+      "api/internal/cron/jurisprudence-publication",
+      "api/internal/cron/jurisprudence-publication/route.ts",
+    ]);
+
+    const appFiles = readdirSync(
+      path.join(process.cwd(), "app"),
+      { recursive: true },
+    ).filter(
       (entry): entry is string => typeof entry === "string",
     );
+
     const routeFiles = appFiles
       .filter((entry) => /(^|[\\/])route\.ts$/.test(entry))
-      .map((entry) => path.relative(process.cwd(), path.join(process.cwd(), "app", entry)).split(path.sep).join("/"));
-    expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
-    // jurisprudencia no crea ni consume rutas API propias
+      .map((entry) =>
+        path
+          .relative(
+            process.cwd(),
+            path.join(process.cwd(), "app", entry),
+          )
+          .split(path.sep)
+          .join("/"),
+      );
+
+    expect(routeFiles.sort()).toEqual(
+      authorizedRouteFiles.sort(),
+    );
+
     expect(
-      appFiles.some((entry) => {
+      appFiles.filter((entry) => {
         const normalized = entry.replaceAll("\\", "/");
-        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
-        return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
-      })
-    ).toBe(false);
-    const uiSource = ["app", "components", "data"].flatMap((root) => readdirSync(path.join(process.cwd(), root), { recursive: true })
-      .filter(
-        (entry): entry is string =>
-          typeof entry === "string" && /\.(ts|tsx)$/.test(entry),
+
+        if (
+          !normalized.startsWith("api/") ||
+          !/jurisprudence/.test(normalized)
+        ) {
+          return false;
+        }
+
+        return !authorizedJurisprudenceApiEntries.has(normalized);
+      }),
+    ).toEqual([]);
+
+    const uiSource = ["app", "components", "data"]
+      .flatMap((root) =>
+        readdirSync(path.join(process.cwd(), root), {
+          recursive: true,
+        })
+          .filter(
+            (entry): entry is string =>
+              typeof entry === "string" &&
+              /\.(ts|tsx)$/.test(entry),
+          )
+          .map((entry) =>
+            readFileSync(
+              path.join(process.cwd(), root, entry),
+              "utf8",
+            ),
+          ),
       )
-      .map((entry) => readFileSync(path.join(process.cwd(), root, entry), "utf8"))).join("\n");
-    expect(uiSource).not.toMatch(/jurisprudence-(?:http|route-handler)/);
-    expect(readFileSync(path.join(process.cwd(), "app/jurisprudencia/page.tsx"), "utf8")).not.toMatch(/fetch\(|jurisprudence-(?:http|route-handler)/);
+      .join("\n");
+
+    expect(uiSource).not.toMatch(
+      /jurisprudence-(?:http|route-handler)/,
+    );
+
+    expect(
+      readFileSync(
+        path.join(
+          process.cwd(),
+          "app/jurisprudencia/page.tsx",
+        ),
+        "utf8",
+      ),
+    ).not.toMatch(
+      /fetch\(|jurisprudence-(?:http|route-handler)/,
+    );
   });
 
   it("no reexporta transporte ni incorpora any explícito", () => {

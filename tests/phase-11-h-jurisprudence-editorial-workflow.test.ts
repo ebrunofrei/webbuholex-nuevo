@@ -410,36 +410,106 @@ describe("publicación, seguridad estática y preservación", () => {
     expect(source).not.toMatch(/\bany\b/);
   });
 
-  it("no crea rutas, UI, scraping, OCR, IA, RAG, embeddings ni Auth0", () => {
+  it("limita las rutas API de jurisprudencia y mantiene el workflow editorial aislado de UI, scraping e IA", () => {
     const authorizedRouteFiles = [
-    "app/api/admin/complaints/[complaintId]/responses/route.ts",
-    "app/api/admin/complaints/[complaintId]/review/route.ts",
-    "app/api/admin/complaints/[complaintId]/route.ts",
-    "app/api/admin/complaints/route.ts",
-    "app/api/admin/complaints/[complaintId]/close/route.ts",
-    "app/api/admin/complaints/[complaintId]/request-information/route.ts",
-    "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
-    "app/api/complaints/route.ts",
-    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/admin/complaints/[complaintId]/responses/route.ts",
+      "app/api/admin/complaints/[complaintId]/review/route.ts",
+      "app/api/admin/complaints/[complaintId]/route.ts",
+      "app/api/admin/complaints/route.ts",
+      "app/api/admin/complaints/[complaintId]/close/route.ts",
+      "app/api/admin/complaints/[complaintId]/request-information/route.ts",
+      "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
+      "app/api/admin/jurisprudence/publication/execution/route.ts",
+      "app/api/complaints/route.ts",
+      "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
-];
-    const appEntries = readdirSync(path.join(process.cwd(), "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string");
+    ];
+
+    const authorizedJurisprudenceApiEntries = new Set([
+      "api/admin/jurisprudence",
+      "api/admin/jurisprudence/publication",
+      "api/admin/jurisprudence/publication/execution",
+      "api/admin/jurisprudence/publication/execution/route.ts",
+      "api/internal/cron/jurisprudence-publication",
+      "api/internal/cron/jurisprudence-publication/route.ts",
+    ]);
+
+    const appEntries = readdirSync(
+      path.join(process.cwd(), "app"),
+      { recursive: true },
+    ).filter(
+      (entry): entry is string => typeof entry === "string",
+    );
+
     const routeFiles = appEntries
       .filter((entry) => path.basename(entry) === "route.ts")
-      .map((entry) => path.relative(process.cwd(), path.join(process.cwd(), "app", entry)).split(path.sep).join("/"));
-    expect(routeFiles.sort()).toEqual(authorizedRouteFiles.sort());
-    // editorial no crea rutas API de jurisprudencia
+      .map((entry) =>
+        path
+          .relative(
+            process.cwd(),
+            path.join(process.cwd(), "app", entry),
+          )
+          .split(path.sep)
+          .join("/"),
+      );
+
+    expect(routeFiles.sort()).toEqual(
+      authorizedRouteFiles.sort(),
+    );
+
     expect(
-      appEntries.some((entry) => {
+      appEntries.filter((entry) => {
         const normalized = entry.replaceAll("\\", "/");
-        if (normalized.startsWith("api/internal/cron/jurisprudence-publication")) return false;
-        return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);
-      })
-    ).toBe(false);
-    const files = ["types/jurisprudence-editorial-workflow.ts", "lib/schemas/jurisprudence-editorial-workflow.ts", "lib/jurisprudence-editorial-workflow.ts", "lib/jurisprudence-editorial-readiness.ts", "lib/jurisprudence-editorial-case-repository.ts", "lib/in-memory-jurisprudence-editorial-case-repository.ts", "lib/sqlite-jurisprudence-editorial-case-repository.ts"];
-    const source = files.map((file) => readFileSync(path.join(process.cwd(), file), "utf8")).join("\n");
-    expect(source).not.toMatch(/fetch\(|scrap|crawl|OCR|embedding|\bRAG\b|OpenAI|Anthropic|@auth0/i);
-    expect(readFileSync(path.join(process.cwd(), "app", "jurisprudencia", "page.tsx"), "utf8")).not.toMatch(/EditorialWorkflow|editorial-workflow|fetch\(/);
+
+        if (
+          !normalized.startsWith("api/") ||
+          !/jurisprudence/.test(normalized)
+        ) {
+          return false;
+        }
+
+        return !authorizedJurisprudenceApiEntries.has(
+          normalized,
+        );
+      }),
+    ).toEqual([]);
+
+    const files = [
+      "types/jurisprudence-editorial-workflow.ts",
+      "lib/schemas/jurisprudence-editorial-workflow.ts",
+      "lib/jurisprudence-editorial-workflow.ts",
+      "lib/jurisprudence-editorial-readiness.ts",
+      "lib/jurisprudence-editorial-case-repository.ts",
+      "lib/in-memory-jurisprudence-editorial-case-repository.ts",
+      "lib/sqlite-jurisprudence-editorial-case-repository.ts",
+    ];
+
+    const source = files
+      .map((file) =>
+        readFileSync(
+          path.join(process.cwd(), file),
+          "utf8",
+        ),
+      )
+      .join("\n");
+
+    expect(source).not.toMatch(
+      /fetch\(|scrap|crawl|OCR|embedding|\bRAG\b|OpenAI|Anthropic|@auth0/i,
+    );
+
+    expect(
+      readFileSync(
+        path.join(
+          process.cwd(),
+          "app",
+          "jurisprudencia",
+          "page.tsx",
+        ),
+        "utf8",
+      ),
+    ).not.toMatch(
+      /EditorialWorkflow|editorial-workflow|fetch\(/,
+    );
   });
 
   it("mantiene package y lockfile con React y Next en las versiones esperadas", () => {
