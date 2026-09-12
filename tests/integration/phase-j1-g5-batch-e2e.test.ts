@@ -1,5 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeAll } from "vitest";
+import { loadEnvFile } from "node:process";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { jurisprudencePublicationOutbox, jurisprudenceRecords } from "@/database/schema/jurisprudence";
 import { PostgresJurisprudencePublicationOutboxProcessorRepository } from "@/lib/jurisprudence/postgres-jurisprudence-publication-outbox-processor-repository";
 import { PostgresJurisprudencePublicProjectionWriter } from "@/lib/jurisprudence/postgres-jurisprudence-public-projection-writer";
@@ -10,27 +17,74 @@ import { inArray, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+loadEnvFile(".env.local");
+
+function requireEnvironmentVariable(name: string): string {
+  const value = process.env[name]?.trim();
+
+  if (!value) {
+    throw new Error(
+      `${name} is required for J1-G.5 integration`,
+    );
+  }
+
+  return value;
+}
+
+const migrationUrl =
+  requireEnvironmentVariable("DATABASE_MIGRATION_URL");
+
 describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
   let adminDb: any;
   let processor1: JurisprudencePublicationOutboxProcessor;
   let processor2: JurisprudencePublicationOutboxProcessor;
+  let queryClient: ReturnType<typeof postgres>;
 
   beforeAll(async () => {
     // Admin DB for fixture setup (has permission to insert directly)
-    const queryClient = postgres(process.env.DATABASE_MIGRATION_URL as string, { ssl: "require" });
+    queryClient = postgres(migrationUrl, {
+      ssl: "require",
+      prepare: false,
+      max: 1,
+    });
+
     adminDb = drizzle(queryClient);
 
     // Clean up any test fixtures from previous runs to prevent contamination
-    await adminDb.delete(jurisprudencePublicationOutbox)
-      .where(lt(jurisprudencePublicationOutbox.availableAt, new Date("2000-01-01")));
+    await adminDb
+      .delete(jurisprudencePublicationOutbox)
+      .where(
+        lt(
+          jurisprudencePublicationOutbox.availableAt,
+          new Date("2000-01-01"),
+        ),
+      );
 
-    const repo1 = new PostgresJurisprudencePublicationOutboxProcessorRepository();
-    const writer1 = new PostgresJurisprudencePublicProjectionWriter();
-    processor1 = new JurisprudencePublicationOutboxProcessor(repo1, writer1);
+    const repo1 =
+      new PostgresJurisprudencePublicationOutboxProcessorRepository();
+    const writer1 =
+      new PostgresJurisprudencePublicProjectionWriter();
 
-    const repo2 = new PostgresJurisprudencePublicationOutboxProcessorRepository();
-    const writer2 = new PostgresJurisprudencePublicProjectionWriter();
-    processor2 = new JurisprudencePublicationOutboxProcessor(repo2, writer2);
+    processor1 =
+      new JurisprudencePublicationOutboxProcessor(
+        repo1,
+        writer1,
+      );
+
+    const repo2 =
+      new PostgresJurisprudencePublicationOutboxProcessorRepository();
+    const writer2 =
+      new PostgresJurisprudencePublicProjectionWriter();
+
+    processor2 =
+      new JurisprudencePublicationOutboxProcessor(
+        repo2,
+        writer2,
+      );
+  });
+
+  afterAll(async () => {
+    await queryClient.end();
   });
 
   async function createEligibleMessages(count: number, dateStr: string) {
