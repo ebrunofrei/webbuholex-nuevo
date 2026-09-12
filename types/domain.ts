@@ -54,15 +54,6 @@ export type {
   ProductPackageStatus,
 } from "@/types/product-package";
 
-export interface LegalService {
-  id: string;
-  slug: string;
-  name: string;
-  summary: string;
-  engagement: "orientacion" | "revision" | "redaccion" | "patrocinio" | "defensa";
-  status: "available" | "preparation";
-}
-
 export interface LegalInquiry {
   id: string;
   matter: string;

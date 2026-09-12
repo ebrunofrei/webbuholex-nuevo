@@ -14,7 +14,7 @@ const webService = getPublicServiceBySlug("diseno-desarrollo-paginas-web-profesi
 
 describe("fase 10.H: servicio web, responsive y consola", () => {
   it("registra SRV-WEB-001 como el octavo servicio tipado", () => {
-    expect(publicServices).toHaveLength(8);
+    expect(publicServices).toHaveLength(11);
     expect(webService).toMatchObject({
       id: "SRV-WEB-001",
       slug: "diseno-desarrollo-paginas-web-profesionales",

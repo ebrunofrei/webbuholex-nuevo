@@ -280,8 +280,7 @@ h3 {
   top: 0;
   z-index: 30;
   border-bottom: 1px solid var(--bl-border);
-  background: rgb(255 255 255 / 96%);
-  backdrop-filter: blur(16px);
+  background: var(--bl-white);
 }
 
 .nav-shell {
@@ -344,6 +343,7 @@ h3 {
   font-size: .77rem;
   font-weight: 700;
   text-decoration: none;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
 }
 
 .main-nav ul a:hover {

@@ -1,5 +1,10 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ServiceCatalog } from "@/components/services/service-catalog";
 import { ServiceDetail } from "@/components/services/service-detail";
@@ -13,11 +18,52 @@ describe("catálogo público de servicios", () => {
   });
 
   it("renderiza fichas navegables sin compra ni pago inmediato", () => {
-    const { container } = render(<ServiceCatalog services={publicServices} />);
-    expect(screen.getByText("11 servicios registrados")).toBeInTheDocument();
-    expect(container.querySelectorAll("article")).toHaveLength(11);
-    expect(container.querySelector("[download], [href*='checkout'], [href*='compra']")).toBeNull();
-    expect(publicServices.every((service) => service.allowsImmediatePayment === false && service.price === null && service.currency === null)).toBe(true);
+    const { container } = render(
+      <ServiceCatalog services={publicServices} />,
+    );
+
+    const serviceRail = screen.getByRole("navigation", {
+      name: /lista de servicios/i,
+    });
+
+    for (const service of publicServices) {
+      const serviceTitle = within(serviceRail).getByText(
+        service.title,
+        {
+          selector: "strong",
+          exact: true,
+        },
+      );
+
+      const selector = serviceTitle.closest("button");
+
+      expect(selector).not.toBeNull();
+
+      fireEvent.click(selector!);
+
+      const serviceLink = screen.getByRole("link", {
+        name: /explorar servicio/i,
+      });
+
+      expect(
+        serviceLink.getAttribute("href")?.replace(/\/$/, ""),
+      ).toBe(`/servicios/${service.slug}`);
+    }
+
+    expect(
+      container.querySelector(
+        '[download], [href*="checkout"], [href*="compra"]',
+      ),
+    ).toBeNull();
+
+    expect(
+      publicServices.every(
+        (service) =>
+          service.allowsImmediatePayment === false &&
+          service.price === null &&
+          service.currency === null,
+      ),
+    ).toBe(true);
   });
 
   it("protege la evaluación técnica y no inventa responsable", () => {
