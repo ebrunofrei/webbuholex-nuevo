@@ -1,0 +1,3593 @@
+{
+  "id": "2c36eace-40be-40eb-b68f-d034ad9e98fb",
+  "prevId": "b5444dbc-6640-4cbd-a384-875dab99d49f",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "complaints_private.complaint_audit_events": {
+      "name": "complaint_audit_events",
+      "schema": "complaints_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "complaint_id": {
+          "name": "complaint_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "complaint_audit_events_comp_created_idx": {
+          "name": "complaint_audit_events_comp_created_idx",
+          "columns": [
+            {
+              "expression": "complaint_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "complaint_audit_events_complaint_id_complaints_id_fk": {
+          "name": "complaint_audit_events_complaint_id_complaints_id_fk",
+          "tableFrom": "complaint_audit_events",
+          "tableTo": "complaints",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "complaint_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "complaints_private.complaint_information_requests": {
+      "name": "complaint_information_requests",
+      "schema": "complaints_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "complaint_id": {
+          "name": "complaint_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_sequence": {
+          "name": "request_sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_text": {
+          "name": "request_text",
+          "type": "varchar(2000)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "return_note": {
+          "name": "return_note",
+          "type": "varchar(2000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_by": {
+          "name": "received_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "complaint_information_requests_comp_open_idx": {
+          "name": "complaint_information_requests_comp_open_idx",
+          "columns": [
+            {
+              "expression": "complaint_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"complaints_private\".\"complaint_information_requests\".\"status\" = 'open'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "complaint_information_requests_complaint_id_complaints_id_fk": {
+          "name": "complaint_information_requests_complaint_id_complaints_id_fk",
+          "tableFrom": "complaint_information_requests",
+          "tableTo": "complaints",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "complaint_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "complaint_information_requests_comp_seq_idx": {
+          "name": "complaint_information_requests_comp_seq_idx",
+          "nullsNotDistinct": false,
+          "columns": [
+            "complaint_id",
+            "request_sequence"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "lifecycle_consistency": {
+          "name": "lifecycle_consistency",
+          "value": "(\"complaints_private\".\"complaint_information_requests\".\"status\" = 'open' AND \"complaints_private\".\"complaint_information_requests\".\"return_note\" IS NULL AND \"complaints_private\".\"complaint_information_requests\".\"received_at\" IS NULL AND \"complaints_private\".\"complaint_information_requests\".\"received_by\" IS NULL) OR (\"complaints_private\".\"complaint_information_requests\".\"status\" = 'received' AND \"complaints_private\".\"complaint_information_requests\".\"return_note\" IS NOT NULL AND \"complaints_private\".\"complaint_information_requests\".\"received_at\" IS NOT NULL AND \"complaints_private\".\"complaint_information_requests\".\"received_by\" IS NOT NULL)"
+        },
+        "request_sequence_positive": {
+          "name": "request_sequence_positive",
+          "value": "\"complaints_private\".\"complaint_information_requests\".\"request_sequence\" > 0"
+        },
+        "request_text_not_empty": {
+          "name": "request_text_not_empty",
+          "value": "length(trim(\"complaints_private\".\"complaint_information_requests\".\"request_text\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "complaints_private.complaint_internal_notes": {
+      "name": "complaint_internal_notes",
+      "schema": "complaints_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "complaint_id": {
+          "name": "complaint_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supersedes_note_id": {
+          "name": "supersedes_note_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correction_reason": {
+          "name": "correction_reason",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "complaint_internal_notes_comp_created_idx": {
+          "name": "complaint_internal_notes_comp_created_idx",
+          "columns": [
+            {
+              "expression": "complaint_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "complaint_internal_notes_complaint_id_complaints_id_fk": {
+          "name": "complaint_internal_notes_complaint_id_complaints_id_fk",
+          "tableFrom": "complaint_internal_notes",
+          "tableTo": "complaints",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "complaint_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "complaint_internal_notes_supersedes_note_id_complaint_internal_notes_id_fk": {
+          "name": "complaint_internal_notes_supersedes_note_id_complaint_internal_notes_id_fk",
+          "tableFrom": "complaint_internal_notes",
+          "tableTo": "complaint_internal_notes",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "supersedes_note_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "body_not_empty": {
+          "name": "body_not_empty",
+          "value": "length(trim(\"complaints_private\".\"complaint_internal_notes\".\"body\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "complaints_private.complaint_outbox": {
+      "name": "complaint_outbox",
+      "schema": "complaints_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "complaint_id": {
+          "name": "complaint_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "processing_started_at": {
+          "name": "processing_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error_code": {
+          "name": "last_error_code",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "complaint_outbox_status_available_idx": {
+          "name": "complaint_outbox_status_available_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "available_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "complaint_outbox_complaint_id_complaints_id_fk": {
+          "name": "complaint_outbox_complaint_id_complaints_id_fk",
+          "tableFrom": "complaint_outbox",
+          "tableTo": "complaints",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "complaint_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "attempts_positive": {
+          "name": "attempts_positive",
+          "value": "\"complaints_private\".\"complaint_outbox\".\"attempts\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "complaints_private.complaint_provider_responses": {
+      "name": "complaint_provider_responses",
+      "schema": "complaints_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "complaint_id": {
+          "name": "complaint_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supersedes_response_id": {
+          "name": "supersedes_response_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correction_reason": {
+          "name": "correction_reason",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "response_text": {
+          "name": "response_text",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actions_taken": {
+          "name": "actions_taken",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "responded_at": {
+          "name": "responded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response_channel": {
+          "name": "response_channel",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "responder_name": {
+          "name": "responder_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "responder_role": {
+          "name": "responder_role",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delivery_evidence_reference": {
+          "name": "delivery_evidence_reference",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "complaint_provider_responses_comp_created_idx": {
+          "name": "complaint_provider_responses_comp_created_idx",
+          "columns": [
+            {
+              "expression": "complaint_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "complaint_provider_responses_complaint_id_complaints_id_fk": {
+          "name": "complaint_provider_responses_complaint_id_complaints_id_fk",
+          "tableFrom": "complaint_provider_responses",
+          "tableTo": "complaints",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "complaint_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "complaint_provider_responses_supersedes_response_id_complaint_provider_responses_id_fk": {
+          "name": "complaint_provider_responses_supersedes_response_id_complaint_provider_responses_id_fk",
+          "tableFrom": "complaint_provider_responses",
+          "tableTo": "complaint_provider_responses",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "supersedes_response_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "complaint_provider_responses_comp_ver_idx": {
+          "name": "complaint_provider_responses_comp_ver_idx",
+          "nullsNotDistinct": false,
+          "columns": [
+            "complaint_id",
+            "version"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "version_positive": {
+          "name": "version_positive",
+          "value": "\"complaints_private\".\"complaint_provider_responses\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "complaints_private.complaint_sequences": {
+      "name": "complaint_sequences",
+      "schema": "complaints_private",
+      "columns": {
+        "year": {
+          "name": "year",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "last_value": {
+          "name": "last_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "year_range": {
+          "name": "year_range",
+          "value": "\"complaints_private\".\"complaint_sequences\".\"year\" >= 2000 AND \"complaints_private\".\"complaint_sequences\".\"year\" <= 2100"
+        },
+        "last_value_positive": {
+          "name": "last_value_positive",
+          "value": "\"complaints_private\".\"complaint_sequences\".\"last_value\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "complaints_private.complaint_status_history": {
+      "name": "complaint_status_history",
+      "schema": "complaints_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "complaint_id": {
+          "name": "complaint_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_status": {
+          "name": "from_status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_status": {
+          "name": "to_status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "changed_at": {
+          "name": "changed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "changed_by": {
+          "name": "changed_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "complaint_status_history_comp_changed_idx": {
+          "name": "complaint_status_history_comp_changed_idx",
+          "columns": [
+            {
+              "expression": "complaint_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "changed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "complaint_status_history_complaint_id_complaints_id_fk": {
+          "name": "complaint_status_history_complaint_id_complaints_id_fk",
+          "tableFrom": "complaint_status_history",
+          "tableTo": "complaints",
+          "schemaTo": "complaints_private",
+          "columnsFrom": [
+            "complaint_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "complaints_private.complaints": {
+      "name": "complaints",
+      "schema": "complaints_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sheet_year": {
+          "name": "sheet_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sheet_sequence": {
+          "name": "sheet_sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sheet_number": {
+          "name": "sheet_number",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "private_token_hash": {
+          "name": "private_token_hash",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash_key_version": {
+          "name": "token_hash_key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key_hash": {
+          "name": "idempotency_key_hash",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_hash_key_version": {
+          "name": "idempotency_hash_key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "deadline_at": {
+          "name": "deadline_at",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "payload_snapshot": {
+          "name": "payload_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "complaints_sheet_number_unique": {
+          "name": "complaints_sheet_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "sheet_number"
+          ]
+        },
+        "complaints_idempotency_key_hash_unique": {
+          "name": "complaints_idempotency_key_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "idempotency_key_hash"
+          ]
+        },
+        "complaints_year_seq_idx": {
+          "name": "complaints_year_seq_idx",
+          "nullsNotDistinct": false,
+          "columns": [
+            "sheet_year",
+            "sheet_sequence"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "token_hash_key_version_positive": {
+          "name": "token_hash_key_version_positive",
+          "value": "\"complaints_private\".\"complaints\".\"token_hash_key_version\" > 0"
+        },
+        "idempotency_hash_key_version_positive": {
+          "name": "idempotency_hash_key_version_positive",
+          "value": "\"complaints_private\".\"complaints\".\"idempotency_hash_key_version\" > 0"
+        },
+        "version_positive": {
+          "name": "version_positive",
+          "value": "\"complaints_private\".\"complaints\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "authorization.external_identity_bindings": {
+      "name": "external_identity_bindings",
+      "schema": "authorization",
+      "columns": {
+        "provider": {
+          "name": "provider",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_subject_id": {
+          "name": "external_subject_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operator_id": {
+          "name": "operator_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "external_identity_bindings_operator_id_operators_id_fk": {
+          "name": "external_identity_bindings_operator_id_operators_id_fk",
+          "tableFrom": "external_identity_bindings",
+          "tableTo": "operators",
+          "schemaTo": "authorization",
+          "columnsFrom": [
+            "operator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "external_identity_bindings_prov_sub_idx": {
+          "name": "external_identity_bindings_prov_sub_idx",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "external_subject_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "authorization.operator_capabilities": {
+      "name": "operator_capabilities",
+      "schema": "authorization",
+      "columns": {
+        "operator_id": {
+          "name": "operator_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capability": {
+          "name": "capability",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "operator_capabilities_operator_id_operators_id_fk": {
+          "name": "operator_capabilities_operator_id_operators_id_fk",
+          "tableFrom": "operator_capabilities",
+          "tableTo": "operators",
+          "schemaTo": "authorization",
+          "columnsFrom": [
+            "operator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "operator_capabilities_operator_id_capability_pk": {
+          "name": "operator_capabilities_operator_id_capability_pk",
+          "columns": [
+            "operator_id",
+            "capability"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "authorization.operator_jurisprudence_role_sets": {
+      "name": "operator_jurisprudence_role_sets",
+      "schema": "authorization",
+      "columns": {
+        "operator_id": {
+          "name": "operator_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "operator_jurisprudence_role_sets_operator_id_operators_id_fk": {
+          "name": "operator_jurisprudence_role_sets_operator_id_operators_id_fk",
+          "tableFrom": "operator_jurisprudence_role_sets",
+          "tableTo": "operators",
+          "schemaTo": "authorization",
+          "columnsFrom": [
+            "operator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "operator_jurisprudence_role_sets_version_check": {
+          "name": "operator_jurisprudence_role_sets_version_check",
+          "value": "\"authorization\".\"operator_jurisprudence_role_sets\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "authorization.operator_jurisprudence_roles": {
+      "name": "operator_jurisprudence_roles",
+      "schema": "authorization",
+      "columns": {
+        "operator_id": {
+          "name": "operator_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "operator_jurisprudence_roles_operator_id_operators_id_fk": {
+          "name": "operator_jurisprudence_roles_operator_id_operators_id_fk",
+          "tableFrom": "operator_jurisprudence_roles",
+          "tableTo": "operators",
+          "schemaTo": "authorization",
+          "columnsFrom": [
+            "operator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "operator_jurisprudence_roles_operator_id_role_pk": {
+          "name": "operator_jurisprudence_roles_operator_id_role_pk",
+          "columns": [
+            "operator_id",
+            "role"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "authorization.operators": {
+      "name": "operators",
+      "schema": "authorization",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_editorial_cases": {
+      "name": "jurisprudence_editorial_cases",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "case_id": {
+          "name": "case_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "case_version": {
+          "name": "case_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "jurisprudence_editorial_cases_active_idx": {
+          "name": "jurisprudence_editorial_cases_active_idx",
+          "columns": [
+            {
+              "expression": "record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "record_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "active = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "jurisprudence_editorial_cases_record_id_record_version_jurisprudence_record_versions_record_id_version_fk": {
+          "name": "jurisprudence_editorial_cases_record_id_record_version_jurisprudence_record_versions_record_id_version_fk",
+          "tableFrom": "jurisprudence_editorial_cases",
+          "tableTo": "jurisprudence_record_versions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id",
+            "record_version"
+          ],
+          "columnsTo": [
+            "record_id",
+            "version"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "editorial_case_record_version_positive": {
+          "name": "editorial_case_record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_editorial_cases\".\"record_version\" > 0"
+        },
+        "editorial_case_version_positive": {
+          "name": "editorial_case_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_editorial_cases\".\"case_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_editorial_events": {
+      "name": "jurisprudence_editorial_events",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "jurisprudence_editorial_events_case_id_jurisprudence_editorial_cases_case_id_fk": {
+          "name": "jurisprudence_editorial_events_case_id_jurisprudence_editorial_cases_case_id_fk",
+          "tableFrom": "jurisprudence_editorial_events",
+          "tableTo": "jurisprudence_editorial_cases",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "case_id"
+          ],
+          "columnsTo": [
+            "case_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "jurisprudence_editorial_events_seq_unique": {
+          "name": "jurisprudence_editorial_events_seq_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "case_id",
+            "sequence"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "editorial_event_sequence_positive": {
+          "name": "editorial_event_sequence_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_editorial_events\".\"sequence\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_editorial_idempotency": {
+      "name": "jurisprudence_editorial_idempotency",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "command_fingerprint": {
+          "name": "command_fingerprint",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_governed_sources": {
+      "name": "jurisprudence_governed_sources",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "source_id": {
+          "name": "source_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_idempotency": {
+      "name": "jurisprudence_idempotency",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "input_json": {
+          "name": "input_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "jurisprudence_idempotency_record_id_jurisprudence_records_id_fk": {
+          "name": "jurisprudence_idempotency_record_id_jurisprudence_records_id_fk",
+          "tableFrom": "jurisprudence_idempotency",
+          "tableTo": "jurisprudence_records",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "jurisprudence_public.projection_barriers": {
+      "name": "projection_barriers",
+      "schema": "jurisprudence_public",
+      "columns": {
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "execution_version": {
+          "name": "execution_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "projection_state": {
+          "name": "projection_state",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "projection_barrier_record_version_positive": {
+          "name": "projection_barrier_record_version_positive",
+          "value": "\"jurisprudence_public\".\"projection_barriers\".\"record_version\" > 0"
+        },
+        "projection_barrier_execution_version_positive": {
+          "name": "projection_barrier_execution_version_positive",
+          "value": "\"jurisprudence_public\".\"projection_barriers\".\"execution_version\" > 0"
+        },
+        "valid_projection_state": {
+          "name": "valid_projection_state",
+          "value": "\"jurisprudence_public\".\"projection_barriers\".\"projection_state\" IN ('published', 'withdrawn')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_public_projections": {
+      "name": "jurisprudence_public_projections",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "projection_id": {
+          "name": "projection_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "jurisprudence_public_projections_active_idx": {
+          "name": "jurisprudence_public_projections_active_idx",
+          "columns": [
+            {
+              "expression": "record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "record_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'active_internal'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "jurisprudence_public_projections_execution_id_jurisprudence_publication_executions_execution_id_fk": {
+          "name": "jurisprudence_public_projections_execution_id_jurisprudence_publication_executions_execution_id_fk",
+          "tableFrom": "jurisprudence_public_projections",
+          "tableTo": "jurisprudence_publication_executions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "execution_id"
+          ],
+          "columnsTo": [
+            "execution_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "jurisprudence_public_projections_record_id_record_version_jurisprudence_record_versions_record_id_version_fk": {
+          "name": "jurisprudence_public_projections_record_id_record_version_jurisprudence_record_versions_record_id_version_fk",
+          "tableFrom": "jurisprudence_public_projections",
+          "tableTo": "jurisprudence_record_versions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id",
+            "record_version"
+          ],
+          "columnsTo": [
+            "record_id",
+            "version"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "public_projection_record_version_positive": {
+          "name": "public_projection_record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_public_projections\".\"record_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_authorization_cases": {
+      "name": "jurisprudence_publication_authorization_cases",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "authorization_case_id": {
+          "name": "authorization_case_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "authorization_version": {
+          "name": "authorization_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "jurisprudence_publication_authorization_cases_record_id_record_version_jurisprudence_record_versions_record_id_version_fk": {
+          "name": "jurisprudence_publication_authorization_cases_record_id_record_version_jurisprudence_record_versions_record_id_version_fk",
+          "tableFrom": "jurisprudence_publication_authorization_cases",
+          "tableTo": "jurisprudence_record_versions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id",
+            "record_version"
+          ],
+          "columnsTo": [
+            "record_id",
+            "version"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "auth_case_record_version_positive": {
+          "name": "auth_case_record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_authorization_cases\".\"record_version\" > 0"
+        },
+        "auth_case_version_positive": {
+          "name": "auth_case_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_authorization_cases\".\"authorization_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_authorization_events": {
+      "name": "jurisprudence_publication_authorization_events",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "authorization_case_id": {
+          "name": "authorization_case_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "jurisprudence_publication_authorization_events_authorization_case_id_jurisprudence_publication_authorization_cases_authorization_case_id_fk": {
+          "name": "jurisprudence_publication_authorization_events_authorization_case_id_jurisprudence_publication_authorization_cases_authorization_case_id_fk",
+          "tableFrom": "jurisprudence_publication_authorization_events",
+          "tableTo": "jurisprudence_publication_authorization_cases",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "authorization_case_id"
+          ],
+          "columnsTo": [
+            "authorization_case_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "jurisprudence_auth_events_seq_unique": {
+          "name": "jurisprudence_auth_events_seq_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "authorization_case_id",
+            "sequence"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "auth_event_sequence_positive": {
+          "name": "auth_event_sequence_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_authorization_events\".\"sequence\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_authorization_idempotency": {
+      "name": "jurisprudence_publication_authorization_idempotency",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "command_fingerprint": {
+          "name": "command_fingerprint",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_dossier_events": {
+      "name": "jurisprudence_publication_dossier_events",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "dossier_id": {
+          "name": "dossier_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "jurisprudence_publication_dossier_events_dossier_id_jurisprudence_publication_dossiers_dossier_id_fk": {
+          "name": "jurisprudence_publication_dossier_events_dossier_id_jurisprudence_publication_dossiers_dossier_id_fk",
+          "tableFrom": "jurisprudence_publication_dossier_events",
+          "tableTo": "jurisprudence_publication_dossiers",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "dossier_id"
+          ],
+          "columnsTo": [
+            "dossier_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "jurisprudence_pub_dossier_events_seq_unique": {
+          "name": "jurisprudence_pub_dossier_events_seq_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "dossier_id",
+            "sequence"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "dossier_event_sequence_positive": {
+          "name": "dossier_event_sequence_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_dossier_events\".\"sequence\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_dossiers": {
+      "name": "jurisprudence_publication_dossiers",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "dossier_id": {
+          "name": "dossier_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dossier_version": {
+          "name": "dossier_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "jurisprudence_publication_dossiers_active_idx": {
+          "name": "jurisprudence_publication_dossiers_active_idx",
+          "columns": [
+            {
+              "expression": "record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "record_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "active = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "jurisprudence_publication_dossiers_record_id_record_version_jurisprudence_record_versions_record_id_version_fk": {
+          "name": "jurisprudence_publication_dossiers_record_id_record_version_jurisprudence_record_versions_record_id_version_fk",
+          "tableFrom": "jurisprudence_publication_dossiers",
+          "tableTo": "jurisprudence_record_versions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id",
+            "record_version"
+          ],
+          "columnsTo": [
+            "record_id",
+            "version"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "publication_dossier_record_version_positive": {
+          "name": "publication_dossier_record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_dossiers\".\"record_version\" > 0"
+        },
+        "publication_dossier_version_positive": {
+          "name": "publication_dossier_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_dossiers\".\"dossier_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_execution_events": {
+      "name": "jurisprudence_publication_execution_events",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "execution_version": {
+          "name": "execution_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "jurisprudence_pub_exec_events_record_idx": {
+          "name": "jurisprudence_pub_exec_events_record_idx",
+          "columns": [
+            {
+              "expression": "record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "jurisprudence_publication_execution_events_execution_id_jurisprudence_publication_executions_execution_id_fk": {
+          "name": "jurisprudence_publication_execution_events_execution_id_jurisprudence_publication_executions_execution_id_fk",
+          "tableFrom": "jurisprudence_publication_execution_events",
+          "tableTo": "jurisprudence_publication_executions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "execution_id"
+          ],
+          "columnsTo": [
+            "execution_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "jurisprudence_publication_execution_events_record_id_jurisprudence_records_id_fk": {
+          "name": "jurisprudence_publication_execution_events_record_id_jurisprudence_records_id_fk",
+          "tableFrom": "jurisprudence_publication_execution_events",
+          "tableTo": "jurisprudence_records",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "jurisprudence_pub_exec_events_seq_unique": {
+          "name": "jurisprudence_pub_exec_events_seq_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "execution_id",
+            "sequence"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "pub_exec_event_record_version_positive": {
+          "name": "pub_exec_event_record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_execution_events\".\"record_version\" > 0"
+        },
+        "pub_exec_event_exec_version_positive": {
+          "name": "pub_exec_event_exec_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_execution_events\".\"execution_version\" > 0"
+        },
+        "pub_exec_event_sequence_positive": {
+          "name": "pub_exec_event_sequence_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_execution_events\".\"sequence\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_executions": {
+      "name": "jurisprudence_publication_executions",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "execution_id": {
+          "name": "execution_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "editorial_case_id": {
+          "name": "editorial_case_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publication_dossier_id": {
+          "name": "publication_dossier_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "authorization_case_id": {
+          "name": "authorization_case_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "projection_id": {
+          "name": "projection_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "executed_at": {
+          "name": "executed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "executed_by_reference": {
+          "name": "executed_by_reference",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "withdrawn_at": {
+          "name": "withdrawn_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "withdrawal_reason": {
+          "name": "withdrawal_reason",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "superseded_at": {
+          "name": "superseded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "superseded_by_record_version": {
+          "name": "superseded_by_record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "publication_executed": {
+          "name": "publication_executed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "deployed": {
+          "name": "deployed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "jurisprudence_pub_exec_record_version_idx": {
+          "name": "jurisprudence_pub_exec_record_version_idx",
+          "columns": [
+            {
+              "expression": "record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "record_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jurisprudence_pub_exec_status_idx": {
+          "name": "jurisprudence_pub_exec_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "jurisprudence_publication_executions_record_id_jurisprudence_records_id_fk": {
+          "name": "jurisprudence_publication_executions_record_id_jurisprudence_records_id_fk",
+          "tableFrom": "jurisprudence_publication_executions",
+          "tableTo": "jurisprudence_records",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "publication_execution_version_positive": {
+          "name": "publication_execution_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_executions\".\"version\" > 0"
+        },
+        "publication_execution_record_version_positive": {
+          "name": "publication_execution_record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_executions\".\"record_version\" > 0"
+        },
+        "publication_execution_deployed_false": {
+          "name": "publication_execution_deployed_false",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_executions\".\"deployed\" = false"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_governance_idempotency": {
+      "name": "jurisprudence_publication_governance_idempotency",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "command_fingerprint": {
+          "name": "command_fingerprint",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_idempotency": {
+      "name": "jurisprudence_publication_idempotency",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "command_fingerprint": {
+          "name": "command_fingerprint",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_publication_outbox": {
+      "name": "jurisprudence_publication_outbox",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "execution_version": {
+          "name": "execution_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "processing_started_at": {
+          "name": "processing_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error_code": {
+          "name": "last_error_code",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recovery_of_outbox_id": {
+          "name": "recovery_of_outbox_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "jurisprudence_publication_outbox_status_available_idx": {
+          "name": "jurisprudence_publication_outbox_status_available_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "available_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jurisprudence_publication_outbox_record_idx": {
+          "name": "jurisprudence_publication_outbox_record_idx",
+          "columns": [
+            {
+              "expression": "record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "record_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "jurisprudence_publication_outbox_record_id_jurisprudence_records_id_fk": {
+          "name": "jurisprudence_publication_outbox_record_id_jurisprudence_records_id_fk",
+          "tableFrom": "jurisprudence_publication_outbox",
+          "tableTo": "jurisprudence_records",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "jurisprudence_publication_outbox_execution_id_jurisprudence_publication_executions_execution_id_fk": {
+          "name": "jurisprudence_publication_outbox_execution_id_jurisprudence_publication_executions_execution_id_fk",
+          "tableFrom": "jurisprudence_publication_outbox",
+          "tableTo": "jurisprudence_publication_executions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "execution_id"
+          ],
+          "columnsTo": [
+            "execution_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "jurisprudence_publication_outbox_recovery_of_outbox_id_jurisprudence_publication_outbox_id_fk": {
+          "name": "jurisprudence_publication_outbox_recovery_of_outbox_id_jurisprudence_publication_outbox_id_fk",
+          "tableFrom": "jurisprudence_publication_outbox",
+          "tableTo": "jurisprudence_publication_outbox",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "recovery_of_outbox_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "attempts_positive": {
+          "name": "attempts_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_outbox\".\"attempts\" >= 0"
+        },
+        "valid_event_type": {
+          "name": "valid_event_type",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_outbox\".\"event_type\" IN ('publish_projection', 'withdraw_projection')"
+        },
+        "valid_status": {
+          "name": "valid_status",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_publication_outbox\".\"status\" IN ('pending', 'processing', 'sent', 'failed', 'dead_letter')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_public.published_records": {
+      "name": "published_records",
+      "schema": "jurisprudence_public",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "case_title": {
+          "name": "case_title",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "case_number": {
+          "name": "case_number",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resolution_number": {
+          "name": "resolution_number",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_type": {
+          "name": "resolution_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "institution_name": {
+          "name": "institution_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issuing_body": {
+          "name": "issuing_body",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matter": {
+          "name": "matter",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_name": {
+          "name": "source_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "official_html_url": {
+          "name": "official_html_url",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "official_pdf_url": {
+          "name": "official_pdf_url",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normalized_search_text": {
+          "name": "normalized_search_text",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "search_vector": {
+          "name": "search_vector",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "to_tsvector('spanish', normalized_search_text)",
+            "type": "stored"
+          }
+        }
+      },
+      "indexes": {
+        "published_records_case_idx": {
+          "name": "published_records_case_idx",
+          "columns": [
+            {
+              "expression": "case_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "published_records_resolution_idx": {
+          "name": "published_records_resolution_idx",
+          "columns": [
+            {
+              "expression": "resolution_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "published_records_issued_at_idx": {
+          "name": "published_records_issued_at_idx",
+          "columns": [
+            {
+              "expression": "issued_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "published_records_fts_gin_idx": {
+          "name": "published_records_fts_gin_idx",
+          "columns": [
+            {
+              "expression": "search_vector",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "published_records_slug_unique": {
+          "name": "published_records_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "published_record_version_positive": {
+          "name": "published_record_version_positive",
+          "value": "\"jurisprudence_public\".\"published_records\".\"record_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_record_versions": {
+      "name": "jurisprudence_record_versions",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "change_kind": {
+          "name": "change_kind",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "snapshot_json": {
+          "name": "snapshot_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "jurisprudence_record_versions_record_id_jurisprudence_records_id_fk": {
+          "name": "jurisprudence_record_versions_record_id_jurisprudence_records_id_fk",
+          "tableFrom": "jurisprudence_record_versions",
+          "tableTo": "jurisprudence_records",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "jurisprudence_record_versions_pk": {
+          "name": "jurisprudence_record_versions_pk",
+          "nullsNotDistinct": false,
+          "columns": [
+            "record_id",
+            "version"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "version_positive": {
+          "name": "version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_record_versions\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_records": {
+      "name": "jurisprudence_records",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "deduplication_key": {
+          "name": "deduplication_key",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_document_id": {
+          "name": "source_document_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normalized_case_number": {
+          "name": "normalized_case_number",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_resolution_number": {
+          "name": "normalized_resolution_number",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "institution_id": {
+          "name": "institution_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_matter": {
+          "name": "normalized_matter",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_search_text": {
+          "name": "normalized_search_text",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "search_vector": {
+          "name": "search_vector",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "to_tsvector('spanish', normalized_search_text)",
+            "type": "stored"
+          }
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "editorial_status": {
+          "name": "editorial_status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publication_status": {
+          "name": "publication_status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verification_status": {
+          "name": "verification_status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "jurisprudence_records_source_document_idx": {
+          "name": "jurisprudence_records_source_document_idx",
+          "columns": [
+            {
+              "expression": "source_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_document_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jurisprudence_records_case_idx": {
+          "name": "jurisprudence_records_case_idx",
+          "columns": [
+            {
+              "expression": "normalized_case_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jurisprudence_records_resolution_idx": {
+          "name": "jurisprudence_records_resolution_idx",
+          "columns": [
+            {
+              "expression": "normalized_resolution_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jurisprudence_records_institution_matter_date_idx": {
+          "name": "jurisprudence_records_institution_matter_date_idx",
+          "columns": [
+            {
+              "expression": "institution_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "normalized_matter",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "issued_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jurisprudence_records_status_idx": {
+          "name": "jurisprudence_records_status_idx",
+          "columns": [
+            {
+              "expression": "editorial_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "publication_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "verification_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jurisprudence_records_fts_gin_idx": {
+          "name": "jurisprudence_records_fts_gin_idx",
+          "columns": [
+            {
+              "expression": "search_vector",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "jurisprudence_records_slug_unique": {
+          "name": "jurisprudence_records_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        },
+        "jurisprudence_records_deduplication_key_unique": {
+          "name": "jurisprudence_records_deduplication_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "deduplication_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "record_version_positive": {
+          "name": "record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_records\".\"record_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "jurisprudence_internal.jurisprudence_source_bindings": {
+      "name": "jurisprudence_source_bindings",
+      "schema": "jurisprudence_internal",
+      "columns": {
+        "binding_id": {
+          "name": "binding_id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_version": {
+          "name": "record_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "binding_status": {
+          "name": "binding_status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "jurisprudence_source_bindings_record_id_record_version_jurisprudence_record_versions_record_id_version_fk": {
+          "name": "jurisprudence_source_bindings_record_id_record_version_jurisprudence_record_versions_record_id_version_fk",
+          "tableFrom": "jurisprudence_source_bindings",
+          "tableTo": "jurisprudence_record_versions",
+          "schemaTo": "jurisprudence_internal",
+          "columnsFrom": [
+            "record_id",
+            "record_version"
+          ],
+          "columnsTo": [
+            "record_id",
+            "version"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "source_binding_record_version_positive": {
+          "name": "source_binding_record_version_positive",
+          "value": "\"jurisprudence_internal\".\"jurisprudence_source_bindings\".\"record_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "payments_private.payment_orders": {
+      "name": "payment_orders",
+      "schema": "payments_private",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "service_id": {
+          "name": "service_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sub_offer_id": {
+          "name": "sub_offer_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "customer_reference": {
+          "name": "customer_reference",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quote_reference": {
+          "name": "quote_reference",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount_minor": {
+          "name": "amount_minor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_order_id": {
+          "name": "provider_order_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_payment_id": {
+          "name": "provider_payment_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_at": {
+          "name": "failed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refunded_at": {
+          "name": "refunded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expired_at": {
+          "name": "expired_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payment_orders_provider_order_id_idx": {
+          "name": "payment_orders_provider_order_id_idx",
+          "columns": [
+            {
+              "expression": "provider_order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"payments_private\".\"payment_orders\".\"provider_order_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_orders_provider_payment_id_idx": {
+          "name": "payment_orders_provider_payment_id_idx",
+          "columns": [
+            {
+              "expression": "provider_payment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"payments_private\".\"payment_orders\".\"provider_payment_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_orders_status_idx": {
+          "name": "payment_orders_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_orders_created_at_idx": {
+          "name": "payment_orders_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_orders_service_id_idx": {
+          "name": "payment_orders_service_id_idx",
+          "columns": [
+            {
+              "expression": "service_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "payment_orders_idempotency_key_unique": {
+          "name": "payment_orders_idempotency_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "idempotency_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "payment_orders_amount_minor_check": {
+          "name": "payment_orders_amount_minor_check",
+          "value": "\"payments_private\".\"payment_orders\".\"amount_minor\" > 0"
+        },
+        "payment_orders_service_id_check": {
+          "name": "payment_orders_service_id_check",
+          "value": "length(trim(\"payments_private\".\"payment_orders\".\"service_id\")) > 0"
+        },
+        "payment_orders_customer_reference_check": {
+          "name": "payment_orders_customer_reference_check",
+          "value": "length(trim(\"payments_private\".\"payment_orders\".\"customer_reference\")) > 0"
+        },
+        "payment_orders_idempotency_key_check": {
+          "name": "payment_orders_idempotency_key_check",
+          "value": "length(trim(\"payments_private\".\"payment_orders\".\"idempotency_key\")) > 0"
+        },
+        "payment_orders_currency_check": {
+          "name": "payment_orders_currency_check",
+          "value": "\"payments_private\".\"payment_orders\".\"currency\" IN ('PEN')"
+        },
+        "payment_orders_provider_check": {
+          "name": "payment_orders_provider_check",
+          "value": "\"payments_private\".\"payment_orders\".\"provider\" IS NULL OR \"payments_private\".\"payment_orders\".\"provider\" IN ('culqi')"
+        },
+        "payment_orders_payment_method_check": {
+          "name": "payment_orders_payment_method_check",
+          "value": "\"payments_private\".\"payment_orders\".\"payment_method\" IS NULL OR \"payments_private\".\"payment_orders\".\"payment_method\" IN ('card', 'yape')"
+        },
+        "payment_orders_status_check": {
+          "name": "payment_orders_status_check",
+          "value": "\"payments_private\".\"payment_orders\".\"status\" IN ('draft', 'awaiting_payment', 'processing', 'paid', 'failed', 'cancelled', 'expired', 'refunded')"
+        },
+        "payment_orders_draft_payment_method_check": {
+          "name": "payment_orders_draft_payment_method_check",
+          "value": "\"payments_private\".\"payment_orders\".\"status\" <> 'draft' OR \"payments_private\".\"payment_orders\".\"payment_method\" IS NULL"
+        },
+        "payment_orders_paid_at_check": {
+          "name": "payment_orders_paid_at_check",
+          "value": "(\"payments_private\".\"payment_orders\".\"status\" IN ('paid', 'refunded')) = (\"payments_private\".\"payment_orders\".\"paid_at\" IS NOT NULL)"
+        },
+        "payment_orders_failed_at_check": {
+          "name": "payment_orders_failed_at_check",
+          "value": "(\"payments_private\".\"payment_orders\".\"status\" = 'failed') = (\"payments_private\".\"payment_orders\".\"failed_at\" IS NOT NULL)"
+        },
+        "payment_orders_cancelled_at_check": {
+          "name": "payment_orders_cancelled_at_check",
+          "value": "(\"payments_private\".\"payment_orders\".\"status\" = 'cancelled') = (\"payments_private\".\"payment_orders\".\"cancelled_at\" IS NOT NULL)"
+        },
+        "payment_orders_expired_at_check": {
+          "name": "payment_orders_expired_at_check",
+          "value": "(\"payments_private\".\"payment_orders\".\"status\" = 'expired') = (\"payments_private\".\"payment_orders\".\"expired_at\" IS NOT NULL)"
+        },
+        "payment_orders_refunded_at_check": {
+          "name": "payment_orders_refunded_at_check",
+          "value": "(\"payments_private\".\"payment_orders\".\"status\" = 'refunded') = (\"payments_private\".\"payment_orders\".\"refunded_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "complaints_private": "complaints_private",
+    "authorization": "authorization",
+    "jurisprudence_internal": "jurisprudence_internal",
+    "jurisprudence_public": "jurisprudence_public",
+    "payments_private": "payments_private"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -232,6 +232,13 @@
       "when": 1787176316029,
       "tag": "0032_jurisprudence_role_assignment_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789319636628,
+      "tag": "0033_puzzling_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }
