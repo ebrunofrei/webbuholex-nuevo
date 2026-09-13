@@ -321,18 +321,20 @@ describe("persistencia, lifecycle y logging", () => {
 describe("barreras estáticas y preservación", () => {
   it("mantiene rutas, UI y jurisprudencia desconectadas", () => {
     const authorizedRouteFiles = [
-    "app/api/admin/complaints/[complaintId]/responses/route.ts",
-    "app/api/admin/complaints/[complaintId]/review/route.ts",
-    "app/api/admin/complaints/[complaintId]/route.ts",
-    "app/api/admin/complaints/route.ts",
-    "app/api/admin/complaints/[complaintId]/close/route.ts",
-    "app/api/admin/complaints/[complaintId]/request-information/route.ts",
-    "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
-    "app/api/admin/jurisprudence/publication/execution/route.ts",
-    "app/api/complaints/route.ts",
-    "app/api/internal/cron/jurisprudence-publication/route.ts",
+      "app/api/admin/complaints/[complaintId]/responses/route.ts",
+      "app/api/admin/complaints/[complaintId]/review/route.ts",
+      "app/api/admin/complaints/[complaintId]/route.ts",
+      "app/api/admin/complaints/route.ts",
+      "app/api/admin/complaints/[complaintId]/close/route.ts",
+      "app/api/admin/complaints/[complaintId]/request-information/route.ts",
+      "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
+      "app/api/admin/jurisprudence/publication/execution/route.ts",
+      "app/api/admin/payments/orders/route.ts",
+      "app/api/admin/payments/orders/[id]/route.ts",
+      "app/api/complaints/route.ts",
+      "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
-];
+    ];
     const routes = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string" && /(^|[\/\\])route\.ts$/.test(entry)).map((entry) => path.relative(ROOT, path.join(ROOT, "app", entry)).split(path.sep).join("/"));
     expect(routes.sort()).toEqual(authorizedRouteFiles.sort());
     const appEntries = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string");

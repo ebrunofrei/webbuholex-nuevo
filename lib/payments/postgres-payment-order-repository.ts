@@ -7,6 +7,18 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(private tx: any) {}
 
+  async findById(id: string): Promise<PaymentOrder | null> {
+    const result = await this.tx
+      .select()
+      .from(paymentOrders)
+      .where(eq(paymentOrders.id, id))
+      .limit(1);
+
+    if (result.length === 0) return null;
+
+    return this.mapToDomain(result[0]);
+  }
+
   async findByQuoteReference(quoteReference: string): Promise<PaymentOrder | null> {
     const result = await this.tx
       .select()

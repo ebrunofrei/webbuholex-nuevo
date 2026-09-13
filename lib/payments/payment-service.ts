@@ -23,6 +23,13 @@ export class PaymentQuoteNotFoundError extends Error {
   }
 }
 
+export class PaymentOrderNotFoundError extends Error {
+  constructor(orderId: string) {
+    super(`PaymentOrder ${orderId} not found.`);
+    this.name = "PaymentOrderNotFoundError";
+  }
+}
+
 export class PaymentOrderReconciliationError extends Error {
   constructor() {
     super("Concurrency conflict occurred but canonical PaymentOrder could not be retrieved");
@@ -91,6 +98,16 @@ export class PaymentService {
       }
 
       return paymentOrder;
+    });
+  }
+
+  async getPaymentOrderById(orderId: string): Promise<PaymentOrder> {
+    return this.uow.execute(async ({ orders }) => {
+      const order = await orders.findById(orderId);
+      if (!order) {
+        throw new PaymentOrderNotFoundError(orderId);
+      }
+      return order;
     });
   }
 }

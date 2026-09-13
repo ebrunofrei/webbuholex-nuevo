@@ -27,6 +27,7 @@ class MockQuoteRepository implements PaymentQuoteRepository {
 
 class MockOrderRepository implements PaymentOrderRepository {
   orders: Map<string, PaymentOrder> = new Map();
+  findById = vi.fn().mockImplementation(async (id: string) => this.orders.get(id) || null);
 
   async findByQuoteReference(quoteReference: string): Promise<PaymentOrder | null> {
     for (const order of this.orders.values()) {

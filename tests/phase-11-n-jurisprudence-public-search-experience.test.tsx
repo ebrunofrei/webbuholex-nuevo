@@ -621,6 +621,8 @@ describe("fase 11.N: experiencia pública controlada de búsqueda jurisprudencia
         "app/api/admin/complaints/[complaintId]/request-information/route.ts",
         "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
         "app/api/admin/jurisprudence/publication/execution/route.ts",
+      "app/api/admin/payments/orders/route.ts",
+      "app/api/admin/payments/orders/[id]/route.ts",
         "app/api/complaints/route.ts",
         "app/api/internal/cron/jurisprudence-publication/route.ts",
         "app/api/owl/admission/route.ts",

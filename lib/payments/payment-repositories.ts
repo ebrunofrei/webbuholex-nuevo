@@ -7,6 +7,7 @@ export interface PaymentQuoteRepository {
 }
 
 export interface PaymentOrderRepository {
+  findById(id: string): Promise<PaymentOrder | null>;
   findByQuoteReference(quoteReference: string): Promise<PaymentOrder | null>;
   findByIdempotencyKey(key: string): Promise<PaymentOrder | null>;
   insertIdempotent(order: PaymentOrder): Promise<"inserted" | "already_exists">;
