@@ -239,6 +239,13 @@
       "when": 1789319636628,
       "tag": "0033_puzzling_cassandra_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789323335654,
+      "tag": "0034_hard_dreadnoughts",
+      "breakpoints": true
     }
   ]
 }

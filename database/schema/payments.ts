@@ -10,6 +10,8 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+import { paymentQuotes } from "./payment-quotes";
+
 export const paymentsPrivateSchema = pgSchema("payments_private");
 
 export const paymentOrders = paymentsPrivateSchema.table(
@@ -19,7 +21,7 @@ export const paymentOrders = paymentsPrivateSchema.table(
     serviceId: varchar("service_id").notNull(),
     subOfferId: varchar("sub_offer_id"),
     customerReference: varchar("customer_reference").notNull(),
-    quoteReference: varchar("quote_reference"),
+    quoteReference: uuid("quote_reference").references(() => paymentQuotes.id, { onDelete: "restrict" }),
     amountMinor: integer("amount_minor").notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
     provider: varchar("provider"),
@@ -59,6 +61,9 @@ export const paymentOrders = paymentsPrivateSchema.table(
     uniqueIndex("payment_orders_provider_payment_id_idx")
       .on(table.providerPaymentId)
       .where(sql`${table.providerPaymentId} IS NOT NULL`),
+    uniqueIndex("payment_orders_quote_reference_idx")
+      .on(table.quoteReference)
+      .where(sql`${table.quoteReference} IS NOT NULL`),
     index("payment_orders_status_idx").on(table.status),
     index("payment_orders_created_at_idx").on(table.createdAt),
     index("payment_orders_service_id_idx").on(table.serviceId),
