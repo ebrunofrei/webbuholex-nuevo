@@ -192,4 +192,68 @@ export class PostgresPaymentAttemptRepository implements PaymentAttemptRepositor
       .set(values)
       .where(eq(paymentAttempts.id, id));
   }
+
+  async transitionStatusFromProcessing(
+    id: string,
+    newStatus: PaymentAttemptStatus,
+    timestamp: Date,
+    details?: {
+      failureCategory?: PaymentAttemptFailureCategory | null;
+      failureCode?: string | null;
+    }
+  ): Promise<boolean> {
+    const values: Partial<typeof paymentAttempts.$inferInsert> = {
+      status: newStatus,
+      updatedAt: timestamp,
+    };
+
+    if (details) {
+      if (details.failureCategory !== undefined) values.failureCategory = details.failureCategory;
+      if (details.failureCode !== undefined) values.failureCode = details.failureCode;
+    }
+
+    switch (newStatus) {
+      case "succeeded":
+        values.succeededAt = timestamp;
+        break;
+      case "failed":
+        values.failedAt = timestamp;
+        break;
+      case "indeterminate":
+        values.indeterminateAt = timestamp;
+        break;
+    }
+
+    const result = await this.db
+      .update(paymentAttempts)
+      .set(values)
+      .where(
+        and(
+          eq(paymentAttempts.id, id),
+          eq(paymentAttempts.status, "processing")
+        )
+      )
+      .returning({ id: paymentAttempts.id });
+
+    return result.length > 0;
+  }
+
+  async claimAttempt(id: string, now: Date): Promise<boolean> {
+    const result = await this.db
+      .update(paymentAttempts)
+      .set({
+        status: "processing",
+        startedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(paymentAttempts.id, id),
+          eq(paymentAttempts.status, "created")
+        )
+      )
+      .returning({ id: paymentAttempts.id });
+
+    return result.length > 0;
+  }
 }

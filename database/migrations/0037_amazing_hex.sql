@@ -1,0 +1,2 @@
+ALTER TABLE "payments_private"."payment_orders" ADD COLUMN "customer_email" varchar(254);--> statement-breakpoint
+ALTER TABLE "payments_private"."payment_quotes" ADD COLUMN "customer_email" varchar(254);

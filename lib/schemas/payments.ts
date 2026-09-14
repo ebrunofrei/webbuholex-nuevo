@@ -31,6 +31,7 @@ export const paymentOrderSchema = z
     serviceId: z.string().min(1),
     subOfferId: z.string().nullable(),
     customerReference: z.string().min(1),
+    customerEmail: z.string().trim().email().max(254).nullable().optional(),
     quoteReference: z.string().uuid().nullable(),
     amountMinor: z.number().int().positive(),
     currency: currencySchema,

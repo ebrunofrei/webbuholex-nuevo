@@ -55,6 +55,8 @@ class MockOrderRepository implements PaymentOrderRepository {
     this.orders.set(order.id, order);
     return "inserted";
   }
+  markProcessingFromAwaitingPayment = vi.fn();
+  finalizePaidFromAwaitingPayment = vi.fn();
 }
 
 describe("Payment Service", () => {
@@ -76,6 +78,7 @@ describe("Payment Service", () => {
       serviceId: "srv_1",
       subOfferId: null,
       customerReference: "cust_1",
+      customerEmail: "user@test.com",
       amountMinor: 5000,
       currency: "PEN",
       status: "approved",
@@ -103,6 +106,7 @@ describe("Payment Service", () => {
     expect(order.serviceId).toBe(quote.serviceId);
     expect(order.subOfferId).toBe(quote.subOfferId);
     expect(order.customerReference).toBe(quote.customerReference);
+    expect(order.customerEmail).toBe(quote.customerEmail);
     expect(order.quoteReference).toBe(quote.id);
     expect(order.provider).toBeNull();
     expect(order.paymentMethod).toBeNull();

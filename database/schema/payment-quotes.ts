@@ -10,6 +10,7 @@ export const paymentQuotes = paymentsPrivate.table(
     serviceId: varchar("service_id").notNull(),
     subOfferId: varchar("sub_offer_id"),
     customerReference: varchar("customer_reference").notNull(),
+    customerEmail: varchar("customer_email", { length: 254 }),
     amountMinor: integer("amount_minor").notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
     status: varchar("status").notNull(),

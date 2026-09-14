@@ -260,6 +260,13 @@
       "when": 1789353600312,
       "tag": "0036_moaning_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789393439017,
+      "tag": "0037_amazing_hex",
+      "breakpoints": true
     }
   ]
 }

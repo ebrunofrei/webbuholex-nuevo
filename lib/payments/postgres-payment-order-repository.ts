@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { PaymentOrder } from "../schemas/payments";
 import { paymentOrders } from "../../database/schema/payments";
 import { PaymentOrderRepository } from "./payment-repositories";
@@ -76,6 +76,42 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
     return "inserted";
   }
 
+  async markProcessingFromAwaitingPayment(orderId: string, now: Date): Promise<boolean> {
+    const result = await this.tx
+      .update(paymentOrders)
+      .set({
+        status: "processing",
+        updatedAt: now,
+      })
+      .where(and(eq(paymentOrders.id, orderId), eq(paymentOrders.status, "awaiting_payment")));
+
+    return result.rowCount > 0;
+  }
+
+  async finalizePaidFromAwaitingPayment(
+    orderId: string,
+    details: {
+      provider: string;
+      paymentMethod: string;
+      providerPaymentId: string;
+      paidAt: Date;
+    }
+  ): Promise<boolean> {
+    const result = await this.tx
+      .update(paymentOrders)
+      .set({
+        status: "paid",
+        provider: details.provider,
+        paymentMethod: details.paymentMethod,
+        providerPaymentId: details.providerPaymentId,
+        paidAt: details.paidAt,
+        updatedAt: details.paidAt,
+      })
+      .where(and(eq(paymentOrders.id, orderId), eq(paymentOrders.status, "awaiting_payment")));
+
+    return result.rowCount > 0;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapToDomain(row: any): PaymentOrder {
     return {
@@ -83,6 +119,7 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
       serviceId: row.serviceId,
       subOfferId: row.subOfferId,
       customerReference: row.customerReference,
+      customerEmail: row.customerEmail,
       quoteReference: row.quoteReference,
       amountMinor: row.amountMinor,
       currency: row.currency as "PEN",

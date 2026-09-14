@@ -17,6 +17,7 @@ export const paymentQuoteSchema = z
     serviceId: z.string().min(1),
     subOfferId: z.string().nullable(),
     customerReference: z.string().min(1),
+    customerEmail: z.string().trim().email().max(254).nullable().optional(),
     amountMinor: z.number().int().positive(),
     currency: currencySchema,
     status: paymentQuoteStatusSchema,

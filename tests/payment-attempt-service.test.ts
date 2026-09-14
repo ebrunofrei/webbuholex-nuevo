@@ -26,6 +26,8 @@ describe("createPaymentAttempt", () => {
       findByQuoteReference: vi.fn(),
       findByIdempotencyKey: vi.fn(),
       insertIdempotent: vi.fn(),
+      markProcessingFromAwaitingPayment: vi.fn(),
+      finalizePaidFromAwaitingPayment: vi.fn(),
     };
 
     const attemptsRepo: PaymentAttemptRepository = {
@@ -40,6 +42,8 @@ describe("createPaymentAttempt", () => {
       insert: vi.fn(async (a) => { attemptsMock.push(a); }),
       assignProviderPaymentId: vi.fn(),
       transitionStatus: vi.fn(),
+      transitionStatusFromProcessing: vi.fn(),
+      claimAttempt: vi.fn(),
     };
 
     uow = new MockUnitOfWork({

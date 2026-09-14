@@ -35,6 +35,8 @@ describe("PaymentCheckoutSessionService", () => {
       findByQuoteReference: vi.fn(),
       findByIdempotencyKey: vi.fn(),
       insertIdempotent: vi.fn(),
+      markProcessingFromAwaitingPayment: vi.fn(),
+      finalizePaidFromAwaitingPayment: vi.fn(),
     };
 
     const sessionsRepo: PaymentCheckoutSessionRepository = {

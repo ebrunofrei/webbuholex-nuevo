@@ -12,6 +12,16 @@ export interface PaymentOrderRepository {
   findByQuoteReference(quoteReference: string): Promise<PaymentOrder | null>;
   findByIdempotencyKey(key: string): Promise<PaymentOrder | null>;
   insertIdempotent(order: PaymentOrder): Promise<"inserted" | "already_exists">;
+  markProcessingFromAwaitingPayment(orderId: string, now: Date): Promise<boolean>;
+  finalizePaidFromAwaitingPayment(
+    orderId: string,
+    details: {
+      provider: string;
+      paymentMethod: string;
+      providerPaymentId: string;
+      paidAt: Date;
+    }
+  ): Promise<boolean>;
 }
 
 export interface PaymentCheckoutSessionRepository {
@@ -50,6 +60,16 @@ export interface PaymentAttemptRepository {
       failureCode?: string | null;
     }
   ): Promise<void>;
+  transitionStatusFromProcessing(
+    id: string,
+    newStatus: PaymentAttemptStatus,
+    timestamp: Date,
+    details?: {
+      failureCategory?: PaymentAttemptFailureCategory | null;
+      failureCode?: string | null;
+    }
+  ): Promise<boolean>;
+  claimAttempt(id: string, now: Date): Promise<boolean>;
 }
 
 export interface PaymentProviderEventRepository {

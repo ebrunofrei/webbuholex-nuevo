@@ -21,6 +21,7 @@ export class PostgresPaymentQuoteRepository implements PaymentQuoteRepository {
       serviceId: result[0].serviceId,
       subOfferId: result[0].subOfferId,
       customerReference: result[0].customerReference,
+      customerEmail: result[0].customerEmail,
       amountMinor: result[0].amountMinor,
       currency: result[0].currency as "PEN",
       status: result[0].status as "draft" | "approved" | "rejected" | "cancelled" | "expired",
@@ -43,6 +44,7 @@ export class PostgresPaymentQuoteRepository implements PaymentQuoteRepository {
         target: paymentQuotes.id,
         set: {
           status: quote.status,
+          customerEmail: quote.customerEmail,
           updatedAt: quote.updatedAt,
           approvedAt: quote.approvedAt,
           rejectedAt: quote.rejectedAt,

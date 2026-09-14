@@ -37,6 +37,13 @@ export class PaymentOrderReconciliationError extends Error {
   }
 }
 
+export class PaymentChargeReconciliationError extends Error {
+  constructor(message: string = "Internal invariant lost during payment attempt finalization") {
+    super(message);
+    this.name = "PaymentChargeReconciliationError";
+  }
+}
+
 export class PaymentService {
   constructor(private uow: UnitOfWork) {}
 
@@ -67,6 +74,7 @@ export class PaymentService {
         serviceId: quote.serviceId,
         subOfferId: quote.subOfferId,
         customerReference: quote.customerReference,
+        customerEmail: quote.customerEmail,
         quoteReference: quote.id,
         amountMinor: quote.amountMinor,
         currency: quote.currency,

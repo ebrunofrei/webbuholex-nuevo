@@ -21,6 +21,7 @@ export const paymentOrders = paymentsPrivateSchema.table(
     serviceId: varchar("service_id").notNull(),
     subOfferId: varchar("sub_offer_id"),
     customerReference: varchar("customer_reference").notNull(),
+    customerEmail: varchar("customer_email", { length: 254 }),
     quoteReference: uuid("quote_reference").references(() => paymentQuotes.id, { onDelete: "restrict" }),
     amountMinor: integer("amount_minor").notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
