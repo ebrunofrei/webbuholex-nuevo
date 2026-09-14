@@ -4,6 +4,8 @@ import { UnitOfWork, PaymentContext } from "./payment-repositories";
 import { PostgresPaymentQuoteRepository } from "./postgres-payment-quote-repository";
 import { PostgresPaymentOrderRepository } from "./postgres-payment-order-repository";
 import { PostgresPaymentCheckoutSessionRepository } from "./postgres-payment-checkout-session-repository";
+import { PostgresPaymentAttemptRepository } from "./postgres-payment-attempt-repository";
+import { PostgresPaymentProviderEventRepository } from "./postgres-payment-provider-event-repository";
 import { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../../database/schema";
 
@@ -23,6 +25,8 @@ export class PostgresPaymentUnitOfWork implements UnitOfWork {
         quotes: new PostgresPaymentQuoteRepository(tx),
         orders: new PostgresPaymentOrderRepository(tx),
         checkoutSessions: new PostgresPaymentCheckoutSessionRepository(tx),
+        attempts: new PostgresPaymentAttemptRepository(tx),
+        providerEvents: new PostgresPaymentProviderEventRepository(tx),
       };
 
 

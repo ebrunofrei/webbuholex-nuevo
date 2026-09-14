@@ -7,7 +7,7 @@ import {
   CheckoutSessionRevokedError,
   InvalidCheckoutTokenFormatError,
 } from "@/lib/payments/payment-checkout-session-service";
-import { UnitOfWork, PaymentContext, PaymentOrderRepository, PaymentCheckoutSessionRepository, PaymentQuoteRepository } from "@/lib/payments/payment-repositories";
+import { UnitOfWork, PaymentContext, PaymentOrderRepository, PaymentCheckoutSessionRepository, PaymentQuoteRepository, PaymentAttemptRepository, PaymentProviderEventRepository } from "@/lib/payments/payment-repositories";
 import { PaymentOrder, PaymentCheckoutSession } from "@/lib/schemas/payments";
 import { hashCheckoutToken } from "@/lib/payments/payment-checkout-session";
 import { PaymentOrderNotFoundError } from "@/lib/payments/payment-service";
@@ -45,7 +45,29 @@ describe("PaymentCheckoutSessionService", () => {
       markExpired: vi.fn(async (id) => { if (sessionsMock[id]) sessionsMock[id].status = 'expired'; }),
     };
 
-    uow = new MockUnitOfWork({ orders: ordersRepo, checkoutSessions: sessionsRepo, quotes: {} as PaymentQuoteRepository });
+    uow = new MockUnitOfWork({
+      orders: ordersRepo,
+      checkoutSessions: sessionsRepo,
+      quotes: {} as PaymentQuoteRepository,
+      attempts: {
+        findById: vi.fn(),
+        findByOperationKey: vi.fn(),
+        listByPaymentOrderId: vi.fn(),
+        findLatestByPaymentOrderId: vi.fn(),
+        insert: vi.fn(),
+        assignProviderPaymentId: vi.fn(),
+        transitionStatus: vi.fn(),
+      } as unknown as PaymentAttemptRepository,
+      providerEvents: {
+        findById: vi.fn(),
+        findByProviderEventId: vi.fn(),
+        findByDeduplicationKey: vi.fn(),
+        insertIdempotent: vi.fn(),
+        markProcessing: vi.fn(),
+        markProcessed: vi.fn(),
+        markFailed: vi.fn(),
+      } as unknown as PaymentProviderEventRepository,
+    });
     service = new PaymentCheckoutSessionService(uow);
   });
 

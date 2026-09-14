@@ -124,3 +124,184 @@ export const paymentCheckoutSessions = paymentsPrivateSchema.table(
     ),
   ]
 );
+
+export const paymentAttempts = paymentsPrivateSchema.table(
+  "payment_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentOrderId: uuid("payment_order_id")
+      .notNull()
+      .references(() => paymentOrders.id, { onDelete: "restrict" }),
+    attemptNumber: integer("attempt_number").notNull(),
+    operationKey: varchar("operation_key").notNull().unique(),
+    provider: varchar("provider", { enum: ["culqi"] }).notNull(),
+    paymentMethod: varchar("payment_method", { enum: ["card", "yape"] }).notNull(),
+    providerPaymentId: varchar("provider_payment_id"),
+    status: varchar("status", {
+      enum: [
+        "created",
+        "processing",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "indeterminate",
+      ],
+    }).notNull(),
+    failureCategory: varchar("failure_category", {
+      enum: [
+        "customer_decline",
+        "validation",
+        "provider_rejection",
+        "provider_unavailable",
+        "network",
+        "timeout",
+        "internal",
+        "unknown",
+      ],
+    }),
+    failureCode: varchar("failure_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    succeededAt: timestamp("succeeded_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    indeterminateAt: timestamp("indeterminate_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("payment_attempts_payment_order_id_attempt_number_idx").on(
+      table.paymentOrderId,
+      table.attemptNumber
+    ),
+    index("payment_attempts_payment_order_id_idx").on(table.paymentOrderId),
+    index("payment_attempts_status_idx").on(table.status),
+    check("payment_attempts_operation_key_check", sql`length(trim(${table.operationKey})) > 0`),
+    check("payment_attempts_failure_code_check", sql`${table.failureCode} IS NULL OR length(trim(${table.failureCode})) > 0`),
+    check("payment_attempts_provider_check", sql`${table.provider} IN ('culqi')`),
+    check("payment_attempts_payment_method_check", sql`${table.paymentMethod} IN ('card', 'yape')`),
+    check(
+      "payment_attempts_attempt_number_check",
+      sql`${table.attemptNumber} > 0`
+    ),
+    check(
+      "payment_attempts_status_check",
+      sql`${table.status} IN ('created', 'processing', 'succeeded', 'failed', 'cancelled', 'indeterminate')`
+    ),
+    check(
+      "payment_attempts_failure_category_check",
+      sql`${table.failureCategory} IS NULL OR ${table.failureCategory} IN ('customer_decline', 'validation', 'provider_rejection', 'provider_unavailable', 'network', 'timeout', 'internal', 'unknown')`
+    ),
+    check(
+      "payment_attempts_started_at_check",
+      sql`(${table.status} IN ('processing', 'succeeded', 'failed', 'indeterminate') AND ${table.startedAt} IS NOT NULL) OR (${table.status} IN ('created', 'cancelled') AND ${table.startedAt} IS NULL)`
+    ),
+    check(
+      "payment_attempts_succeeded_at_check",
+      sql`(${table.status} = 'succeeded') = (${table.succeededAt} IS NOT NULL)`
+    ),
+    check(
+      "payment_attempts_failed_at_check",
+      sql`(${table.status} = 'failed') = (${table.failedAt} IS NOT NULL)`
+    ),
+    check(
+      "payment_attempts_cancelled_at_check",
+      sql`(${table.status} = 'cancelled') = (${table.cancelledAt} IS NOT NULL)`
+    ),
+    check(
+      "payment_attempts_indeterminate_at_check",
+      sql`(${table.status} = 'indeterminate') = (${table.indeterminateAt} IS NOT NULL)`
+    ),
+  ]
+);
+
+export const paymentProviderEvents = paymentsPrivateSchema.table(
+  "payment_provider_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: varchar("provider", { enum: ["culqi"] }).notNull(),
+    providerEventId: varchar("provider_event_id"),
+    deduplicationKey: varchar("deduplication_key").notNull().unique(),
+    providerObjectId: varchar("provider_object_id"),
+    paymentOrderId: uuid("payment_order_id").references(() => paymentOrders.id, {
+      onDelete: "restrict",
+    }),
+    paymentAttemptId: uuid("payment_attempt_id").references(() => paymentAttempts.id, {
+      onDelete: "restrict",
+    }),
+    eventType: varchar("event_type").notNull(),
+    payloadHash: varchar("payload_hash", { length: 64 }).notNull(),
+    status: varchar("status", {
+      enum: ["received", "processing", "processed", "failed"],
+    }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    failureCode: varchar("failure_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("payment_provider_events_provider_event_id_idx")
+      .on(table.provider, table.providerEventId)
+      .where(sql`${table.providerEventId} IS NOT NULL`),
+    index("payment_provider_events_payment_order_id_idx").on(table.paymentOrderId),
+    index("payment_provider_events_payment_attempt_id_idx").on(table.paymentAttemptId),
+    index("payment_provider_events_status_idx").on(table.status),
+    check(
+      "payment_provider_events_status_check",
+      sql`${table.status} IN ('received', 'processing', 'processed', 'failed')`
+    ),
+    check(
+      "payment_provider_events_payload_hash_check",
+      sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`
+    ),
+    check(
+      "payment_provider_events_provider_check",
+      sql`${table.provider} IN ('culqi')`
+    ),
+    check(
+      "payment_provider_events_deduplication_key_check",
+      sql`length(trim(${table.deduplicationKey})) > 0`
+    ),
+    check(
+      "payment_provider_events_event_type_check",
+      sql`length(trim(${table.eventType})) > 0`
+    ),
+    check(
+      "payment_provider_events_provider_event_id_check",
+      sql`${table.providerEventId} IS NULL OR length(trim(${table.providerEventId})) > 0`
+    ),
+    check(
+      "payment_provider_events_provider_object_id_check",
+      sql`${table.providerObjectId} IS NULL OR length(trim(${table.providerObjectId})) > 0`
+    ),
+    check(
+      "payment_provider_events_failure_code_check",
+      sql`${table.failureCode} IS NULL OR length(trim(${table.failureCode})) > 0`
+    ),
+    check(
+      "payment_provider_events_received_check",
+      sql`${table.status} <> 'received' OR (${table.processingStartedAt} IS NULL AND ${table.processedAt} IS NULL AND ${table.failedAt} IS NULL)`
+    ),
+    check(
+      "payment_provider_events_processing_check",
+      sql`${table.status} <> 'processing' OR ${table.processingStartedAt} IS NOT NULL`
+    ),
+    check(
+      "payment_provider_events_processed_check",
+      sql`${table.status} <> 'processed' OR (${table.processingStartedAt} IS NOT NULL AND ${table.processedAt} IS NOT NULL)`
+    ),
+    check(
+      "payment_provider_events_failed_check",
+      sql`${table.status} <> 'failed' OR (${table.processingStartedAt} IS NOT NULL AND ${table.failedAt} IS NOT NULL)`
+    ),
+  ]
+);

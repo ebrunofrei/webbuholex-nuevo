@@ -22,10 +22,59 @@ export interface PaymentCheckoutSessionRepository {
   markExpired(id: string, now: Date): Promise<void>;
 }
 
+import {
+  PaymentAttempt,
+  PaymentProviderEvent,
+  PaymentAttemptStatus,
+  PaymentAttemptFailureCategory,
+  PaymentProviderEventStatus,
+} from "../schemas/payments";
+
+export interface PaymentAttemptRepository {
+  findById(id: string): Promise<PaymentAttempt | null>;
+  findByOperationKey(operationKey: string): Promise<PaymentAttempt | null>;
+  listByPaymentOrderId(orderId: string): Promise<PaymentAttempt[]>;
+  findLatestByPaymentOrderId(orderId: string): Promise<PaymentAttempt | null>;
+  insert(attempt: PaymentAttempt): Promise<void>;
+  assignProviderPaymentId(
+    id: string,
+    providerPaymentId: string,
+    timestamp: Date
+  ): Promise<void>;
+  transitionStatus(
+    id: string,
+    newStatus: PaymentAttemptStatus,
+    timestamp: Date,
+    details?: {
+      failureCategory?: PaymentAttemptFailureCategory | null;
+      failureCode?: string | null;
+    }
+  ): Promise<void>;
+}
+
+export interface PaymentProviderEventRepository {
+  findById(id: string): Promise<PaymentProviderEvent | null>;
+  findByProviderEventId(
+    provider: string,
+    providerEventId: string
+  ): Promise<PaymentProviderEvent | null>;
+  findByDeduplicationKey(
+    deduplicationKey: string
+  ): Promise<PaymentProviderEvent | null>;
+  insertIdempotent(
+    event: PaymentProviderEvent
+  ): Promise<"inserted" | "already_exists">;
+  markProcessing(id: string, now: Date): Promise<void>;
+  markProcessed(id: string, now: Date): Promise<void>;
+  markFailed(id: string, failureCode: string | null, now: Date): Promise<void>;
+}
+
 export interface PaymentContext {
   quotes: PaymentQuoteRepository;
   orders: PaymentOrderRepository;
   checkoutSessions: PaymentCheckoutSessionRepository;
+  attempts: PaymentAttemptRepository;
+  providerEvents: PaymentProviderEventRepository;
 }
 
 export interface UnitOfWork {

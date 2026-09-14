@@ -230,3 +230,160 @@ export const paymentCheckoutSessionSchema = z
 export type PaymentCheckoutSession = z.infer<
   typeof paymentCheckoutSessionSchema
 >;
+
+export const paymentAttemptStatusSchema = z.enum([
+  "created",
+  "processing",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "indeterminate",
+]);
+
+export type PaymentAttemptStatus = z.infer<typeof paymentAttemptStatusSchema>;
+
+export const paymentAttemptFailureCategorySchema = z.enum([
+  "customer_decline",
+  "validation",
+  "provider_rejection",
+  "provider_unavailable",
+  "network",
+  "timeout",
+  "internal",
+  "unknown",
+]);
+
+export type PaymentAttemptFailureCategory = z.infer<
+  typeof paymentAttemptFailureCategorySchema
+>;
+
+export const paymentAttemptSchema = z
+  .object({
+    id: z.string().uuid(),
+    paymentOrderId: z.string().uuid(),
+    attemptNumber: z.number().int().positive(),
+    operationKey: z.string().trim().min(1),
+    provider: paymentProviderSchema,
+    paymentMethod: paymentMethodSchema,
+    providerPaymentId: z.string().nullable(),
+    status: paymentAttemptStatusSchema,
+    failureCategory: paymentAttemptFailureCategorySchema.nullable(),
+    failureCode: z.string().trim().min(1).nullable(),
+    createdAt: z.date(),
+    startedAt: z.date().nullable(),
+    succeededAt: z.date().nullable(),
+    failedAt: z.date().nullable(),
+    cancelledAt: z.date().nullable(),
+    indeterminateAt: z.date().nullable(),
+    updatedAt: z.date(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.status === "processing" && data.startedAt === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["startedAt"],
+        message: "startedAt MUST NOT be null when status is processing or beyond.",
+      });
+    }
+    if (data.status === "succeeded" && data.succeededAt === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["succeededAt"],
+        message: "succeededAt MUST NOT be null when status is succeeded.",
+      });
+    }
+    if (data.status === "failed" && data.failedAt === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["failedAt"],
+        message: "failedAt MUST NOT be null when status is failed.",
+      });
+    }
+    if (data.status === "cancelled" && data.cancelledAt === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cancelledAt"],
+        message: "cancelledAt MUST NOT be null when status is cancelled.",
+      });
+    }
+    if (data.status === "cancelled" && data.startedAt !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["startedAt"],
+        message: "startedAt MUST be null when status is cancelled.",
+      });
+    }
+    if (data.status === "created" && data.startedAt !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["startedAt"],
+        message: "startedAt MUST be null when status is created.",
+      });
+    }
+    if (data.status === "indeterminate" && data.indeterminateAt === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["indeterminateAt"],
+        message: "indeterminateAt MUST NOT be null when status is indeterminate.",
+      });
+    }
+  });
+
+export type PaymentAttempt = z.infer<typeof paymentAttemptSchema>;
+
+export const paymentProviderEventStatusSchema = z.enum([
+  "received",
+  "processing",
+  "processed",
+  "failed",
+]);
+
+export type PaymentProviderEventStatus = z.infer<
+  typeof paymentProviderEventStatusSchema
+>;
+
+export const paymentProviderEventSchema = z
+  .object({
+    id: z.string().uuid(),
+    provider: paymentProviderSchema,
+    providerEventId: z.string().trim().min(1).nullable(),
+    deduplicationKey: z.string().trim().min(1),
+    providerObjectId: z.string().trim().min(1).nullable(),
+    paymentOrderId: z.string().uuid().nullable(),
+    paymentAttemptId: z.string().uuid().nullable(),
+    eventType: z.string().trim().min(1),
+    payloadHash: z.string().length(64).regex(/^[0-9a-f]{64}$/),
+    status: paymentProviderEventStatusSchema,
+    receivedAt: z.date(),
+    processingStartedAt: z.date().nullable(),
+    processedAt: z.date().nullable(),
+    failedAt: z.date().nullable(),
+    failureCode: z.string().trim().min(1).nullable(),
+    createdAt: z.date(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.status === "received") {
+      if (data.processingStartedAt !== null) {
+        ctx.addIssue({ code: "custom", path: ["processingStartedAt"], message: "MUST be null when received." });
+      }
+      if (data.processedAt !== null) {
+        ctx.addIssue({ code: "custom", path: ["processedAt"], message: "MUST be null when received." });
+      }
+    } else {
+      if (data.processingStartedAt === null) {
+        ctx.addIssue({ code: "custom", path: ["processingStartedAt"], message: "MUST NOT be null when processing or beyond." });
+      }
+    }
+
+    if (data.status === "processed" && data.processedAt === null) {
+      ctx.addIssue({ code: "custom", path: ["processedAt"], message: "MUST NOT be null when processed." });
+    }
+
+    if (data.status === "failed" && data.failedAt === null) {
+      ctx.addIssue({ code: "custom", path: ["failedAt"], message: "MUST NOT be null when failed." });
+    }
+  });
+
+export type PaymentProviderEvent = z.infer<typeof paymentProviderEventSchema>;

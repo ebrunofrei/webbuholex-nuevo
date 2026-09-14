@@ -4,8 +4,8 @@ export const paymentOrderTransitions: Readonly<
   Record<PaymentOrderStatus, readonly PaymentOrderStatus[]>
 > = {
   draft: ["awaiting_payment", "cancelled"],
-  awaiting_payment: ["processing", "cancelled", "expired"],
-  processing: ["paid", "failed"],
+  awaiting_payment: ["processing", "paid", "cancelled", "expired"],
+  processing: ["paid", "awaiting_payment", "failed"],
   paid: ["refunded"],
   failed: [],
   cancelled: [],
