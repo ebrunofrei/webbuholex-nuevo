@@ -234,7 +234,7 @@ describe("PAY-3 Protected Payment Order API", () => {
     it("13. rejects unauthenticated GET without invoking service", async () => {
       (authResolver.resolveTrustedAdminPrincipal as any).mockResolvedValue({ kind: "unauthenticated" });
 
-      const res = await GET(createGetRequest(), { params: { id: validOrderId } });
+      const res = await GET(createGetRequest(), { params: Promise.resolve({ id: validOrderId }) });
 
       expect(res.status).toBe(401);
       expect(authResolver.resolveTrustedAdminPrincipal).toHaveBeenCalledWith(undefined, "payments:read", expect.anything());
@@ -244,7 +244,7 @@ describe("PAY-3 Protected Payment Order API", () => {
     it("13. rejects unauthorized GET (missing capability)", async () => {
       (authResolver.resolveTrustedAdminPrincipal as any).mockResolvedValue({ kind: "capability_missing" });
 
-      const res = await GET(createGetRequest(), { params: { id: validOrderId } });
+      const res = await GET(createGetRequest(), { params: Promise.resolve({ id: validOrderId }) });
 
       expect(res.status).toBe(403);
     });
@@ -252,7 +252,7 @@ describe("PAY-3 Protected Payment Order API", () => {
     it("16. GET invalid UUID -> 400", async () => {
       (authResolver.resolveTrustedAdminPrincipal as any).mockResolvedValue({ kind: "authorized" });
 
-      const res = await GET(new NextRequest("http://localhost"), { params: { id: "invalid-uuid" } });
+      const res = await GET(new NextRequest("http://localhost"), { params: Promise.resolve({ id: "invalid-uuid" }) });
       expect(res.status).toBe(400);
     });
 
@@ -260,7 +260,7 @@ describe("PAY-3 Protected Payment Order API", () => {
       (authResolver.resolveTrustedAdminPrincipal as any).mockResolvedValue({ kind: "authorized" });
       vi.mocked(PaymentService.prototype.getPaymentOrderById).mockRejectedValue(new PaymentOrderNotFoundError(validOrderId));
 
-      const res = await GET(createGetRequest(), { params: { id: validOrderId } });
+      const res = await GET(createGetRequest(), { params: Promise.resolve({ id: validOrderId }) });
       expect(res.status).toBe(404);
     });
 
@@ -292,7 +292,7 @@ describe("PAY-3 Protected Payment Order API", () => {
 
       vi.mocked(PaymentService.prototype.getPaymentOrderById).mockResolvedValue(mockOrder);
 
-      const res = await GET(createGetRequest(), { params: { id: validOrderId } });
+      const res = await GET(createGetRequest(), { params: Promise.resolve({ id: validOrderId }) });
       expect(res.status).toBe(200);
 
       const json = await res.json();

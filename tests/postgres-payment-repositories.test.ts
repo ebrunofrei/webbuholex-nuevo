@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PostgresPaymentUnitOfWork } from "../lib/payments/postgres-payment-unit-of-work";
+import { PaymentDbExecutor } from "../lib/payments/postgres-db-executor";
 import { PostgresPaymentQuoteRepository } from "../lib/payments/postgres-payment-quote-repository";
 import { PostgresPaymentOrderRepository } from "../lib/payments/postgres-payment-order-repository";
 import { PaymentOrder } from "../lib/schemas/payments";
@@ -16,9 +17,10 @@ const mocks = vi.hoisted(() => {
       insert: vi.fn().mockReturnThis(),
       values: vi.fn().mockReturnThis(),
       onConflictDoNothing: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockReturnThis(),
     },
     mockDb: {
-      transaction: vi.fn(async (cb: Function) => cb(mocks.mockTx)),
+      transaction: vi.fn(async (cb: Function) => cb(mocks.mockTx as unknown as PaymentDbExecutor)),
     }
   };
 });
@@ -39,6 +41,7 @@ describe("Postgres Payment Infrastructure", () => {
     mockTx.insert.mockReturnThis();
     mockTx.values.mockReturnThis();
     mockTx.onConflictDoNothing.mockReturnThis();
+    mockTx.returning.mockReturnThis();
   });
 
   const dummyQuote: PaymentQuote = {
@@ -84,14 +87,14 @@ describe("Postgres Payment Infrastructure", () => {
 
   describe("PostgresPaymentQuoteRepository", () => {
     it("findById returns null if empty", async () => {
-      const repo = new PostgresPaymentQuoteRepository(mockTx);
+      const repo = new PostgresPaymentQuoteRepository((mockTx as unknown as PaymentDbExecutor));
       mockTx.limit.mockResolvedValueOnce([]);
       const result = await repo.findById(dummyQuote.id);
       expect(result).toBeNull();
     });
 
     it("findById returns mapped quote if found", async () => {
-      const repo = new PostgresPaymentQuoteRepository(mockTx);
+      const repo = new PostgresPaymentQuoteRepository((mockTx as unknown as PaymentDbExecutor));
       mockTx.limit.mockResolvedValueOnce([dummyQuote]);
       const result = await repo.findById(dummyQuote.id);
       expect(result?.id).toBe(dummyQuote.id);
@@ -101,14 +104,14 @@ describe("Postgres Payment Infrastructure", () => {
 
   describe("PostgresPaymentOrderRepository", () => {
     it("findByQuoteReference returns null if empty", async () => {
-      const repo = new PostgresPaymentOrderRepository(mockTx);
+      const repo = new PostgresPaymentOrderRepository((mockTx as unknown as PaymentDbExecutor));
       mockTx.limit.mockResolvedValueOnce([]);
       const result = await repo.findByQuoteReference(dummyQuote.id);
       expect(result).toBeNull();
     });
 
     it("findByQuoteReference returns mapped order", async () => {
-      const repo = new PostgresPaymentOrderRepository(mockTx);
+      const repo = new PostgresPaymentOrderRepository((mockTx as unknown as PaymentDbExecutor));
       mockTx.limit.mockResolvedValueOnce([dummyOrder]);
       const result = await repo.findByQuoteReference(dummyQuote.id);
       expect(result?.id).toBe(dummyOrder.id);
@@ -116,15 +119,17 @@ describe("Postgres Payment Infrastructure", () => {
     });
 
     it("insertIdempotent returns 'inserted' when rowCount is 1", async () => {
-      const repo = new PostgresPaymentOrderRepository(mockTx);
-      mockTx.onConflictDoNothing.mockResolvedValueOnce({ rowCount: 1 });
+      const repo = new PostgresPaymentOrderRepository((mockTx as unknown as PaymentDbExecutor));
+      mockTx.onConflictDoNothing.mockReturnThis();
+      mockTx.returning.mockResolvedValueOnce([{ id: dummyOrder.id }]);
       const result = await repo.insertIdempotent(dummyOrder);
       expect(result).toBe("inserted");
     });
 
     it("insertIdempotent returns 'already_exists' when rowCount is 0", async () => {
-      const repo = new PostgresPaymentOrderRepository(mockTx);
-      mockTx.onConflictDoNothing.mockResolvedValueOnce({ rowCount: 0 });
+      const repo = new PostgresPaymentOrderRepository((mockTx as unknown as PaymentDbExecutor));
+      mockTx.onConflictDoNothing.mockReturnThis();
+      mockTx.returning.mockResolvedValueOnce([]);
       const result = await repo.insertIdempotent(dummyOrder);
       expect(result).toBe("already_exists");
     });

@@ -121,7 +121,7 @@ export class ChargeOrchestrationService {
     let response: NormalizedChargeResponse | null = null;
     try {
       response = await this.providerClient.createCharge(command);
-    } catch (error: any) {
+    } catch (error: unknown) {
       await this.handleProviderError(attemptId, snapshot.orderId, error, now);
       return;
     }
@@ -159,7 +159,7 @@ export class ChargeOrchestrationService {
     });
   }
 
-  private async handleProviderError(attemptId: string, orderId: string, error: any, now: Date) {
+  private async handleProviderError(attemptId: string, orderId: string, error: unknown, now: Date) {
     await this.uow.execute(async ({ attempts, orders }) => {
       if (
         error instanceof CulqiAuthenticationError ||

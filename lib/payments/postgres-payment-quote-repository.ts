@@ -2,10 +2,10 @@ import { eq } from "drizzle-orm";
 import { PaymentQuote } from "../schemas/payment-quotes";
 import { paymentQuotes } from "../../database/schema/payment-quotes";
 import { PaymentQuoteRepository } from "./payment-repositories";
+import { PaymentDbExecutor } from "./postgres-db-executor";
 
 export class PostgresPaymentQuoteRepository implements PaymentQuoteRepository {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(private tx: any) {}
+  constructor(private tx: PaymentDbExecutor) {}
 
   async findById(id: string): Promise<PaymentQuote | null> {
     const result = await this.tx
@@ -17,21 +17,21 @@ export class PostgresPaymentQuoteRepository implements PaymentQuoteRepository {
     if (result.length === 0) return null;
 
     return {
-      id: result[0].id,
-      serviceId: result[0].serviceId,
-      subOfferId: result[0].subOfferId,
-      customerReference: result[0].customerReference,
-      customerEmail: result[0].customerEmail,
-      amountMinor: result[0].amountMinor,
-      currency: result[0].currency as "PEN",
-      status: result[0].status as "draft" | "approved" | "rejected" | "cancelled" | "expired",
-      createdAt: result[0].createdAt,
-      updatedAt: result[0].updatedAt,
-      approvedAt: result[0].approvedAt,
-      rejectedAt: result[0].rejectedAt,
-      cancelledAt: result[0].cancelledAt,
-      expiresAt: result[0].expiresAt,
-      expiredAt: result[0].expiredAt,
+      id: result[0]!.id,
+      serviceId: result[0]!.serviceId,
+      subOfferId: result[0]!.subOfferId,
+      customerReference: result[0]!.customerReference,
+      customerEmail: result[0]!.customerEmail,
+      amountMinor: result[0]!.amountMinor,
+      currency: result[0]!.currency as "PEN",
+      status: result[0]!.status as "draft" | "approved" | "rejected" | "cancelled" | "expired",
+      createdAt: result[0]!.createdAt,
+      updatedAt: result[0]!.updatedAt,
+      approvedAt: result[0]!.approvedAt,
+      rejectedAt: result[0]!.rejectedAt,
+      cancelledAt: result[0]!.cancelledAt,
+      expiresAt: result[0]!.expiresAt,
+      expiredAt: result[0]!.expiredAt,
     };
   }
 

@@ -2,10 +2,10 @@ import { eq, and } from "drizzle-orm";
 import { PaymentOrder } from "../schemas/payments";
 import { paymentOrders } from "../../database/schema/payments";
 import { PaymentOrderRepository } from "./payment-repositories";
+import { PaymentDbExecutor } from "./postgres-db-executor";
 
 export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(private tx: any) {}
+  constructor(private tx: PaymentDbExecutor) {}
 
   async findById(id: string): Promise<PaymentOrder | null> {
     const result = await this.tx
@@ -16,7 +16,7 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
 
     if (result.length === 0) return null;
 
-    return this.mapToDomain(result[0]);
+    return this.mapToDomain(result[0]!);
   }
 
   async findByIdForUpdate(id: string): Promise<PaymentOrder | null> {
@@ -29,7 +29,7 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
 
     if (result.length === 0) return null;
 
-    return this.mapToDomain(result[0]);
+    return this.mapToDomain(result[0]!);
   }
 
 
@@ -42,7 +42,7 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
 
     if (result.length === 0) return null;
 
-    return this.mapToDomain(result[0]);
+    return this.mapToDomain(result[0]!);
   }
 
   async findByIdempotencyKey(key: string): Promise<PaymentOrder | null> {
@@ -54,7 +54,7 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
 
     if (result.length === 0) return null;
 
-    return this.mapToDomain(result[0]);
+    return this.mapToDomain(result[0]!);
   }
 
   async insertIdempotent(order: PaymentOrder): Promise<"inserted" | "already_exists"> {
@@ -65,11 +65,10 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
     const result = await this.tx
       .insert(paymentOrders)
       .values(order)
-      .onConflictDoNothing({ target: paymentOrders.idempotencyKey });
+      .onConflictDoNothing({ target: paymentOrders.idempotencyKey })
+      .returning({ id: paymentOrders.id });
 
-    // In Drizzle/Postgres, result contains the rowCount.
-    // If rowCount is 0, it means the ON CONFLICT DO NOTHING triggered.
-    if (result.rowCount === 0) {
+    if (result.length === 0) {
       return "already_exists";
     }
 
@@ -83,9 +82,10 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
         status: "processing",
         updatedAt: now,
       })
-      .where(and(eq(paymentOrders.id, orderId), eq(paymentOrders.status, "awaiting_payment")));
+      .where(and(eq(paymentOrders.id, orderId), eq(paymentOrders.status, "awaiting_payment")))
+      .returning({ id: paymentOrders.id });
 
-    return result.rowCount > 0;
+    return result.length > 0;
   }
 
   async finalizePaidFromAwaitingPayment(
@@ -107,13 +107,13 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
         paidAt: details.paidAt,
         updatedAt: details.paidAt,
       })
-      .where(and(eq(paymentOrders.id, orderId), eq(paymentOrders.status, "awaiting_payment")));
+      .where(and(eq(paymentOrders.id, orderId), eq(paymentOrders.status, "awaiting_payment")))
+      .returning({ id: paymentOrders.id });
 
-    return result.rowCount > 0;
+    return result.length > 0;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private mapToDomain(row: any): PaymentOrder {
+  private mapToDomain(row: typeof paymentOrders.$inferSelect): PaymentOrder {
     return {
       id: row.id,
       serviceId: row.serviceId,
@@ -123,10 +123,10 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
       quoteReference: row.quoteReference,
       amountMinor: row.amountMinor,
       currency: row.currency as "PEN",
-      provider: row.provider,
+      provider: row.provider as "culqi" | null,
       providerOrderId: row.providerOrderId,
       providerPaymentId: row.providerPaymentId,
-      paymentMethod: row.paymentMethod,
+      paymentMethod: row.paymentMethod as "card" | "yape" | null,
       status: row.status as PaymentOrder["status"],
       idempotencyKey: row.idempotencyKey,
       createdAt: row.createdAt,

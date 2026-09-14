@@ -2,10 +2,10 @@ import { eq, and, sql } from "drizzle-orm";
 import { PaymentCheckoutSession } from "../schemas/payments";
 import { paymentCheckoutSessions } from "../../database/schema/payments";
 import { PaymentCheckoutSessionRepository } from "./payment-repositories";
+import { PaymentDbExecutor } from "./postgres-db-executor";
 
 export class PostgresPaymentCheckoutSessionRepository implements PaymentCheckoutSessionRepository {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(private tx: any) {}
+  constructor(private tx: PaymentDbExecutor) {}
 
   async findActiveByPaymentOrderIdForUpdate(paymentOrderId: string): Promise<PaymentCheckoutSession | null> {
     const result = await this.tx
@@ -20,7 +20,7 @@ export class PostgresPaymentCheckoutSessionRepository implements PaymentCheckout
 
     if (result.length === 0) return null;
 
-    return this.mapToDomain(result[0]);
+    return this.mapToDomain(result[0]!);
   }
 
   async findByTokenHash(tokenHash: string): Promise<PaymentCheckoutSession | null> {
@@ -32,7 +32,7 @@ export class PostgresPaymentCheckoutSessionRepository implements PaymentCheckout
 
     if (result.length === 0) return null;
 
-    return this.mapToDomain(result[0]);
+    return this.mapToDomain(result[0]!);
   }
 
   async insert(session: PaymentCheckoutSession): Promise<void> {
@@ -76,8 +76,7 @@ export class PostgresPaymentCheckoutSessionRepository implements PaymentCheckout
       ));
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private mapToDomain(row: any): PaymentCheckoutSession {
+  private mapToDomain(row: typeof paymentCheckoutSessions.$inferSelect): PaymentCheckoutSession {
     return {
       id: row.id,
       paymentOrderId: row.paymentOrderId,

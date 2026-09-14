@@ -10,9 +10,9 @@ const UuidParamSchema = z.string().uuid();
 
 export async function GET(
   request: Request,
-  context: any
+  context: { params: Promise<{ id: string }> }
 ) {
-  const params = await Promise.resolve(context.params);
+  const params = await context.params;
   try {
     const authResult = await authorizeAdminPaymentsRead();
 

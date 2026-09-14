@@ -80,12 +80,14 @@ export class CulqiProviderAdapter implements PaymentProviderClient {
         body: JSON.stringify(body),
         signal: controller.signal,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeout);
-      if (err.name === "AbortError") {
+      const isAbort = (err instanceof Error && err.name === "AbortError") || (err && typeof err === "object" && "name" in err && (err as { name: string }).name === "AbortError");
+      if (isAbort) {
         throw new CulqiTimeoutError();
       }
-      throw new CulqiNetworkError(err.message || "Network error occurred connecting to Culqi");
+      const msg = err instanceof Error ? err.message : (err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err));
+      throw new CulqiNetworkError(msg || "Network error occurred connecting to Culqi");
     }
 
     clearTimeout(timeout);
@@ -105,12 +107,14 @@ export class CulqiProviderAdapter implements PaymentProviderClient {
         headers,
         signal: controller.signal,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeout);
-      if (err.name === "AbortError") {
+      const isAbort = (err instanceof Error && err.name === "AbortError") || (err && typeof err === "object" && "name" in err && (err as { name: string }).name === "AbortError");
+      if (isAbort) {
         throw new CulqiTimeoutError();
       }
-      throw new CulqiNetworkError(err.message || "Network error occurred connecting to Culqi");
+      const msg = err instanceof Error ? err.message : (err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err));
+      throw new CulqiNetworkError(msg || "Network error occurred connecting to Culqi");
     }
 
     clearTimeout(timeout);
@@ -125,7 +129,7 @@ export class CulqiProviderAdapter implements PaymentProviderClient {
       throw new CulqiRateLimitError();
     }
 
-    let json: any;
+    let json: unknown;
     try {
       json = await response.json();
     } catch (err) {
@@ -163,8 +167,9 @@ export class CulqiProviderAdapter implements PaymentProviderClient {
       // It's a 2xx response but malformed. Could mean mutation happened!
       // We must check if we can extract a valid charge_id safely.
       let chargeId: string | undefined;
-      if (json && typeof json.id === "string" && json.id.startsWith("chr_")) {
-        chargeId = json.id;
+      const jsonObj = json as { id?: unknown };
+      if (jsonObj && typeof jsonObj.id === "string" && jsonObj.id.startsWith("chr_")) {
+        chargeId = jsonObj.id;
       }
       throw new CulqiReconciliationError("Invalid charge object returned by provider", chargeId);
     }

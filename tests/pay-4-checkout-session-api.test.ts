@@ -31,42 +31,42 @@ describe("PAY-4 Checkout Session API", () => {
     it("rejects unauthenticated", async () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "unauthenticated" });
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "00000000-0000-0000-0000-000000000000" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }) });
       expect(res.status).toBe(401);
     });
 
     it("rejects capability_missing", async () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "capability_missing" });
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "00000000-0000-0000-0000-000000000000" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }) });
       expect(res.status).toBe(403);
     });
 
     it("rejects operator_not_mapped", async () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "operator_not_mapped" });
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "00000000-0000-0000-0000-000000000000" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }) });
       expect(res.status).toBe(403);
     });
 
     it("rejects operator_inactive", async () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "operator_inactive" });
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "00000000-0000-0000-0000-000000000000" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }) });
       expect(res.status).toBe(403);
     });
 
     it("rejects authorization_unavailable", async () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "authorization_unavailable" });
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "00000000-0000-0000-0000-000000000000" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }) });
       expect(res.status).toBe(503);
     });
 
     it("proves payments:read-only or complaints:* capabilities do not authorize it at resolver boundary", async () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "capability_missing" });
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "00000000-0000-0000-0000-000000000000" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }) });
       expect(res.status).toBe(403);
       // Prove that it asked for exactly "payments:write"
       expect(resolveTrustedAdminPrincipal).toHaveBeenCalledWith(
@@ -80,7 +80,7 @@ describe("PAY-4 Checkout Session API", () => {
       vi.mocked(resolveTrustedAdminPrincipal).mockResolvedValue({ kind: "authorized", principal: { operatorId: "1", identitySource: "authenticated_session" } });
       PaymentCheckoutSessionService.prototype.createCheckoutSessionForPaymentOrder = vi.fn();
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "not-a-uuid" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "not-a-uuid" }) });
       expect(res.status).toBe(400);
       expect(PaymentCheckoutSessionService.prototype.createCheckoutSessionForPaymentOrder).not.toHaveBeenCalled();
     });
@@ -95,7 +95,7 @@ describe("PAY-4 Checkout Session API", () => {
       PaymentCheckoutSessionService.prototype.createCheckoutSessionForPaymentOrder = createMock;
 
       const req = new NextRequest("http://localhost/api");
-      const res = await AdminCreateSession(req, { params: { id: "00000000-0000-0000-0000-000000000000" } });
+      const res = await AdminCreateSession(req, { params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }) });
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.token).toBe("tok-1");

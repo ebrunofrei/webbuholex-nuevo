@@ -1,6 +1,5 @@
 import { eq, desc, and, or, isNull } from "drizzle-orm";
-import type { PgTransaction } from "drizzle-orm/pg-core";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { PaymentDbExecutor } from "./postgres-db-executor";
 import type { PaymentAttemptRepository } from "./payment-repositories";
 import type { PaymentAttempt, PaymentAttemptStatus, PaymentAttemptFailureCategory } from "../schemas/payments";
 import { paymentAttempts } from "../../database/schema/payments";
@@ -9,7 +8,7 @@ import { PaymentAttemptProviderPaymentIdConflictError } from "./payment-errors";
 
 export class PostgresPaymentAttemptRepository implements PaymentAttemptRepository {
   constructor(
-    private readonly db: PostgresJsDatabase<any> | PgTransaction<any, any, any>
+    private readonly db: PaymentDbExecutor
   ) {}
 
   private mapRowToAttempt(row: typeof paymentAttempts.$inferSelect): PaymentAttempt {

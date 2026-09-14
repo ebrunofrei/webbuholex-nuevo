@@ -1,6 +1,5 @@
 import { eq, and } from "drizzle-orm";
-import type { PgTransaction } from "drizzle-orm/pg-core";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { PaymentDbExecutor } from "./postgres-db-executor";
 import type { PaymentProviderEventRepository } from "./payment-repositories";
 import type { PaymentProviderEvent, PaymentProvider } from "../schemas/payments";
 import { paymentProviderEvents } from "../../database/schema/payments";
@@ -8,7 +7,7 @@ import { paymentProviderEventSchema } from "../schemas/payments";
 
 export class PostgresPaymentProviderEventRepository implements PaymentProviderEventRepository {
   constructor(
-    private readonly db: PostgresJsDatabase<any> | PgTransaction<any, any, any>
+    private readonly db: PaymentDbExecutor
   ) {}
 
   private mapRowToEvent(row: typeof paymentProviderEvents.$inferSelect): PaymentProviderEvent {
@@ -103,12 +102,12 @@ export class PostgresPaymentProviderEventRepository implements PaymentProviderEv
         createdAt: event.createdAt,
       });
       return "inserted";
-    } catch (error: any) {
-      if (error.code === "23505") {
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "23505") {
         // Restrict idempotent success to the known deduplication constraints.
         // Drizzle creates 'payment_provider_events_deduplication_key_unique' for the .unique() column.
         // We named the partial unique index 'payment_provider_events_provider_event_id_idx'.
-        const constraintName = error.constraint || "";
+        const constraintName = (error as { constraint?: string }).constraint || "";
         if (
           constraintName === "payment_provider_events_deduplication_key_unique" ||
           constraintName === "payment_provider_events_provider_event_id_idx"
