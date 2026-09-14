@@ -432,6 +432,8 @@ describe("seguridad estática y preservación", () => {
       "app/api/complaints/route.ts",
       "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
+      "app/api/admin/payments/orders/[id]/checkout-session/route.ts",
+      "app/api/payments/checkout-session/resolve/route.ts"
     ];
 
     const authorizedJurisprudenceApiEntries = new Set([

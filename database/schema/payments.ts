@@ -86,3 +86,41 @@ export const paymentOrders = paymentsPrivateSchema.table(
     check("payment_orders_refunded_at_check", sql`(${table.status} = 'refunded') = (${table.refundedAt} IS NOT NULL)`),
   ]
 );
+
+export const paymentCheckoutSessions = paymentsPrivateSchema.table(
+  "payment_checkout_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentOrderId: uuid("payment_order_id")
+      .notNull()
+      .references(() => paymentOrders.id, { onDelete: "restrict" }),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    status: varchar("status", { enum: ["active", "revoked", "expired"] }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("payment_checkout_sessions_active_idx")
+      .on(table.paymentOrderId)
+      .where(sql`${table.status} = 'active'`),
+    index("payment_checkout_sessions_payment_order_id_idx").on(table.paymentOrderId),
+    index("payment_checkout_sessions_status_idx").on(table.status),
+    index("payment_checkout_sessions_expires_at_idx").on(table.expiresAt),
+    check(
+      "payment_checkout_sessions_status_check",
+      sql`${table.status} IN ('active', 'revoked', 'expired')`
+    ),
+    check(
+      "payment_checkout_sessions_revoked_at_check",
+      sql`(${table.status} = 'revoked') = (${table.revokedAt} IS NOT NULL)`
+    ),
+    check(
+      "payment_checkout_sessions_expired_at_check",
+      sql`(${table.status} = 'expired') = (${table.expiredAt} IS NOT NULL)`
+    ),
+  ]
+);

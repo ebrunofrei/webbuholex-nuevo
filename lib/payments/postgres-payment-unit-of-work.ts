@@ -3,6 +3,7 @@ import { getDatabase } from "../../database/client";
 import { UnitOfWork, PaymentContext } from "./payment-repositories";
 import { PostgresPaymentQuoteRepository } from "./postgres-payment-quote-repository";
 import { PostgresPaymentOrderRepository } from "./postgres-payment-order-repository";
+import { PostgresPaymentCheckoutSessionRepository } from "./postgres-payment-checkout-session-repository";
 import { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../../database/schema";
 
@@ -21,7 +22,9 @@ export class PostgresPaymentUnitOfWork implements UnitOfWork {
       const context: PaymentContext = {
         quotes: new PostgresPaymentQuoteRepository(tx),
         orders: new PostgresPaymentOrderRepository(tx),
+        checkoutSessions: new PostgresPaymentCheckoutSessionRepository(tx),
       };
+
 
       return work(context);
     });

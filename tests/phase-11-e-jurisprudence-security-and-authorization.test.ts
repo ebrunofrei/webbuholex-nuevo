@@ -712,6 +712,8 @@ describe("readiness y límites estáticos", () => {
     "app/api/complaints/route.ts",
     "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
+      "app/api/admin/payments/orders/[id]/checkout-session/route.ts",
+      "app/api/payments/checkout-session/resolve/route.ts"
 ];
     const appRoot = path.join(process.cwd(), "app");
     const entries = readdirSync(appRoot, { recursive: true })

@@ -164,3 +164,69 @@ export const paymentOrderSchema = z
   });
 
 export type PaymentOrder = z.infer<typeof paymentOrderSchema>;
+
+export const paymentCheckoutSessionStatusSchema = z.enum([
+  "active",
+  "revoked",
+  "expired",
+]);
+
+export type PaymentCheckoutSessionStatus = z.infer<
+  typeof paymentCheckoutSessionStatusSchema
+>;
+
+export const paymentCheckoutSessionSchema = z
+  .object({
+    id: z.string().uuid(),
+    paymentOrderId: z.string().uuid(),
+    tokenHash: z.string().length(64).regex(/^[0-9a-f]{64}$/),
+    status: paymentCheckoutSessionStatusSchema,
+    expiresAt: z.date(),
+    createdAt: z.date(),
+    revokedAt: z.date().nullable(),
+    expiredAt: z.date().nullable(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    // revoked status rules
+    if (data.status === "revoked") {
+      if (data.revokedAt === null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["revokedAt"],
+          message: "revokedAt MUST NOT be null when status is revoked.",
+        });
+      }
+    } else {
+      if (data.revokedAt !== null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["revokedAt"],
+          message: "revokedAt MUST be null when status is not revoked.",
+        });
+      }
+    }
+
+    // expired status rules
+    if (data.status === "expired") {
+      if (data.expiredAt === null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["expiredAt"],
+          message: "expiredAt MUST NOT be null when status is expired.",
+        });
+      }
+    } else {
+      if (data.expiredAt !== null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["expiredAt"],
+          message: "expiredAt MUST be null when status is not expired.",
+        });
+      }
+    }
+  });
+
+export type PaymentCheckoutSession = z.infer<
+  typeof paymentCheckoutSessionSchema
+>;

@@ -334,6 +334,8 @@ describe("barreras estáticas y preservación", () => {
       "app/api/complaints/route.ts",
       "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
+      "app/api/admin/payments/orders/[id]/checkout-session/route.ts",
+      "app/api/payments/checkout-session/resolve/route.ts"
     ];
     const routes = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string" && /(^|[\/\\])route\.ts$/.test(entry)).map((entry) => path.relative(ROOT, path.join(ROOT, "app", entry)).split(path.sep).join("/"));
     expect(routes.sort()).toEqual(authorizedRouteFiles.sort());

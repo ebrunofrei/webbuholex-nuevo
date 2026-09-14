@@ -19,6 +19,20 @@ export class PostgresPaymentOrderRepository implements PaymentOrderRepository {
     return this.mapToDomain(result[0]);
   }
 
+  async findByIdForUpdate(id: string): Promise<PaymentOrder | null> {
+    const result = await this.tx
+      .select()
+      .from(paymentOrders)
+      .where(eq(paymentOrders.id, id))
+      .for("update")
+      .limit(1);
+
+    if (result.length === 0) return null;
+
+    return this.mapToDomain(result[0]);
+  }
+
+
   async findByQuoteReference(quoteReference: string): Promise<PaymentOrder | null> {
     const result = await this.tx
       .select()

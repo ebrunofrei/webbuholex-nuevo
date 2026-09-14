@@ -477,6 +477,8 @@ describe("sesión, revocación y controles estáticos", () => {
       "app/api/complaints/route.ts",
       "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
+      "app/api/admin/payments/orders/[id]/checkout-session/route.ts",
+      "app/api/payments/checkout-session/resolve/route.ts"
     ];
     const entries = readdirSync(path.join(process.cwd(), "app"), { recursive: true })
       .filter((entry): entry is string => typeof entry === "string");
