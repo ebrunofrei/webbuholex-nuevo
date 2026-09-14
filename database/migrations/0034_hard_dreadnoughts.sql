@@ -24,7 +24,7 @@ CREATE TABLE "payments_private"."payment_quotes" (
 	CONSTRAINT "payment_quotes_expired_at_check" CHECK (("payments_private"."payment_quotes"."status" = 'expired') = ("payments_private"."payment_quotes"."expired_at" IS NOT NULL))
 );
 --> statement-breakpoint
-ALTER TABLE "payments_private"."payment_orders" ALTER COLUMN "quote_reference" SET DATA TYPE uuid;--> statement-breakpoint
+ALTER TABLE "payments_private"."payment_orders" ALTER COLUMN "quote_reference" SET DATA TYPE uuid USING "quote_reference"::uuid;--> statement-breakpoint
 CREATE INDEX "payment_quotes_status_idx" ON "payments_private"."payment_quotes" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "payment_quotes_service_id_idx" ON "payments_private"."payment_quotes" USING btree ("service_id");--> statement-breakpoint
 CREATE INDEX "payment_quotes_customer_reference_idx" ON "payments_private"."payment_quotes" USING btree ("customer_reference");--> statement-breakpoint
