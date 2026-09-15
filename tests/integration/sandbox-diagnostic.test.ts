@@ -136,15 +136,20 @@ describe("Preview Database Runtime Identity Diagnostic", () => {
       { code: "42501", expected: "insufficient_privilege" },
       { code: "XX000", expected: "internal_database_error" },
       { code: "XX123", expected: "internal_database_error" },
+      { cause: { code: "XX000" }, expected: "internal_database_error" },
+      { cause: { code: "28P01" }, expected: "invalid_authorization" },
+      { cause: { code: "XX000", password: "secret" }, expected: "internal_database_error" },
+      { errorInstance: new Error("DrizzleQueryError", { cause: { code: "XX000" } }), expected: "internal_database_error" },
       { code: "XYZ123", expected: "unknown" },
     ];
 
-    for (const { code, expected } of cases) {
-      it(`maps code ${code} to identity_query / ${expected}`, async () => {
+    for (const { code, cause, errorInstance, expected } of cases) {
+      it(`maps code/cause ${code || JSON.stringify(cause) || "ErrorInstance"} to identity_query / ${expected}`, async () => {
         process.env.VERCEL_ENV = "preview";
         vi.mocked(authRuntime.authorizeAdminPaymentsWrite).mockResolvedValue({ kind: "authorized", principal: { id: "op-1", role: "admin" } } as any);
 
-        const mockDbExecute = vi.fn().mockRejectedValue({ code });
+        const errorObj = errorInstance ? errorInstance : (cause ? { cause } : { code });
+        const mockDbExecute = vi.fn().mockRejectedValue(errorObj);
         vi.mocked(dbClient.getDatabase).mockReturnValue({ execute: mockDbExecute } as any);
 
         const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
