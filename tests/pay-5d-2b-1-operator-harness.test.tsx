@@ -25,7 +25,7 @@ vi.mock("next/script", () => ({
 
 describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
   const originalEnv = process.env;
-  
+
   beforeEach(() => {
     vi.resetAllMocks();
     process.env = { ...originalEnv };
@@ -35,17 +35,19 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
         writeText: vi.fn(),
       },
     });
+    global.fetch = vi.fn();
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    vi.restoreAllMocks();
   });
 
   describe("Server Page Guards", () => {
     it("Production unavailable (notFound)", async () => {
       vi.stubEnv("VERCEL_ENV", "production");
       vi.stubEnv("NODE_ENV", "production");
-      
+
       try {
         await CulqiSandboxTokenPage();
       } catch {}
@@ -74,7 +76,7 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
 
       expect(redirect).toHaveBeenCalledWith("/app");
     });
-    
+
     it("missing pk_test_* fails safely with Configuration Required warning", async () => {
       vi.stubEnv("VERCEL_ENV", "preview");
       vi.stubEnv("NEXT_PUBLIC_CULQI_PUBLIC_KEY", "");
@@ -95,19 +97,29 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
       }
       (window as any).CulqiCheckout = MockCulqiCheckout;
 
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ attemptId: "a1", amountMinor: 500, currency: "PEN" })
+      });
+
       render(<OperatorTokenHarness publicKey="pk_live_123" />);
-      
+      fireEvent.click(screen.getByText("1. Prepare Sandbox Run"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Loading checkout...")).toBeDefined();
+      });
+
       act(() => {
         (global as any).simulateScriptLoad();
       });
-      
+
       await waitFor(() => {
         expect(screen.getByText("Invalid public key. Must be a test key (pk_test_...).")).toBeDefined();
       });
       expect(mockOpen).not.toHaveBeenCalled();
     });
 
-    it("successful callback accepts valid tkn_* and opens checkout only after provider client ready", async () => {
+    it("successful callback accepts valid tkn_* and prepares for manual execution without exposing token", async () => {
       const mockOpen = vi.fn();
       let capturedInstance: any;
       class MockCulqiCheckout {
@@ -122,19 +134,35 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
       }
       (window as any).CulqiCheckout = MockCulqiCheckout;
 
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          quoteId: "q1",
+          orderId: "o1",
+          attemptId: "a1",
+          amountMinor: 500,
+          currency: "PEN"
+        })
+      });
+
       render(<OperatorTokenHarness publicKey="pk_test_123" />);
-      
-      expect(screen.getByText("Loading checkout...")).toBeDefined();
-      
+
+      const prepareBtn = screen.getByText("1. Prepare Sandbox Run");
+      fireEvent.click(prepareBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText("Loading checkout...")).toBeDefined();
+      });
+
       act(() => {
         (global as any).simulateScriptLoad();
       });
-      
+
       await waitFor(() => {
-        expect(screen.getByText("Open Culqi Checkout")).toBeDefined();
+        expect(screen.getByText("2. Open Culqi Checkout")).toBeDefined();
       });
 
-      fireEvent.click(screen.getByText("Open Culqi Checkout"));
+      fireEvent.click(screen.getByText("2. Open Culqi Checkout"));
       expect(mockOpen).toHaveBeenCalled();
 
       act(() => {
@@ -143,11 +171,29 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("Token Generated Successfully")).toBeDefined();
-        expect(screen.getByText("tkn_test_123abc")).toBeDefined();
+        expect(screen.getByText("Sandbox token generated and ready")).toBeDefined();
+        // Token is NOT rendered
+        expect(screen.queryByText("tkn_test_123abc")).toBeNull();
+        expect(screen.queryByText("Copy Token")).toBeNull();
+        expect(screen.getByText("3. Execute Sandbox Charge")).toBeDefined();
+      });
+
+      // Prepare execution
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          resultClass: "succeeded"
+        })
+      });
+
+      fireEvent.click(screen.getByText("3. Execute Sandbox Charge"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Execution Finished")).toBeDefined();
       });
     });
-    
+
     it("malformed token rejected by callback", async () => {
       const mockOpen = vi.fn();
       let capturedInstance: any;
@@ -163,13 +209,24 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
       }
       (window as any).CulqiCheckout = MockCulqiCheckout;
 
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ attemptId: "a1", amountMinor: 500, currency: "PEN" })
+      });
+
       render(<OperatorTokenHarness publicKey="pk_test_123" />);
+      fireEvent.click(screen.getByText("1. Prepare Sandbox Run"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Loading checkout...")).toBeDefined();
+      });
+
       act(() => {
         (global as any).simulateScriptLoad();
       });
-      
+
       await waitFor(() => {
-        expect(screen.getByText("Open Culqi Checkout")).toBeDefined();
+        expect(screen.getByText("2. Open Culqi Checkout")).toBeDefined();
       });
 
       act(() => {
@@ -197,13 +254,24 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
       }
       (window as any).CulqiCheckout = MockCulqiCheckout;
 
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ attemptId: "a1", amountMinor: 500, currency: "PEN" })
+      });
+
       render(<OperatorTokenHarness publicKey="pk_test_123" />);
+      fireEvent.click(screen.getByText("1. Prepare Sandbox Run"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Loading checkout...")).toBeDefined();
+      });
+
       act(() => {
         (global as any).simulateScriptLoad();
       });
-      
+
       await waitFor(() => {
-        expect(screen.getByText("Open Culqi Checkout")).toBeDefined();
+        expect(screen.getByText("2. Open Culqi Checkout")).toBeDefined();
       });
 
       act(() => {

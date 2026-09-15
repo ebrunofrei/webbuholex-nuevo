@@ -428,6 +428,8 @@ describe("seguridad estática y preservación", () => {
       "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
       "app/api/admin/jurisprudence/publication/execution/route.ts",
       "app/api/admin/payments/orders/route.ts",
+      "app/api/admin/payments/sandbox/card-run/route.ts",
+      "app/api/admin/payments/sandbox/charge/route.ts",
       "app/api/admin/payments/orders/[id]/route.ts",
       "app/api/complaints/route.ts",
       "app/api/internal/cron/jurisprudence-publication/route.ts",
