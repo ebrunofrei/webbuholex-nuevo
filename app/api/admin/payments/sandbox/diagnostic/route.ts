@@ -31,26 +31,49 @@ export async function GET() {
       sessionUser: result[0]!.sessionUser,
     }, { status: 200 });
 
-  } catch (err: any) {
-    if (err && typeof err.code === "string") {
+  } catch (err: unknown) {
+    let code: string | null = null;
+
+    if (typeof err === "object" && err !== null && "code" in err) {
+      const candidateCode = (err as { code?: unknown }).code;
+
+      if (
+        typeof candidateCode === "string" &&
+        /^[0-9A-Z]{5}$/.test(candidateCode)
+      ) {
+        code = candidateCode;
+      }
+    }
+
+    if (code !== null) {
       const allowlist: Record<string, string> = {
         "42501": "insufficient_privilege",
         "42P01": "undefined_table",
         "23514": "check_violation",
         "23502": "not_null_violation",
         "23505": "unique_violation",
-        "22P02": "invalid_text_representation"
+        "22P02": "invalid_text_representation",
       };
-      const code = err.code as string;
-      let classification = "unknown";
-      if (allowlist[code]) classification = allowlist[code];
-      else if (code.startsWith("08")) classification = "connection_exception";
 
-      console.error(`DIAGNOSTIC QUERY FAILED: ${classification} (${code})`);
+      const mappedClassification = allowlist[code];
+      let classification = "unknown";
+
+      if (mappedClassification !== undefined) {
+        classification = mappedClassification;
+      } else if (code.startsWith("08")) {
+        classification = "connection_exception";
+      }
+
+      console.error(
+        `DIAGNOSTIC QUERY FAILED: ${classification} (${code})`,
+      );
     } else {
-      console.error(`DIAGNOSTIC QUERY FAILED: unknown error format`);
+      console.error("DIAGNOSTIC QUERY FAILED: unknown error format");
     }
 
-    return NextResponse.json({ success: false, error: "Internal Error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Internal Error" },
+      { status: 500 },
+    );
   }
 }
