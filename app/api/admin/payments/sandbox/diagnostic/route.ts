@@ -35,35 +35,48 @@ export async function GET() {
 
   } catch (err: unknown) {
     let classification = "unknown";
-    let code: string | null = null;
 
     if (typeof err === "object" && err !== null && "code" in err) {
       const candidateCode = (err as { code?: unknown }).code;
 
-      if (
-        typeof candidateCode === "string" &&
-        /^[0-9A-Z]{5}$/.test(candidateCode)
-      ) {
-        code = candidateCode;
-      }
-    }
+      if (typeof candidateCode === "string") {
+        const nodeCodeAllowlist: Record<string, string> = {
+          ENOTFOUND: "dns_failure",
+          EAI_AGAIN: "dns_failure",
+          ECONNREFUSED: "connection_refused",
+          ECONNRESET: "connection_reset",
+          ETIMEDOUT: "connection_timeout",
+        };
 
-    if (code !== null) {
-      const allowlist: Record<string, string> = {
-        "42501": "insufficient_privilege",
-        "42P01": "undefined_table",
-        "23514": "check_violation",
-        "23502": "not_null_violation",
-        "23505": "unique_violation",
-        "22P02": "invalid_text_representation",
-      };
+        const nodeClassification = nodeCodeAllowlist[candidateCode];
 
-      const mappedClassification = allowlist[code];
+        if (nodeClassification !== undefined) {
+          classification = nodeClassification;
+        } else if (/^[0-9A-Z]{5}$/.test(candidateCode)) {
+          const sqlStateAllowlist: Record<string, string> = {
+            "28P01": "invalid_authorization",
+            "28000": "invalid_authorization",
+            "57P03": "cannot_connect_now",
+            "3D000": "invalid_database",
+            "42501": "insufficient_privilege",
+            "42P01": "undefined_table",
+            "23514": "check_violation",
+            "23502": "not_null_violation",
+            "23505": "unique_violation",
+            "22P02": "invalid_text_representation",
+          };
 
-      if (mappedClassification !== undefined) {
-        classification = mappedClassification;
-      } else if (code.startsWith("08")) {
-        classification = "connection_exception";
+          const sqlStateClassification =
+            sqlStateAllowlist[candidateCode];
+
+          if (sqlStateClassification !== undefined) {
+            classification = sqlStateClassification;
+          } else if (candidateCode.startsWith("08")) {
+            classification = "connection_exception";
+          } else if (candidateCode.startsWith("28")) {
+            classification = "invalid_authorization";
+          }
+        }
       }
     }
 

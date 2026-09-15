@@ -120,4 +120,41 @@ describe("Preview Database Runtime Identity Diagnostic", () => {
     expect(consoleSpy).toHaveBeenCalledWith("DATABASE DIAGNOSTIC FAILED: identity_query / connection_exception");
     consoleSpy.mockRestore();
   });
+
+  describe("exact code classification mapping", () => {
+    const cases = [
+      { code: "28P01", expected: "invalid_authorization" },
+      { code: "28000", expected: "invalid_authorization" },
+      { code: "28ABC", expected: "invalid_authorization" },
+      { code: "ENOTFOUND", expected: "dns_failure" },
+      { code: "EAI_AGAIN", expected: "dns_failure" },
+      { code: "ECONNREFUSED", expected: "connection_refused" },
+      { code: "ECONNRESET", expected: "connection_reset" },
+      { code: "ETIMEDOUT", expected: "connection_timeout" },
+      { code: "57P03", expected: "cannot_connect_now" },
+      { code: "3D000", expected: "invalid_database" },
+      { code: "42501", expected: "insufficient_privilege" },
+      { code: "XYZ123", expected: "unknown" },
+    ];
+
+    for (const { code, expected } of cases) {
+      it(`maps code ${code} to identity_query / ${expected}`, async () => {
+        process.env.VERCEL_ENV = "preview";
+        vi.mocked(authRuntime.authorizeAdminPaymentsWrite).mockResolvedValue({ kind: "authorized", principal: { id: "op-1", role: "admin" } } as any);
+
+        const mockDbExecute = vi.fn().mockRejectedValue({ code });
+        vi.mocked(dbClient.getDatabase).mockReturnValue({ execute: mockDbExecute } as any);
+
+        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        const res = await GET();
+        expect(res.status).toBe(500);
+        const data = await res.json();
+        expect(data).toEqual({ success: false, error: "Internal Error" });
+
+        expect(consoleSpy).toHaveBeenCalledWith(`DATABASE DIAGNOSTIC FAILED: identity_query / ${expected}`);
+        consoleSpy.mockRestore();
+      });
+    }
+  });
 });
