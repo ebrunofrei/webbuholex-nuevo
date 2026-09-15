@@ -15,9 +15,11 @@ export async function GET() {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 });
   }
 
+  let stage = "client_init";
   try {
     const db = getDatabase();
 
+    stage = "identity_query";
     const result = await db.execute<{ currentUser: string, sessionUser: string }>(sql`
       SELECT current_user AS "currentUser", session_user AS "sessionUser"
     `);
@@ -32,6 +34,7 @@ export async function GET() {
     }, { status: 200 });
 
   } catch (err: unknown) {
+    let classification = "unknown";
     let code: string | null = null;
 
     if (typeof err === "object" && err !== null && "code" in err) {
@@ -56,20 +59,17 @@ export async function GET() {
       };
 
       const mappedClassification = allowlist[code];
-      let classification = "unknown";
 
       if (mappedClassification !== undefined) {
         classification = mappedClassification;
       } else if (code.startsWith("08")) {
         classification = "connection_exception";
       }
-
-      console.error(
-        `DIAGNOSTIC QUERY FAILED: ${classification} (${code})`,
-      );
-    } else {
-      console.error("DIAGNOSTIC QUERY FAILED: unknown error format");
     }
+
+    console.error(
+      `DATABASE DIAGNOSTIC FAILED: ${stage} / ${classification}`,
+    );
 
     return NextResponse.json(
       { success: false, error: "Internal Error" },

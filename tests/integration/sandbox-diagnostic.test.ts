@@ -66,16 +66,58 @@ describe("Preview Database Runtime Identity Diagnostic", () => {
     expect(queryString).not.toContain("delete");
   });
 
-  it("returns 500 and masks error on DB failure", async () => {
+  it("returns 500 and logs client_init when getDatabase throws", async () => {
     process.env.VERCEL_ENV = "preview";
     vi.mocked(authRuntime.authorizeAdminPaymentsWrite).mockResolvedValue({ kind: "authorized", principal: { id: "op-1", role: "admin" } } as any);
 
-    const mockDbExecute = vi.fn().mockRejectedValue({ code: "42501" });
-    vi.mocked(dbClient.getDatabase).mockReturnValue({ execute: mockDbExecute } as any);
+    vi.mocked(dbClient.getDatabase).mockImplementation(() => {
+      throw new Error("database_runtime_configuration_missing");
+    });
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await GET();
     expect(res.status).toBe(500);
     const data = await res.json();
     expect(data).toEqual({ success: false, error: "Internal Error" });
+
+    expect(consoleSpy).toHaveBeenCalledWith("DATABASE DIAGNOSTIC FAILED: client_init / unknown");
+    consoleSpy.mockRestore();
+  });
+
+  it("returns 500 and logs identity_query / unknown on db.execute throw without SQLSTATE", async () => {
+    process.env.VERCEL_ENV = "preview";
+    vi.mocked(authRuntime.authorizeAdminPaymentsWrite).mockResolvedValue({ kind: "authorized", principal: { id: "op-1", role: "admin" } } as any);
+
+    const mockDbExecute = vi.fn().mockRejectedValue(new Error("weird error"));
+    vi.mocked(dbClient.getDatabase).mockReturnValue({ execute: mockDbExecute } as any);
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await GET();
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data).toEqual({ success: false, error: "Internal Error" });
+
+    expect(consoleSpy).toHaveBeenCalledWith("DATABASE DIAGNOSTIC FAILED: identity_query / unknown");
+    consoleSpy.mockRestore();
+  });
+
+  it("returns 500 and logs identity_query / connection_exception on db.execute throw with SQLSTATE 080xx", async () => {
+    process.env.VERCEL_ENV = "preview";
+    vi.mocked(authRuntime.authorizeAdminPaymentsWrite).mockResolvedValue({ kind: "authorized", principal: { id: "op-1", role: "admin" } } as any);
+
+    const mockDbExecute = vi.fn().mockRejectedValue({ code: "08001" });
+    vi.mocked(dbClient.getDatabase).mockReturnValue({ execute: mockDbExecute } as any);
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await GET();
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data).toEqual({ success: false, error: "Internal Error" });
+
+    expect(consoleSpy).toHaveBeenCalledWith("DATABASE DIAGNOSTIC FAILED: identity_query / connection_exception");
+    consoleSpy.mockRestore();
   });
 });
