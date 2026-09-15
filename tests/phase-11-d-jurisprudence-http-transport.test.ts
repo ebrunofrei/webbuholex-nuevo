@@ -386,6 +386,7 @@ describe("persistencia SQLite y seguridad estática", () => {
       "app/api/admin/payments/orders/route.ts",
       "app/api/admin/payments/sandbox/card-run/route.ts",
       "app/api/admin/payments/sandbox/charge/route.ts",
+    "app/api/admin/payments/sandbox/diagnostic/route.ts",
       "app/api/admin/payments/orders/[id]/route.ts",
       "app/api/complaints/route.ts",
       "app/api/internal/cron/jurisprudence-publication/route.ts",
