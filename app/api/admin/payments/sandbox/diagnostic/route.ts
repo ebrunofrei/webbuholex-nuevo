@@ -75,6 +75,8 @@ export async function GET() {
             classification = "connection_exception";
           } else if (candidateCode.startsWith("28")) {
             classification = "invalid_authorization";
+          } else if (candidateCode.startsWith("XX")) {
+            classification = "internal_database_error";
           }
         }
       }

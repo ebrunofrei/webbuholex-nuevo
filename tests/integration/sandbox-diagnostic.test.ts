@@ -134,6 +134,8 @@ describe("Preview Database Runtime Identity Diagnostic", () => {
       { code: "57P03", expected: "cannot_connect_now" },
       { code: "3D000", expected: "invalid_database" },
       { code: "42501", expected: "insufficient_privilege" },
+      { code: "XX000", expected: "internal_database_error" },
+      { code: "XX123", expected: "internal_database_error" },
       { code: "XYZ123", expected: "unknown" },
     ];
 
