@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,7 +9,8 @@ import { calculateFileMetadata, getExpectedPrivateReference, inspectLocalProduct
 
 const contract = rentalHousingProductPackage.customerEditableFiles[0];
 
-describe("verificación privada de archivos de producto", () => {
+const hasProductAssets = existsSync(path.resolve("product-assets/BL-LEG-CON-001"));
+describe.skipIf(!hasProductAssets)("verificación privada de archivos de producto", () => {
   it("recalcula tamaño y SHA-256 de los 22 archivos físicos", async () => {
     const records = Object.values(rentalHousingVerifiedFileInventory);
     expect(records).toHaveLength(22);

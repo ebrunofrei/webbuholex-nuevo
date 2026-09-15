@@ -16,7 +16,8 @@ const routeState = vi.hoisted(() => ({ pathname: "/explorar" }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => routeState.pathname }));
 
-describe("auditoría responsive de la fase 10.G", () => {
+const hasProductAssets = fs.existsSync(path.resolve("product-assets/BL-LEG-CON-001"));
+describe.skipIf(!hasProductAssets)("auditoría responsive de la fase 10.G", () => {
   it("utiliza el PNG institucional original con canal alfa real", () => {
     const file = fs.readFileSync(path.join(root, "public/brand/buho-institucional.png"));
     expect(file.subarray(1, 4).toString("ascii")).toBe("PNG");

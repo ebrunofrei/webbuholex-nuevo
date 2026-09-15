@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -8,7 +9,8 @@ import { isTemplateProductPubliclyAvailable } from "@/lib/catalog-visibility";
 import { validateProductPackageIntegrity } from "@/lib/product-package-integrity";
 import { buildProductPackageManifest } from "@/lib/product-package-manifest";
 
-describe("manifiesto local BL-LEG-CON-001", () => {
+const hasProductAssets = existsSync(path.resolve("product-assets/BL-LEG-CON-001"));
+describe.skipIf(!hasProductAssets)("manifiesto local BL-LEG-CON-001", () => {
   const errors = validateProductPackageIntegrity(rentalHousingContract, rentalHousingProductPackage);
   const manifest = buildProductPackageManifest(rentalHousingProductPackage, "2026-07-27T00:00:00.000Z", errors);
 

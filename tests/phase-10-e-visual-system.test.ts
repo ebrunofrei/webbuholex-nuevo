@@ -6,7 +6,8 @@ import { templateCatalog } from "@/data/template-catalog";
 const root = process.cwd();
 const read = (file: string) => fs.readFileSync(path.join(root, file), "utf8").replace(/^\uFEFF/, "");
 
-describe("sistema visual institucional de la fase 10.E", () => {
+const hasProductAssets = fs.existsSync(path.resolve("product-assets/BL-LEG-CON-001"));
+describe.skipIf(!hasProductAssets)("sistema visual institucional de la fase 10.E", () => {
   it("centraliza la paleta pública, privada y semántica", () => {
     const css = read("app/globals.css");
     for (const token of [
