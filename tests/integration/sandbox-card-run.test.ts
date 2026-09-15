@@ -80,4 +80,66 @@ describe("PAY-5D.2B.3 Sandbox Card Run API", () => {
     expect(json.attemptId).toBe("att_test");
     expect(json.status).toBe("created");
   });
+
+  describe("PAY-5D.2B.3 Safe Stage Diagnostics", () => {
+    let consoleErrorSpy: any;
+
+    beforeEach(() => {
+      consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      (authResolver.resolveTrustedAdminPrincipal as any).mockResolvedValue({ kind: "authorized", principal: { operatorId: "op-1" } });
+    });
+
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+    });
+
+    it("A. Quote persistence failure logs quote_stage_failed without leaking to browser", async () => {
+      mockUowExecute.mockImplementationOnce(() => Promise.reject(new Error("DB Connection Error")));
+
+      const res = await POST();
+      expect(res.status).toBe(500);
+
+      const json = await res.json();
+      expect(json).toEqual({ success: false, error: "Internal Error" });
+
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith("SANDBOX PREPARE ERROR: quote_stage_failed");
+    });
+
+    it("B. Order creation failure logs order_stage_failed without leaking to browser", async () => {
+      // uow1 quote save succeeds
+      mockUowExecute.mockImplementationOnce(async (_callback: unknown) => {});
+
+      // Order creation throws
+      vi.spyOn(PaymentService.prototype, 'createPaymentOrderFromApprovedQuote').mockRejectedValueOnce(new Error("Order Generation Error"));
+
+      const res = await POST();
+      expect(res.status).toBe(500);
+
+      const json = await res.json();
+      expect(json).toEqual({ success: false, error: "Internal Error" });
+
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith("SANDBOX PREPARE ERROR: order_stage_failed");
+    });
+
+    it("C. Attempt creation failure logs attempt_stage_failed without leaking to browser", async () => {
+      // uow1 quote save succeeds
+      mockUowExecute.mockImplementationOnce(async (_callback: unknown) => {});
+
+      // Order creation succeeds (already mocked in global beforeEach)
+
+      // uow3 attempt creation throws
+      mockUowExecute.mockImplementationOnce(() => Promise.reject(new Error("Culqi API Error")));
+
+      const res = await POST();
+      expect(res.status).toBe(500);
+
+      const json = await res.json();
+      expect(json).toEqual({ success: false, error: "Internal Error" });
+
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith("SANDBOX PREPARE ERROR: attempt_stage_failed");
+    });
+  });
 });

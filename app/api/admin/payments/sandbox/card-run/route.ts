@@ -8,6 +8,8 @@ import { createPaymentAttempt } from "@/lib/payments/create-payment-attempt";
 
 export const runtime = "nodejs";
 
+type PrepareStage = "quote" | "order" | "attempt" | "response";
+
 export async function POST() {
   if (process.env.VERCEL_ENV !== "preview" && process.env.NODE_ENV !== "development") {
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
@@ -17,6 +19,8 @@ export async function POST() {
   if (authResult.kind !== "authorized") {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 });
   }
+
+  let stage: PrepareStage = "quote";
 
   try {
     const now = new Date();
@@ -46,11 +50,13 @@ export async function POST() {
     await uow1.execute(async ({ quotes }) => {
       await quotes.save(quote);
     });
+    stage = "order";
 
     // 2. Create order
     const uow2 = new PostgresPaymentUnitOfWork();
     const service = new PaymentService(uow2);
     const order = await service.createPaymentOrderFromApprovedQuote(quoteId, now);
+    stage = "attempt";
 
     // 3. Create attempt
     const operationKey = `sandbox-op-${uuidv4()}`;
@@ -58,6 +64,7 @@ export async function POST() {
     const attempt = await uow3.execute(async (context) => {
       return await createPaymentAttempt(context, order.id, "card", operationKey);
     });
+    stage = "response";
 
     return NextResponse.json({
       quoteId: quote.id,
@@ -67,9 +74,9 @@ export async function POST() {
       currency: order.currency,
       status: attempt.status,
     }, { status: 201 });
-  } catch (err: unknown) {
+  } catch (_err: unknown) {
     // Avoid logging DB/internal error objects
-    console.error("SANDBOX PREPARE ERROR: An internal error occurred preparing the run.");
+    console.error(`SANDBOX PREPARE ERROR: ${stage}_stage_failed`);
     return NextResponse.json({ success: false, error: "Internal Error" }, { status: 500 });
   }
 }
