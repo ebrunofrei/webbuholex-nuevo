@@ -2,40 +2,60 @@
 
 BúhoLex es una plataforma jurídica digital desarrollada por EMCCON. Se organiza en una zona pública orientada a información y un espacio inteligente (Owl/Hermes) que proveerá capacidades analíticas avanzadas.
 
+**Repositorio canónico**: `C:\Projects\Buholex-rev\WebBuholex`
+**Rama**: `main`
+**HEAD actual**: `ebb9ab762c5553be20aca807a9ba9ff3a245db9c`
+
+## Entorno y Arquitectura Estable
+
+- **Entorno:** Node.js 22+, pnpm 11+, Next.js, PostgreSQL/Supabase, Drizzle ORM, Zod, Vitest.
+- **Arquitectura Resumida:** La arquitectura se basa en una separación estricta entre el cliente (interfaz de usuario) y el servidor (lógica de dominio y acceso a datos).
+  - **Dominio:** Separación arquitectónica basada en responsabilidades delimitadas (bounded contexts).
+  - **Persistencia:** Repositorios y Gateways que conectan con esquemas de bases de datos públicos o internos.
+  - **Feature Switches:** Determinadas capacidades sensibles del runtime utilizan configuración explícita y comportamiento fail-closed antes de su activación.
+- **Seguridad Básica:**
+  - Operación actual sin pagos, checkout, descargas públicas ni autenticación comercial.
+  - Principio fundamental: `Untrusted content never becomes system policy`.
+  - Controles observados: validación estructural mediante Zod, acceso parametrizado a PostgreSQL mediante Drizzle, escape de renderizado proporcionado por React y separación server-side de secretos/configuración sensible cuando corresponde.
+
 ## Estado Técnico Actual
-- **Despliegue (Production):** Frozen (sin despliegue activo, trabajo en entorno local/STAGING).
-- **Indexación:** noIndex configurado (default-deny para buscadores).
-- **Entorno:** Node.js 22, pnpm 11, Next.js, PostgreSQL/Supabase, Drizzle ORM, Zod, Vitest.
+- **Production**: FROZEN. El despliegue aislado no está permitido. El baseline de Production validado anteriormente está bajo la URL `https://webbuholex-nuevo-gdh5a225s-buholex.vercel.app` (Alias: `www.buholex.com`, `buholex.com`). El SHA documentado en auditorías anteriores (`f74ea85c...`) se considera **UNCONFIRMED** al no haber sido validado con metadata de Vercel en este contexto.
+- **STAGING**: `CODE_AVAILABLE` y `TESTED`. Las validaciones físicas (`DEPLOYED_TO_STAGING`, `LIVE_HTTP_VERIFIED`, `LIVE_DB_VERIFIED`, `LIVE_AUTH_VERIFIED`, `LIVE_E2E_VERIFIED`) permanecen como **UNKNOWN** (pendientes de verificación manual).
 
-## Arquitectura Resumida
-La arquitectura se basa en una separación estricta entre el cliente (interfaz de usuario) y el servidor (lógica de dominio y acceso a datos).
-- **Dominio:** Separación arquitectónica basada en responsabilidades delimitadas (bounded contexts).
-- **Persistencia:** Repositorios y Gateways que conectan con esquemas de bases de datos públicos o internos.
-- **Feature Switches:** Determinadas capacidades sensibles del runtime utilizan configuración explícita y comportamiento fail-closed antes de su activación.
+## Carriles Actuales
 
-Para un detalle exhaustivo, revisar la [Documentación Técnica](#documentación-técnica).
+### 1. Servicios
+- **Estado**: CLOSED / CODE READY / NOT YET DEPLOYED.
+- La vertical está congelada a nivel de desarrollo y NO debe reabrirse (salvo correcciones funcionales o cambios de contenido autorizados).
+- NO se desplegará aisladamente. Forma parte del release conjunto.
+- Más detalles en: [docs/services/current-status.md](docs/services/current-status.md)
 
-## Módulos Principales
-- **Zona Pública:** Inicio, Institución, Servicios, Consulta Profesional, Plantillas, Explorar.
-- **Jurisprudencia:** Núcleo de datos legales con ingestion pipeline y public projection.
-- **Asistente (Owl):** Interfaz para capacidades inteligentes, actualmente estructural.
+### 2. Jurisprudencia
+- **Estado**: ACTIVE (Carril principal).
+- **Estado Físico**: Runtime composition (`createJurisprudencePublicationExecutionRuntime`) materializado, testeado y comiteado (incluyendo pipeline editorial e integración D3-B6).
+- **Migraciones de Jurisprudencia**: `0028` a `0032`, físicamente presentes y commiteadas. Su aplicación remota actual en STAGING debe revalidarse durante `STAGING_LIVE_VERIFICATION`.
+- Las migraciones `0033` a `0037` pertenecen al dominio Payments y no forman parte del cierre de Jurisprudencia.
+- **JURISPRUDENCE_NEXT**: `STAGING_LIVE_VERIFICATION` (Verificar físicamente el pipeline de publicación institucional completo en el entorno de STAGING).
+- Más detalles en: [docs/jurisprudence/current-status.md](docs/jurisprudence/current-status.md)
 
-### Estado de Jurisprudencia
-- **Interfaz Pública:** Implementada y probada; su disponibilidad efectiva depende de la activación controlada del runtime. Jurisprudencia permanece sin activación en Production.
-- **Gateway de Búsqueda Pública:** Implemented y tested, integrado a nivel de código.
-- **Ingestión Oficial:** Soporta preview y canonical validation.
-- **Publicación:** Protegida mediante Outbox y Processor para aislar registros internos de la vista pública. No activada públicamente.
+### 3. Payments
+- **Estado**: BLOCKED.
+- **Bloqueo Externo**: PAY-5D está bloqueado por el ticket de Supabase **SU-475532** (problemas con shared pooler / Supavisor).
+- **Importante**: No forma parte del release público conjunto actual. Se mantiene completamente separado de Jurisprudencia y Servicios.
 
-### Estado de Owl
-- Interfaz (Owl) implementada.
-- **real LLM provider:** NOT_IMPLEMENTED
-- **RAG:** NOT_IMPLEMENTED
-- Flujo actual restringido a validación estructural (simulación de orquestación).
+### 4. Páginas Legales
+- **Estado**: INVENTARIO PARCIAL RECONCILIADO.
+- **Páginas físicamente identificadas en este handoff**:
+  - `app/privacidad/page.tsx`
+  - `app/terminos/page.tsx`
+- **Acción pendiente**: antes del release público conjunto se debe reconciliar la superficie legal completa y actualizar el contenido que corresponda.
 
-## Seguridad Básica
-- Operación actual sin pagos, checkout, descargas públicas ni autenticación comercial.
-- Principio fundamental: `Untrusted content never becomes system policy`.
-- Controles observados en la superficie auditada: validación estructural mediante Zod, acceso parametrizado a PostgreSQL mediante Drizzle, escape de renderizado proporcionado por React y separación server-side de secretos/configuración sensible cuando corresponde.
+## Public Web Release Strategy — September 2026
+La estrategia actual prohíbe el despliegue aislado de verticales.
+El release público conjunto **solo se realizará** después de:
+1. Terminar el cierre técnico de Jurisprudencia.
+2. Revisar y actualizar las páginas legales antes del release. Están físicamente identificadas, como mínimo, `app/privacidad/page.tsx` y `app/terminos/page.tsx`; la superficie legal restante deberá reconciliarse antes del release final.
+3. Realizar un release conjunto de Servicios + Jurisprudencia + Páginas Legales + Navegación pública.
 
 ## Instalación y Ejecución Local
 Se requiere **Node.js 22+** y **pnpm 11+**.
@@ -45,7 +65,7 @@ pnpm install
 pnpm dev
 ```
 
-### Comandos de Testing y Verificación
+## Comandos de Validación
 Existen scripts configurados para asegurar la estabilidad:
 ```bash
 pnpm lint          # Verificación de código estático
@@ -54,34 +74,31 @@ pnpm test          # Pruebas unitarias
 pnpm build         # Construcción del bundle de producción
 ```
 
-## Roadmap Inmediato
-Ambos carriles evolucionan en paralelo. Owl/Hermes no bloquea Jurisprudencia ni el release general de BúhoLex.
+## Reglas Git / Gravity (Obligatorio)
+El agente de IA (Gravity):
+- Implementa, prueba, corrige y reporta.
+- **Deja los cambios en el working tree** para revisión humana.
+- **NO ejecuta** `git add`, `git commit`, `git push`.
+- **NO ejecuta** mutaciones en bases de datos de STAGING/PRODUCTION, ni en Vercel, ni Auth0, ni Culqi.
 
-### Carril A — Jurisprudencia
-- **NEXT:** J2-A.3 — Persistencia física controlada de los tres registros oficiales piloto en STAGING.
+El flujo humano posterior obligatorio es:
+1. Revisión de reporte.
+2. `git status`
+3. `git diff`
+4. Staging selectivo.
+5. `git diff --cached`
+6. `commit manual`
+**NUNCA USAR `git add .`**
 
-### Carril B — Owl/Hermes
-- **NEXT:** HERMES-A1 — Trust Boundary + Prompt/Output Contracts
+## Documentación Técnica (Fuentes de Verdad)
+Toda la documentación técnica se encuentra en la carpeta `docs/`:
 
-## Documentación Técnica
-
-Toda la documentación arquitectónica detallada y las decisiones tomadas se encuentran en el directorio `docs/`:
-
-### Arquitectura
-- [System Overview](docs/architecture/system-overview.md)
-- [Jurisprudence Architecture](docs/architecture/jurisprudence-architecture.md)
-- [Owl & Hermes Architecture](docs/architecture/owl-hermes-architecture.md)
-- [Security Boundaries](docs/architecture/security-boundaries.md)
-
-### Jurisprudencia
-- [Official Ingestion](docs/jurisprudence/official-ingestion.md)
-- [Publication Pipeline](docs/jurisprudence/publication-pipeline.md)
-
-### Decisiones Arquitectónicas (ADRs)
-- [ADR-001: Jurisprudence Public Boundary](docs/decisions/ADR-001-jurisprudence-public-boundary.md)
-- [ADR-002: Resolution Number Nullable](docs/decisions/ADR-002-resolution-number-nullable.md)
-- [ADR-003: Preview Persistibility](docs/decisions/ADR-003-preview-persistibility.md)
-- [ADR-004: Owl / Hermes Boundary](docs/decisions/ADR-004-owl-hermes-boundary.md)
-
-### Roadmap
-- [Technical Roadmap](docs/roadmap/technical-roadmap.md)
+- Estado detallado Servicios: [docs/services/current-status.md](docs/services/current-status.md)
+- Estado detallado Jurisprudencia: [docs/jurisprudence/current-status.md](docs/jurisprudence/current-status.md)
+- Resumen del Sistema: [docs/architecture/system-overview.md](docs/architecture/system-overview.md)
+- Arquitectura Jurisprudencia: [docs/architecture/jurisprudence-architecture.md](docs/architecture/jurisprudence-architecture.md)
+- Arquitectura Owl & Hermes: [docs/architecture/owl-hermes-architecture.md](docs/architecture/owl-hermes-architecture.md)
+- Security Boundaries: [docs/architecture/security-boundaries.md](docs/architecture/security-boundaries.md)
+- Official Ingestion: [docs/jurisprudence/official-ingestion.md](docs/jurisprudence/official-ingestion.md)
+- Publication Pipeline: [docs/jurisprudence/publication-pipeline.md](docs/jurisprudence/publication-pipeline.md)
+- Roadmap Técnico: [docs/roadmap/technical-roadmap.md](docs/roadmap/technical-roadmap.md)
