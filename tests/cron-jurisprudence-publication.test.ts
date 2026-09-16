@@ -26,7 +26,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   };
 
   it("fails if secret is missing in environment", async () => {
-    delete process.env.CRON_SECRET;
+    delete process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET;
     const req = createRequest("Bearer valid-secret");
 
     const res = await GET(req);
@@ -35,7 +35,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("fails if Authorization header is missing", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     const req = createRequest(null);
 
     const res = await GET(req);
@@ -44,7 +44,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("fails if wrong secret is provided", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     const req = createRequest("Bearer wrong-secret");
 
     const res = await GET(req);
@@ -53,7 +53,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("fails if malformed Bearer header is provided", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     const req = createRequest("Basic valid-secret");
 
     const res = await GET(req);
@@ -62,7 +62,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("secret is never exposed in response", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     const req = createRequest("Bearer wrong-secret");
 
     const res = await GET(req);
@@ -71,7 +71,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("does not run batch if valid auth + feature OFF", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     process.env.JURISPRUDENCE_PUBLICATION_CRON_ENABLED = "false";
     const req = createRequest("Bearer valid-secret");
 
@@ -83,7 +83,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("does not run batch if valid auth + unset feature", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     delete process.env.JURISPRUDENCE_PUBLICATION_CRON_ENABLED;
     const req = createRequest("Bearer valid-secret");
 
@@ -95,7 +95,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("does not run batch if valid auth + malformed feature value", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     process.env.JURISPRUDENCE_PUBLICATION_CRON_ENABLED = "anything-else";
     const req = createRequest("Bearer valid-secret");
 
@@ -105,7 +105,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("executes exactly one processBatch invocation if valid auth + feature ON", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     process.env.JURISPRUDENCE_PUBLICATION_CRON_ENABLED = "true";
 
     vi.mocked(outboxHost.runJurisprudencePublicationOutboxHost).mockResolvedValueOnce({
@@ -137,7 +137,7 @@ describe("Jurisprudence Publication Cron Route", () => {
   });
 
   it("safe HTTP failure on unexpected infrastructure error", async () => {
-    process.env.CRON_SECRET = "valid-secret";
+    process.env.JURISPRUDENCE_PUBLICATION_CRON_SECRET = "valid-secret";
     process.env.JURISPRUDENCE_PUBLICATION_CRON_ENABLED = "true";
 
     vi.mocked(outboxHost.runJurisprudencePublicationOutboxHost).mockRejectedValueOnce(

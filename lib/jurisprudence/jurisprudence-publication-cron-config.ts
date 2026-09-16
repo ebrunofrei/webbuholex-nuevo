@@ -19,5 +19,5 @@ export function isJurisprudencePublicationCronEnabled(
 export function readJurisprudencePublicationCronSecret(
   env: Partial<NodeJS.ProcessEnv> = process.env,
 ): string | undefined {
-  return env.CRON_SECRET;
+  return env.JURISPRUDENCE_PUBLICATION_CRON_SECRET;
 }

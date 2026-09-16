@@ -38,7 +38,7 @@ La existencia del host o processor en código no equivale a cron activado ni a p
 - **Cron Host:**
   - `protected cron host = CODE_AVAILABLE / TESTED`
   - `activation/schedule = separate operational concern`
-  - `Authorization: Bearer <CRON_SECRET>`
+  - `Authorization: Bearer <JURISPRUDENCE_PUBLICATION_CRON_SECRET>`
 
 - **Feature Switches:**
   - `CODE_AVAILABLE`, `ENABLED` y `ACTIVATED` representan estados conceptualmente distintos.
