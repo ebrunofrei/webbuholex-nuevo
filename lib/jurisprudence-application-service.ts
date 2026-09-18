@@ -1,5 +1,5 @@
 import {
-  getJurisprudencePublicationBlockers,
+  getJurisprudencePrePublicationBlockers,
   isJurisprudenceRecordPublic,
   normalizeJurisprudenceSearchInput,
   toPublicJurisprudenceDetail,
@@ -321,7 +321,7 @@ export class JurisprudenceApplicationService {
       const parsed = evaluateJurisprudencePublicationQuerySchema.parse(query);
       const record = await this.#repository.findById(parsed.id);
       if (record === null) throw new JurisprudenceApplicationError("NOT_FOUND", "No existe el registro jurisprudencial solicitado.", { requestId: parsed.context.requestId, recordId: parsed.id });
-      const blockers = structuredClone(getJurisprudencePublicationBlockers(record));
+      const blockers = structuredClone(getJurisprudencePrePublicationBlockers(record));
       return {
         requestId: parsed.context.requestId,
         recordId: record.id,

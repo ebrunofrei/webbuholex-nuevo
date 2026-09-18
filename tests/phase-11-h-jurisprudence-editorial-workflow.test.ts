@@ -15,6 +15,7 @@ import { SqliteJurisprudenceEditorialCaseRepository } from "@/lib/sqlite-jurispr
 import { createFictitiousJurisprudenceRecord } from "@/tests/helpers/jurisprudence-record-fixture";
 import type { JurisprudenceApplicationContext, JurisprudenceInternalApi } from "@/types/jurisprudence-application";
 import type {
+  JurisprudenceEditorialCase,
   JurisprudenceEditorialCaseView,
   JurisprudenceEditorialLogEvent,
   JurisprudenceEditorialWorkflow,
@@ -295,8 +296,47 @@ describe("revisión editorial y verificación jurídica", () => {
     const approved = await approveBoth(test, await assignBoth(test, await openCase(test)));
     const evaluation = await test.workflow.evaluatePublication({ context: workflowContext("evaluador-ficticio"), caseId: approved.case.caseId, expectedRecordVersion: 1, expectedCaseVersion: approved.case.caseVersion, idempotencyKey: `evaluacion-ficticia-${kind}` });
     expect(evaluation).toMatchObject({ status: "verified_for_publication_evaluation", eligibleForPublicationEvaluation: true, publicationAuthorizationGranted: false, publicationExecuted: false });
-    expect(evaluation.blockers).toEqual(expect.arrayContaining(["PUBLICATION_STATUS_NOT_PUBLISHED", "SOURCE_NOT_VERIFIED"]));
+    expect(evaluation.blockers).toEqual([]);
     expect((await test.api.getInternalRecord({ context: applicationContext(), id: approved.case.recordId })).record).toMatchObject({ publicationStatus: "private", verificationStatus: "unverified" });
+  });
+
+  function fakeCaseWithEvaluation(domainPublicable: boolean, blockers: readonly string[]): JurisprudenceEditorialCase {
+    return {
+      caseId: "fake-case",
+      recordId: "fake-record",
+      recordVersion: 1,
+      caseVersion: 1,
+      purpose: "Fake",
+      openedAt: NOW,
+      openedByReference: "sys",
+      updatedAt: NOW,
+      closedAt: null,
+      closedByReference: null,
+      supersededAt: null,
+      supersededByRecordVersion: null,
+      expiresAt: "3000-01-01T00:00:00.000Z",
+      editorialAssignment: null,
+      legalAssignment: null,
+      editorialDecision: { decision: "editorial_approved", recordVersion: 1, actorReference: "b", decidedAt: NOW },
+      legalDecision: { decision: "legal_verification_approved", recordVersion: 1, actorReference: "a", decidedAt: NOW },
+      observations: [],
+      publicationEvaluation: { evaluatedAt: NOW, evaluatedByReference: "sys", recordVersion: 1, domainPublicable, blockers, publicationAuthorizationGranted: false, publicationExecuted: false }
+    };
+  }
+
+  it("T3: editorial readiness rejects publicationEvaluation.domainPublicable=false", () => {
+    const fakeCase = fakeCaseWithEvaluation(false, []);
+    expect(evaluateJurisprudenceEditorialReadiness(fakeCase, 1, NOW).publicationEvaluationReady).toBe(false);
+  });
+
+  it("T4: editorial readiness rejects non-empty blockers", () => {
+    const fakeCase = fakeCaseWithEvaluation(true, ["SOME_BLOCKER"]);
+    expect(evaluateJurisprudenceEditorialReadiness(fakeCase, 1, NOW).publicationEvaluationReady).toBe(false);
+  });
+
+  it("T5: editorial readiness accepts domainPublicable=true + blockers=[]", () => {
+    const fakeCase = fakeCaseWithEvaluation(true, []);
+    expect(evaluateJurisprudenceEditorialReadiness(fakeCase, 1, NOW).publicationEvaluationReady).toBe(true);
   });
 });
 

@@ -25,14 +25,11 @@ function hasMinimumLegalIdentification(record: JurisprudenceRecord): boolean {
     (record.resolutionNumber === null || record.resolutionNumber.trim().length > 0);
 }
 
-export function getJurisprudencePublicationBlockers(record: JurisprudenceRecord): readonly JurisprudencePublicationBlocker[] {
+export function getJurisprudencePrePublicationBlockers(record: JurisprudenceRecord): readonly JurisprudencePublicationBlocker[] {
   const blockers: JurisprudencePublicationBlocker[] = [];
   const add = (blocker: JurisprudencePublicationBlocker) => blockers.push(blocker);
 
   if (!hasIdentifiableSource(record)) add({ code: "SOURCE_NOT_IDENTIFIABLE", path: "source", message: "El registro requiere una fuente identificable." });
-  if (record.source.verificationStatus !== "verified" || record.source.verifiedAt === null) add({ code: "SOURCE_NOT_VERIFIED", path: "source.verificationStatus", message: "La fuente debe estar verificada antes de publicar." });
-  if (record.publicationStatus !== "published") add({ code: "PUBLICATION_STATUS_NOT_PUBLISHED", path: "publicationStatus", message: "El estado de publicación debe ser published." });
-  if (record.editorialStatus !== "verified") add({ code: "EDITORIAL_STATUS_NOT_VERIFIED", path: "editorialStatus", message: "El registro requiere verificación editorial." });
   if (!hasMinimumLegalIdentification(record)) add({ code: "LEGAL_IDENTIFICATION_INCOMPLETE", path: "caseNumber", message: "La identificación jurídica mínima está incompleta." });
   if (record.internal.contradictions.some((contradiction) => contradiction.severity === "critical")) add({ code: "CRITICAL_CONTRADICTION", path: "internal.contradictions", message: "El registro conserva contradicciones críticas sin resolver." });
 
@@ -45,8 +42,19 @@ export function getJurisprudencePublicationBlockers(record: JurisprudenceRecord)
   return blockers;
 }
 
+export function getJurisprudencePublicReadBlockers(record: JurisprudenceRecord): readonly JurisprudencePublicationBlocker[] {
+  const blockers = Array.from(getJurisprudencePrePublicationBlockers(record));
+  const add = (blocker: JurisprudencePublicationBlocker) => blockers.push(blocker);
+
+  if (record.source.verificationStatus !== "verified" || record.source.verifiedAt === null) add({ code: "SOURCE_NOT_VERIFIED", path: "source.verificationStatus", message: "La fuente debe estar verificada antes de publicar." });
+  if (record.publicationStatus !== "published") add({ code: "PUBLICATION_STATUS_NOT_PUBLISHED", path: "publicationStatus", message: "El estado de publicación debe ser published." });
+  if (record.editorialStatus !== "verified") add({ code: "EDITORIAL_STATUS_NOT_VERIFIED", path: "editorialStatus", message: "El registro requiere verificación editorial." });
+
+  return blockers;
+}
+
 export function isJurisprudenceRecordPublic(record: JurisprudenceRecord): boolean {
-  return jurisprudenceRecordSchema.safeParse(record).success && getJurisprudencePublicationBlockers(record).length === 0;
+  return jurisprudenceRecordSchema.safeParse(record).success && getJurisprudencePublicReadBlockers(record).length === 0;
 }
 
 function toPublicSource(record: JurisprudenceRecord) {

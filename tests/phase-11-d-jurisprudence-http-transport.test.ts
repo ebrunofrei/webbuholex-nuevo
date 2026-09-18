@@ -195,7 +195,7 @@ describe.each(factories)("transporte HTTP no montado con $name", (factory) => {
     const createdResponse = await handlers.internal.create(bodyRequest("https://internal.invalid/records", "POST", { record: httpRecord(110) }, { "idempotency-key": "http-evaluate-110" }));
     const { id } = await expectSuccessfulData<{ id: string }>(createdResponse, 201);
     const evaluation = await handlers.internal.evaluatePublication(request("https://internal.invalid/evaluate"), { id });
-    expect(await json(evaluation)).toMatchObject({ ok: true, data: { publicable: false, recordVersion: 1 } });
+    expect(await json(evaluation)).toMatchObject({ ok: true, data: { publicable: true, recordVersion: 1 } });
   });
 
   it("cierra una vez y rechaza operaciones posteriores", async () => {

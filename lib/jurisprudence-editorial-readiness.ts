@@ -31,6 +31,9 @@ export function evaluateJurisprudenceEditorialReadiness(
   const noBlockingObservations = openBlockingObservations(editorialCase) === 0;
   const evaluationCurrent = editorialCase.publicationEvaluation?.recordVersion === currentRecordVersion;
 
+  const publicationEvaluationClean = editorialCase.publicationEvaluation?.domainPublicable === true
+    && editorialCase.publicationEvaluation?.blockers.length === 0;
+
   if (!active) blockers.push("case_not_active");
   if (!currentVersion) blockers.push("record_version_changed");
   if (!unexpired) blockers.push("case_expired");
@@ -39,12 +42,13 @@ export function evaluateJurisprudenceEditorialReadiness(
   if (!decisionsAreSeparated(editorialCase)) blockers.push("separation_of_duties_missing");
   if (!noBlockingObservations) blockers.push("blocking_observations_open");
   if (!evaluationCurrent) blockers.push("publication_evaluation_missing_for_version");
+  if (!publicationEvaluationClean) blockers.push("publication_evaluation_has_blockers");
 
   return Object.freeze({
     editorialWorkflowReady: active && currentVersion && unexpired,
     legalVerificationReady: active && currentVersion && unexpired && editorialCase.legalAssignment !== null,
     publicationEvaluationReady: active && currentVersion && unexpired && editorialApproved && legallyVerified
-      && decisionsAreSeparated(editorialCase) && noBlockingObservations && evaluationCurrent,
+      && decisionsAreSeparated(editorialCase) && noBlockingObservations && evaluationCurrent && publicationEvaluationClean,
     publicationAuthorizationReady: false,
     publicationExecutionReady: false,
     blockers: Object.freeze(blockers),

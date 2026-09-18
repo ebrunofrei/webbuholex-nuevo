@@ -191,8 +191,8 @@ describe.each(apiFactories)("contrato de aplicación con $name", (factory) => {
     const api = open(factory);
     const blocked = await api.createRecord({ context: context(19), idempotencyKey: "application-publication-019", record: createFictitiousJurisprudenceRecord(19) });
     const evaluation = await api.evaluatePublication({ context: context(20), id: blocked.id });
-    expect(evaluation.publicable).toBe(false);
-    expect(evaluation.blockers.map((item) => item.code)).toContain("PUBLICATION_STATUS_NOT_PUBLISHED");
+    expect(evaluation.publicable).toBe(true);
+    expect(evaluation.blockers).toEqual([]);
     expect((await api.getInternalRecord({ context: context(21), id: blocked.id })).record.recordVersion).toBe(1);
   });
 

@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { jurisprudenceDemoDocuments } from "@/data/jurisprudence-cognitive";
 import {
-  getJurisprudencePublicationBlockers,
+  getJurisprudencePrePublicationBlockers,
+  getJurisprudencePublicReadBlockers,
   isJurisprudenceRecordPublic,
   normalizeJurisprudenceSearchInput,
   toPublicJurisprudenceDetail,
@@ -116,7 +117,8 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
   it("acepta un registro jurídicamente completo, trazable y verificable", () => {
     const record = createVerifiedRecord();
     expect(jurisprudenceRecordSchema.safeParse(record).success).toBe(true);
-    expect(getJurisprudencePublicationBlockers(record)).toEqual([]);
+    expect(getJurisprudencePrePublicationBlockers(record)).toEqual([]);
+    expect(getJurisprudencePublicReadBlockers(record)).toEqual([]);
     expect(isJurisprudenceRecordPublic(record)).toBe(true);
   });
 
@@ -161,7 +163,7 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
 
     // CASE C: La simple presencia de texto íntegro NO autoriza la proyección pública
     expect(isJurisprudenceRecordPublic(draftRecord)).toBe(false);
-    expect(getJurisprudencePublicationBlockers(draftRecord)).not.toHaveLength(0);
+    expect(getJurisprudencePublicReadBlockers(draftRecord)).not.toHaveLength(0);
   });
 
   it("normaliza espacios, elimina filtros vacíos y aplica paginación acotada", () => {
@@ -184,12 +186,12 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
     const unverified = createVerifiedRecord();
     unverified.source = { ...unverified.source, verificationStatus: "source_located", verifiedAt: null };
     expect(isJurisprudenceRecordPublic(unverified)).toBe(false);
-    expect(getJurisprudencePublicationBlockers(unverified).map((blocker) => blocker.code)).toContain("SOURCE_NOT_VERIFIED");
+    expect(getJurisprudencePublicReadBlockers(unverified).map((blocker) => blocker.code)).toContain("SOURCE_NOT_VERIFIED");
 
     const noEvidence = createVerifiedRecord();
     noEvidence.source = { ...noEvidence.source, url: null, documentId: null, evidenceReference: null };
     expect(jurisprudenceRecordSchema.safeParse(noEvidence).success).toBe(false);
-    expect(getJurisprudencePublicationBlockers(noEvidence).map((blocker) => blocker.code)).toContain("SOURCE_NOT_IDENTIFIABLE");
+    expect(getJurisprudencePrePublicationBlockers(noEvidence).map((blocker) => blocker.code)).toContain("SOURCE_NOT_IDENTIFIABLE");
   });
 
   it("impide publicar una vista editorial previa", () => {
@@ -222,7 +224,7 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
     record.generatedContent = { internalDraft: "Borrador generado sin respaldo.", reviewed: false, supportedBySource: false };
     record.internal = { ...record.internal, generatedContentOnly: true };
     expect(isJurisprudenceRecordPublic(record)).toBe(false);
-    expect(getJurisprudencePublicationBlockers(record).map((blocker) => blocker.code)).toContain("GENERATED_CONTENT_WITHOUT_SUPPORT");
+    expect(getJurisprudencePrePublicationBlockers(record).map((blocker) => blocker.code)).toContain("GENERATED_CONTENT_WITHOUT_SUPPORT");
     expect(jurisprudenceRecordSchema.safeParse({ ...createVerifiedRecord(), source: { ...createVerifiedRecord().source, type: "generated" } }).success).toBe(false);
   });
 
@@ -249,5 +251,37 @@ describe("contrato canónico de jurisprudencia de Fase 11.A", () => {
 
     const recordUndefined = { ...createVerifiedRecord(), resolutionNumber: undefined };
     expect(jurisprudenceRecordSchema.safeParse(recordUndefined).success).toBe(false);
+  });
+
+  it("T1: private/unverified/draft Model-A state does NOT block pre-publication eligibility when base invariants pass", () => {
+    const record = {
+      ...createVerifiedRecord(),
+      editorialStatus: "draft" as const,
+      publicationStatus: "private" as const,
+      source: {
+        ...createVerifiedRecord().source,
+        verificationStatus: "unverified" as const,
+      }
+    };
+    expect(getJurisprudencePrePublicationBlockers(record)).toEqual([]);
+    expect(isJurisprudenceRecordPublic(record)).toBe(false);
+  });
+
+  it("T2: real base-domain invariant failure DOES block pre-publication eligibility", () => {
+    const record = createVerifiedRecord();
+    record.internal = {
+      ...record.internal,
+      contradictions: [
+        ...record.internal.contradictions,
+        { severity: "critical", code: "TEST_CONTRADICTION", message: "Test message" }
+      ]
+    };
+    expect(getJurisprudencePrePublicationBlockers(record).map(b => b.code)).toContain("CRITICAL_CONTRADICTION");
+  });
+
+  it("T6: public-read validator still rejects non-public state", () => {
+    const record = { ...createVerifiedRecord(), publicationStatus: "private" as const };
+    expect(getJurisprudencePublicReadBlockers(record).map(b => b.code)).toContain("PUBLICATION_STATUS_NOT_PUBLISHED");
+    expect(isJurisprudenceRecordPublic(record)).toBe(false);
   });
 });
