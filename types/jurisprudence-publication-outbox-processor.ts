@@ -1,3 +1,5 @@
+import type { JurisprudenceRepository } from "./jurisprudence-repository";
+
 export interface JurisprudencePublicationOutboxClaim {
   readonly id: string;
   readonly recordId: string;
@@ -30,3 +32,5 @@ export interface JurisprudencePublicationOutboxProcessorRepository {
     processedAt: Date
   ): Promise<void>;
 }
+
+export type JurisprudencePublicationStatusSynchronizer = Pick<JurisprudenceRepository, "synchronizePublicationStatus">;

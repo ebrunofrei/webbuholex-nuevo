@@ -353,6 +353,33 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
     });
   }
 
+  async synchronizePublicationStatus(recordId: string, status: JurisprudencePublicationStatus): Promise<void> {
+    this.assertOpen();
+    const db = getJurisprudenceInternalWriteDatabase();
+
+    return await withJurisprudenceInternalWriteRole(db, async (tx) => {
+      // 1. Lock row FOR UPDATE to ensure safe concurrency
+      const lockRows = await tx.execute(
+        sql`SELECT id, publication_status AS "publicationStatus" FROM jurisprudence_internal.jurisprudence_records WHERE id = ${recordId} FOR UPDATE`
+      );
+
+      if (lockRows.length === 0) {
+        throw new JurisprudenceRepositoryError("NOT_FOUND", "No existe el registro jurisprudencial solicitado.", { recordId });
+      }
+
+      const current = lockRows[0] as { id: string; publicationStatus: string };
+
+      if (current.publicationStatus === status) {
+        return; // Idempotent
+      }
+
+      await tx.update(jurisprudenceRecords).set({
+        publicationStatus: status,
+        payloadJson: sql`jsonb_set(${jurisprudenceRecords.payloadJson}, '{publicationStatus}', ${JSON.stringify(status)})`
+      }).where(eq(jurisprudenceRecords.id, recordId));
+    });
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;

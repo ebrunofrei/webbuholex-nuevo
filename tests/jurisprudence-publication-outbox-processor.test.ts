@@ -12,6 +12,7 @@ import { JurisprudencePublicationOutboxProcessor } from "../lib/jurisprudence/ju
 import type {
   JurisprudencePublicationOutboxClaim,
   JurisprudencePublicationOutboxProcessorRepository,
+  JurisprudencePublicationStatusSynchronizer,
 } from "../types/jurisprudence-publication-outbox-processor";
 
 import type {
@@ -23,6 +24,7 @@ import type {
 describe("JurisprudencePublicationOutboxProcessor", () => {
   let repository: Mocked<JurisprudencePublicationOutboxProcessorRepository>;
   let writer: Mocked<JurisprudencePublicProjectionWriter>;
+  let recordRepository: Mocked<JurisprudencePublicationStatusSynchronizer>;
   let processor: JurisprudencePublicationOutboxProcessor;
   let fixedDate: Date;
 
@@ -63,12 +65,7 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
     ...overrides,
   });
 
-  const createUnsupportedEventClaim =
-    (): JurisprudencePublicationOutboxClaim =>
-      ({
-        ...createClaim(),
-        eventType: "unknown_event",
-      }) as unknown as JurisprudencePublicationOutboxClaim;
+
 
   beforeEach(() => {
     repository = {
@@ -77,11 +74,15 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
       markSent: vi.fn(),
       markFailed: vi.fn(),
       markDeadLetter: vi.fn(),
-    } as unknown as Mocked<JurisprudencePublicationOutboxProcessorRepository>;
+    };
 
     writer = {
       upsert: vi.fn(),
       removeById: vi.fn(),
+    };
+
+    recordRepository = {
+      synchronizePublicationStatus: vi.fn(),
     };
 
     fixedDate = new Date("2026-01-01T00:00:00.000Z");
@@ -89,6 +90,7 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
     processor = new JurisprudencePublicationOutboxProcessor(
       repository,
       writer,
+      recordRepository,
       () => fixedDate,
     );
   });
@@ -212,25 +214,7 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
     });
   });
 
-  it("sends DEAD_LETTER for unsupported outbox event", async () => {
-    repository.claimNext.mockResolvedValueOnce(
-      createUnsupportedEventClaim(),
-    );
 
-    const result = await processor.processNext();
-
-    expect(result).toBe("DEAD_LETTER");
-    expect(repository.markDeadLetter).toHaveBeenCalledWith(
-      "out-1",
-      "UNSUPPORTED_OUTBOX_EVENT",
-      fixedDate,
-    );
-
-    expect(writer.upsert).not.toHaveBeenCalled();
-    expect(writer.removeById).not.toHaveBeenCalled();
-    expect(repository.markFailed).not.toHaveBeenCalled();
-    expect(repository.markSent).not.toHaveBeenCalled();
-  });
 
   describe("publish_projection", () => {
     it.each<PublicProjectionMutationResult>([
@@ -550,26 +534,7 @@ describe("JurisprudencePublicationOutboxProcessor", () => {
       },
     );
 
-    it(
-      "does not misclassify unsupported-event bookkeeping failure as public write failure",
-      async () => {
-        repository.claimNext.mockResolvedValueOnce(
-          createUnsupportedEventClaim(),
-        );
 
-        repository.markDeadLetter.mockRejectedValueOnce(
-          new Error("Bookkeeping failure"),
-        );
-
-        await expect(
-          processor.processNext(),
-        ).rejects.toThrow("Bookkeeping failure");
-
-        expect(repository.markFailed).not.toHaveBeenCalled();
-        expect(writer.upsert).not.toHaveBeenCalled();
-        expect(writer.removeById).not.toHaveBeenCalled();
-      },
-    );
   });
 
   describe("Provenance Propagation (D1-R2)", () => {

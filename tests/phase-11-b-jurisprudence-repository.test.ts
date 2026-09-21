@@ -3,6 +3,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { InMemoryJurisprudenceRepository } from "@/lib/in-memory-jurisprudence-repository";
 import {
@@ -42,10 +43,21 @@ function readTypeScriptTree(directory: string): string {
   }).join("\n");
 }
 
+const testSqlitePaths = new WeakMap<JurisprudenceRepository, string>();
+const cleanupPaths: string[] = [];
+
 type RepositoryFactory = { name: string; create: () => JurisprudenceRepository };
 const repositoryFactories: readonly RepositoryFactory[] = [
   { name: "memoria", create: () => new InMemoryJurisprudenceRepository(deterministicDependencies("memory")) },
-  { name: "sqlite", create: () => new SqliteJurisprudenceRepository(":memory:", deterministicDependencies("sqlite")) },
+  { name: "sqlite", create: () => {
+      const dbDir = mkdtempSync(path.join(tmpdir(), "buholex-sqlite-test-"));
+      const dbPath = path.join(dbDir, "test.sqlite");
+      cleanupPaths.push(dbDir);
+      const repo = new SqliteJurisprudenceRepository(dbPath, deterministicDependencies("sqlite"));
+      testSqlitePaths.set(repo, dbPath);
+      return repo;
+    }
+  },
 ];
 
 const openRepositories: JurisprudenceRepository[] = [];
@@ -57,6 +69,14 @@ function open(factory: RepositoryFactory): JurisprudenceRepository {
 
 afterEach(async () => {
   await Promise.all(openRepositories.splice(0).map((repository) => repository.close()));
+
+  for (const dir of cleanupPaths.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors on Windows
+    }
+  }
 });
 
 describe.each(repositoryFactories)("contrato del repositorio: $name", (factory) => {
@@ -67,6 +87,96 @@ describe.each(repositoryFactories)("contrato del repositorio: $name", (factory) 
     expect(created.recordVersion).toBe(1);
     expect(created.createdAt).toBe(created.updatedAt);
     expect(created.publicationStatus).toBe("private");
+  });
+
+  describe("synchronizePublicationStatus (A1.7D-F: T6 / T7)", () => {
+    it("mantiene recordVersion estable e aísla campos de Modelo-A", async () => {
+      const repository = open(factory);
+      const initialRecord = createFictitiousJurisprudenceRecord(9);
+      const created = await repository.create({ record: initialRecord, idempotencyKey: "sync-test-09" });
+
+      const N = created.recordVersion;
+
+      const assertPhysicalState = (expectedStatus: string) => {
+        if (!(repository instanceof SqliteJurisprudenceRepository)) return;
+        const dbPath = testSqlitePaths.get(repository);
+        if (!dbPath) throw new Error("Missing DatabaseSync path");
+        const inspectDb = new DatabaseSync(dbPath);
+
+        try {
+          const row = inspectDb.prepare("SELECT record_version, publication_status, payload_json FROM jurisprudence_records WHERE id = ?").get(created.id);
+          if (!row || typeof row !== "object") throw new Error("Invalid row");
+
+          if (!("record_version" in row) || typeof row.record_version !== "number") throw new Error("Invalid record_version");
+          expect(row.record_version).toBe(N);
+
+          if (!("publication_status" in row) || typeof row.publication_status !== "string") throw new Error("Invalid status");
+          expect(row.publication_status).toBe(expectedStatus);
+
+          if (!("payload_json" in row) || typeof row.payload_json !== "string") throw new Error("Invalid payload");
+          const payloadJson = JSON.parse(row.payload_json);
+          expect(payloadJson.publicationStatus).toBe(expectedStatus);
+        } finally {
+          inspectDb.close();
+        }
+      };
+
+      // Capturar estado previo
+      const before = await repository.findById(created.id);
+      expect(before).toBeDefined();
+      expect(before!.publicationStatus).toBe("private");
+      expect(before!.source.verificationStatus).toBe("unverified"); // Fixture is unverified
+      const beforeSource = before!.source;
+      const beforeEditorial = before!.editorialStatus;
+      const beforeMatter = before!.matter;
+
+      assertPhysicalState("private");
+
+      // 1. PUBLICADO
+      await repository.synchronizePublicationStatus(created.id, "published");
+      const afterPublish = await repository.findById(created.id);
+      expect(afterPublish!.publicationStatus).toBe("published");
+      expect(afterPublish!.recordVersion).toBe(N); // T6: Version stability
+      expect(afterPublish!.source.verificationStatus).toBe(beforeSource.verificationStatus); // T7: Model-A isolation
+      expect(afterPublish!.source.verifiedAt).toBe(beforeSource.verifiedAt);
+      expect(afterPublish!.editorialStatus).toBe(beforeEditorial);
+      expect(afterPublish!.matter).toBe(beforeMatter);
+
+      assertPhysicalState("published");
+
+      // 2. PUBLICADO REPETIDO (idempotente)
+      await repository.synchronizePublicationStatus(created.id, "published");
+      const afterRepeatedPublish = await repository.findById(created.id);
+      expect(afterRepeatedPublish!.publicationStatus).toBe("published");
+      expect(afterRepeatedPublish!.recordVersion).toBe(N);
+      expect(afterRepeatedPublish!.source.verificationStatus).toBe(beforeSource.verificationStatus);
+      expect(afterRepeatedPublish!.editorialStatus).toBe(beforeEditorial);
+      expect(afterRepeatedPublish!.matter).toBe(beforeMatter);
+
+      assertPhysicalState("published");
+
+      // 3. RETIRADO
+      await repository.synchronizePublicationStatus(created.id, "withdrawn");
+      const afterWithdrawn = await repository.findById(created.id);
+      expect(afterWithdrawn!.publicationStatus).toBe("withdrawn");
+      expect(afterWithdrawn!.recordVersion).toBe(N);
+      expect(afterWithdrawn!.source.verificationStatus).toBe(beforeSource.verificationStatus);
+      expect(afterWithdrawn!.editorialStatus).toBe(beforeEditorial);
+      expect(afterWithdrawn!.matter).toBe(beforeMatter);
+
+      assertPhysicalState("withdrawn");
+
+      // 4. RETIRADO REPETIDO (idempotente)
+      await repository.synchronizePublicationStatus(created.id, "withdrawn");
+      const afterRepeatedWithdrawn = await repository.findById(created.id);
+      expect(afterRepeatedWithdrawn!.publicationStatus).toBe("withdrawn");
+      expect(afterRepeatedWithdrawn!.recordVersion).toBe(N);
+      expect(afterRepeatedWithdrawn!.source.verificationStatus).toBe(beforeSource.verificationStatus);
+      expect(afterRepeatedWithdrawn!.editorialStatus).toBe(beforeEditorial);
+      expect(afterRepeatedWithdrawn!.matter).toBe(beforeMatter);
+
+      assertPhysicalState("withdrawn");
+    });
   });
 
   it("rechaza un registro inválido mediante error estructurado", async () => {

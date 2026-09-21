@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { loadEnvFile } from "node:process";
 import {
   afterAll,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -10,10 +10,11 @@ import {
 import { jurisprudencePublicationOutbox, jurisprudenceRecords } from "@/database/schema/jurisprudence";
 import { PostgresJurisprudencePublicationOutboxProcessorRepository } from "@/lib/jurisprudence/postgres-jurisprudence-publication-outbox-processor-repository";
 import { PostgresJurisprudencePublicProjectionWriter } from "@/lib/jurisprudence/postgres-jurisprudence-public-projection-writer";
+import { PostgresJurisprudenceRepository } from "@/lib/jurisprudence/postgres-jurisprudence-repository";
 import { JurisprudencePublicationOutboxProcessor } from "@/lib/jurisprudence/jurisprudence-publication-outbox-processor";
 import { processBatch } from "@/lib/jurisprudence/jurisprudence-publication-outbox-batch";
 import { v4 as uuid } from "uuid";
-import { inArray, lt } from "drizzle-orm";
+import { inArray, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -35,9 +36,10 @@ const migrationUrl =
   requireEnvironmentVariable("DATABASE_MIGRATION_URL");
 
 describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
-  let adminDb: any;
+  let adminDb: ReturnType<typeof drizzle>;
   let processor1: JurisprudencePublicationOutboxProcessor;
   let processor2: JurisprudencePublicationOutboxProcessor;
+  let recordRepo1: PostgresJurisprudenceRepository;
   let queryClient: ReturnType<typeof postgres>;
 
   beforeAll(async () => {
@@ -64,27 +66,35 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
       new PostgresJurisprudencePublicationOutboxProcessorRepository();
     const writer1 =
       new PostgresJurisprudencePublicProjectionWriter();
+    recordRepo1 = new PostgresJurisprudenceRepository();
 
     processor1 =
       new JurisprudencePublicationOutboxProcessor(
         repo1,
         writer1,
+        recordRepo1,
       );
 
     const repo2 =
       new PostgresJurisprudencePublicationOutboxProcessorRepository();
     const writer2 =
       new PostgresJurisprudencePublicProjectionWriter();
+    const recordRepo2 = new PostgresJurisprudenceRepository();
 
     processor2 =
       new JurisprudencePublicationOutboxProcessor(
         repo2,
         writer2,
+        recordRepo2,
       );
   });
 
   afterAll(async () => {
     await queryClient.end();
+  });
+
+  beforeEach(async () => {
+    await adminDb.delete(jurisprudencePublicationOutbox);
   });
 
   async function createEligibleMessages(count: number, dateStr: string) {
@@ -125,19 +135,19 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
     expect(result.failed).toBe(0);
 
     // Assert Durability with polling
-    let states: any[] = [];
+    let states: { id: string; status: string | null }[] = [];
     for (let i = 0; i < 10; i++) {
       states = await adminDb.select({ id: jurisprudencePublicationOutbox.id, status: jurisprudencePublicationOutbox.status })
         .from(jurisprudencePublicationOutbox)
         .where(inArray(jurisprudencePublicationOutbox.id, outboxIds));
-      if (states.filter((s: any) => s.status === "dead_letter").length === 2) break;
+      if (states.filter((s) => s.status === "dead_letter").length === 2) break;
       await new Promise(r => setTimeout(r, 500));
     }
 
     console.log("DB States:", states);
 
-    const deadLetters = states.filter((s: any) => s.status === "dead_letter");
-    const pending = states.filter((s: any) => s.status === "pending");
+    const deadLetters = states.filter((s) => s.status === "dead_letter");
+    const pending = states.filter((s) => s.status === "pending");
 
     expect(deadLetters).toHaveLength(2);
     expect(pending).toHaveLength(3);
@@ -154,16 +164,16 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
     expect(res1.deadLetter + res2.deadLetter).toBe(6);
 
     // Assert Durability with polling
-    let states: any[] = [];
+    let states: { id: string; status: string | null }[] = [];
     for (let i = 0; i < 10; i++) {
       states = await adminDb.select({ id: jurisprudencePublicationOutbox.id, status: jurisprudencePublicationOutbox.status })
         .from(jurisprudencePublicationOutbox)
         .where(inArray(jurisprudencePublicationOutbox.id, outboxIds));
-      if (states.filter((s: any) => s.status === "dead_letter").length === 6) break;
+      if (states.filter((s) => s.status === "dead_letter").length === 6) break;
       await new Promise(r => setTimeout(r, 500));
     }
 
-    const deadLetters = states.filter((s: any) => s.status === "dead_letter");
+    const deadLetters = states.filter((s) => s.status === "dead_letter");
     expect(deadLetters).toHaveLength(6);
   }, 30000);
 
@@ -187,97 +197,99 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
       matter: "Materia",
       issuedAt: "2026-01-15",
       summary: "Resumen",
-      sourceName: "Fuente"
+      sourceName: "Fuente",
+      officialHtmlUrl: null,
+      officialPdfUrl: null,
     });
 
-    const createRecordPayload = (recId: string, slug: string) => {
+    const createRecordPayload = (recId: string, slug: string, status: "private" | "published" = "published") => {
       const checksum = "a".repeat(64);
       return {
-      id: recId,
-      slug,
-      recordVersion: 1,
-      editorialStatus: "verified",
-      publicationStatus: "published",
-      createdAt: "2026-07-29T10:00:00.000Z",
-      updatedAt: "2026-07-29T11:00:00.000Z",
-      caseNumber: "CONTRACT-TEST-001",
-      resolutionNumber: "RES-CONTRACT-TEST-001",
-      resolutionType: "Resolución de prueba contractual",
-      institution: {
-        id: "institution-contract-test",
-        name: "Institución oficial de prueba",
-        shortName: "Institución",
-        country: "Perú",
-        kind: "judiciary",
-        officialHomepage: "https://official.example.test",
-      },
-      issuingBody: "Órgano de prueba",
-      instanceLevel: "Instancia",
-      specialty: "Especialidad",
-      matter: "Materia",
-      submatter: null,
-      judicialDistrict: "Distrito",
-      chamberOrCourt: "Sala",
-      rapporteur: null,
-      issuedAt: "2026-01-15",
-      officiallyPublishedAt: "2026-01-16",
-      officialContent: {
-        officialSummary: "Sumilla",
-        officialFullText: "Texto",
-        fullTextAvailable: true,
-        publicationAllowed: true,
-        documentAvailability: "official_file_available",
-        originFormat: "pdf",
-        language: "es-PE",
-        pageCount: 12,
-      },
-      editorialContent: {
-        editorialTitle: "Título",
-        editorialSummary: "Resumen",
-        publicExcerpt: "Extracto",
-        legalIssue: "Problema",
-        mainCriterion: "Criterio",
-        relevantGrounds: ["Fundamento"],
-        decision: "Decisión",
-        citedNorms: ["Norma"],
-        citedPrecedentIds: [],
-        relatedRecordIds: [],
-        keywords: ["contrato"],
-      },
-      generatedContent: { internalDraft: null, reviewed: false, supportedBySource: false },
-      authority: {
-        resolutionCategory: "ordinary_decision",
-        legalAuthority: "ordinary",
-        authorityEvidence: "Referencia",
-        authorityVerifiedAt: "2026-07-29T10:30:00.000Z",
-        validityStatus: "current",
-        validityEvidence: "Vigencia",
-      },
-      source: {
-        type: "official_judiciary",
-        name: "Fuente",
-        url: "https://official.example.test/resolution",
-        documentId: "official-contract-test-001",
-        publishedAt: "2026-01-16T12:00:00.000Z",
-        retrievedAt: "2026-07-29T09:00:00.000Z",
-        checksum,
-        verificationStatus: "verified",
-        verifiedAt: "2026-07-29T10:00:00.000Z",
-        verifiedBy: "editorial-test-reference",
-        verificationNotes: "Nota",
-        evidenceReference: "evidence",
-      },
-      officialFile: {
-        available: true,
-        originalName: "res.pdf",
-        mimeType: "application/pdf",
-        byteSize: 1024,
-        checksum,
-        internalLocation: "private/res.pdf",
-        publicAccessAllowed: true,
-      },
-      search: { normalizedSearchText: "texto" }
-    };
+        id: recId,
+        slug,
+        recordVersion: 1,
+        editorialStatus: "verified",
+        publicationStatus: status,
+        createdAt: "2026-07-29T10:00:00.000Z",
+        updatedAt: "2026-07-29T11:00:00.000Z",
+        caseNumber: "CONTRACT-TEST-001",
+        resolutionNumber: "RES-CONTRACT-TEST-001",
+        resolutionType: "Resolución de prueba contractual",
+        institution: {
+          id: "institution-contract-test",
+          name: "Institución oficial de prueba",
+          shortName: "Institución",
+          country: "Perú",
+          kind: "judiciary",
+          officialHomepage: "https://official.example.test",
+        },
+        issuingBody: "Órgano de prueba",
+        instanceLevel: "Instancia",
+        specialty: "Especialidad",
+        matter: "Materia",
+        submatter: null,
+        judicialDistrict: "Distrito",
+        chamberOrCourt: "Sala",
+        rapporteur: null,
+        issuedAt: "2026-01-15",
+        officiallyPublishedAt: "2026-01-16",
+        officialContent: {
+          officialSummary: "Sumilla",
+          officialFullText: "Texto",
+          fullTextAvailable: true,
+          publicationAllowed: true,
+          documentAvailability: "official_file_available",
+          originFormat: "pdf",
+          language: "es-PE",
+          pageCount: 12,
+        },
+        editorialContent: {
+          editorialTitle: "Título",
+          editorialSummary: "Resumen",
+          publicExcerpt: "Extracto",
+          legalIssue: "Problema",
+          mainCriterion: "Criterio",
+          relevantGrounds: ["Fundamento"],
+          decision: "Decisión",
+          citedNorms: ["Norma"],
+          citedPrecedentIds: [],
+          relatedRecordIds: [],
+          keywords: ["contrato"],
+        },
+        generatedContent: { internalDraft: null, reviewed: false, supportedBySource: false },
+        authority: {
+          resolutionCategory: "ordinary_decision",
+          legalAuthority: "ordinary",
+          authorityEvidence: "Referencia",
+          authorityVerifiedAt: "2026-07-29T10:30:00.000Z",
+          validityStatus: "current",
+          validityEvidence: "Vigencia",
+        },
+        source: {
+          type: "official_judiciary",
+          name: "Fuente",
+          url: "https://official.example.test/resolution",
+          documentId: "official-contract-test-001",
+          publishedAt: "2026-01-16T12:00:00.000Z",
+          retrievedAt: "2026-07-29T09:00:00.000Z",
+          checksum,
+          verificationStatus: "verified",
+          verifiedAt: "2026-07-29T10:00:00.000Z",
+          verifiedBy: "editorial-test-reference",
+          verificationNotes: "Nota",
+          evidenceReference: "evidence",
+        },
+        officialFile: {
+          available: true,
+          originalName: "res.pdf",
+          mimeType: "application/pdf",
+          byteSize: 1024,
+          checksum,
+          internalLocation: "private/res.pdf",
+          publicAccessAllowed: true,
+        },
+        search: { normalizedSearchText: "texto" }
+      };
     };
 
     const outboxId1 = uuid();
@@ -302,9 +314,9 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
         normalizedSearchText: "TEXT",
         issuedAt: "2026-01-15",
         editorialStatus: "verified",
-        publicationStatus: "published",
+        publicationStatus: "private",
         verificationStatus: "verified",
-        payloadJson: createRecordPayload(fixtureRecordId1, slug1)
+        payloadJson: createRecordPayload(fixtureRecordId1, slug1, "private")
       },
       {
         id: fixtureRecordId2,
@@ -320,9 +332,9 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
         normalizedSearchText: "TEXT",
         issuedAt: "2026-01-15",
         editorialStatus: "verified",
-        publicationStatus: "published",
+        publicationStatus: "private",
         verificationStatus: "verified",
-        payloadJson: createRecordPayload(fixtureRecordId2, slug2)
+        payloadJson: createRecordPayload(fixtureRecordId2, slug2, "private")
       }
     ]);
 
@@ -353,6 +365,35 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
       }
     ]);
 
+    // BEFORE synchronize: Verify initial state for physical proof
+    const getPhysicalRow = async () => {
+      const result = await adminDb.select({
+        recordVersion: jurisprudenceRecords.recordVersion,
+        publicationStatus: jurisprudenceRecords.publicationStatus,
+        payloadJson: jurisprudenceRecords.payloadJson,
+        issuedAt: jurisprudenceRecords.issuedAt
+      }).from(jurisprudenceRecords).where(inArray(jurisprudenceRecords.id, [fixtureRecordId1]));
+      const [row] = result;
+      if (!row) throw new Error("Row not found");
+      return row;
+    };
+
+    const beforeSync = await getPhysicalRow();
+    expect(beforeSync.recordVersion).toBe(1);
+    expect(beforeSync.publicationStatus).toBe("private");
+    const beforePayload = beforeSync.payloadJson;
+    if (typeof beforePayload !== "object" || beforePayload === null ||
+        !("publicationStatus" in beforePayload) || !("editorialStatus" in beforePayload) ||
+        !("source" in beforePayload) || typeof beforePayload.source !== "object" || beforePayload.source === null ||
+      !("verificationStatus" in beforePayload.source) || !("verifiedAt" in beforePayload.source)) {
+      throw new Error("Invalid payload shape");
+    }
+    expect(beforePayload.publicationStatus).toBe("private");
+    const beforeIssuedAt = beforeSync.issuedAt;
+    const beforeVerificationStatus = beforePayload.source.verificationStatus;
+    const beforeVerifiedAt = beforePayload.source.verifiedAt;
+    const beforeEditorialStatus = beforePayload.editorialStatus;
+
     const result = await processBatch(processor1, { maxItems: 2, maxDurationMs: 10000 });
 
     expect(result.stopReason).toBe("MAX_ITEMS");
@@ -362,29 +403,74 @@ describe("J1-G.5 Batch Processor E2E and Concurrency", () => {
     expect(result.failed).toBe(0);
 
     // Bounded condition poll instead of fixed sleep
-    let states: any[] = [];
+    let states: { id: string; status: string | null }[] = [];
     const maxPolls = 10;
     for (let i = 0; i < maxPolls; i++) {
       states = await adminDb.select({ id: jurisprudencePublicationOutbox.id, status: jurisprudencePublicationOutbox.status })
         .from(jurisprudencePublicationOutbox)
         .where(inArray(jurisprudencePublicationOutbox.id, outboxIds));
 
-      const sent = states.filter((s: any) => s.status === "sent");
+      const sent = states.filter((s) => s.status === "sent");
       if (sent.length === 2) break;
       await new Promise(r => setTimeout(r, 500));
     }
 
-    const sent = states.filter((s: any) => s.status === "sent");
+    const sent = states.filter((s) => s.status === "sent");
     expect(sent).toHaveLength(2);
 
-    // Assert projection and barrier exist
-    // Using adminDb to query public schema projection tables directly
-    // Wait, the projection and barrier are in jurisprudence_public schema!
-    // Since adminDb is DATABASE_MIGRATION_URL, it has full access.
-    const res = await adminDb.execute(`SELECT count(*) as c FROM jurisprudence_public.published_records WHERE id IN ('${fixtureRecordId1}', '${fixtureRecordId2}')`);
-    expect(Number(res[0].c)).toBe(2);
+    const res = await adminDb.execute(sql`SELECT count(*) as c FROM jurisprudence_public.published_records WHERE id IN (${fixtureRecordId1}, ${fixtureRecordId2})`);
+    const [publishedRow] = res;
+    expect(publishedRow).toBeDefined();
+    if (!publishedRow) throw new Error("Expected published_records row");
+    expect(Number(publishedRow.c)).toBe(2);
 
-    const barrierRes = await adminDb.execute(`SELECT count(*) as c FROM jurisprudence_public.projection_barriers WHERE record_id IN ('${fixtureRecordId1}', '${fixtureRecordId2}')`);
-    expect(Number(barrierRes[0].c)).toBe(2);
+    const barrierRes = await adminDb.execute(sql`SELECT count(*) as c FROM jurisprudence_public.projection_barriers WHERE record_id IN (${fixtureRecordId1}, ${fixtureRecordId2})`);
+    const [barrierRow] = barrierRes;
+    expect(barrierRow).toBeDefined();
+    if (!barrierRow) throw new Error("Expected projection_barriers row");
+    expect(Number(barrierRow.c)).toBe(2);
+
+    function assertUnchangedT7(payload: unknown) {
+      if (typeof payload !== "object" || payload === null || !("publicationStatus" in payload) || !("editorialStatus" in payload) || !("source" in payload) || typeof payload.source !== "object" || payload.source === null || !("verificationStatus" in payload.source) || !("verifiedAt" in payload.source)) throw new Error("Invalid payload");
+      expect(payload.editorialStatus).toBe(beforeEditorialStatus);
+      expect(payload.source.verificationStatus).toBe(beforeVerificationStatus);
+      expect(payload.source.verifiedAt).toBe(beforeVerifiedAt);
+      return payload;
+    }
+
+    // AFTER published (T6/T7 Physical Proof)
+    const afterSync = await getPhysicalRow();
+    expect(afterSync.recordVersion).toBe(1); // Unchanged
+    expect(afterSync.publicationStatus).toBe("published"); // Mutated
+    const afterPayload = assertUnchangedT7(afterSync.payloadJson);
+    expect(afterPayload.publicationStatus).toBe("published"); // Mutated
+    expect(afterSync.issuedAt).toBe(beforeIssuedAt); // Unchanged Model-A
+
+    // AFTER repeated published (idempotent)
+    await recordRepo1.synchronizePublicationStatus(fixtureRecordId1, "published");
+    const afterRepeat = await getPhysicalRow();
+    expect(afterRepeat.recordVersion).toBe(1);
+    expect(afterRepeat.publicationStatus).toBe("published");
+    const afterRepeatPayload = assertUnchangedT7(afterRepeat.payloadJson);
+    expect(afterRepeatPayload.publicationStatus).toBe("published");
+    expect(afterRepeat.issuedAt).toBe(beforeIssuedAt);
+
+    // AFTER withdrawn
+    await recordRepo1.synchronizePublicationStatus(fixtureRecordId1, "withdrawn");
+    const afterWithdrawn = await getPhysicalRow();
+    expect(afterWithdrawn.recordVersion).toBe(1);
+    expect(afterWithdrawn.publicationStatus).toBe("withdrawn");
+    const afterWithdrawnPayload = assertUnchangedT7(afterWithdrawn.payloadJson);
+    expect(afterWithdrawnPayload.publicationStatus).toBe("withdrawn");
+    expect(afterWithdrawn.issuedAt).toBe(beforeIssuedAt);
+
+    // AFTER repeated withdrawn
+    await recordRepo1.synchronizePublicationStatus(fixtureRecordId1, "withdrawn");
+    const afterRepeatWithdrawn = await getPhysicalRow();
+    expect(afterRepeatWithdrawn.recordVersion).toBe(1);
+    expect(afterRepeatWithdrawn.publicationStatus).toBe("withdrawn");
+    const afterRepeatWithdrawnPayload = assertUnchangedT7(afterRepeatWithdrawn.payloadJson);
+    expect(afterRepeatWithdrawnPayload.publicationStatus).toBe("withdrawn");
+    expect(afterRepeatWithdrawn.issuedAt).toBe(beforeIssuedAt);
   }, 30000);
 });

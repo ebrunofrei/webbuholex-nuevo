@@ -18,7 +18,10 @@ import {
 } from "@/lib/jurisprudence-repository-utils";
 import { jurisprudenceCreateInputSchema, jurisprudenceUpdateInputSchema } from "@/lib/schemas/jurisprudence-repository";
 import { jurisprudenceRecordSchema } from "@/lib/schemas/jurisprudence";
-import type { JurisprudenceRecord } from "@/types/jurisprudence";
+import type {
+  JurisprudencePublicationStatus,
+  JurisprudenceRecord,
+} from "@/types/jurisprudence";
 import type {
   JurisprudenceCreateInput,
   JurisprudenceExternalIdentity,
@@ -325,6 +328,32 @@ export class SqliteJurisprudenceRepository implements JurisprudenceRepository {
         };
       });
     });
+  }
+
+  async synchronizePublicationStatus(recordId: string, status: JurisprudencePublicationStatus): Promise<void> {
+    return this.safely(() => this.transaction(() => {
+      const lockStmt = this.database.prepare(
+        "SELECT id, publication_status FROM jurisprudence_records WHERE id = ? LIMIT 1"
+      );
+      const current = lockStmt.get(recordId) as { id: string; publication_status: string } | undefined;
+
+      if (!current) {
+        throw new JurisprudenceRepositoryError("NOT_FOUND", "No existe el registro jurisprudencial solicitado.", { recordId });
+      }
+
+      if (current.publication_status === status) {
+        return; // Idempotent
+      }
+
+      const stmt = this.database.prepare(`
+        UPDATE jurisprudence_records
+        SET publication_status = ?,
+            payload_json = json_set(payload_json, '$.publicationStatus', ?)
+        WHERE id = ?
+      `);
+
+      stmt.run(status, status, recordId);
+    }));
   }
 
   clearForTests(): void {

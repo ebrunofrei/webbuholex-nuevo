@@ -166,6 +166,24 @@ export class InMemoryJurisprudenceRepository implements JurisprudenceRepository 
     return (this.history.get(id) ?? []).map((entry) => ({ ...entry, snapshot: cloneJurisprudenceRecord(entry.snapshot) }));
   }
 
+  async synchronizePublicationStatus(recordId: string, status: JurisprudencePublicationStatus): Promise<void> {
+    return this.safely(() => {
+      const current = this.records.get(recordId);
+      if (!current) {
+        throw new JurisprudenceRepositoryError("NOT_FOUND", "No existe el registro jurisprudencial solicitado.", { recordId });
+      }
+
+      if (current.publicationStatus === status) {
+        return; // Idempotent
+      }
+
+      const updated = cloneJurisprudenceRecord(current);
+      updated.publicationStatus = status;
+
+      this.records.set(recordId, updated);
+    });
+  }
+
   clearForTests(): void {
     this.assertOpen();
     this.records.clear();

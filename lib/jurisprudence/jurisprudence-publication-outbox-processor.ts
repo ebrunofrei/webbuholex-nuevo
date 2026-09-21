@@ -1,5 +1,6 @@
 import type {
   JurisprudencePublicationOutboxProcessorRepository,
+  JurisprudencePublicationStatusSynchronizer,
   ProcessNextResult,
 } from "@/types/jurisprudence-publication-outbox-processor";
 import type { JurisprudencePublicProjectionWriter } from "@/types/jurisprudence-public-projection-writer";
@@ -13,6 +14,7 @@ export class JurisprudencePublicationOutboxProcessor {
   constructor(
     private readonly repository: JurisprudencePublicationOutboxProcessorRepository,
     private readonly writer: JurisprudencePublicProjectionWriter,
+    private readonly recordRepository: JurisprudencePublicationStatusSynchronizer,
     private readonly clock: () => Date = () => new Date()
   ) {}
 
@@ -57,11 +59,16 @@ export class JurisprudencePublicationOutboxProcessor {
         return "DEAD_LETTER";
       }
 
-      executePublicWrite = () =>
-        this.writer.upsert(
+      executePublicWrite = async () => {
+        await this.writer.upsert(
           payload,
           claim.executionVersion,
         );
+        await this.recordRepository.synchronizePublicationStatus(
+          claim.recordId,
+          "published",
+        );
+      };
     } else if (
       claim.eventType === "withdraw_projection"
     ) {
@@ -80,12 +87,17 @@ export class JurisprudencePublicationOutboxProcessor {
         return "DEAD_LETTER";
       }
 
-      executePublicWrite = () =>
-        this.writer.removeById(
+      executePublicWrite = async () => {
+        await this.writer.removeById(
           claim.recordId,
           claim.recordVersion,
           claim.executionVersion,
         );
+        await this.recordRepository.synchronizePublicationStatus(
+          claim.recordId,
+          "withdrawn",
+        );
+      };
     } else {
       await this.repository.markDeadLetter(
         claim.id,

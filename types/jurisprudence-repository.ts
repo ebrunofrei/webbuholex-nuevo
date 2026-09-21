@@ -104,6 +104,7 @@ export interface JurisprudenceRepository {
   count(filters?: JurisprudenceRepositoryFilters): Promise<number>;
   existsByExternalIdentity(identity: JurisprudenceExternalIdentity): Promise<boolean>;
   getVersionHistory(id: string): Promise<readonly JurisprudenceVersionEntry[]>;
+  synchronizePublicationStatus(recordId: string, status: JurisprudencePublicationStatus): Promise<void>;
   close(): Promise<void>;
 }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, MockInstance } from "vitest";
 import { processBatch } from "../lib/jurisprudence/jurisprudence-publication-outbox-batch";
 import { JurisprudencePublicationOutboxProcessor } from "../lib/jurisprudence/jurisprudence-publication-outbox-processor";
-import { JurisprudencePublicationOutboxProcessorRepository } from "../types/jurisprudence-publication-outbox-processor";
+import { JurisprudencePublicationOutboxProcessorRepository, JurisprudencePublicationStatusSynchronizer } from "../types/jurisprudence-publication-outbox-processor";
 import { JurisprudencePublicProjectionWriter } from "../types/jurisprudence-public-projection-writer";
 
 describe("JurisprudencePublicationOutboxBatch", () => {
@@ -9,9 +9,21 @@ describe("JurisprudencePublicationOutboxBatch", () => {
   let mockProcessNext: MockInstance;
 
   beforeEach(() => {
-    const repo = {} as JurisprudencePublicationOutboxProcessorRepository;
-    const writer = {} as JurisprudencePublicProjectionWriter;
-    processor = new JurisprudencePublicationOutboxProcessor(repo, writer);
+    const repo: JurisprudencePublicationOutboxProcessorRepository = {
+      findById: vi.fn(),
+      claimNext: vi.fn(),
+      markSent: vi.fn(),
+      markFailed: vi.fn(),
+      markDeadLetter: vi.fn(),
+    };
+    const writer: JurisprudencePublicProjectionWriter = {
+      upsert: vi.fn(),
+      removeById: vi.fn(),
+    };
+    const recordRepo: JurisprudencePublicationStatusSynchronizer = {
+      synchronizePublicationStatus: vi.fn(),
+    };
+    processor = new JurisprudencePublicationOutboxProcessor(repo, writer, recordRepo);
     mockProcessNext = vi.spyOn(processor, "processNext");
   });
 
