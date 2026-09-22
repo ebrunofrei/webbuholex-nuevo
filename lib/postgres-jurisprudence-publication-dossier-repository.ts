@@ -2,8 +2,10 @@ import "server-only";
 import { and, eq, asc } from "drizzle-orm";
 import { getJurisprudenceInternalWriteDatabase } from "@/database/client";
 import { getJurisprudenceInternalReadDatabase } from "@/database/jurisprudence-internal-read-database";
-import { withJurisprudenceInternalWriteRole } from "@/database/roles";
+import { withJurisprudenceInternalWriteRole, type JurisprudenceTransaction } from "@/database/roles";
 import { withJurisprudenceInternalReadRole } from "@/database/roles/with-jurisprudence-internal-read-role";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type * as schema from "@/database/schema";
 import {
   jurisprudenceGovernedSources,
   jurisprudenceSourceBindings,
@@ -55,9 +57,12 @@ function parseSource(payloadJson: unknown): JurisprudenceSourceRecord {
   return cloneGovernedSource(parsed.data);
 }
 
-function parseBinding(payloadJson: unknown): JurisprudenceSourceBinding {
+function parseBinding(payloadJson: unknown, physicalSourceId: unknown): JurisprudenceSourceBinding {
   const parsed = jurisprudenceSourceBindingSchema.safeParse(parseJson(payloadJson));
   if (!parsed.success) throw new JurisprudencePublicationGovernanceError("REPOSITORY_UNAVAILABLE", "El vínculo persistido es inválido.");
+  if (typeof physicalSourceId !== "string" || physicalSourceId !== parsed.data.sourceId) {
+    throw new JurisprudencePublicationGovernanceError("REPOSITORY_UNAVAILABLE", "El identificador de fuente físico diverge del JSON.");
+  }
   return cloneSourceBinding(parsed.data);
 }
 
@@ -82,8 +87,25 @@ function isPostgresError(error: unknown): error is { code: string; constraint_na
   return typeof error.code === "string";
 }
 
+export type PostgresJurisprudencePublicationDossierRepositoryDependencies = {
+  getReadDatabase: () => PostgresJsDatabase<Record<string, never>>;
+  getWriteDatabase: () => PostgresJsDatabase<typeof schema>;
+  withReadRole: <T>(db: PostgresJsDatabase<Record<string, never>>, callback: (tx: PostgresJsDatabase<Record<string, never>>) => Promise<T>) => Promise<T>;
+  withWriteRole: <T>(db: PostgresJsDatabase<typeof schema>, callback: (tx: JurisprudenceTransaction) => Promise<T>) => Promise<T>;
+};
+
 export class PostgresJurisprudencePublicationDossierRepository implements JurisprudencePublicationDossierRepository {
   #closed = false;
+  #deps: PostgresJurisprudencePublicationDossierRepositoryDependencies;
+
+  constructor(deps?: Partial<PostgresJurisprudencePublicationDossierRepositoryDependencies>) {
+    this.#deps = {
+      getReadDatabase: deps?.getReadDatabase ?? getJurisprudenceInternalReadDatabase,
+      getWriteDatabase: deps?.getWriteDatabase ?? getJurisprudenceInternalWriteDatabase,
+      withReadRole: deps?.withReadRole ?? withJurisprudenceInternalReadRole,
+      withWriteRole: deps?.withWriteRole ?? withJurisprudenceInternalWriteRole,
+    };
+  }
 
   private async safely<T>(operation: () => Promise<T>): Promise<T> {
     assertPublicationGovernanceRepositoryOpen(this.#closed);
@@ -110,8 +132,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async findSourceById(sourceId: string): Promise<JurisprudenceSourceRecord | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
-      return await withJurisprudenceInternalReadRole(db, async (tx) => {
+      const db = this.#deps.getReadDatabase();
+      return await this.#deps.withReadRole(db, async (tx) => {
         const rows = await tx.select({ payloadJson: jurisprudenceGovernedSources.payloadJson })
           .from(jurisprudenceGovernedSources)
           .where(eq(jurisprudenceGovernedSources.sourceId, sourceId))
@@ -125,8 +147,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async createSource(source: JurisprudenceSourceRecord, idempotency: PublicationGovernanceIdempotencyEntry): Promise<void> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
-      await withJurisprudenceInternalWriteRole(db, async (tx) => {
+      const db = this.#deps.getWriteDatabase();
+      await this.#deps.withWriteRole(db, async (tx) => {
         await tx.insert(jurisprudenceGovernedSources).values({
           sourceId: source.sourceId,
           payloadJson: source,
@@ -142,25 +164,29 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async findBindingById(bindingId: string): Promise<JurisprudenceSourceBinding | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
-      return await withJurisprudenceInternalReadRole(db, async (tx) => {
-        const rows = await tx.select({ payloadJson: jurisprudenceSourceBindings.payloadJson })
+      const db = this.#deps.getReadDatabase();
+      return await this.#deps.withReadRole(db, async (tx) => {
+        const rows = await tx.select({
+          payloadJson: jurisprudenceSourceBindings.payloadJson,
+          sourceId: jurisprudenceSourceBindings.sourceId
+        })
           .from(jurisprudenceSourceBindings)
           .where(eq(jurisprudenceSourceBindings.bindingId, bindingId))
           .limit(1);
         const row = rows[0];
         if (!row) return null;
-        return parseBinding(row.payloadJson);
+        return parseBinding(row.payloadJson, row.sourceId);
       });
     });
   }
 
   async createBinding(binding: JurisprudenceSourceBinding, idempotency: PublicationGovernanceIdempotencyEntry): Promise<void> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
-      await withJurisprudenceInternalWriteRole(db, async (tx) => {
+      const db = this.#deps.getWriteDatabase();
+      await this.#deps.withWriteRole(db, async (tx) => {
         await tx.insert(jurisprudenceSourceBindings).values({
           bindingId: binding.bindingId,
+          sourceId: binding.sourceId,
           recordId: binding.recordId,
           recordVersion: binding.recordVersion,
           bindingStatus: binding.bindingStatus,
@@ -177,8 +203,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async supersedeBinding(previous: JurisprudenceSourceBinding, replacement: JurisprudenceSourceBinding, idempotency: PublicationGovernanceIdempotencyEntry): Promise<void> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
-      await withJurisprudenceInternalWriteRole(db, async (tx) => {
+      const db = this.#deps.getWriteDatabase();
+      await this.#deps.withWriteRole(db, async (tx) => {
         const updateResult = await tx.update(jurisprudenceSourceBindings)
           .set({
             bindingStatus: previous.bindingStatus,
@@ -197,6 +223,7 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
         await tx.insert(jurisprudenceSourceBindings).values({
           bindingId: replacement.bindingId,
+          sourceId: replacement.sourceId,
           recordId: replacement.recordId,
           recordVersion: replacement.recordVersion,
           bindingStatus: replacement.bindingStatus,
@@ -214,8 +241,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async findById(dossierId: string): Promise<JurisprudencePublicationDossier | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
-      return await withJurisprudenceInternalReadRole(db, async (tx) => {
+      const db = this.#deps.getReadDatabase();
+      return await this.#deps.withReadRole(db, async (tx) => {
         const rows = await tx.select({ payloadJson: jurisprudencePublicationDossiers.payloadJson })
           .from(jurisprudencePublicationDossiers)
           .where(eq(jurisprudencePublicationDossiers.dossierId, dossierId))
@@ -229,8 +256,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async findActiveByRecordAndVersion(recordId: string, recordVersion: number): Promise<JurisprudencePublicationDossier | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
-      return await withJurisprudenceInternalReadRole(db, async (tx) => {
+      const db = this.#deps.getReadDatabase();
+      return await this.#deps.withReadRole(db, async (tx) => {
         const rows = await tx.select({ payloadJson: jurisprudencePublicationDossiers.payloadJson })
           .from(jurisprudencePublicationDossiers)
           .where(
@@ -250,8 +277,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async create(commit: PublicationDossierCreateCommit): Promise<void> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
-      await withJurisprudenceInternalWriteRole(db, async (tx) => {
+      const db = this.#deps.getWriteDatabase();
+      await this.#deps.withWriteRole(db, async (tx) => {
         await tx.insert(jurisprudencePublicationDossiers).values({
           dossierId: commit.dossier.dossierId,
           recordId: commit.dossier.recordId,
@@ -279,8 +306,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async commit(commit: PublicationDossierUpdateCommit): Promise<void> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
-      await withJurisprudenceInternalWriteRole(db, async (tx) => {
+      const db = this.#deps.getWriteDatabase();
+      await this.#deps.withWriteRole(db, async (tx) => {
         const updateResult = await tx.update(jurisprudencePublicationDossiers)
           .set({
             recordVersion: commit.dossier.recordVersion,
@@ -318,8 +345,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async listEvents(dossierId: string): Promise<readonly PublicationDossierEvent[]> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
-      return await withJurisprudenceInternalReadRole(db, async (tx) => {
+      const db = this.#deps.getReadDatabase();
+      return await this.#deps.withReadRole(db, async (tx) => {
         const dossierRows = await tx.select({ dossierId: jurisprudencePublicationDossiers.dossierId })
           .from(jurisprudencePublicationDossiers)
           .where(eq(jurisprudencePublicationDossiers.dossierId, dossierId))
@@ -341,8 +368,8 @@ export class PostgresJurisprudencePublicationDossierRepository implements Jurisp
 
   async findIdempotencyResult(idempotencyKey: string): Promise<PublicationGovernanceIdempotencyEntry | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
-      return await withJurisprudenceInternalReadRole(db, async (tx) => {
+      const db = this.#deps.getReadDatabase();
+      return await this.#deps.withReadRole(db, async (tx) => {
         const rows = await tx.select({
           commandFingerprint: jurisprudencePublicationGovernanceIdempotency.commandFingerprint,
           resultJson: jurisprudencePublicationGovernanceIdempotency.resultJson

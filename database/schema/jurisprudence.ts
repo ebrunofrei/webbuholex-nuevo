@@ -266,6 +266,7 @@ export const jurisprudenceGovernedSources = jurisprudenceInternalSchema.table("j
 
 export const jurisprudenceSourceBindings = jurisprudenceInternalSchema.table("jurisprudence_source_bindings", {
   bindingId: varchar("binding_id").primaryKey(),
+  sourceId: varchar("source_id").notNull(),
   recordId: varchar("record_id").notNull(),
   recordVersion: integer("record_version").notNull(),
   bindingStatus: varchar("binding_status").notNull(),
@@ -273,9 +274,14 @@ export const jurisprudenceSourceBindings = jurisprudenceInternalSchema.table("ju
 }, (table) => [
   check("source_binding_record_version_positive", sql`${table.recordVersion} > 0`),
   foreignKey({
+    columns: [table.sourceId],
+    foreignColumns: [jurisprudenceGovernedSources.sourceId],
+  }).onDelete("restrict"),
+  foreignKey({
     columns: [table.recordId, table.recordVersion],
     foreignColumns: [jurisprudenceRecordVersions.recordId, jurisprudenceRecordVersions.version],
   }).onDelete("restrict"),
+  index("jurisprudence_source_bindings_source_id_idx").on(table.sourceId),
 ]);
 
 export const jurisprudencePublicationDossiers = jurisprudenceInternalSchema.table("jurisprudence_publication_dossiers", {

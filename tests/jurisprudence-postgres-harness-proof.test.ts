@@ -165,7 +165,7 @@ describe('Real PostgreSQL Migration Test Harness Foundation (A1.7E-H0)', () => {
 
     // H6: cleanup removes isolated test state
     it('H6: cleanup removes isolated test state (try/finally proven)', async () => {
-      let capturedSchema: string;
+      let capturedSchema: string | undefined;
       const parsedUrl = validateTestDatabaseUrl(process.env);
       const sqlCheck = postgres(parsedUrl.toString(), { max: 1 });
 

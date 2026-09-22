@@ -117,6 +117,150 @@ export async function withEphemeralSchema<T>(
   }
 }
 
+type HarnessOutcome<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: unknown };
+
+function validateFixedSchemaName(schemaName: string): string {
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(schemaName)) {
+    throw new JurisprudenceMigrationTestHarnessError(
+      `Unsafe fixed schema identifier: ${schemaName}`,
+    );
+  }
+
+  return schemaName;
+}
+
+function registerHarnessFailure<T>(
+  outcome: HarnessOutcome<T> | undefined,
+  error: unknown,
+  secondaryMessage: string,
+): HarnessOutcome<T> {
+  if (outcome === undefined || outcome.ok) {
+    return { ok: false, error };
+  }
+
+  console.error(secondaryMessage, error);
+  return outcome;
+}
+
+export async function withFixedSchema<T>(
+  env: NodeJS.ProcessEnv,
+  schemaName: string,
+  fn: (sql: postgres.Sql) => Promise<T>
+): Promise<T> {
+  const parsedUrl = validateTestDatabaseUrl(env);
+  const safeSchemaName = validateFixedSchemaName(schemaName);
+
+  const sql = postgres(parsedUrl.toString(), {
+    max: 1,
+    onnotice: () => {},
+  });
+
+  let outcome: HarnessOutcome<T> | undefined;
+  let lockAcquired = false;
+
+  try {
+    try {
+      await sql`
+        SELECT pg_advisory_lock(
+          hashtext('jurisprudence_harness'),
+          hashtext(${safeSchemaName})
+        )
+      `;
+      lockAcquired = true;
+
+      await sql.unsafe(
+        `DROP SCHEMA IF EXISTS ${safeSchemaName} CASCADE`
+      );
+
+      await sql.unsafe(
+        `CREATE SCHEMA ${safeSchemaName}`
+      );
+
+      try {
+        outcome = {
+          ok: true,
+          value: await fn(sql),
+        };
+      } catch (error) {
+        outcome = {
+          ok: false,
+          error,
+        };
+      }
+
+      try {
+        await sql.unsafe(
+          `DROP SCHEMA IF EXISTS ${safeSchemaName} CASCADE`
+        );
+      } catch (cleanupError) {
+        outcome = registerHarnessFailure(
+          outcome,
+          cleanupError,
+          'Schema cleanup failed after an earlier error:',
+        );
+      }
+    } catch (setupError) {
+      outcome = registerHarnessFailure(
+        outcome,
+        setupError,
+        'Fixed-schema setup failed after an earlier error:',
+      );
+    } finally {
+      if (lockAcquired) {
+        try {
+          const rows = await sql`
+            SELECT pg_advisory_unlock(
+              hashtext('jurisprudence_harness'),
+              hashtext(${safeSchemaName})
+            ) AS unlocked
+          `;
+
+          const row = requireDefined(
+            rows[0],
+            'Expected advisory unlock result row.',
+          );
+
+          if (row.unlocked !== true) {
+            throw new JurisprudenceMigrationTestHarnessError(
+              'PostgreSQL advisory lock was not released by the owning session',
+            );
+          }
+        } catch (unlockError) {
+          outcome = registerHarnessFailure(
+            outcome,
+            unlockError,
+            'Failed to release advisory lock after an earlier error:',
+          );
+        }
+      }
+    }
+  } finally {
+    try {
+      await sql.end({ timeout: 5 });
+    } catch (closeError) {
+      outcome = registerHarnessFailure(
+        outcome,
+        closeError,
+        'Failed to close postgres connection after an earlier error:',
+      );
+    }
+  }
+
+  if (outcome === undefined) {
+    throw new JurisprudenceMigrationTestHarnessError(
+      'Fixed-schema harness finished without producing an outcome',
+    );
+  }
+
+  if (!outcome.ok) {
+    throw outcome.error;
+  }
+
+  return outcome.value;
+}
+
 export async function inspectColumns(sql: postgres.Sql, schema: string, table: string): Promise<Array<{ column_name: string; data_type: string; is_nullable: string }>> {
   const rows = await sql`
     SELECT column_name, data_type, is_nullable
@@ -130,21 +274,75 @@ export async function inspectColumns(sql: postgres.Sql, schema: string, table: s
   }));
 }
 
-export async function inspectForeignKeys(sql: postgres.Sql, schema: string, table: string): Promise<Array<{ constraint_name: string; delete_rule: string }>> {
+export async function inspectForeignKeys(
+  sql: postgres.Sql,
+  schema: string,
+  table: string,
+): Promise<
+  Array<{
+    constraint_name: string;
+    source_schema: string;
+    source_table: string;
+    source_column: string;
+    target_schema: string;
+    target_table: string;
+    target_column: string;
+    delete_rule: string;
+  }>
+> {
   const rows = await sql`
-    SELECT tc.constraint_name, rc.delete_rule
-    FROM information_schema.table_constraints tc
-    JOIN information_schema.referential_constraints rc
-      ON tc.constraint_name = rc.constraint_name
-      AND tc.constraint_schema = rc.constraint_schema
-      AND tc.constraint_catalog = rc.constraint_catalog
-    WHERE tc.constraint_type = 'FOREIGN KEY'
-      AND tc.table_schema = ${schema}
-      AND tc.table_name = ${table}
+    SELECT
+      con.conname AS constraint_name,
+      source_ns.nspname AS source_schema,
+      source_table.relname AS source_table,
+      source_attr.attname AS source_column,
+      target_ns.nspname AS target_schema,
+      target_table.relname AS target_table,
+      target_attr.attname AS target_column,
+      CASE con.confdeltype
+        WHEN 'a' THEN 'NO ACTION'
+        WHEN 'r' THEN 'RESTRICT'
+        WHEN 'c' THEN 'CASCADE'
+        WHEN 'n' THEN 'SET NULL'
+        WHEN 'd' THEN 'SET DEFAULT'
+        ELSE 'UNKNOWN'
+      END AS delete_rule
+    FROM pg_catalog.pg_constraint con
+    JOIN pg_catalog.pg_class source_table
+      ON source_table.oid = con.conrelid
+    JOIN pg_catalog.pg_namespace source_ns
+      ON source_ns.oid = source_table.relnamespace
+    JOIN pg_catalog.pg_class target_table
+      ON target_table.oid = con.confrelid
+    JOIN pg_catalog.pg_namespace target_ns
+      ON target_ns.oid = target_table.relnamespace
+    JOIN LATERAL unnest(con.conkey)
+      WITH ORDINALITY AS source_key(attnum, ord)
+      ON TRUE
+    JOIN LATERAL unnest(con.confkey)
+      WITH ORDINALITY AS target_key(attnum, ord)
+      ON target_key.ord = source_key.ord
+    JOIN pg_catalog.pg_attribute source_attr
+      ON source_attr.attrelid = source_table.oid
+      AND source_attr.attnum = source_key.attnum
+    JOIN pg_catalog.pg_attribute target_attr
+      ON target_attr.attrelid = target_table.oid
+      AND target_attr.attnum = target_key.attnum
+    WHERE con.contype = 'f'
+      AND source_ns.nspname = ${schema}
+      AND source_table.relname = ${table}
+    ORDER BY con.conname, source_key.ord
   `;
-  return rows.map((r) => ({
-    constraint_name: requireStringField(r, 'constraint_name'),
-    delete_rule: requireStringField(r, 'delete_rule'),
+
+  return rows.map((row) => ({
+    constraint_name: requireStringField(row, 'constraint_name'),
+    source_schema: requireStringField(row, 'source_schema'),
+    source_table: requireStringField(row, 'source_table'),
+    source_column: requireStringField(row, 'source_column'),
+    target_schema: requireStringField(row, 'target_schema'),
+    target_table: requireStringField(row, 'target_table'),
+    target_column: requireStringField(row, 'target_column'),
+    delete_rule: requireStringField(row, 'delete_rule'),
   }));
 }
 

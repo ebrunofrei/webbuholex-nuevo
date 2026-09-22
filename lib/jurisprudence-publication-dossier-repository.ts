@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS jurisprudence_governed_sources (
 );
 CREATE TABLE IF NOT EXISTS jurisprudence_source_bindings (
   binding_id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL REFERENCES jurisprudence_governed_sources(source_id) ON DELETE RESTRICT,
   record_id TEXT NOT NULL,
   record_version INTEGER NOT NULL CHECK (record_version >= 1),
   binding_status TEXT NOT NULL,
