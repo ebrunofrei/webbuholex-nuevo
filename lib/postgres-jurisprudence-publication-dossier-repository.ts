@@ -5,7 +5,7 @@ import { getJurisprudenceInternalReadDatabase } from "@/database/jurisprudence-i
 import { withJurisprudenceInternalWriteRole, type JurisprudenceTransaction } from "@/database/roles";
 import { withJurisprudenceInternalReadRole } from "@/database/roles/with-jurisprudence-internal-read-role";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type * as schema from "@/database/schema";
+import * as schema from "@/database/schema";
 import {
   jurisprudenceGovernedSources,
   jurisprudenceSourceBindings,

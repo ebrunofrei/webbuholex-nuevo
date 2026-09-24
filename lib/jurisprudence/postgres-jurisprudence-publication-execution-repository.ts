@@ -130,15 +130,15 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
   }
 
   async findById(executionId: string): Promise<JurisprudencePublicationExecution | null> {
-    return this.safely(async () => {
-      const result = await this.#executor.select()
+    return this.safely(async () => withJurisprudencePublicationCommandRole(this.#executor, async (tx) => {
+      const result = await tx.select()
         .from(schema.jurisprudencePublicationExecutions)
         .where(eq(schema.jurisprudencePublicationExecutions.executionId, executionId))
         .limit(1);
 
       if (result.length === 0) return null;
       return mapExecutionFromRow(result[0] as typeof schema.jurisprudencePublicationExecutions.$inferSelect);
-    });
+    }));
   }
 
   async findActiveByRecordVersion(recordId: string, recordVersion: number): Promise<JurisprudencePublicationExecution | null> {
@@ -275,7 +275,7 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
     }));
   }
 
-  async updateExecution(commit: JurisprudencePublicationExecutionUpdateCommit): Promise<void> {
+    async updateExecution(commit: JurisprudencePublicationExecutionUpdateCommit): Promise<void> {
     await this.safely(() => this.withTransaction(async (tx) => {
       const updateResult = await tx.update(schema.jurisprudencePublicationExecutions)
         .set({

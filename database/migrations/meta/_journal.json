@@ -267,6 +267,13 @@
       "when": 1789393439017,
       "tag": "0037_amazing_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790040041000,
+      "tag": "0038_jurisprudence_source_binding_fk",
+      "breakpoints": true
     }
   ]
 }
