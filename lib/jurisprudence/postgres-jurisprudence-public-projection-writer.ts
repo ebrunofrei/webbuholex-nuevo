@@ -1,6 +1,8 @@
 import { sql, eq } from "drizzle-orm";
 import { getJurisprudencePublicWriteDatabase } from "@/database/client";
 import { withJurisprudencePublicWriteRole } from "@/database/roles";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@/database/schema";
 import {
   jurisprudencePublishedRecords,
   jurisprudencePublicProjectionBarriers,
@@ -13,7 +15,19 @@ import type {
 
 type Tx = Parameters<Parameters<typeof withJurisprudencePublicWriteRole>[1]>[0];
 
+export type PostgresJurisprudencePublicProjectionWriterDependencies = {
+  getWriteDatabase: () => PostgresJsDatabase<typeof schema>;
+};
+
 export class PostgresJurisprudencePublicProjectionWriter implements JurisprudencePublicProjectionWriter {
+  #deps: PostgresJurisprudencePublicProjectionWriterDependencies;
+
+  constructor(deps?: Partial<PostgresJurisprudencePublicProjectionWriterDependencies>) {
+    this.#deps = {
+      getWriteDatabase: deps?.getWriteDatabase ?? getJurisprudencePublicWriteDatabase,
+    };
+  }
+
   private generateNormalizedSearchText(record: JurisprudencePublicProjectionRecord): string {
     const parts = [
       record.title,
@@ -142,7 +156,7 @@ export class PostgresJurisprudencePublicProjectionWriter implements Jurisprudenc
   }
 
   async upsert(record: JurisprudencePublicProjectionRecord, executionVersion: number): Promise<PublicProjectionMutationResult> {
-    const db = getJurisprudencePublicWriteDatabase();
+    const db = this.#deps.getWriteDatabase();
 
     return await withJurisprudencePublicWriteRole(db, async (tx) => {
       const { status, isNew } = await this.acquireAndEvaluateBarrier(
@@ -211,7 +225,7 @@ export class PostgresJurisprudencePublicProjectionWriter implements Jurisprudenc
   }
 
   async removeById(recordId: string, recordVersion: number, executionVersion: number): Promise<PublicProjectionMutationResult> {
-    const db = getJurisprudencePublicWriteDatabase();
+    const db = this.#deps.getWriteDatabase();
 
     return await withJurisprudencePublicWriteRole(db, async (tx) => {
       const { status, isNew } = await this.acquireAndEvaluateBarrier(

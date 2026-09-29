@@ -18,24 +18,40 @@ import { getJurisprudenceInternalWriteDatabase } from "@/database/client";
 import { getJurisprudenceInternalReadDatabase } from "@/database/jurisprudence-internal-read-database";
 import type { JurisprudencePublicationExecutionService } from "@/types/jurisprudence-publication-execution";
 
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@/database/schema";
+
 export interface JurisprudencePublicationExecutionRuntimeContainer {
   readonly service: JurisprudencePublicationExecutionService;
   close(): Promise<void>;
 }
 
-export function createJurisprudencePublicationExecutionRuntime(): JurisprudencePublicationExecutionRuntimeContainer {
+export interface JurisprudencePublicationExecutionRuntimeDependencies {
+  getInternalReadDatabase?: () => PostgresJsDatabase<Record<string, never>>;
+  getInternalWriteDatabase?: () => PostgresJsDatabase<typeof schema>;
+}
+
+export function createJurisprudencePublicationExecutionRuntime(
+  deps?: JurisprudencePublicationExecutionRuntimeDependencies
+): JurisprudencePublicationExecutionRuntimeContainer {
   const now = () => new Date().toISOString();
   const generateId = () => randomUUID();
   const logger = { log: () => undefined };
 
-  const writeDb = getJurisprudenceInternalWriteDatabase();
-  const readDb = getJurisprudenceInternalReadDatabase();
+  const getInternalWriteDatabase = deps?.getInternalWriteDatabase ?? getJurisprudenceInternalWriteDatabase;
+  const getInternalReadDatabase = deps?.getInternalReadDatabase ?? getJurisprudenceInternalReadDatabase;
 
-  const internalRepository = new PostgresJurisprudenceRepository({ now, generateId });
+  const writeDb = getInternalWriteDatabase();
+  const readDb = getInternalReadDatabase();
+
+  const internalRepository = new PostgresJurisprudenceRepository({ now, generateId, getWriteDatabase: getInternalWriteDatabase });
   const applicationService = new JurisprudenceApplicationService({ repository: internalRepository, now, logger });
   const api = new DefaultJurisprudenceInternalApi(applicationService);
 
-  const editorialRepository = new PostgresJurisprudenceEditorialCaseRepository();
+  const editorialRepository = new PostgresJurisprudenceEditorialCaseRepository({
+    getReadDatabase: getInternalReadDatabase,
+    getWriteDatabase: getInternalWriteDatabase,
+  });
   const editorialWorkflow = createJurisprudenceEditorialWorkflow({
     api,
     repository: editorialRepository,
@@ -44,7 +60,10 @@ export function createJurisprudencePublicationExecutionRuntime(): JurisprudenceP
     logger,
   });
 
-  const governanceRepository = new PostgresJurisprudencePublicationDossierRepository();
+  const governanceRepository = new PostgresJurisprudencePublicationDossierRepository({
+    getReadDatabase: getInternalReadDatabase,
+    getWriteDatabase: getInternalWriteDatabase,
+  });
   const publicationGovernance = createJurisprudencePublicationGovernanceService({
     api,
     editorialWorkflow,
@@ -54,7 +73,10 @@ export function createJurisprudencePublicationExecutionRuntime(): JurisprudenceP
     logger,
   });
 
-  const authorizationRepository = new PostgresJurisprudencePublicationAuthorizationRepository();
+  const authorizationRepository = new PostgresJurisprudencePublicationAuthorizationRepository({
+    getReadDatabase: getInternalReadDatabase,
+    getWriteDatabase: getInternalWriteDatabase,
+  });
   const publicationAuthorization = createJurisprudencePublicationAuthorizationService({
     api,
     editorialWorkflow,
@@ -69,7 +91,9 @@ export function createJurisprudencePublicationExecutionRuntime(): JurisprudenceP
   const sourceReader = new PostgresJurisprudencePublicationSourceReader(readDb);
 
   const executionRepository = new PostgresJurisprudencePublicationExecutionRepository(writeDb);
-  const projectionRepository = new PostgresJurisprudencePublicProjectionRepository();
+  const projectionRepository = new PostgresJurisprudencePublicProjectionRepository({
+    getReadDatabase: getInternalReadDatabase,
+  });
 
   const transactionCoordinator = new PostgresJurisprudencePublicationTransactionCoordinator(writeDb);
 

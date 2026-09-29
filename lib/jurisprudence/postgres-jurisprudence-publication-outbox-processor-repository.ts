@@ -1,6 +1,8 @@
 import { sql, eq, and, or, asc, lte, getTableColumns } from "drizzle-orm";
 import { getJurisprudenceOutboxDatabase } from "@/database/client";
 import { withJurisprudencePublicationOutboxRole } from "@/database/roles";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@/database/schema";
 import { jurisprudencePublicationOutbox } from "@/database/schema/jurisprudence";
 import type {
   JurisprudencePublicationOutboxClaim,
@@ -8,11 +10,22 @@ import type {
 } from "@/types/jurisprudence-publication-outbox-processor";
 import { JURISPRUDENCE_OUTBOX_PROCESSING_STALE_MS } from "./jurisprudence-publication-outbox-policy";
 
+export type PostgresJurisprudencePublicationOutboxProcessorRepositoryDependencies = {
+  getOutboxDatabase: () => PostgresJsDatabase<typeof schema>;
+};
+
 export class PostgresJurisprudencePublicationOutboxProcessorRepository
   implements JurisprudencePublicationOutboxProcessorRepository
 {
+  #deps: PostgresJurisprudencePublicationOutboxProcessorRepositoryDependencies;
+
+  constructor(deps?: Partial<PostgresJurisprudencePublicationOutboxProcessorRepositoryDependencies>) {
+    this.#deps = {
+      getOutboxDatabase: deps?.getOutboxDatabase ?? getJurisprudenceOutboxDatabase,
+    };
+  }
   async findById(id: string): Promise<JurisprudencePublicationOutboxClaim | null> {
-    const db = getJurisprudenceOutboxDatabase();
+    const db = this.#deps.getOutboxDatabase();
 
     return await withJurisprudencePublicationOutboxRole(db, async (tx) => {
       const [row] = await tx
@@ -41,7 +54,7 @@ export class PostgresJurisprudencePublicationOutboxProcessorRepository
   }
 
   async claimNext(now: Date): Promise<JurisprudencePublicationOutboxClaim | null> {
-    const db = getJurisprudenceOutboxDatabase();
+    const db = this.#deps.getOutboxDatabase();
 
     return await withJurisprudencePublicationOutboxRole(db, async (tx) => {
       const staleCutoff = new Date(now.getTime() - JURISPRUDENCE_OUTBOX_PROCESSING_STALE_MS);
@@ -109,7 +122,7 @@ export class PostgresJurisprudencePublicationOutboxProcessorRepository
   }
 
   async markSent(id: string, processedAt: Date): Promise<void> {
-    const db = getJurisprudenceOutboxDatabase();
+    const db = this.#deps.getOutboxDatabase();
 
     await withJurisprudencePublicationOutboxRole(db, async (tx) => {
       await tx
@@ -136,7 +149,7 @@ export class PostgresJurisprudencePublicationOutboxProcessorRepository
     errorCode: string,
     updatedAt: Date
   ): Promise<void> {
-    const db = getJurisprudenceOutboxDatabase();
+    const db = this.#deps.getOutboxDatabase();
 
     await withJurisprudencePublicationOutboxRole(db, async (tx) => {
       await tx
@@ -159,7 +172,7 @@ export class PostgresJurisprudencePublicationOutboxProcessorRepository
   }
 
   async markDeadLetter(id: string, errorCode: string, processedAt: Date): Promise<void> {
-    const db = getJurisprudenceOutboxDatabase();
+    const db = this.#deps.getOutboxDatabase();
 
     await withJurisprudencePublicationOutboxRole(db, async (tx) => {
       await tx

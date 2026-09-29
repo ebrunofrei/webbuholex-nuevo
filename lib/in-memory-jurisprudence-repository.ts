@@ -13,7 +13,10 @@ import {
   validateJurisprudenceRecordForPersistence,
 } from "@/lib/jurisprudence-repository-utils";
 import { jurisprudenceCreateInputSchema, jurisprudenceUpdateInputSchema } from "@/lib/schemas/jurisprudence-repository";
-import type { JurisprudenceRecord } from "@/types/jurisprudence";
+import type {
+  JurisprudenceRecord,
+  JurisprudencePublicationStatus,
+} from "@/types/jurisprudence";
 import type {
   JurisprudenceCreateInput,
   JurisprudenceExternalIdentity,

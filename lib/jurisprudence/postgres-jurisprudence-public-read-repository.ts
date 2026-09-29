@@ -2,6 +2,8 @@ import "server-only";
 import { sql, and, desc, asc, eq, gte, lte, count } from "drizzle-orm";
 import { getJurisprudencePublicReadDatabase } from "@/database/client";
 import { withJurisprudencePublicReadRole } from "@/database/roles";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@/database/schema";
 import { jurisprudencePublishedRecords } from "@/database/schema/jurisprudence";
 import type {
   JurisprudencePublicSearchQuery,
@@ -10,9 +12,21 @@ import type {
 } from "@/types/jurisprudence-public-search-gateway";
 import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
 
+export type PostgresJurisprudencePublicReadRepositoryDependencies = {
+  getReadDatabase: () => PostgresJsDatabase<typeof schema>;
+};
+
 export class PostgresJurisprudencePublicReadRepository {
+  #deps: PostgresJurisprudencePublicReadRepositoryDependencies;
+
+  constructor(deps?: Partial<PostgresJurisprudencePublicReadRepositoryDependencies>) {
+    this.#deps = {
+      getReadDatabase: deps?.getReadDatabase ?? getJurisprudencePublicReadDatabase,
+    };
+  }
+
   async search(query: JurisprudencePublicSearchQuery): Promise<JurisprudencePublicSearchPage> {
-    const db = getJurisprudencePublicReadDatabase();
+    const db = this.#deps.getReadDatabase();
 
     return await withJurisprudencePublicReadRole(db, async (tx) => {
       const conditions = [];
@@ -134,7 +148,7 @@ export class PostgresJurisprudencePublicReadRepository {
   }
 
   async getBySlug(slug: string): Promise<JurisprudencePublicProjectionDetail | null> {
-    const db = getJurisprudencePublicReadDatabase();
+    const db = this.#deps.getReadDatabase();
 
     return await withJurisprudencePublicReadRole(db, async (tx) => {
       const rows = await tx

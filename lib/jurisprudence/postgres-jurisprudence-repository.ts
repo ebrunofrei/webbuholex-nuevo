@@ -16,7 +16,7 @@ import {
 import { jurisprudenceCreateInputSchema, jurisprudenceUpdateInputSchema } from "@/lib/schemas/jurisprudence-repository";
 import { buildJurisprudenceDeduplicationKey, getJurisprudenceExternalIdentity, normalizeJurisprudenceExternalIdentity } from "@/lib/jurisprudence-identity";
 import { jurisprudenceRecordSchema } from "@/lib/schemas/jurisprudence";
-import type { JurisprudenceRecord } from "@/types/jurisprudence";
+import type { JurisprudenceRecord, JurisprudencePublicationStatus } from "@/types/jurisprudence";
 import type {
   JurisprudenceCreateInput,
   JurisprudenceExternalIdentity,
@@ -31,9 +31,17 @@ import type {
   JurisprudenceVersionEntry,
 } from "@/types/jurisprudence-repository";
 
-const defaultDependencies: JurisprudenceRepositoryDependencies = {
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@/database/schema";
+
+export type PostgresJurisprudenceRepositoryDependencies = JurisprudenceRepositoryDependencies & {
+  getWriteDatabase: () => PostgresJsDatabase<typeof schema>;
+};
+
+const defaultDependencies: PostgresJurisprudenceRepositoryDependencies = {
   now: () => new Date().toISOString(),
   generateId: () => crypto.randomUUID(),
+  getWriteDatabase: getJurisprudenceInternalWriteDatabase,
 };
 
 function normalizeSqlText(value: string): string {
@@ -47,7 +55,18 @@ function escapeLike(value: string): string {
 export class PostgresJurisprudenceRepository implements JurisprudenceRepository {
   private closed = false;
 
-  constructor(private readonly dependencies: JurisprudenceRepositoryDependencies = defaultDependencies) {}
+  private readonly dependencies: PostgresJurisprudenceRepositoryDependencies;
+
+  constructor(
+    dependencies: Partial<PostgresJurisprudenceRepositoryDependencies> = {},
+  ) {
+    this.dependencies = {
+      now: dependencies.now ?? defaultDependencies.now,
+      generateId: dependencies.generateId ?? defaultDependencies.generateId,
+      getWriteDatabase:
+        dependencies.getWriteDatabase ?? defaultDependencies.getWriteDatabase,
+    };
+  }
 
   private assertOpen(): void {
     if (this.closed) throw new JurisprudenceRepositoryError("RESOURCE_CLOSED", "El repositorio PostgreSQL está cerrado.");
@@ -55,7 +74,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
 
   async findById(id: string): Promise<JurisprudenceRecord | null> {
     this.assertOpen();
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       const rows = await tx.select().from(jurisprudenceRecords).where(eq(jurisprudenceRecords.id, id)).limit(1);
       if (rows.length === 0) return null;
@@ -65,7 +84,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
 
   async findBySlug(slug: string): Promise<JurisprudenceRecord | null> {
     this.assertOpen();
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       const rows = await tx.select().from(jurisprudenceRecords).where(eq(jurisprudenceRecords.slug, slug)).limit(1);
       if (rows.length === 0) return null;
@@ -76,7 +95,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
   async findByExternalIdentity(identity: JurisprudenceExternalIdentity): Promise<JurisprudenceRecord | null> {
     this.assertOpen();
     const key = buildJurisprudenceDeduplicationKey(identity);
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       const rows = await tx.select().from(jurisprudenceRecords).where(eq(jurisprudenceRecords.deduplicationKey, key)).limit(1);
       if (rows.length === 0) return null;
@@ -92,7 +111,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
     // We stringify the record input to store in idempotency logic exactly as sqlite does
     const inputJson = JSON.parse(JSON.stringify(recordInput));
 
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       // 1. Idempotency lookup
       const idempotencyRows = await tx.select().from(jurisprudenceIdempotency)
@@ -178,7 +197,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
   async update(input: JurisprudenceUpdateInput): Promise<JurisprudenceRecord> {
     this.assertOpen();
     const parsed = jurisprudenceUpdateInputSchema.parse(input);
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
 
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       // 1. Lock row FOR UPDATE to ensure safe concurrency
@@ -271,7 +290,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
 
   private async executeQuery(input: JurisprudenceRepositoryListInput | JurisprudenceRepositorySearchInput): Promise<JurisprudenceRepositoryPage> {
     const query = normalizeJurisprudenceRepositoryQuery(input);
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       const conditions = [];
 
@@ -333,7 +352,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
 
   async getVersionHistory(id: string): Promise<readonly JurisprudenceVersionEntry[]> {
     this.assertOpen();
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       const recordExists = await tx.select({ id: jurisprudenceRecords.id }).from(jurisprudenceRecords).where(eq(jurisprudenceRecords.id, id)).limit(1);
       if (recordExists.length === 0) throw new JurisprudenceRepositoryError("NOT_FOUND", "No existe el registro jurisprudencial solicitado.", { recordId: id });
@@ -355,7 +374,7 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
 
   async synchronizePublicationStatus(recordId: string, status: JurisprudencePublicationStatus): Promise<void> {
     this.assertOpen();
-    const db = getJurisprudenceInternalWriteDatabase();
+    const db = this.dependencies.getWriteDatabase();
 
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       // 1. Lock row FOR UPDATE to ensure safe concurrency

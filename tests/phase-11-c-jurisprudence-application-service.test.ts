@@ -289,6 +289,7 @@ describe("errores, logging, factory y encapsulación", () => {
       count: (filters) => base.count(filters),
       existsByExternalIdentity: (identity) => base.existsByExternalIdentity(identity),
       getVersionHistory: (id) => base.getVersionHistory(id),
+      synchronizePublicationStatus: (id, status) => base.synchronizePublicationStatus(id, status),
       close: () => base.close(),
     };
     const api = createJurisprudenceInternalApi({ repository: unavailable });

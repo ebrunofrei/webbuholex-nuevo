@@ -21,8 +21,19 @@ function parseJson(value: unknown): unknown {
   return value;
 }
 
+export type PostgresJurisprudencePublicProjectionRepositoryDependencies = {
+  getReadDatabase: () => PostgresJsDatabase<Record<string, never>>;
+};
+
 export class PostgresJurisprudencePublicProjectionRepository implements JurisprudencePublicProjectionRepository {
   #closed = false;
+  #deps: PostgresJurisprudencePublicProjectionRepositoryDependencies;
+
+  constructor(deps?: Partial<PostgresJurisprudencePublicProjectionRepositoryDependencies>) {
+    this.#deps = {
+      getReadDatabase: deps?.getReadDatabase ?? getJurisprudenceInternalReadDatabase,
+    };
+  }
 
   private assertOpen() {
     if (this.#closed) {
@@ -42,7 +53,7 @@ export class PostgresJurisprudencePublicProjectionRepository implements Jurispru
 
   async findById(projectionId: string): Promise<JurisprudencePublicProjection | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return withJurisprudenceInternalReadRole(db, async (tx) => {
         const result = await tx.select({ payloadJson: schema.jurisprudencePublicProjections.payloadJson })
           .from(schema.jurisprudencePublicProjections)
@@ -59,7 +70,7 @@ export class PostgresJurisprudencePublicProjectionRepository implements Jurispru
 
   async findActiveByRecordVersion(recordId: string, recordVersion: number): Promise<JurisprudencePublicProjection | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return withJurisprudenceInternalReadRole(db, async (tx) => {
         const result = await tx.select({ payloadJson: schema.jurisprudencePublicProjections.payloadJson })
           .from(schema.jurisprudencePublicProjections)
@@ -82,7 +93,7 @@ export class PostgresJurisprudencePublicProjectionRepository implements Jurispru
 
   async listByRecord(recordId: string): Promise<readonly JurisprudencePublicProjection[]> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return withJurisprudenceInternalReadRole(db, async (tx) => {
         const results = await tx.select({ payloadJson: schema.jurisprudencePublicProjections.payloadJson })
           .from(schema.jurisprudencePublicProjections)

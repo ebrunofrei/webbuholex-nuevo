@@ -9,6 +9,8 @@ import {
 } from "@/database/schema/jurisprudence";
 import { withJurisprudenceInternalWriteRole } from "@/database/roles";
 import { withJurisprudenceInternalReadRole } from "@/database/roles/with-jurisprudence-internal-read-role";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@/database/schema";
 import {
   assertPublicationAuthorizationRepositoryOpen,
   clonePublicationAuthorizationCase,
@@ -60,8 +62,21 @@ function isPostgresError(error: unknown): error is { code: string; constraint_na
   return typeof error.code === "string";
 }
 
+export type PostgresJurisprudencePublicationAuthorizationRepositoryDependencies = {
+  getReadDatabase: () => PostgresJsDatabase<Record<string, never>>;
+  getWriteDatabase: () => PostgresJsDatabase<typeof schema>;
+};
+
 export class PostgresJurisprudencePublicationAuthorizationRepository implements JurisprudencePublicationAuthorizationRepository {
   #closed = false;
+  #deps: PostgresJurisprudencePublicationAuthorizationRepositoryDependencies;
+
+  constructor(deps?: Partial<PostgresJurisprudencePublicationAuthorizationRepositoryDependencies>) {
+    this.#deps = {
+      getReadDatabase: deps?.getReadDatabase ?? getJurisprudenceInternalReadDatabase,
+      getWriteDatabase: deps?.getWriteDatabase ?? getJurisprudenceInternalWriteDatabase,
+    };
+  }
 
   private safely<T>(operation: () => Promise<T>): Promise<T> {
     assertPublicationAuthorizationRepositoryOpen(this.#closed);
@@ -81,7 +96,7 @@ export class PostgresJurisprudencePublicationAuthorizationRepository implements 
 
   async findById(authorizationCaseId: string) {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return withJurisprudenceInternalReadRole(db, async (tx) => {
         const rows = await tx.select({ payloadJson: jurisprudencePublicationAuthorizationCases.payloadJson })
           .from(jurisprudencePublicationAuthorizationCases)
@@ -95,7 +110,7 @@ export class PostgresJurisprudencePublicationAuthorizationRepository implements 
 
   async findActiveByRecordVersion(recordId: string, recordVersion: number, evaluatedAt: string) {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return withJurisprudenceInternalReadRole(db, async (tx) => {
         const rows = await tx.select({ payloadJson: jurisprudencePublicationAuthorizationCases.payloadJson })
           .from(jurisprudencePublicationAuthorizationCases)
@@ -112,7 +127,7 @@ export class PostgresJurisprudencePublicationAuthorizationRepository implements 
 
   async listHistoryByRecord(recordId: string) {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return withJurisprudenceInternalReadRole(db, async (tx) => {
         // According to InMemory repo: ORDER BY occurredAt ASC, eventId ASC.
         // Sequence remains case-local, so cross-case record history must use occurredAt.
@@ -132,7 +147,7 @@ export class PostgresJurisprudencePublicationAuthorizationRepository implements 
 
   async createDecision(commit: JurisprudencePublicationAuthorizationCreateCommit) {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
+      const db = this.#deps.getWriteDatabase();
       return withJurisprudenceInternalWriteRole(db, async (tx) => {
         if (commit.authorizationCase.status === "authorized") {
           const rows = await tx.select({ payloadJson: jurisprudencePublicationAuthorizationCases.payloadJson })
@@ -179,7 +194,7 @@ export class PostgresJurisprudencePublicationAuthorizationRepository implements 
 
   private async update(commit: JurisprudencePublicationAuthorizationUpdateCommit) {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
+      const db = this.#deps.getWriteDatabase();
       return withJurisprudenceInternalWriteRole(db, async (tx) => {
         const updateResult = await tx.update(jurisprudencePublicationAuthorizationCases)
           .set({
@@ -225,7 +240,7 @@ export class PostgresJurisprudencePublicationAuthorizationRepository implements 
 
   async findIdempotencyResult(idempotencyKey: string) {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return withJurisprudenceInternalReadRole(db, async (tx) => {
         const rows = await tx.select({
           commandFingerprint: jurisprudencePublicationAuthorizationIdempotency.commandFingerprint,

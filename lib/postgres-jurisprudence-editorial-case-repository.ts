@@ -4,6 +4,8 @@ import { getJurisprudenceInternalWriteDatabase } from "@/database/client";
 import { getJurisprudenceInternalReadDatabase } from "@/database/jurisprudence-internal-read-database";
 import { withJurisprudenceInternalWriteRole } from "@/database/roles";
 import { withJurisprudenceInternalReadRole } from "@/database/roles/with-jurisprudence-internal-read-role";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@/database/schema";
 import {
   jurisprudenceEditorialCases,
   jurisprudenceEditorialEvents,
@@ -61,8 +63,21 @@ function isPostgresError(error: unknown): error is { code: string; constraint_na
   return typeof error === 'object' && error !== null && 'code' in error && typeof (error as Record<string, unknown>).code === 'string';
 }
 
+export type PostgresJurisprudenceEditorialCaseRepositoryDependencies = {
+  getReadDatabase: () => PostgresJsDatabase<Record<string, never>>;
+  getWriteDatabase: () => PostgresJsDatabase<typeof schema>;
+};
+
 export class PostgresJurisprudenceEditorialCaseRepository implements JurisprudenceEditorialCaseRepository {
   #closed = false;
+  #deps: PostgresJurisprudenceEditorialCaseRepositoryDependencies;
+
+  constructor(deps?: Partial<PostgresJurisprudenceEditorialCaseRepositoryDependencies>) {
+    this.#deps = {
+      getReadDatabase: deps?.getReadDatabase ?? getJurisprudenceInternalReadDatabase,
+      getWriteDatabase: deps?.getWriteDatabase ?? getJurisprudenceInternalWriteDatabase,
+    };
+  }
 
   private async safely<T>(operation: () => Promise<T>): Promise<T> {
     assertEditorialRepositoryOpen(this.#closed);
@@ -92,7 +107,7 @@ export class PostgresJurisprudenceEditorialCaseRepository implements Jurispruden
 
   async findById(caseId: string): Promise<JurisprudenceEditorialCase | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return await withJurisprudenceInternalReadRole(db, async (tx) => {
         const rows = await tx.select({ payloadJson: jurisprudenceEditorialCases.payloadJson })
           .from(jurisprudenceEditorialCases)
@@ -107,7 +122,7 @@ export class PostgresJurisprudenceEditorialCaseRepository implements Jurispruden
 
   async findActiveByRecordVersion(recordId: string, recordVersion: number): Promise<JurisprudenceEditorialCase | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return await withJurisprudenceInternalReadRole(db, async (tx) => {
         const rows = await tx.select({ payloadJson: jurisprudenceEditorialCases.payloadJson })
           .from(jurisprudenceEditorialCases)
@@ -128,7 +143,7 @@ export class PostgresJurisprudenceEditorialCaseRepository implements Jurispruden
 
   async findIdempotency(idempotencyKey: string): Promise<JurisprudenceEditorialIdempotencyEntry | null> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return await withJurisprudenceInternalReadRole(db, async (tx) => {
         const rows = await tx.select({
             commandFingerprint: jurisprudenceEditorialIdempotency.commandFingerprint,
@@ -155,7 +170,7 @@ export class PostgresJurisprudenceEditorialCaseRepository implements Jurispruden
 
   async create(commit: JurisprudenceEditorialCreateCommit): Promise<void> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
+      const db = this.#deps.getWriteDatabase();
       await withJurisprudenceInternalWriteRole(db, async (tx) => {
         const idempotencyRows = await tx.select({ idempotencyKey: jurisprudenceEditorialIdempotency.idempotencyKey })
           .from(jurisprudenceEditorialIdempotency)
@@ -212,7 +227,7 @@ export class PostgresJurisprudenceEditorialCaseRepository implements Jurispruden
 
   async update(commit: JurisprudenceEditorialUpdateCommit): Promise<void> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalWriteDatabase();
+      const db = this.#deps.getWriteDatabase();
       await withJurisprudenceInternalWriteRole(db, async (tx) => {
         const idempotencyRows = await tx.select({ idempotencyKey: jurisprudenceEditorialIdempotency.idempotencyKey })
           .from(jurisprudenceEditorialIdempotency)
@@ -261,7 +276,7 @@ export class PostgresJurisprudenceEditorialCaseRepository implements Jurispruden
 
   async getHistory(caseId: string): Promise<readonly JurisprudenceEditorialEvent[]> {
     return this.safely(async () => {
-      const db = getJurisprudenceInternalReadDatabase();
+      const db = this.#deps.getReadDatabase();
       return await withJurisprudenceInternalReadRole(db, async (tx) => {
         const caseRows = await tx.select({ caseId: jurisprudenceEditorialCases.caseId })
           .from(jurisprudenceEditorialCases)
