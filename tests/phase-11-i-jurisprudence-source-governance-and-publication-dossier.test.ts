@@ -181,6 +181,7 @@ describe("barreras estáticas y preservación", () => {
       "app/api/admin/complaints/[complaintId]/close/route.ts",
       "app/api/admin/complaints/[complaintId]/request-information/route.ts",
       "app/api/admin/complaints/[complaintId]/resume-review/route.ts",
+      "app/api/admin/jurisprudence/governance/sources/route.ts",
       "app/api/admin/jurisprudence/publication/execution/route.ts",
       "app/api/admin/payments/orders/route.ts",
       "app/api/admin/payments/sandbox/card-run/route.ts",
@@ -196,6 +197,9 @@ describe("barreras estáticas y preservación", () => {
 
     const authorizedJurisprudenceApiEntries = new Set([
       "api/admin/jurisprudence",
+      "api/admin/jurisprudence/governance",
+      "api/admin/jurisprudence/governance/sources",
+      "api/admin/jurisprudence/governance/sources/route.ts",
       "api/admin/jurisprudence/publication",
       "api/admin/jurisprudence/publication/execution",
       "api/admin/jurisprudence/publication/execution/route.ts",
