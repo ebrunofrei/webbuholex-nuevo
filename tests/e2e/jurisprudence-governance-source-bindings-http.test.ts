@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { handleJurisprudenceGovernanceSourceBindingsPost } from "@/lib/jurisprudence/jurisprudence-governance-http-handler";
+import { createFictitiousJurisprudenceRecord } from "../helpers/jurisprudence-record-fixture";
+import type { JurisprudenceRecord } from "@/types/jurisprudence";
 import { withFixedSchemas } from "../helpers/jurisprudence-migration-harness";
 import { randomUUID } from "node:crypto";
 import * as fs from "fs";
@@ -164,10 +166,19 @@ describe("Jurisprudence Source Bindings HTTP Boundary", () => {
 
           // Helper para crear un record
           const recordId = "rec-" + randomUUID().substring(0, 8);
+          const validRecordBase = createFictitiousJurisprudenceRecord(1);
+          const validRecord: JurisprudenceRecord = {
+            ...validRecordBase,
+            id: recordId,
+            recordVersion: 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
           await runnerSql.begin(async (tx) => {
             await tx`SET LOCAL ROLE jurisprudence_internal_write_runtime`;
-            await tx`INSERT INTO jurisprudence_internal.jurisprudence_records (id, slug, record_version, deduplication_key, source_type, source_document_id, normalized_case_number, institution_id, normalized_matter, normalized_search_text, issued_at, editorial_status, publication_status, verification_status, payload_json) VALUES (${recordId}, ${recordId}, 1, ${recordId}, 'test', 'test', 'test', 'test', 'test', 'test', '2026-01-01', 'draft', 'private', 'unverified', '{}'::jsonb)`;
-            await tx`INSERT INTO jurisprudence_internal.jurisprudence_record_versions (record_id, version, change_kind, snapshot_json) VALUES (${recordId}, 1, 'creation', '{}'::jsonb)`;
+            await tx`INSERT INTO jurisprudence_internal.jurisprudence_records (id, slug, record_version, deduplication_key, source_type, source_document_id, normalized_case_number, institution_id, normalized_matter, normalized_search_text, issued_at, editorial_status, publication_status, verification_status, payload_json) VALUES (${validRecord.id}, ${validRecord.slug}, ${validRecord.recordVersion}, ${validRecord.id}, ${validRecord.source.type}, ${validRecord.source.documentId}, ${validRecord.caseNumber.toLowerCase()}, ${validRecord.institution.id}, ${validRecord.matter.toLowerCase()}, ${validRecord.search.normalizedSearchText}, ${validRecord.issuedAt}, ${validRecord.editorialStatus}, ${validRecord.publicationStatus}, ${validRecord.source.verificationStatus}, ${JSON.stringify(validRecord)}::jsonb)`;
+            await tx`INSERT INTO jurisprudence_internal.jurisprudence_record_versions (record_id, version, change_kind, snapshot_json) VALUES (${validRecord.id}, ${validRecord.recordVersion}, 'creation', ${JSON.stringify(validRecord)}::jsonb)`;
           });
 
           // Helper para crear una source
@@ -198,7 +209,7 @@ describe("Jurisprudence Source Bindings HTTP Boundary", () => {
           };
           await runnerSql.begin(async (tx) => {
             await tx`SET LOCAL ROLE jurisprudence_internal_write_runtime`;
-            await tx`INSERT INTO jurisprudence_internal.jurisprudence_governed_sources (source_id, payload_json) VALUES (${sourceId}, ${sourcePayload}::jsonb)`;
+            await tx`INSERT INTO jurisprudence_internal.jurisprudence_governed_sources (source_id, payload_json) VALUES (${sourceId}, ${JSON.stringify(sourcePayload)}::jsonb)`;
           });
 
           const dependencies = {
@@ -279,7 +290,7 @@ describe("Jurisprudence Source Bindings HTTP Boundary", () => {
           };
           await runnerSql.begin(async (tx) => {
             await tx`SET LOCAL ROLE jurisprudence_internal_write_runtime`;
-            await tx`INSERT INTO jurisprudence_internal.jurisprudence_governed_sources (source_id, payload_json) VALUES (${sourceIdDisputed}, ${sourcePayloadDisputed}::jsonb)`;
+            await tx`INSERT INTO jurisprudence_internal.jurisprudence_governed_sources (source_id, payload_json) VALUES (${sourceIdDisputed}, ${JSON.stringify(sourcePayloadDisputed)}::jsonb)`;
           });
           const payloadG = {
             ...validPayload,
@@ -321,7 +332,7 @@ describe("Jurisprudence Source Bindings HTTP Boundary", () => {
           };
           await runnerSql.begin(async (tx) => {
             await tx`SET LOCAL ROLE jurisprudence_internal_write_runtime`;
-            await tx`INSERT INTO jurisprudence_internal.jurisprudence_governed_sources (source_id, payload_json) VALUES (${sourceIdSec}, ${sourcePayloadSec}::jsonb)`;
+            await tx`INSERT INTO jurisprudence_internal.jurisprudence_governed_sources (source_id, payload_json) VALUES (${sourceIdSec}, ${JSON.stringify(sourcePayloadSec)}::jsonb)`;
           });
           const payloadI = {
             ...validPayload,
