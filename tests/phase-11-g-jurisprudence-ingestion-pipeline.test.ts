@@ -436,7 +436,12 @@ describe("seguridad estática y preservación", () => {
       "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
       "app/api/admin/payments/orders/[id]/checkout-session/route.ts",
-      "app/api/payments/checkout-session/resolve/route.ts"
+      "app/api/payments/checkout-session/resolve/route.ts",
+      "app/api/admin/jurisprudence/editorial/cases/route.ts",
+      "app/api/admin/jurisprudence/governance/dossiers/commands/route.ts",
+      "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
+      "app/api/admin/jurisprudence/governance/sources/route.ts",
+      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts"
     ];
 
     const authorizedJurisprudenceApiEntries = new Set([
@@ -446,6 +451,20 @@ describe("seguridad estática y preservación", () => {
       "api/admin/jurisprudence/publication/execution/route.ts",
       "api/internal/cron/jurisprudence-publication",
       "api/internal/cron/jurisprudence-publication/route.ts",
+      "api/admin/jurisprudence/editorial",
+      "api/admin/jurisprudence/editorial/cases",
+      "api/admin/jurisprudence/editorial/cases/route.ts",
+      "api/admin/jurisprudence/governance",
+      "api/admin/jurisprudence/governance/dossiers",
+      "api/admin/jurisprudence/governance/dossiers/commands",
+      "api/admin/jurisprudence/governance/dossiers/commands/route.ts",
+      "api/admin/jurisprudence/governance/source-bindings",
+      "api/admin/jurisprudence/governance/source-bindings/route.ts",
+      "api/admin/jurisprudence/governance/sources",
+      "api/admin/jurisprudence/governance/sources/route.ts",
+      "api/admin/jurisprudence/publication/authorizations",
+      "api/admin/jurisprudence/publication/authorizations/commands",
+      "api/admin/jurisprudence/publication/authorizations/commands/route.ts"
     ]);
 
     const appEntries = readdirSync(
@@ -539,15 +558,16 @@ describe("seguridad estática y preservación", () => {
 
 describe("contrato expl�cito de resolutionNumber (J2-A.2J)", () => {
   it("omitted o undefined se aceptan en ingestion y se normalizan a null can�nico", () => {
-    const rawOmitted = { ...record() };
-    delete (rawOmitted as any).resolutionNumber;
+    const { resolutionNumber: _, ...rawOmitted } = record();
     expect(normalizeJurisprudenceIngestionRecord(rawOmitted, "a").record.resolutionNumber).toBeNull();
     const rawUndefined = { ...record(), resolutionNumber: undefined };
     expect(normalizeJurisprudenceIngestionRecord(rawUndefined, "a").record.resolutionNumber).toBeNull();
   });
 
   it("rechaza ingreso de null directo, vac�o o puros espacios", async () => {
-    const inputNull = { ...batch(), items: [{ ...batch().items[0], rawRecord: { ...record(), resolutionNumber: null as any } }] };
+    const { resolutionNumber: _, ...baseRecord } = record();
+    const badRecord = { ...baseRecord, resolutionNumber: null };
+    const inputNull = { ...batch(), items: [{ ...batch().items[0], rawRecord: badRecord }] };
     await expect(system("memory").pipeline.previewBatch(inputNull)).resolves.toMatchObject({ status: "rejected" });
     const inputEmpty = { ...batch(), items: [{ ...batch().items[0], rawRecord: { ...record(), resolutionNumber: "" } }] };
     await expect(system("memory").pipeline.previewBatch(inputEmpty)).resolves.toMatchObject({ status: "rejected" });
@@ -562,6 +582,7 @@ describe("contrato expl�cito de resolutionNumber (J2-A.2J)", () => {
 
   it("fingerprint es determinista para null, no escapa literal undefined y distingue null de '<NULL>'", () => {
     const recNull = normalizeJurisprudenceIngestionRecord({ ...record(), resolutionNumber: undefined }, "a").record;
+    expect(recNull.resolutionNumber).toBeNull();
     const f1 = normalizeJurisprudenceIngestionRecord({ ...record(), resolutionNumber: undefined }, "a").jurisprudenceIdentityKey;
     const f2 = normalizeJurisprudenceIngestionRecord({ ...record(), resolutionNumber: undefined }, "b").jurisprudenceIdentityKey;
     expect(f1).toBe(f2);

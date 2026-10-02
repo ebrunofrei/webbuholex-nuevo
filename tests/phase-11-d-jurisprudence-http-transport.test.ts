@@ -392,7 +392,12 @@ describe("persistencia SQLite y seguridad estática", () => {
       "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
       "app/api/admin/payments/orders/[id]/checkout-session/route.ts",
-      "app/api/payments/checkout-session/resolve/route.ts"
+      "app/api/payments/checkout-session/resolve/route.ts",
+      "app/api/admin/jurisprudence/editorial/cases/route.ts",
+      "app/api/admin/jurisprudence/governance/dossiers/commands/route.ts",
+      "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
+      "app/api/admin/jurisprudence/governance/sources/route.ts",
+      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts"
     ];
 
     const authorizedJurisprudenceApiEntries = new Set([
@@ -402,6 +407,20 @@ describe("persistencia SQLite y seguridad estática", () => {
       "api/admin/jurisprudence/publication/execution/route.ts",
       "api/internal/cron/jurisprudence-publication",
       "api/internal/cron/jurisprudence-publication/route.ts",
+      "api/admin/jurisprudence/editorial",
+      "api/admin/jurisprudence/editorial/cases",
+      "api/admin/jurisprudence/editorial/cases/route.ts",
+      "api/admin/jurisprudence/governance",
+      "api/admin/jurisprudence/governance/dossiers",
+      "api/admin/jurisprudence/governance/dossiers/commands",
+      "api/admin/jurisprudence/governance/dossiers/commands/route.ts",
+      "api/admin/jurisprudence/governance/source-bindings",
+      "api/admin/jurisprudence/governance/source-bindings/route.ts",
+      "api/admin/jurisprudence/governance/sources",
+      "api/admin/jurisprudence/governance/sources/route.ts",
+      "api/admin/jurisprudence/publication/authorizations",
+      "api/admin/jurisprudence/publication/authorizations/commands",
+      "api/admin/jurisprudence/publication/authorizations/commands/route.ts"
     ]);
 
     const appFiles = readdirSync(
