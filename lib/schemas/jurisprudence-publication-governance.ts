@@ -20,7 +20,7 @@ import type {
 } from "@/types/jurisprudence-publication-governance";
 
 const opaqueReferenceSchema = z.string().trim().min(3).max(160)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:|-]*$/)
   .refine((value) => !/^\d{8,12}$/.test(value), "La referencia debe ser opaca.");
 const controlledTextSchema = z.string().trim().min(2).max(240)
   .refine((value) => !/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value), "No se permiten correos.")

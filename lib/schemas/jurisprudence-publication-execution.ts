@@ -13,7 +13,7 @@ import type {
 } from "@/types/jurisprudence-publication-execution";
 
 const opaqueReferenceSchema = z.string().trim().min(3).max(180)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:|-]*$/)
   .refine((value) => !/@/.test(value), "La referencia debe ser opaca.")
   .refine((value) => !/^\d{8,12}$/.test(value), "No se permiten identificadores personales.");
 const idempotencyKeySchema = z.string().trim().min(8).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);

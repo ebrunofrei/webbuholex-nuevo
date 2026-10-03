@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { authenticationProviderKindSchema } from "@/lib/schemas/authentication-configuration";
 
-const opaqueReferenceSchema = z.string().min(8).max(200).regex(/^[A-Za-z0-9._:-]+$/);
+const opaqueReferenceSchema = z.string().min(8).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:|-]*$/);
 const externalSubjectSchema = z.string().min(8).max(200).regex(/^[A-Za-z0-9._:|-]+$/);
 
 export const externalIdentityResolutionSchema = z.discriminatedUnion("status", [

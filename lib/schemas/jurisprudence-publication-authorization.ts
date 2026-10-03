@@ -14,7 +14,7 @@ import type {
 } from "@/types/jurisprudence-publication-authorization";
 
 const opaqueReferenceSchema = z.string().trim().min(3).max(160)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:|-]*$/)
   .refine((value) => !/^\d{8,12}$/.test(value), "La referencia debe ser opaca.")
   .refine((value) => !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value), "No se permiten direcciones IP.")
   .refine((value) => !/^\d{3}[-.]\d{3}[-.]\d{3,4}$/.test(value), "No se permiten teléfonos.");

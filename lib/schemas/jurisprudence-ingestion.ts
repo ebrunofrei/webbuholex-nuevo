@@ -7,7 +7,7 @@ import type {
 } from "@/types/jurisprudence-ingestion";
 
 const opaqueReferenceSchema = z.string().trim().min(3).max(200)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:|-]*$/);
 
 export const jurisprudenceIngestionSourceKindSchema = z.enum([
   "local_json",

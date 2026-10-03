@@ -13,7 +13,7 @@ import type {
   WithdrawJurisprudencePublicExposureCommand,
 } from "@/types/jurisprudence-public-exposure";
 
-const opaqueReferenceSchema = z.string().trim().min(3).max(180).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/).refine((value) => !/@/.test(value), "La referencia debe ser opaca.");
+const opaqueReferenceSchema = z.string().trim().min(3).max(180).regex(/^[A-Za-z0-9][A-Za-z0-9._:|-]*$/).refine((value) => !/@/.test(value), "La referencia debe ser opaca.");
 const idempotencyKeySchema = z.string().trim().min(8).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
 const isoDateTimeSchema = z.string().datetime();
 const slugSchema = z.string().trim().min(3).max(180).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
