@@ -27,6 +27,10 @@ import {
 
 const MAX_BODY_BYTES = 65536;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export type JurisprudenceGovernanceHttpDependencies = {
   createAuthenticationRuntime?: typeof createJurisprudenceAuthenticationRuntime;
 };
@@ -115,7 +119,21 @@ export async function handleJurisprudenceGovernanceSourcesPost(
     return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
   }
 
-  const parsedBody = registerJurisprudenceSourceCommandSchema.safeParse(payload);
+  if (!isRecord(payload)) {
+    return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
+  }
+  const clientPayload = { ...payload };
+  delete clientPayload.context;
+  const commandToValidate = {
+    ...clientPayload,
+    context: {
+      requestId: randomUUID(),
+      actorReference: principal.subjectId,
+      requestedAt: evaluatedAt
+    }
+  };
+
+  const parsedBody = registerJurisprudenceSourceCommandSchema.safeParse(commandToValidate);
   if (!parsedBody.success) {
     return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
   }
@@ -125,17 +143,7 @@ export async function handleJurisprudenceGovernanceSourcesPost(
   try {
     governanceRuntime = createJurisprudenceGovernanceRuntime();
 
-    // Reconstruir el comando inyectando el context
-    const command = {
-      ...parsedBody.data,
-      context: {
-        requestId: randomUUID(),
-        actorReference: principal.subjectId,
-        requestedAt: evaluatedAt
-      }
-    };
-
-    const result = await governanceRuntime.service.registerSource(command);
+    const result = await governanceRuntime.service.registerSource(parsedBody.data);
 
     return NextResponse.json(
       { success: true, data: result },
@@ -252,7 +260,21 @@ export async function handleJurisprudenceGovernanceSourceBindingsPost(
     return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
   }
 
-  const parsedBody = bindJurisprudenceSourceCommandSchema.safeParse(payload);
+  if (!isRecord(payload)) {
+    return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
+  }
+  const clientPayload = { ...payload };
+  delete clientPayload.context;
+  const commandToValidate = {
+    ...clientPayload,
+    context: {
+      requestId: randomUUID(),
+      actorReference: principal.subjectId,
+      requestedAt: evaluatedAt
+    }
+  };
+
+  const parsedBody = bindJurisprudenceSourceCommandSchema.safeParse(commandToValidate);
   if (!parsedBody.success) {
     return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
   }
@@ -262,16 +284,7 @@ export async function handleJurisprudenceGovernanceSourceBindingsPost(
   try {
     governanceRuntime = createJurisprudenceGovernanceRuntime();
 
-    const command = {
-      ...parsedBody.data,
-      context: {
-        requestId: randomUUID(),
-        actorReference: principal.subjectId,
-        requestedAt: evaluatedAt
-      }
-    };
-
-    const result = await governanceRuntime.service.bindSource(command);
+    const result = await governanceRuntime.service.bindSource(parsedBody.data);
 
     return NextResponse.json(
       { success: true, data: result },
@@ -397,10 +410,21 @@ export async function handleJurisprudenceGovernanceDossierCommandsPost(
     return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
   }
 
-  if (typeof payload !== "object" || payload === null || !("action" in payload) || typeof (payload as Record<string, unknown>).action !== "string") {
+  if (!isRecord(payload) || typeof payload.action !== "string") {
     return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
   }
-  const action = (payload as Record<string, unknown>).action;
+  const action = payload.action;
+  const clientPayload = { ...payload };
+  delete clientPayload.context;
+  delete clientPayload.action;
+  const commandToValidate = {
+    ...clientPayload,
+    context: {
+      requestId: randomUUID(),
+      actorReference: principal.subjectId,
+      requestedAt: evaluatedAt
+    }
+  };
 
   let governanceRuntime: ReturnType<typeof createJurisprudenceGovernanceRuntime> | undefined;
 
@@ -409,41 +433,41 @@ export async function handleJurisprudenceGovernanceDossierCommandsPost(
     let result;
 
     if (action === "open_dossier") {
-      const parsedBody = openPublicationDossierCommandSchema.safeParse(payload);
+      const parsedBody = openPublicationDossierCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.openDossier({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.openDossier(parsedBody.data);
     } else if (action === "assess_provenance") {
-      const parsedBody = assessProvenanceCommandSchema.safeParse(payload);
+      const parsedBody = assessProvenanceCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.assessProvenance({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.assessProvenance(parsedBody.data);
     } else if (action === "assess_integrity") {
-      const parsedBody = assessIntegrityCommandSchema.safeParse(payload);
+      const parsedBody = assessIntegrityCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.assessIntegrity({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.assessIntegrity(parsedBody.data);
     } else if (action === "assess_rights") {
-      const parsedBody = assessRightsCommandSchema.safeParse(payload);
+      const parsedBody = assessRightsCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.assessRights({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.assessRights(parsedBody.data);
     } else if (action === "assess_privacy") {
-      const parsedBody = assessPrivacyCommandSchema.safeParse(payload);
+      const parsedBody = assessPrivacyCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.assessPrivacy({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.assessPrivacy(parsedBody.data);
     } else if (action === "assess_public_projection") {
-      const parsedBody = assessPublicProjectionCommandSchema.safeParse(payload);
+      const parsedBody = assessPublicProjectionCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.assessPublicProjection({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.assessPublicProjection(parsedBody.data);
     } else if (action === "evaluate_dossier") {
-      const parsedBody = evaluatePublicationDossierCommandSchema.safeParse(payload);
+      const parsedBody = evaluatePublicationDossierCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.evaluateDossier({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.evaluateDossier(parsedBody.data);
     } else if (action === "synchronize_dossier") {
-      const parsedBody = synchronizePublicationDossierCommandSchema.safeParse(payload);
+      const parsedBody = synchronizePublicationDossierCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.synchronizeDossier({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.synchronizeDossier(parsedBody.data);
     } else if (action === "close_dossier") {
-      const parsedBody = closePublicationDossierCommandSchema.safeParse(payload);
+      const parsedBody = closePublicationDossierCommandSchema.safeParse(commandToValidate);
       if (!parsedBody.success) return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
-      result = await governanceRuntime.service.closeDossier({ ...parsedBody.data, context: { requestId: randomUUID(), actorReference: principal.subjectId, requestedAt: evaluatedAt } });
+      result = await governanceRuntime.service.closeDossier(parsedBody.data);
     } else {
       return NextResponse.json({ success: false, error: { code: "BAD_REQUEST" } }, { status: 400, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } });
     }
