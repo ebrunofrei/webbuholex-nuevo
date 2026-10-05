@@ -39,12 +39,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isSafeMessage(msg: string): boolean {
+  if (msg.includes("Failed query:")) return false;
+  const upper = msg.toUpperCase();
+  if (upper.includes("SET LOCAL ROLE")) return false;
+  if (upper.includes("INSERT INTO ")) return false;
+  if (upper.includes("UPDATE ") && upper.includes(" SET ")) return false;
+  if (upper.includes("DELETE FROM ")) return false;
+  if (upper.includes("SELECT ") && upper.includes(" FROM ")) return false;
+  return true;
+}
+
 function extractDiagnosticFields(error: unknown): Record<string, string> {
   if (!isRecord(error)) return {};
   const diagnostic: Record<string, string> = {};
 
   const fields = [
-    "name", "message", "code", "severity",
+    "name", "code", "severity",
     "schema_name", "schema",
     "table_name", "table",
     "column_name", "column",
@@ -56,6 +67,25 @@ function extractDiagnosticFields(error: unknown): Record<string, string> {
     const value = error[field];
     if (typeof value === "string") {
       diagnostic[field] = value;
+    }
+  }
+
+  const message = error["message"];
+  if (typeof message === "string" && isSafeMessage(message)) {
+    diagnostic["message"] = message;
+  }
+
+  const cause = error["cause"];
+  if (isRecord(cause)) {
+    for (const field of fields) {
+      const value = cause[field];
+      if (typeof value === "string") {
+        diagnostic[`cause_${field}`] = value;
+      }
+    }
+    const causeMessage = cause["message"];
+    if (typeof causeMessage === "string" && isSafeMessage(causeMessage)) {
+      diagnostic["cause_message"] = causeMessage;
     }
   }
 

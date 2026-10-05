@@ -321,4 +321,89 @@ describe("J1-E.3A.2 PostgresJurisprudencePublicationExecutionRepository", () => 
       console.error = originalConsoleError;
     }
   });
+  it("should extract safe diagnostics from Drizzle wrapper error cause and omit SQL from message", async () => {
+    const originalConsoleError = console.error;
+    const consoleErrorMock = vi.fn();
+    console.error = consoleErrorMock;
+
+    try {
+      const pgRepo = new PostgresJurisprudencePublicationExecutionRepository(dbExecutor);
+      const rawError = new Error("Failed query: SET LOCAL ROLE jurisprudence_publication_command_runtime");
+      rawError.name = "Error";
+
+      const cause = {
+        code: "42501",
+        severity: "ERROR",
+        message: "permission denied to set role",
+        routine: "set_role",
+        internalQuery: "SET LOCAL ROLE",
+        password: "secret_password",
+      };
+      rawError.cause = cause;
+
+      mockTx.insert.mockReturnValueOnce({
+        values: vi.fn().mockRejectedValue(rawError)
+      });
+
+      await expect(pgRepo.createExecution(commit)).rejects.toMatchObject({ code: "REPOSITORY_UNAVAILABLE" });
+
+      expect(consoleErrorMock).toHaveBeenCalledTimes(1);
+      const call = consoleErrorMock.mock.calls[0];
+      if (!call) throw new Error("Expected console.error to be called");
+      const prefix = call[0];
+      const diagnostic = call[1];
+      expect(prefix).toBe("[JURIS_EXEC_REPOSITORY_ERROR]");
+
+      expect(diagnostic).toEqual({
+        name: "Error",
+        cause_code: "42501",
+        cause_severity: "ERROR",
+        cause_message: "permission denied to set role",
+        cause_routine: "set_role",
+      });
+
+      expect(diagnostic.message).toBeUndefined(); // Omitted because it contained "Failed query:"
+      expect(diagnostic.cause_internalQuery).toBeUndefined(); // Not in whitelist
+      expect(diagnostic.cause_password).toBeUndefined(); // Not in whitelist
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  it("should omit cause message if it contains SQL", async () => {
+    const originalConsoleError = console.error;
+    const consoleErrorMock = vi.fn();
+    console.error = consoleErrorMock;
+
+    try {
+      const pgRepo = new PostgresJurisprudencePublicationExecutionRepository(dbExecutor);
+      const rawError = new Error("General failure");
+
+      const cause = {
+        code: "42601",
+        message: "syntax error at or near SELECT FROM table",
+      };
+      rawError.cause = cause;
+
+      mockTx.insert.mockReturnValueOnce({
+        values: vi.fn().mockRejectedValue(rawError)
+      });
+
+      await expect(pgRepo.createExecution(commit)).rejects.toMatchObject({ code: "REPOSITORY_UNAVAILABLE" });
+
+      const call = consoleErrorMock.mock.calls[0];
+      if (!call) throw new Error("Expected console.error to be called");
+      const diagnostic = call[1];
+
+      expect(diagnostic).toEqual({
+        name: "Error",
+        message: "General failure", // Safe message is preserved
+        cause_code: "42601",
+      });
+      // cause_message is omitted because it contained "SELECT " and " FROM "
+      expect(diagnostic.cause_message).toBeUndefined();
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
 });
