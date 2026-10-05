@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { PostgresJurisprudencePublicationExecutionRepository } from "@/lib/jurisprudence/postgres-jurisprudence-publication-execution-repository";
-import type { JurisprudencePublicationExecution } from "@/types/jurisprudence-publication-execution";
 import { PostgresJsDatabase, PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import { PgTransaction } from "drizzle-orm/pg-core";
 import { ExtractTablesWithRelations } from "drizzle-orm";
@@ -10,10 +9,12 @@ import postgres from "postgres";
 
 type DbExecutor = PostgresJsDatabase<typeof schema> | PgTransaction<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
 
+import type { Mock } from "vitest";
+
 interface MockTx {
-  select: any;
-  insert: any;
-  update: any;
+  select: Mock;
+  insert: Mock;
+  update: Mock;
 }
 
 describe("J1-E.3A.2 PostgresJurisprudencePublicationExecutionRepository", () => {
@@ -251,5 +252,73 @@ describe("J1-E.3A.2 PostgresJurisprudencePublicationExecutionRepository", () => 
     });
 
     await expect(pgRepo.createExecution(commit)).rejects.toMatchObject({ code: "REPOSITORY_UNAVAILABLE" });
+  });
+
+  it("should extract safe diagnostics and log on unexpected error without logging credentials or raw objects", async () => {
+    const originalConsoleError = console.error;
+    const consoleErrorMock = vi.fn();
+    console.error = consoleErrorMock;
+
+    try {
+      const pgRepo = new PostgresJurisprudencePublicationExecutionRepository(dbExecutor);
+      const rawError = {
+        code: "53300",
+        message: "too many connections",
+        constraint_name: "my_constraint",
+        severity: "FATAL",
+        routine: "InitPostgres",
+        schema_name: "public",
+        table_name: "my_table",
+        column_name: "my_col",
+        internalQuery: "SELECT * FROM secrets",
+        password: "my_password"
+      };
+
+      mockTx.insert.mockReturnValueOnce({
+        values: vi.fn().mockRejectedValue(rawError)
+      });
+
+      await expect(pgRepo.createExecution(commit)).rejects.toMatchObject({ code: "REPOSITORY_UNAVAILABLE" });
+
+      expect(consoleErrorMock).toHaveBeenCalledTimes(1);
+      const call = consoleErrorMock.mock.calls[0];
+      if (!call) throw new Error("Expected console.error to be called");
+      const prefix = call[0];
+      const diagnostic = call[1];
+      expect(prefix).toBe("[JURIS_EXEC_REPOSITORY_ERROR]");
+
+      expect(diagnostic).toEqual({
+        code: "53300",
+        message: "too many connections",
+        constraint_name: "my_constraint",
+        severity: "FATAL",
+        routine: "InitPostgres",
+        schema_name: "public",
+        table_name: "my_table",
+        column_name: "my_col",
+      });
+
+      expect(diagnostic).not.toBe(rawError);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  it("should not log safe diagnostics for known mapped constraints", async () => {
+    const originalConsoleError = console.error;
+    const consoleErrorMock = vi.fn();
+    console.error = consoleErrorMock;
+
+    try {
+      const pgRepo = new PostgresJurisprudencePublicationExecutionRepository(dbExecutor);
+      mockTx.insert.mockReturnValueOnce({
+        values: vi.fn().mockRejectedValue({ code: '23505', constraint_name: 'jurisprudence_publication_idempotency_pkey' })
+      });
+
+      await expect(pgRepo.createExecution(commit)).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+      expect(consoleErrorMock).not.toHaveBeenCalled();
+    } finally {
+      console.error = originalConsoleError;
+    }
   });
 });

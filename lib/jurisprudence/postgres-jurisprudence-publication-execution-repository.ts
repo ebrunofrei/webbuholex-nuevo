@@ -35,15 +35,42 @@ function parseJson(value: unknown): unknown {
   return value;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function extractDiagnosticFields(error: unknown): Record<string, string> {
+  if (!isRecord(error)) return {};
+  const diagnostic: Record<string, string> = {};
+
+  const fields = [
+    "name", "message", "code", "severity",
+    "schema_name", "schema",
+    "table_name", "table",
+    "column_name", "column",
+    "constraint_name", "constraint",
+    "routine"
+  ] as const;
+
+  for (const field of fields) {
+    const value = error[field];
+    if (typeof value === "string") {
+      diagnostic[field] = value;
+    }
+  }
+
+  return diagnostic;
+}
+
 function isPostgresError(
   error: unknown
 ): error is { code: string; constraint_name?: string } {
-  if (typeof error !== "object" || error === null) return false;
+  if (!isRecord(error)) return false;
 
-  const code = Reflect.get(error, "code");
+  const code = error["code"];
   if (typeof code !== "string") return false;
 
-  const constraint = Reflect.get(error, "constraint_name");
+  const constraint = error["constraint_name"];
   return constraint === undefined || typeof constraint === "string";
 }
 
@@ -115,6 +142,7 @@ export class PostgresJurisprudencePublicationExecutionRepository implements Juri
           throw new JurisprudencePublicationExecutionError("IDEMPOTENCY_CONFLICT", "Conflicto de idempotencia.");
         }
       }
+      console.error("[JURIS_EXEC_REPOSITORY_ERROR]", extractDiagnosticFields(error));
       throw new JurisprudencePublicationExecutionError("REPOSITORY_UNAVAILABLE", "No fue posible completar la persistencia de ejecución.");
     }
   }
