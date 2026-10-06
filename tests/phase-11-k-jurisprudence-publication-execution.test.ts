@@ -85,7 +85,7 @@ interface TestSystem {
   close(): Promise<void>;
 }
 
-function createSystem(kind: "memory" | "sqlite", options: { executionPath?: string; logs?: JurisprudencePublicationExecutionLogEvent[] } = {}): TestSystem {
+function createSystem(kind: "memory" | "sqlite", options: { executionPath?: string; logs?: JurisprudencePublicationExecutionLogEvent[]; publicationSourceInstitutionName?: string } = {}): TestSystem {
   const clock: TestClock = { value: INITIAL_NOW };
   const baseRepository = new InMemoryJurisprudenceRepository(repositoryDependencies(`juris-${kind}`));
   const api = createJurisprudenceInternalApi({ repository: baseRepository, now: () => INITIAL_NOW });
@@ -120,7 +120,7 @@ function createSystem(kind: "memory" | "sqlite", options: { executionPath?: stri
           caseNumber: snapshot.caseNumber,
           resolutionNumber: snapshot.resolutionNumber,
           resolutionType: snapshot.resolutionType,
-          institutionName: snapshot.institution.name,
+          institutionName: options.publicationSourceInstitutionName ?? snapshot.institution.name,
           issuingBody: snapshot.issuingBody,
           matter: snapshot.matter,
           issuedAt: snapshot.issuedAt,
@@ -211,6 +211,34 @@ describe("evaluación y ejecución reversible", () => {
     const test = createSystem("memory"); const foundation = await completeFoundation(test, 1); const command = evaluationCommand(foundation, 1);
     await expect(test.execution.evaluateExecution(command)).resolves.toEqual({ status: "ready", blockers: [], publicationExecuted: false });
     await expect(test.executionRepository.findActiveByRecordVersion(foundation.created.id, 1)).resolves.toBeNull();
+  });
+  it("A1.3H: acepta ejecución cuando institutionName existe y resolutionNumber es nulo", async () => {
+    const test = createSystem("memory");
+    const testRecord = { ...record(91), resolutionNumber: null };
+    const created = await test.api.createRecord({ context: applicationContext(91), idempotencyKey: `crear-registro-91`, record: testRecord });
+    const { editorialEvaluated, completed } = await completeEditorialAndGovernance(test, created.id, 1, 91);
+    const authorized = await test.authorization.authorizePublication({ context: authorizationContext(91), publicationDossierId: completed.dossier.dossierId, expectedRecordVersion: 1, institutionalAuthorityRef: "autoridad-institucional", decisionRef: "decision", authorizationScopeRef: "alcance", effectiveFrom: INITIAL_NOW, expiresAt: undefined, reasons: [], conditions: JURISPRUDENCE_PUBLICATION_AUTHORIZATION_REQUIRED_CONDITIONS, idempotencyKey: `autorizar-91` });
+
+    const command = { context: executionContext(91), recordId: created.id, expectedRecordVersion: 1, editorialCaseId: editorialEvaluated.case.caseId, publicationDossierId: completed.dossier.dossierId, authorizationCaseId: authorized.authorizationCase.authorizationCaseId };
+    const result = await test.execution.evaluateExecution(command);
+    expect(result.status).toBe("ready");
+    if (result.status === "blocked") expect(result.blockers).not.toContain("public_projection_unavailable");
+  });
+  it("A1.3H: bloquea ejecución si institutionName está vacío, aunque resolutionNumber sea nulo", async () => {
+    const test = createSystem("memory", { publicationSourceInstitutionName: "   " });
+    const baseRec = record(92);
+    const testRecord = { ...baseRec, resolutionNumber: null };
+    const created = await test.api.createRecord({ context: applicationContext(92), idempotencyKey: `crear-registro-92`, record: testRecord });
+
+    const { editorialEvaluated, completed } = await completeEditorialAndGovernance(test, created.id, 1, 92);
+    const authorized = await test.authorization.authorizePublication({ context: authorizationContext(92), publicationDossierId: completed.dossier.dossierId, expectedRecordVersion: 1, institutionalAuthorityRef: "autoridad-institucional", decisionRef: "decision", authorizationScopeRef: "alcance", effectiveFrom: INITIAL_NOW, expiresAt: undefined, reasons: [], conditions: JURISPRUDENCE_PUBLICATION_AUTHORIZATION_REQUIRED_CONDITIONS, idempotencyKey: `autorizar-92` });
+
+    const command = { context: executionContext(92), recordId: created.id, expectedRecordVersion: 1, editorialCaseId: editorialEvaluated.case.caseId, publicationDossierId: completed.dossier.dossierId, authorizationCaseId: authorized.authorizationCase.authorizationCaseId };
+    const result = await test.execution.evaluateExecution(command);
+    expect(result.status).toBe("blocked");
+    if (result.status === "blocked") {
+      expect(result.blockers).toContain("public_projection_unavailable");
+    }
   });
   it("bloquea autorización inexistente", async () => {
     const test = createSystem("memory"); const foundation = await completeFoundation(test, 2);

@@ -143,7 +143,6 @@ export class DefaultJurisprudencePublicationExecutionService implements Jurispru
       !record.issuingBody?.trim() ||
       !record.matter?.trim() ||
       !record.caseNumber?.trim() ||
-      !record.resolutionNumber?.trim() ||
       !record.resolutionType?.trim() ||
       !record.issuedAt?.trim()
     )) blockers.push("public_projection_unavailable");
