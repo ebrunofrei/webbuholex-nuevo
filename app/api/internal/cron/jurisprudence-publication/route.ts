@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { findPostgresDiagnosticError } from "@/database/postgres-error";
 import crypto from "crypto";
 import { JurisprudencePublicationLogger } from "@/lib/jurisprudence/jurisprudence-publication-logger";
 import { timingSafeEqual } from "node:crypto";
@@ -140,12 +141,57 @@ export async function GET(request: Request) {
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    logger.log({
+    const pgError = findPostgresDiagnosticError(error);
+    let postgresCode: string | undefined;
+    let postgresSeverity: string | undefined;
+    let postgresRoutine: string | undefined;
+    let postgresConstraint: string | undefined;
+    let postgresMessage: string | undefined;
+
+    if (pgError) {
+      postgresCode = pgError.code;
+      postgresSeverity = pgError.severity;
+      postgresRoutine = pgError.routine;
+      postgresConstraint = pgError.constraint_name;
+
+      if (typeof pgError.message === "string") {
+        const msg = pgError.message;
+        const boundedLength = msg.length < 1000;
+        const singleLine = !msg.includes("\n") && !msg.includes("\r");
+        const lowerMsg = msg.toLowerCase();
+
+        const noUrls =
+          !lowerMsg.includes("postgres://") &&
+          !lowerMsg.includes("postgresql://");
+
+        const noSecrets =
+          !lowerMsg.includes("bearer") &&
+          !lowerMsg.includes("token") &&
+          !lowerMsg.includes("secret") &&
+          !lowerMsg.includes("password");
+
+        const sqlRegex = /\b(select|insert|update|delete|with|alter|create|drop|grant|revoke|copy|truncate|set\s+role)\b/i;
+        const noSql = !sqlRegex.test(msg);
+
+        if (boundedLength && singleLine && noUrls && noSecrets && noSql) {
+          postgresMessage = msg;
+        }
+      }
+    }
+
+    const logPayload: import("@/lib/jurisprudence/jurisprudence-publication-logger").JurisprudencePublicationLogEvent = {
       event: "cron_unexpected_error",
       cronInvocationId,
       errorCategory: "UNKNOWN",
-      message: error instanceof Error ? error.name : "UnknownError"
-    });
+      message: error instanceof Error ? error.name : "UnknownError",
+    };
+    if (postgresCode) logPayload.postgresCode = postgresCode;
+    if (postgresSeverity) logPayload.postgresSeverity = postgresSeverity;
+    if (postgresRoutine) logPayload.postgresRoutine = postgresRoutine;
+    if (postgresConstraint) logPayload.postgresConstraint = postgresConstraint;
+    if (postgresMessage) logPayload.postgresMessage = postgresMessage;
+
+    logger.log(logPayload);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

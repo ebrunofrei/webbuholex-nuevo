@@ -50,6 +50,11 @@ export type JurisprudencePublicationLogEvent =
       cronInvocationId: string;
       errorCategory: "UNKNOWN" | "DATABASE" | "CONFIG" | "AUTH";
       message?: string;
+      postgresCode?: string;
+      postgresSeverity?: string;
+      postgresRoutine?: string;
+      postgresConstraint?: string;
+      postgresMessage?: string;
     };
 
 export class JurisprudencePublicationLogger {
