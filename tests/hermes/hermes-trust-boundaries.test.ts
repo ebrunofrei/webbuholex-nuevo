@@ -4,7 +4,7 @@ import { buildHermesUserContent } from "@/lib/hermes/boundaries/user-content-bou
 import { parseAndValidateModelOutput } from "@/lib/hermes/boundaries/model-output-boundary";
 import type { OwlLegalAnalysisRequest } from "@/types/owl/owl-analysis";
 import { hermesRequestSchema } from "@/lib/hermes/contracts/hermes-envelope";
-import type { HermesProviderOutcome, HermesRequest } from "@/lib/hermes/contracts/hermes-envelope";
+import type { HermesProviderOutcome } from "@/lib/hermes/contracts/hermes-envelope";
 import { hermesProviderErrorSchema, getHermesSafePublicErrorMessage } from "@/lib/hermes/contracts/hermes-provider-error";
 
 describe("HERMES-A1-R2 Trust Boundaries", () => {
