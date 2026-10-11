@@ -33,9 +33,35 @@ import type {
 
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/database/schema";
+import type { JurisprudenceTransaction } from "@/database/roles";
 
-export type PostgresJurisprudenceRepositoryDependencies = JurisprudenceRepositoryDependencies & {
+export interface JurisprudenceReadTransactionScope {
+  select(): {
+    from(table: typeof schema.jurisprudenceRecords): {
+      where(clause: unknown): {
+        limit(count: number): Promise<Array<{ id: string; payloadJson: unknown }>>;
+      };
+    };
+  };
+}
+
+export interface JurisprudenceRepositoryReadAccess<
+  TDb = PostgresJsDatabase<typeof schema>,
+  TTx extends JurisprudenceReadTransactionScope = JurisprudenceTransaction,
+> {
+  readonly getDatabase: () => TDb;
+  readonly runTransaction: <T>(
+    db: TDb,
+    callback: (tx: TTx) => Promise<T>
+  ) => Promise<T>;
+}
+
+export type PostgresJurisprudenceRepositoryDependencies<
+  TDb = PostgresJsDatabase<typeof schema>,
+  TTx extends JurisprudenceReadTransactionScope = JurisprudenceTransaction,
+> = JurisprudenceRepositoryDependencies & {
   getWriteDatabase: () => PostgresJsDatabase<typeof schema>;
+  readAccess?: JurisprudenceRepositoryReadAccess<TDb, TTx> | undefined;
 };
 
 const defaultDependencies: PostgresJurisprudenceRepositoryDependencies = {
@@ -52,19 +78,23 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
-export class PostgresJurisprudenceRepository implements JurisprudenceRepository {
+export class PostgresJurisprudenceRepository<
+  TDb = PostgresJsDatabase<typeof schema>,
+  TTx extends JurisprudenceReadTransactionScope = JurisprudenceTransaction,
+> implements JurisprudenceRepository {
   private closed = false;
 
-  private readonly dependencies: PostgresJurisprudenceRepositoryDependencies;
+  private readonly dependencies: PostgresJurisprudenceRepositoryDependencies<TDb, TTx>;
 
   constructor(
-    dependencies: Partial<PostgresJurisprudenceRepositoryDependencies> = {},
+    dependencies: Partial<PostgresJurisprudenceRepositoryDependencies<TDb, TTx>> = {},
   ) {
     this.dependencies = {
       now: dependencies.now ?? defaultDependencies.now,
       generateId: dependencies.generateId ?? defaultDependencies.generateId,
       getWriteDatabase:
         dependencies.getWriteDatabase ?? defaultDependencies.getWriteDatabase,
+      readAccess: dependencies.readAccess,
     };
   }
 
@@ -74,6 +104,16 @@ export class PostgresJurisprudenceRepository implements JurisprudenceRepository 
 
   async findById(id: string): Promise<JurisprudenceRecord | null> {
     this.assertOpen();
+    const readAccess = this.dependencies.readAccess;
+    if (readAccess) {
+      const db = readAccess.getDatabase();
+      return await readAccess.runTransaction(db, async (tx) => {
+        const rows = await tx.select().from(jurisprudenceRecords).where(eq(jurisprudenceRecords.id, id)).limit(1);
+        if (rows.length === 0) return null;
+        return this.mapToRecord(rows[0]!.payloadJson, id);
+      });
+    }
+
     const db = this.dependencies.getWriteDatabase();
     return await withJurisprudenceInternalWriteRole(db, async (tx) => {
       const rows = await tx.select().from(jurisprudenceRecords).where(eq(jurisprudenceRecords.id, id)).limit(1);

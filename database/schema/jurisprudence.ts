@@ -12,7 +12,8 @@ import {
   foreignKey,
   check,
   boolean,
-  uuid
+  uuid,
+  primaryKey
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -107,6 +108,17 @@ export const jurisprudencePublishedRecords = jurisprudencePublicSchema.table("pu
   index("published_records_resolution_idx").on(table.resolutionNumber),
   index("published_records_issued_at_idx").on(table.issuedAt),
   index("published_records_fts_gin_idx").using("gin", table.searchVector)
+]);
+
+export const jurisprudenceRateLimits = jurisprudencePublicSchema.table("jurisprudence_rate_limits", {
+  scope: varchar("scope", { length: 32 }).notNull(),
+  subjectHash: varchar("subject_hash", { length: 64 }).notNull(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+  requestCount: integer("request_count").notNull().default(1),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scope, table.subjectHash] }),
+  index("jurisprudence_rate_limits_expires_idx").on(table.expiresAt),
 ]);
 
 export const jurisprudencePublicationExecutions = jurisprudenceInternalSchema.table("jurisprudence_publication_executions", {

@@ -29,6 +29,8 @@ import {
   readJurisprudenceInternalWriteDatabaseConfig,
   JurisprudenceAuthorizationDatabaseRuntimeConfig,
   readJurisprudenceAuthorizationDatabaseConfig,
+  JurisprudenceInterpretationReadDatabaseRuntimeConfig,
+  readJurisprudenceInterpretationReadDatabaseConfig,
 } from "./config";
 
 export interface DatabaseClientBundle {
@@ -338,4 +340,31 @@ export function getJurisprudenceAuthorizationDatabase(): PostgresJsDatabase<type
     g.__buholexJurisprudenceAuthorizationClient__ = createJurisprudenceAuthorizationDatabaseClient(config);
   }
   return g.__buholexJurisprudenceAuthorizationClient__.db;
+}
+
+const interpretationReadClientCache = new Map<string, DatabaseClientBundle>();
+
+export function createJurisprudenceInterpretationReadDatabaseClient(config: JurisprudenceInterpretationReadDatabaseRuntimeConfig): DatabaseClientBundle {
+  const sql = postgres(config.url, {
+    max: config.maxConnections,
+    idle_timeout: config.idleTimeoutSeconds,
+    connect_timeout: config.connectTimeoutSeconds,
+    prepare: config.prepare,
+    ssl: "require",
+  });
+  const db = drizzle(sql, { schema });
+  return { sql, db };
+}
+
+export function getJurisprudenceInterpretationReadDatabase(
+  config?: JurisprudenceInterpretationReadDatabaseRuntimeConfig
+): PostgresJsDatabase<typeof schema> {
+  const resolvedConfig = config ?? readJurisprudenceInterpretationReadDatabaseConfig();
+  const cached = interpretationReadClientCache.get(resolvedConfig.url);
+  if (cached) {
+    return cached.db;
+  }
+  const created = createJurisprudenceInterpretationReadDatabaseClient(resolvedConfig);
+  interpretationReadClientCache.set(resolvedConfig.url, created);
+  return created.db;
 }

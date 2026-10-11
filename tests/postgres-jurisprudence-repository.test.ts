@@ -179,4 +179,75 @@ describe("J1-G.2B.2 PostgresJurisprudenceRepository", () => {
     expect(mockTx.update).not.toHaveBeenCalled();
     expect(mockTx.insert).not.toHaveBeenCalled();
   });
+
+  it("findById - uses default write database and write role when readAccess is not injected", async () => {
+    const canonicalRecord = {
+      ...dummyRecord,
+      id: "rec_1",
+      recordVersion: 1,
+      createdAt: "2026-08-18T12:00:00.000Z",
+      updatedAt: "2026-08-18T12:00:00.000Z",
+    };
+    mockTx.limit.mockResolvedValueOnce([{ payloadJson: canonicalRecord, id: "rec_1" }]);
+
+    const result = await repo.findById("rec_1");
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe("rec_1");
+    expect(getJurisprudenceInternalWriteDatabase).toHaveBeenCalled();
+    expect(withJurisprudenceInternalWriteRole).toHaveBeenCalled();
+  });
+
+  it("findById - uses injected atomic readAccess without using write dependency", async () => {
+    const canonicalRecord = {
+      ...dummyRecord,
+      id: "rec_1",
+      recordVersion: 1,
+      createdAt: "2026-08-18T12:00:00.000Z",
+      updatedAt: "2026-08-18T12:00:00.000Z",
+    };
+    const mockReadDb = { name: "mockReadDb" };
+    const getReadDatabaseMock = vi.fn().mockReturnValue(mockReadDb);
+    const runReadTransactionMock = vi.fn().mockImplementation(async (db: unknown, cb: (tx: unknown) => unknown) => {
+      return cb(mockTx);
+    });
+
+    const repoWithRead = new PostgresJurisprudenceRepository({
+      now: () => "2026-08-18T12:00:00.000Z",
+      generateId: () => "rec_new",
+      getWriteDatabase: vi.fn(),
+      readAccess: {
+        getDatabase: getReadDatabaseMock,
+        runTransaction: runReadTransactionMock,
+      },
+    });
+
+    mockTx.limit.mockResolvedValueOnce([{ payloadJson: canonicalRecord, id: "rec_1" }]);
+
+    const result = await repoWithRead.findById("rec_1");
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe("rec_1");
+    expect(getReadDatabaseMock).toHaveBeenCalledTimes(1);
+    expect(runReadTransactionMock).toHaveBeenCalledTimes(1);
+    expect(runReadTransactionMock).toHaveBeenCalledWith(mockReadDb, expect.any(Function));
+    expect(withJurisprudenceInternalWriteRole).not.toHaveBeenCalled();
+
+    // Verify write operations on same instance still preserve write path
+    mockTx.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockTx.values.mockResolvedValue({});
+    const writeDbMock = { name: "mockWriteDb" };
+    const getWriteDatabaseMock = vi.fn().mockReturnValue(writeDbMock);
+    const repoWithBoth = new PostgresJurisprudenceRepository({
+      now: () => "2026-08-18T12:00:00.000Z",
+      generateId: () => "rec_new",
+      getWriteDatabase: getWriteDatabaseMock,
+      readAccess: {
+        getDatabase: getReadDatabaseMock,
+        runTransaction: runReadTransactionMock,
+      },
+    });
+
+    await repoWithBoth.create(dummyCreateInput);
+    expect(getWriteDatabaseMock).toHaveBeenCalled();
+    expect(withJurisprudenceInternalWriteRole).toHaveBeenCalled();
+  });
 });

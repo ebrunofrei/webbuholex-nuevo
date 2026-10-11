@@ -138,3 +138,35 @@ export async function withJurisprudenceAuthorizationRole<T>(
     return await callback(tx);
   });
 }
+
+export interface JurisprudenceRoleTransactionScope {
+  execute(query: unknown): Promise<unknown>;
+}
+
+export interface JurisprudenceRoleDatabaseScope<TTx extends JurisprudenceRoleTransactionScope = JurisprudenceTransaction> {
+  transaction<T>(
+    transaction: (tx: TTx) => Promise<T>,
+    config?: {
+      isolationLevel?: "read uncommitted" | "read committed" | "repeatable read" | "serializable";
+      accessMode?: "read only" | "read write";
+      deferrable?: boolean;
+    }
+  ): Promise<T>;
+}
+
+export async function withJurisprudenceInterpretationReadRole<
+  T,
+  TTx extends JurisprudenceRoleTransactionScope = JurisprudenceTransaction,
+>(
+  db: JurisprudenceRoleDatabaseScope<TTx>,
+  callback: (tx: TTx) => Promise<T>
+): Promise<T> {
+  return await db.transaction(
+    async (tx) => {
+      // FAIL CLOSED: If SET LOCAL ROLE fails, an error is thrown and callback is NEVER executed.
+      await tx.execute(sql`SET LOCAL ROLE jurisprudence_interpretation_read_runtime`);
+      return await callback(tx);
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" }
+  );
+}

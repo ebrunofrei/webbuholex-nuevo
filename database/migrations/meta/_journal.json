@@ -274,6 +274,20 @@
       "when": 1790040041000,
       "tag": "0038_jurisprudence_source_binding_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0039_jurisprudence_interpretation_rate_limiter",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790150000000,
+      "tag": "0040_jurisprudence_interpretation_read_security",
+      "breakpoints": true
     }
   ]
 }
