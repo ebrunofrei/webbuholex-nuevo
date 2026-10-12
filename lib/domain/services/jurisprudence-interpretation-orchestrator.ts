@@ -111,11 +111,44 @@ export class JurisprudenceInterpretationOrchestrator {
 
   private checkReference(reference: string, support: Citation[], normalizedSource: string): boolean {
     const normalizedRef = this.normalizeText(reference);
-    if (normalizedSource.includes(normalizedRef)) return true;
-    for (const citation of support) {
-      if (this.normalizeText(citation.quote).includes(normalizedRef)) return true;
+    if (normalizedRef.length === 0) return false;
+
+    // Case A: reference is an exact literal substring of the canonical source text
+    if (normalizedSource.includes(normalizedRef)) {
+      return true;
     }
-    return false;
+
+    // Case B: reference is not an exact literal substring;
+    // requires non-empty evidentiary support.
+    if (support.length === 0) {
+      return false;
+    }
+
+    // Case C: all supporting quotes must be grounded verbatim in the canonical source
+    if (!this.checkSupport(support, normalizedSource)) {
+      return false;
+    }
+
+    // Case D: deterministic anchor extraction & binding (HERMES-PROD-A1.13B)
+    const anchors = this.extractNumericAnchors(reference);
+    if (anchors.length === 0) {
+      return false;
+    }
+
+    return support.some((citation) => {
+      const normalizedQuote = this.normalizeText(citation.quote);
+      return anchors.every((anchor) => this.containsAnchor(normalizedQuote, anchor));
+    });
+  }
+
+  private extractNumericAnchors(reference: string): string[] {
+    const matches = reference.match(/\d+/g);
+    if (!matches) return [];
+    return Array.from(new Set(matches));
+  }
+
+  private containsAnchor(text: string, anchor: string): boolean {
+    return new RegExp(`\\b${anchor}\\b`).test(text);
   }
 
   private normalizeText(text: string): string {
