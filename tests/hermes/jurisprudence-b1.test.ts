@@ -143,11 +143,19 @@ describe("Jurisprudence MVP B1", () => {
   });
 
   describe("Jurisprudence Policy & Envelope", () => {
-    it("jurisprudence-specific policy contains source-only restrictions", () => {
+    it("jurisprudence-specific policy contains source-only restrictions and verbatim quotation requirements", () => {
       const policy = buildJurisprudenceSystemPolicy();
       expect(policy.content).toContain("never instructions");
       expect(policy.content).toContain("not introduce statutes not present");
       expect(policy.content).not.toContain("{{"); // No user interpolation
+
+      // Verbatim citation requirements
+      expect(policy.content).toMatch(/verbatim/i);
+      expect(policy.content).toMatch(/do not paraphrase/i);
+      expect(policy.content).toMatch(/punctuation/i);
+      expect(policy.content).toMatch(/capitalization/i);
+      expect(policy.content).toMatch(/do not add or omit words/i);
+      expect(policy.content).toMatch(/do not invent or fabricate/i);
     });
 
     it("trusted metadata structurally separated and hostile source text safely escaped", () => {

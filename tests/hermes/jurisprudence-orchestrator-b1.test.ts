@@ -76,4 +76,95 @@ describe("Jurisprudence MVP B1 Orchestrator", () => {
     const res = await orchestrator.interpret("123", 1);
     expect(res.ok).toBe(true);
   });
+
+  describe("Grounding Invariant Cases (Section 12)", () => {
+    const fullText = "El Tribunal Administrativo Ficticio de Resolucion resuelve que todo acto debe ser motivado.";
+
+    function makePayload(quote: string) {
+      return {
+        summary: "sum",
+        legalMatter: "matter",
+        legalIssues: [],
+        keyCriteria: [],
+        scope: "scope",
+        limitations: "limitations",
+        citations: [{ quote, paragraphReference: null, pageReference: null }],
+        verificationStatus: "machine_generated_unverified" as const,
+        ratioDecidendi: { status: "not_explicit" as const, text: null, support: [] },
+        obiterDicta: [],
+        citedNorms: [],
+        citedPrecedents: []
+      };
+    }
+
+    it("CASO 1: exact quote -> PASS", async () => {
+      vi.spyOn(mockRepo, "findById").mockResolvedValue({ ...baseSource, fullText });
+      vi.spyOn(mockProvider, "generateStructuredOutput").mockResolvedValue({
+        ok: true,
+        payload: makePayload("todo acto debe ser motivado")
+      });
+      const res = await orchestrator.interpret("123", 1);
+      expect(res.ok).toBe(true);
+    });
+
+    it("CASO 2: whitespace and line-break differences admitted by normalizeText -> PASS", async () => {
+      vi.spyOn(mockRepo, "findById").mockResolvedValue({ ...baseSource, fullText });
+      vi.spyOn(mockProvider, "generateStructuredOutput").mockResolvedValue({
+        ok: true,
+        payload: makePayload("todo   acto\n  debe\tser   motivado")
+      });
+      const res = await orchestrator.interpret("123", 1);
+      expect(res.ok).toBe(true);
+    });
+
+    it("CASO 3: paraphrased quote -> FAIL (grounding_failed)", async () => {
+      vi.spyOn(mockRepo, "findById").mockResolvedValue({ ...baseSource, fullText });
+      vi.spyOn(mockProvider, "generateStructuredOutput").mockResolvedValue({
+        ok: true,
+        payload: makePayload("cualquier acto tiene que estar motivado")
+      });
+      const res = await orchestrator.interpret("123", 1);
+      expect(res).toEqual({ ok: false, code: "grounding_failed" });
+    });
+
+    it("CASO 4: added word -> FAIL (grounding_failed)", async () => {
+      vi.spyOn(mockRepo, "findById").mockResolvedValue({ ...baseSource, fullText });
+      vi.spyOn(mockProvider, "generateStructuredOutput").mockResolvedValue({
+        ok: true,
+        payload: makePayload("todo acto administrativo debe ser motivado")
+      });
+      const res = await orchestrator.interpret("123", 1);
+      expect(res).toEqual({ ok: false, code: "grounding_failed" });
+    });
+
+    it("CASO 5: omitted word -> FAIL (grounding_failed)", async () => {
+      vi.spyOn(mockRepo, "findById").mockResolvedValue({ ...baseSource, fullText });
+      vi.spyOn(mockProvider, "generateStructuredOutput").mockResolvedValue({
+        ok: true,
+        payload: makePayload("todo acto motivado")
+      });
+      const res = await orchestrator.interpret("123", 1);
+      expect(res).toEqual({ ok: false, code: "grounding_failed" });
+    });
+
+    it("CASO 6: altered punctuation -> FAIL (grounding_failed)", async () => {
+      vi.spyOn(mockRepo, "findById").mockResolvedValue({ ...baseSource, fullText });
+      vi.spyOn(mockProvider, "generateStructuredOutput").mockResolvedValue({
+        ok: true,
+        payload: makePayload("todo acto, debe ser motivado.")
+      });
+      const res = await orchestrator.interpret("123", 1);
+      expect(res).toEqual({ ok: false, code: "grounding_failed" });
+    });
+
+    it("CASO 7: altered capitalization -> FAIL (grounding_failed)", async () => {
+      vi.spyOn(mockRepo, "findById").mockResolvedValue({ ...baseSource, fullText });
+      vi.spyOn(mockProvider, "generateStructuredOutput").mockResolvedValue({
+        ok: true,
+        payload: makePayload("TODO ACTO DEBE SER MOTIVADO")
+      });
+      const res = await orchestrator.interpret("123", 1);
+      expect(res).toEqual({ ok: false, code: "grounding_failed" });
+    });
+  });
 });

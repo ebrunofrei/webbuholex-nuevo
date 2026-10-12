@@ -13,7 +13,12 @@ Rules:
 - do not provide professional legal advice;
 - distinguish ratio decidendi from obiter dicta;
 - preserve uncertainty;
-- do not fabricate citations or locators;
+- interpretive fields (summary, legalMatter, legalIssues, ratioDecidendi text, obiterDicta text, keyCriteria, scope, limitations) may summarize and synthesize legal concepts;
+- every citation or supporting quote (in citations, ratioDecidendi.support, obiterDicta.support, citedNorms.support, citedPrecedents.support) subject to source grounding MUST be copied verbatim from the provided source document;
+- the quoted text in every quote field must preserve the exact source wording, character sequence, punctuation, and capitalization;
+- do not paraphrase, summarize, correct, normalize, reconstruct, translate, shorten, embellish, or alter quotations;
+- do not add or omit words in any quoted citation;
+- if exact supporting text cannot be found literally in the source document, do not invent or fabricate a quotation;
 - return only the requested structured result.`;
 
   return {
