@@ -397,7 +397,8 @@ describe("persistencia SQLite y seguridad estática", () => {
       "app/api/admin/jurisprudence/governance/dossiers/commands/route.ts",
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
-      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+      "app/api/jurisprudence/interpret/route.ts"
     ];
 
     const authorizedJurisprudenceApiEntries = new Set([
@@ -420,7 +421,10 @@ describe("persistencia SQLite y seguridad estática", () => {
       "api/admin/jurisprudence/governance/sources/route.ts",
       "api/admin/jurisprudence/publication/authorizations",
       "api/admin/jurisprudence/publication/authorizations/commands",
-      "api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+      "api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+      "api/jurisprudence",
+      "api/jurisprudence/interpret",
+      "api/jurisprudence/interpret/route.ts"
     ]);
 
     const appFiles = readdirSync(

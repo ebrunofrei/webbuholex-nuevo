@@ -14,7 +14,10 @@ import { CanonicalJurisprudenceInterpretationSourceAdapter } from "@/lib/jurispr
 import { readOpenAIHermesConfig } from "@/lib/hermes/config/openai-hermes-config";
 import { OpenAIHermesAdapter } from "@/lib/hermes/adapters/openai-hermes-adapter";
 import type { HermesProviderPort } from "@/lib/hermes/contracts/hermes-provider-port";
-import { JurisprudenceInterpretationOrchestrator } from "@/lib/domain/services/jurisprudence-interpretation-orchestrator";
+import {
+  JurisprudenceInterpretationOrchestrator,
+  type JurisprudenceInterpretationResult,
+} from "@/lib/domain/services/jurisprudence-interpretation-orchestrator";
 import {
   readJurisprudenceRateLimitConfig,
   type JurisprudenceRateLimitConfig,
@@ -39,8 +42,12 @@ export interface JurisprudenceInterpretationRuntimeDependencies<
   readonly env?: Partial<NodeJS.ProcessEnv>;
 }
 
+export interface JurisprudenceInterpretationOrchestratorPort {
+  interpret(recordId: string, recordVersion: number): Promise<JurisprudenceInterpretationResult>;
+}
+
 export interface JurisprudenceInterpretationRuntime {
-  readonly orchestrator: JurisprudenceInterpretationOrchestrator;
+  readonly orchestrator: JurisprudenceInterpretationOrchestratorPort;
   readonly rateLimiter: JurisprudenceRateLimiterPort;
   readonly rateLimitConfig: JurisprudenceRateLimitConfig;
 }

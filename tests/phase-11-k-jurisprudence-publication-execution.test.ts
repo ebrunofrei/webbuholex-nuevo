@@ -371,7 +371,8 @@ describe("barreras estáticas y preservación", () => {
       "app/api/admin/jurisprudence/governance/dossiers/commands/route.ts",
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
-      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+      "app/api/jurisprudence/interpret/route.ts"
     ];
     const routes = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string" && /(^|[\/\\])route\.ts$/.test(entry)).map((entry) => path.relative(ROOT, path.join(ROOT, "app", entry)).split(path.sep).join("/"));
     expect(routes.sort()).toEqual(authorizedRouteFiles.sort());
@@ -398,7 +399,10 @@ describe("barreras estáticas y preservación", () => {
           "api/admin/jurisprudence/governance/sources/route.ts",
           "api/admin/jurisprudence/publication/authorizations",
           "api/admin/jurisprudence/publication/authorizations/commands",
-          "api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+          "api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+          "api/jurisprudence",
+          "api/jurisprudence/interpret",
+          "api/jurisprudence/interpret/route.ts"
         ];
         if (exactExemptions.includes(normalized)) return false;
         return /(^|\/)api(\/|$)/.test(normalized) && /jurisprudence/.test(normalized);

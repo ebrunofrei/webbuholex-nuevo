@@ -474,7 +474,8 @@ describe("publicación, seguridad estática y preservación", () => {
       "app/api/admin/jurisprudence/governance/dossiers/commands/route.ts",
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
-      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+      "app/api/jurisprudence/interpret/route.ts"
     ];
 
     const authorizedJurisprudenceApiEntries = new Set([
@@ -497,7 +498,10 @@ describe("publicación, seguridad estática y preservación", () => {
       "api/admin/jurisprudence/governance/sources/route.ts",
       "api/admin/jurisprudence/publication/authorizations",
       "api/admin/jurisprudence/publication/authorizations/commands",
-      "api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+      "api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+      "api/jurisprudence",
+      "api/jurisprudence/interpret",
+      "api/jurisprudence/interpret/route.ts"
     ]);
 
     const appEntries = readdirSync(

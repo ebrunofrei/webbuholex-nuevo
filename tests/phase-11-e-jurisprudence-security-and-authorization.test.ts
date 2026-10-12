@@ -721,7 +721,8 @@ describe("readiness y límites estáticos", () => {
       "app/api/admin/jurisprudence/governance/dossiers/commands/route.ts",
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
-      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+      "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+      "app/api/jurisprudence/interpret/route.ts"
 ];
     const appRoot = path.join(process.cwd(), "app");
     const entries = readdirSync(appRoot, { recursive: true })
@@ -754,7 +755,10 @@ describe("readiness y límites estáticos", () => {
           "api/admin/jurisprudence/governance/sources/route.ts",
           "api/admin/jurisprudence/publication/authorizations",
           "api/admin/jurisprudence/publication/authorizations/commands",
-          "api/admin/jurisprudence/publication/authorizations/commands/route.ts"
+          "api/admin/jurisprudence/publication/authorizations/commands/route.ts",
+          "api/jurisprudence",
+          "api/jurisprudence/interpret",
+          "api/jurisprudence/interpret/route.ts"
         ];
         if (exactExemptions.includes(normalized)) return false;
         return normalized.startsWith("api/") && /jurisprudence/.test(normalized);

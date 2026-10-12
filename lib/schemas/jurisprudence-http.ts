@@ -25,3 +25,8 @@ export const jurisprudenceHttpUpdateBodySchema = z.object({
   changeKind: z.enum(["editorial_update", "source_update"]),
   record: jurisprudenceNewRecordSchema,
 }).strict();
+
+export const jurisprudenceHttpInterpretRequestBodySchema = z.object({
+  recordId: jurisprudenceHttpRecordIdSchema,
+  recordVersion: z.number().int().positive().safe(),
+}).strict();

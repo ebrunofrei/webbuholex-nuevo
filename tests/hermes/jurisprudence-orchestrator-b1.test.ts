@@ -33,8 +33,10 @@ describe("Jurisprudence MVP B1 Orchestrator", () => {
 
   it("missing record -> record_not_found", async () => {
     vi.spyOn(mockRepo, "findById").mockResolvedValue(null);
+    const providerSpy = vi.spyOn(mockProvider, "generateStructuredOutput");
     const res = await orchestrator.interpret("123", 1);
     expect(res).toEqual({ ok: false, code: "record_not_found" });
+    expect(providerSpy).not.toHaveBeenCalled();
   });
 
   it("uses canonical server text, mismatch version fails", async () => {

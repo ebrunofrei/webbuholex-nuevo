@@ -231,6 +231,7 @@ describe("barreras estáticas y preservación", () => {
       "app/api/admin/jurisprudence/governance/sources/route.ts",
       "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
       "app/api/admin/jurisprudence/publication/execution/route.ts",
+      "app/api/jurisprudence/interpret/route.ts",
       "app/api/admin/payments/orders/route.ts",
       "app/api/admin/payments/sandbox/card-run/route.ts",
       "app/api/admin/payments/sandbox/charge/route.ts",
@@ -264,6 +265,9 @@ describe("barreras estáticas y preservación", () => {
       "api/admin/jurisprudence/publication/execution/route.ts",
       "api/internal/cron/jurisprudence-publication",
       "api/internal/cron/jurisprudence-publication/route.ts",
+      "api/jurisprudence",
+      "api/jurisprudence/interpret",
+      "api/jurisprudence/interpret/route.ts",
     ]);
 
     const packageJson = JSON.parse(
