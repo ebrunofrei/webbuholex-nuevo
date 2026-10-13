@@ -12,6 +12,11 @@ import type {
 } from "@/types/jurisprudence-public-search-gateway";
 import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
 
+export interface JurisprudenceCanonicalRecordReference {
+  readonly recordId: string;
+  readonly recordVersion: number;
+}
+
 export type PostgresJurisprudencePublicReadRepositoryDependencies = {
   getReadDatabase: () => PostgresJsDatabase<typeof schema>;
 };
@@ -193,6 +198,34 @@ export class PostgresJurisprudencePublicReadRepository {
         sourceName: row.sourceName,
         officialHtmlUrl: row.officialHtmlUrl ?? null,
         officialPdfUrl: row.officialPdfUrl ?? null,
+      };
+    });
+  }
+
+  async findCanonicalReferenceBySlug(
+    slug: string
+  ): Promise<JurisprudenceCanonicalRecordReference | null> {
+    const db = this.#deps.getReadDatabase();
+
+    return await withJurisprudencePublicReadRole(db, async (tx) => {
+      const rows = await tx
+        .select({
+          recordId: jurisprudencePublishedRecords.id,
+          recordVersion: jurisprudencePublishedRecords.recordVersion,
+        })
+        .from(jurisprudencePublishedRecords)
+        .where(eq(jurisprudencePublishedRecords.slug, slug))
+        .limit(1);
+
+      if (rows.length === 0) {
+        return null;
+      }
+
+      const row = rows[0]!;
+
+      return {
+        recordId: row.recordId,
+        recordVersion: row.recordVersion,
       };
     });
   }

@@ -8,7 +8,6 @@ vi.mock("@/database/client", () => ({
 }));
 
 import { readJurisprudencePublicReadDatabaseConfig } from "@/database/config";
-import * as roles from "@/database/roles";
 import { withJurisprudencePublicReadRole } from "@/database/roles";
 import { getJurisprudencePublicReadDatabase } from "@/database/client";
 import { PostgresJurisprudencePublicReadRepository } from "@/lib/jurisprudence/postgres-jurisprudence-public-read-repository";
@@ -75,16 +74,17 @@ describe("J1-C Postgres Public Read Repository", () => {
   });
 
   describe("Repository API", () => {
-    it("instantiates correctly and implements search and getBySlug", () => {
+    it("instantiates correctly and implements search, getBySlug, and findCanonicalReferenceBySlug", () => {
       const repo = new PostgresJurisprudencePublicReadRepository();
       expect(typeof repo.search).toBe("function");
       expect(typeof repo.getBySlug).toBe("function");
+      expect(typeof repo.findCanonicalReferenceBySlug).toBe("function");
     });
   });
 
   describe("Provenance and Null Mapping in getBySlug (D1-R2)", () => {
     async function executeMockTx(
-      cb: Function | undefined,
+      cb: ((tx: unknown) => Promise<import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null>) | undefined,
       mockSelect: unknown
     ): Promise<import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null> {
       const mockTx = {
