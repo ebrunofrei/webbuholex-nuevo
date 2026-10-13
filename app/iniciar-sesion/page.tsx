@@ -3,7 +3,7 @@ import Link from "next/link";
 import { FutureAccessPage } from "@/components/portal/future-access-page";
 import { accessBoundaries } from "@/data/access-boundaries";
 import { createPageMetadata } from "@/lib/metadata";
-import { sanitizeWorkspaceReturnTo } from "@/lib/auth/return-to";
+import { buildAuth0LoginPath } from "@/lib/auth/return-to";
 
 export const metadata: Metadata = createPageMetadata("Acceso al Espacio Virtual Inteligente", "Acceso futuro al entorno personal de BúhoLex.", "/iniciar-sesion/");
 
@@ -12,10 +12,9 @@ type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 export default async function LoginPreparationPage(props: { searchParams: SearchParams }) {
   const searchParams = await props.searchParams;
   const rawReturnTo = typeof searchParams.returnTo === "string" ? searchParams.returnTo : "/app";
-  const safeReturnTo = sanitizeWorkspaceReturnTo(rawReturnTo);
 
   const loginAction = (
-    <Link href={`/auth/login?returnTo=${encodeURIComponent(safeReturnTo)}`} className="primary-button" data-primary-cta>
+    <Link href={buildAuth0LoginPath(rawReturnTo)} className="primary-button" data-primary-cta>
       ENTRAR
     </Link>
   );
