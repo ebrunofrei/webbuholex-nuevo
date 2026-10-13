@@ -14,6 +14,7 @@ import type {
   JurisprudencePublicSearchGateway,
 } from "@/types/jurisprudence-public-search-gateway";
 import type { JurisprudencePublicProjectionDetail } from "@/types/jurisprudence";
+import { JurisprudenceAnalysisPanel } from "./jurisprudence-analysis-panel";
 import styles from "./jurisprudence.module.css";
 
 export interface JurisprudencePublicDetailProps {
@@ -21,6 +22,7 @@ export interface JurisprudencePublicDetailProps {
   readonly searchGateway?: JurisprudencePublicSearchGateway | undefined;
   readonly getBySlugAction?: ((slug: string) => Promise<JurisprudencePublicDetailResponse>) | undefined;
   readonly rawSearchParams?: Record<string, string | string[] | undefined> | URLSearchParams | undefined;
+  readonly isAuthenticated?: boolean | undefined;
 }
 
 type DetailUiState =
@@ -57,13 +59,33 @@ function getReturnUrl(
   return serialized ? `/jurisprudencia?${serialized}` : "/jurisprudencia";
 }
 
+export function extractIntentAnalyze(
+  rawSearchParams?: Record<string, string | string[] | undefined> | URLSearchParams,
+): boolean {
+  if (!rawSearchParams) return false;
+  if (rawSearchParams instanceof URLSearchParams) {
+    const intents = rawSearchParams.getAll("intent");
+    return intents.length === 1 && intents[0] === "analyze";
+  }
+  const val = rawSearchParams.intent;
+  if (typeof val === "string") {
+    return val === "analyze";
+  }
+  if (Array.isArray(val)) {
+    return val.length === 1 && val[0] === "analyze";
+  }
+  return false;
+}
+
 export function JurisprudencePublicDetail({
   slug,
   searchGateway = unconfiguredJurisprudencePublicSearchGateway,
   getBySlugAction,
   rawSearchParams,
+  isAuthenticated = false,
 }: JurisprudencePublicDetailProps) {
   const returnUrl = getReturnUrl(rawSearchParams);
+  const intentAnalyze = extractIntentAnalyze(rawSearchParams);
   const parsedSlug = jurisprudencePublicSlugSchema.safeParse(slug);
 
   const [state, setState] = useState<DetailUiState>(() => {
@@ -270,6 +292,11 @@ export function JurisprudencePublicDetail({
                   </div>
                 ) : null}
 
+                <JurisprudenceAnalysisPanel
+                  slug={state.item.slug}
+                  isAuthenticated={isAuthenticated}
+                  intentAnalyze={intentAnalyze}
+                />
               </article>
             ) : null}
           </div>

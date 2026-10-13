@@ -3,6 +3,8 @@ import { JurisprudencePublicDetail } from "@/components/jurisprudence/jurisprude
 import { createPageMetadata } from "@/lib/metadata";
 import { getJurisprudencePublicBySlugAction } from "@/lib/jurisprudence/postgres-jurisprudence-public-actions";
 
+import { getWorkspaceSession } from "@/lib/auth/session";
+
 export async function generateMetadata({
   params,
 }: {
@@ -25,11 +27,14 @@ export default async function JurisprudenceDetailPage({
 }) {
   const { slug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const session = await getWorkspaceSession();
+  const isAuthenticated = session.status === "authenticated";
 
   return (
     <JurisprudencePublicDetail
       slug={slug}
       getBySlugAction={getJurisprudencePublicBySlugAction}
+      isAuthenticated={isAuthenticated}
       {...(resolvedSearchParams !== undefined ? { rawSearchParams: resolvedSearchParams } : {})}
     />
   );
