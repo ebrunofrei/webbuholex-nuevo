@@ -73,9 +73,12 @@ export async function withComplaintsAdminDetailReadRole<T>(
 
 export type JurisprudenceTransaction = PgTransaction<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
 
-export async function withJurisprudencePublicReadRole<T>(
-  db: PostgresJsDatabase<typeof schema>,
-  callback: (tx: JurisprudenceTransaction) => Promise<T>
+export async function withJurisprudencePublicReadRole<
+  T,
+  TTx extends JurisprudenceRoleTransactionScope = JurisprudenceTransaction,
+>(
+  db: JurisprudenceRoleDatabaseScope<TTx>,
+  callback: (tx: TTx) => Promise<T>
 ): Promise<T> {
   return await db.transaction(async (tx) => {
     // FAIL CLOSED: If SET LOCAL ROLE fails, an error is thrown and callback is NEVER executed.

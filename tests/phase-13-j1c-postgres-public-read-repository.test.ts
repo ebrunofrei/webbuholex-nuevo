@@ -45,8 +45,7 @@ describe("J1-C Postgres Public Read Repository", () => {
       };
 
       let callbackExecuted = false;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await withJurisprudencePublicReadRole(mockDb as any, async (tx) => {
+      await withJurisprudencePublicReadRole(mockDb, async (tx) => {
         expect(tx).toBe(mockTx);
         expect(mockTx.execute).toHaveBeenCalled();
         // Drizzle sql tags produce an object with query property
@@ -63,8 +62,8 @@ describe("J1-C Postgres Public Read Repository", () => {
 
       expect(callbackExecuted).toBe(true);
       // Ensure read only isolation level was specified
-      expect(mockDb.transaction).toHaveBeenCalledWith(
-        expect.any(Function),
+      expect(typeof mockDb.transaction.mock.calls[0]![0]).toBe("function");
+      expect(mockDb.transaction.mock.calls[0]![1]).toEqual(
         expect.objectContaining({
           isolationLevel: "repeatable read",
           accessMode: "read only",
@@ -83,22 +82,42 @@ describe("J1-C Postgres Public Read Repository", () => {
   });
 
   describe("Provenance and Null Mapping in getBySlug (D1-R2)", () => {
-    async function executeMockTx(
-      cb: ((tx: unknown) => Promise<import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null>) | undefined,
-      mockSelect: unknown
-    ): Promise<import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null> {
-      const mockTx = {
+    interface JurisprudencePublicReadTestTransactionScope {
+      select: (fields?: unknown) => {
+        from: (table?: unknown) => {
+          where: (clause?: unknown) => {
+            limit: (count?: number) => Promise<unknown[]>;
+          };
+        };
+      };
+      execute: (query?: unknown) => Promise<unknown>;
+    }
+
+    type PublicReadTxCallback<T> = (tx: JurisprudencePublicReadTestTransactionScope) => Promise<T>;
+
+    async function executeMockTx<T>(
+      cb: PublicReadTxCallback<T> | undefined,
+      mockSelect: JurisprudencePublicReadTestTransactionScope["select"]
+    ): Promise<T> {
+      if (!cb) {
+        throw new Error("Captured transaction callback is undefined");
+      }
+      const mockTx: JurisprudencePublicReadTestTransactionScope = {
         select: mockSelect,
         execute: vi.fn().mockResolvedValue(true),
       };
-      return cb!(mockTx);
+      return await cb(mockTx);
     }
 
     it("maps official URLs exactly and preserves null summary and null provenance", async () => {
-      let capturedTxCallback: Parameters<typeof withJurisprudencePublicReadRole>[1] | undefined;
+      let capturedTxCallback:
+        | PublicReadTxCallback<
+            import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null
+          >
+        | undefined;
 
       vi.mocked(getJurisprudencePublicReadDatabase).mockReturnValue({
-        transaction: async (cb: Parameters<typeof withJurisprudencePublicReadRole>[1]) => {
+        transaction: async (cb: PublicReadTxCallback<import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null>) => {
           capturedTxCallback = cb;
           return null;
         }
@@ -141,10 +160,14 @@ describe("J1-C Postgres Public Read Repository", () => {
     });
 
     it("maps null provenance to null", async () => {
-      let capturedTxCallback: Parameters<typeof withJurisprudencePublicReadRole>[1] | undefined;
+      let capturedTxCallback:
+        | PublicReadTxCallback<
+            import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null
+          >
+        | undefined;
 
       vi.mocked(getJurisprudencePublicReadDatabase).mockReturnValue({
-        transaction: async (cb: Parameters<typeof withJurisprudencePublicReadRole>[1]) => {
+        transaction: async (cb: PublicReadTxCallback<import("@/types/jurisprudence-public-exposure").JurisprudencePublicReadModel | null>) => {
           capturedTxCallback = cb;
           return null;
         }

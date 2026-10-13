@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { jurisprudenceSearchInputSchema } from "@/lib/schemas/jurisprudence";
 import { jurisprudenceNewRecordSchema, jurisprudenceRepositoryFiltersSchema } from "@/lib/schemas/jurisprudence-repository";
+import { jurisprudencePublicSlugSchema } from "@/lib/schemas/jurisprudence-public-search-gateway";
 
 export const jurisprudenceHttpRequestIdSchema = z.string().regex(/^[A-Za-z0-9_-]{8,128}$/);
 export const jurisprudenceHttpIdempotencyKeySchema = z.string().regex(/^[A-Za-z0-9._:-]{8,160}$/);
@@ -27,6 +28,9 @@ export const jurisprudenceHttpUpdateBodySchema = z.object({
 }).strict();
 
 export const jurisprudenceHttpInterpretRequestBodySchema = z.object({
-  recordId: jurisprudenceHttpRecordIdSchema,
-  recordVersion: z.number().int().positive().safe(),
+  slug: jurisprudencePublicSlugSchema,
 }).strict();
+
+export type JurisprudenceHttpInterpretRequestBody = z.infer<
+  typeof jurisprudenceHttpInterpretRequestBodySchema
+>;

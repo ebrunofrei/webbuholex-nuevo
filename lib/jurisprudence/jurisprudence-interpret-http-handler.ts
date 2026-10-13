@@ -9,6 +9,11 @@ import {
 } from "@/lib/jurisprudence/jurisprudence-interpretation-runtime";
 import { getWorkspaceSession } from "@/lib/auth/session";
 import type { WorkspaceSession } from "@/types/auth";
+import {
+  resolveJurisprudenceCanonicalRecordBySlug,
+  type ResolveCanonicalRecordBySlugResult,
+  type JurisprudenceCanonicalRecordReference,
+} from "@/lib/jurisprudence/jurisprudence-public-slug-resolver";
 
 export const MAX_BODY_BYTES = 2048;
 
@@ -17,6 +22,9 @@ export interface InterpretHandlerDependencies {
   readonly now?: (() => string) | undefined;
   readonly generateRequestId?: (() => string) | undefined;
   readonly getSession?: (() => Promise<WorkspaceSession | null | undefined>) | undefined;
+  readonly resolveCanonicalBySlug?: (
+    slug: unknown
+  ) => Promise<ResolveCanonicalRecordBySlugResult>;
 }
 
 function errorResponse(
@@ -171,6 +179,8 @@ async function readBodyWithLimit(
 
 export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) {
   const getSession = deps.getSession ?? getWorkspaceSession;
+  const resolveCanonicalBySlug =
+    deps.resolveCanonicalBySlug ?? resolveJurisprudenceCanonicalRecordBySlug;
 
   return async function handleJurisprudenceInterpretPost(request: Request): Promise<NextResponse> {
     try {
@@ -239,7 +249,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 5. Schema validation
+      // 5. Strict slug schema validation
       const parsedBody = jurisprudenceHttpInterpretRequestBodySchema.safeParse(bodyResult.json);
       if (!parsedBody.success) {
         return errorResponse(
@@ -249,7 +259,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      const { recordId, recordVersion } = parsedBody.data;
+      const { slug } = parsedBody.data;
 
       // 6. Origin Policy Gate
       const originResult = validateOrigin(request);
@@ -261,7 +271,34 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 7. Runtime creation & Limiter Setup
+      // 7. Public Slug → Canonical Resolution
+      let canonicalRef: JurisprudenceCanonicalRecordReference;
+      try {
+        const resolveResult = await resolveCanonicalBySlug(slug);
+        if (!resolveResult.ok) {
+          if (resolveResult.code === "not_found") {
+            return errorResponse(
+              404,
+              "jurisprudence_not_found",
+              "No se encontró una resolución pública disponible para análisis."
+            );
+          }
+          return errorResponse(
+            400,
+            "invalid_request_schema",
+            "El formato de los parámetros de solicitud es inválido."
+          );
+        }
+        canonicalRef = resolveResult.value;
+      } catch {
+        return errorResponse(
+          500,
+          "unexpected_internal_failure",
+          "Ocurrió un error inesperado al procesar la solicitud."
+        );
+      }
+
+      // 8. Runtime creation & Limiter Setup
       let runtimeBundle: JurisprudenceInterpretationRuntime;
       try {
         runtimeBundle = deps.runtimeFactory
@@ -289,12 +326,12 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
 
       const { orchestrator, rateLimiter, rateLimitConfig } = runtimeBundle;
 
-      // 8. Extract Client IP and derive subject HMAC
+      // 9. Extract Client IP and derive subject HMAC
       const rawIp = extractClientIp(request.headers);
       const subjectHash = hashRateLimitSubject(rateLimitConfig.hmacSecret, rawIp);
       const globalSubjectHash = hashRateLimitSubject(rateLimitConfig.hmacSecret, "global");
 
-      // 9. Consume Subject Limiter
+      // 10. Consume Subject Limiter
       const subjectOutcome = await rateLimiter.consume({
         scope: "subject",
         subjectHash,
@@ -320,7 +357,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 10. Consume Global Limiter
+      // 11. Consume Global Limiter
       const globalOutcome = await rateLimiter.consume({
         scope: "global",
         subjectHash: globalSubjectHash,
@@ -346,16 +383,19 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 11. Execute Canonical Orchestration
-      const result = await orchestrator.interpret(recordId, recordVersion);
+      // 12. Execute Canonical Orchestration
+      const result = await orchestrator.interpret(
+        canonicalRef.recordId,
+        canonicalRef.recordVersion
+      );
 
       if (!result.ok) {
         switch (result.code) {
           case "record_not_found":
             return errorResponse(
               404,
-              "record_not_found",
-              "El registro solicitado no fue encontrado o no está disponible para interpretación pública."
+              "jurisprudence_not_found",
+              "No se encontró una resolución pública disponible para análisis."
             );
           case "record_version_mismatch":
             return errorResponse(
@@ -396,13 +436,12 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         }
       }
 
-      // 12. Success Response
+      // 13. Success Response (Public response: slug only, zero canonical identifiers)
       return NextResponse.json(
         {
           ok: true,
           data: {
-            recordId,
-            recordVersion,
+            slug,
             interpretation: result.interpretation,
           },
         },

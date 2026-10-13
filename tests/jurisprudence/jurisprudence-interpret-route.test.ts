@@ -10,6 +10,8 @@ import type { JurisprudenceRateLimiterPort, JurisprudenceRateLimiterOutcome, Rat
 import type { JurisprudenceRateLimitConfig } from "@/lib/security/jurisprudence-rate-limiter-config";
 import type { JurisprudenceInterpretationResult } from "@/lib/domain/services/jurisprudence-interpretation-orchestrator";
 import type { JurisprudenceInterpretation } from "@/lib/hermes/contracts/jurisprudence-interpretation";
+import type { ResolveCanonicalRecordBySlugResult } from "@/lib/jurisprudence/jurisprudence-public-slug-resolver";
+import { jurisprudenceHttpInterpretRequestBodySchema } from "@/lib/schemas/jurisprudence-http";
 
 const MOCK_HMAC_SECRET = "test-hmac-secret-at-least-32-chars-long";
 
@@ -59,6 +61,24 @@ const validInterpretation: JurisprudenceInterpretation = {
     pageReference: "pág. 5",
   }],
   verificationStatus: "machine_generated_unverified",
+};
+
+const defaultMockResolver = async (slug: unknown): Promise<ResolveCanonicalRecordBySlugResult> => {
+  if (
+    slug === "exp-00123-2024-aa-tc" ||
+    slug === "slug-publico-valido" ||
+    slug === "exp-valido-1" ||
+    slug === "exp-case-5"
+  ) {
+    return {
+      ok: true,
+      value: {
+        recordId: "rec-valido-1",
+        recordVersion: 1,
+      },
+    };
+  }
+  return { ok: false, code: "not_found" };
 };
 
 function createMockRuntime(overrides: {
@@ -151,8 +171,7 @@ function buildRequest(init: {
     body = JSON.stringify(init.body);
   } else if (method === "POST") {
     body = JSON.stringify({
-      recordId: "rec-valido-1",
-      recordVersion: 1,
+      slug: "exp-00123-2024-aa-tc",
     });
   }
 
@@ -181,12 +200,14 @@ function createAuthenticatedHandler(overrides: {
   now?: () => string;
   generateRequestId?: () => string;
   getSession?: () => Promise<WorkspaceSession | null | undefined>;
+  resolveCanonicalBySlug?: (slug: unknown) => Promise<ResolveCanonicalRecordBySlugResult>;
 } = {}) {
   return createInterpretHandler({
     runtimeFactory: overrides.runtimeFactory,
     now: overrides.now,
     generateRequestId: overrides.generateRequestId,
     getSession: overrides.getSession ?? (async () => mockAuthenticatedSession),
+    resolveCanonicalBySlug: overrides.resolveCanonicalBySlug ?? defaultMockResolver,
   });
 }
 
@@ -196,7 +217,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
-      body: { recordId: "rec-valido-1", recordVersion: 1 },
+      body: { slug: "exp-00123-2024-aa-tc" },
       headers: { "x-request-id": "req-custom-trace-12345" },
     });
 
@@ -208,8 +229,9 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
     const data = await res.json();
     expect(data.ok).toBe(true);
-    expect(data.data.recordId).toBe("rec-valido-1");
-    expect(data.data.recordVersion).toBe(1);
+    expect(data.data.slug).toBe("exp-00123-2024-aa-tc");
+    expect("recordId" in data.data).toBe(false);
+    expect("recordVersion" in data.data).toBe(false);
     expect(data.data.interpretation).toEqual(validInterpretation);
     expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-valido-1", 1);
   });
@@ -243,8 +265,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
     const req = buildRequest({
       body: {
-        recordId: "rec-1",
-        recordVersion: 1,
+        slug: "exp-00123-2024-aa-tc",
         fullText: "malicious injected text",
       },
     });
@@ -256,11 +277,11 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
   });
 
-  it("missing recordId -> 400", async () => {
+  it("missing slug -> 400", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
     const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
-    const req = buildRequest({ body: { recordVersion: 1 } });
+    const req = buildRequest({ body: {} });
     const res = await handler(req);
     expect(res.status).toBe(400);
     const data = await res.json();
@@ -269,11 +290,11 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
   });
 
-  it("blank recordId -> 400", async () => {
+  it("blank slug -> 400", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
     const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
-    const req = buildRequest({ body: { recordId: "   ", recordVersion: 1 } });
+    const req = buildRequest({ body: { slug: "   " } });
     const res = await handler(req);
     expect(res.status).toBe(400);
     const data = await res.json();
@@ -282,33 +303,59 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
   });
 
-  it("recordVersion safe integer semantics: accepts positive safe integers (1, 42, MAX_SAFE_INTEGER)", async () => {
-    for (const validVersion of [1, 42, Number.MAX_SAFE_INTEGER]) {
-      const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+  it("client cannot send canonical identifiers: recordId and recordVersion rejected -> 400", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
-      const req = buildRequest({ body: { recordId: "rec-1", recordVersion: validVersion } });
-      const res = await handler(req);
-      expect(res.status).toBe(200);
-      expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-1", validVersion);
-    }
+    // Client sends recordId + recordVersion only
+    const req1 = buildRequest({ body: { recordId: "rec-1", recordVersion: 1 } });
+    const res1 = await handler(req1);
+    expect(res1.status).toBe(400);
+    const data1 = await res1.json();
+    expect(data1.ok).toBe(false);
+    expect(data1.error.code).toBe("invalid_request_schema");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+
+    // Client sends slug + recordId injection
+    const req2 = buildRequest({ body: { slug: "exp-00123-2024-aa-tc", recordId: "rec-1" } });
+    const res2 = await handler(req2);
+    expect(res2.status).toBe(400);
+    const data2 = await res2.json();
+    expect(data2.ok).toBe(false);
+    expect(data2.error.code).toBe("invalid_request_schema");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+
+    // Client sends slug + recordVersion injection
+    const req3 = buildRequest({ body: { slug: "exp-00123-2024-aa-tc", recordVersion: 1 } });
+    const res3 = await handler(req3);
+    expect(res3.status).toBe(400);
+    const data3 = await res3.json();
+    expect(data3.ok).toBe(false);
+    expect(data3.error.code).toBe("invalid_request_schema");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
   });
 
-  it("recordVersion safe integer semantics: rejects invalid values (0, -1, 1.5, Infinity, >MAX_SAFE_INTEGER, string)", async () => {
-    const invalidVersions = [
-      0,
-      -1,
-      1.5,
-      Infinity,
-      Number.MAX_SAFE_INTEGER + 1,
-      "1",
+  it("slug format validation rejects invalid values -> 400", async () => {
+    const invalidSlugs = [
+      "SLUG-MAYUSCULA",
+      "slug_con_guion_bajo",
+      "slug con espacios",
+      "ab",
+      "a".repeat(181),
+      "--guiones-dobles",
+      "-guion-inicial",
+      "guion-final-",
+      12345,
+      true,
+      [],
+      {},
     ];
 
-    for (const invalidVersion of invalidVersions) {
+    for (const invalidSlug of invalidSlugs) {
       const { runtime, orchestratorInterpretSpy } = createMockRuntime();
       const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
-      const req = buildRequest({ body: { recordId: "rec-1", recordVersion: invalidVersion } });
+      const req = buildRequest({ body: { slug: invalidSlug } });
       const res = await handler(req);
       expect(res.status).toBe(400);
       const data = await res.json();
@@ -324,7 +371,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
     const req = buildRequest({
       headers: { "content-type": "text/plain" },
-      rawBody: "recordId=1",
+      rawBody: "slug=test",
     });
     const res = await handler(req);
     expect(res.status).toBe(415);
@@ -340,7 +387,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
     const largePadding = "x".repeat(MAX_BODY_BYTES + 10);
     const req = buildRequest({
-      rawBody: JSON.stringify({ recordId: "rec-1", recordVersion: 1, padding: largePadding }),
+      rawBody: JSON.stringify({ slug: "exp-00123-2024-aa-tc", padding: largePadding }),
     });
     const res = await handler(req);
     expect(res.status).toBe(413);
@@ -355,18 +402,16 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const largePadding = "x".repeat(MAX_BODY_BYTES + 10);
-    const bodyText = JSON.stringify({ recordId: "rec-1", recordVersion: 1, padding: largePadding });
+    const bodyText = JSON.stringify({ slug: "exp-00123-2024-aa-tc", padding: largePadding });
 
     const headers = new Headers();
     headers.set("content-type", "application/json");
-    // Ensure Content-Length is absent
 
     const req = new Request("https://buholex.com/api/jurisprudence/interpret", {
       method: "POST",
       headers,
       body: bodyText,
     });
-    // Remove content-length header explicitly if runtime added it
     req.headers.delete("content-length");
 
     const res = await handler(req);
@@ -397,7 +442,6 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
     const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
-    // Case 1: Preview URL with attacker Origin and matching spoofed Host header
     const req1 = buildRequest({
       url: "https://buholex-preview.vercel.app/api/jurisprudence/interpret",
       headers: {
@@ -412,7 +456,6 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(data1.error.code).toBe("origin_not_allowed");
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
 
-    // Case 2: localhost URL with foreign Origin and matching spoofed Host header
     const req2 = buildRequest({
       url: "http://localhost:3000/api/jurisprudence/interpret",
       headers: {
@@ -445,7 +488,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
     const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
-    const req = buildRequest(); // no Origin header
+    const req = buildRequest();
     const res = await handler(req);
     expect(res.status).toBe(200);
     expect(orchestratorInterpretSpy).toHaveBeenCalled();
@@ -463,7 +506,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
   });
 
-  it("record absent -> nondisclosing 404", async () => {
+  it("record absent -> nondisclosing 404 jurisprudence_not_found", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime({
       orchestratorResult: { ok: false, code: "record_not_found" },
     });
@@ -474,11 +517,11 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(res.status).toBe(404);
     const data = await res.json();
     expect(data.ok).toBe(false);
-    expect(data.error.code).toBe("record_not_found");
+    expect(data.error.code).toBe("jurisprudence_not_found");
     expect(orchestratorInterpretSpy).toHaveBeenCalled();
   });
 
-  it("version mismatch -> 409", async () => {
+  it("version mismatch -> 409 record_version_mismatch without canonical identifiers", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime({
       orchestratorResult: { ok: false, code: "record_version_mismatch" },
     });
@@ -490,6 +533,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const data = await res.json();
     expect(data.ok).toBe(false);
     expect(data.error.code).toBe("record_version_mismatch");
+    expect(JSON.stringify(data)).not.toContain("rec-valido-1");
     expect(orchestratorInterpretSpy).toHaveBeenCalled();
   });
 
@@ -529,7 +573,6 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(data.error.code).toBe("rate_limited");
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
 
-    // Verify rate limit order: global limiter was NOT called because subject blocked
     expect(rateLimiterConsumeSpy).toHaveBeenCalledTimes(1);
     const firstCall = rateLimiterConsumeSpy.mock.calls[0];
     expect(firstCall).toBeDefined();
@@ -564,7 +607,6 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(data.error.code).toBe("rate_limited");
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
 
-    // Both subject and global were invoked
     expect(rateLimiterConsumeSpy).toHaveBeenCalledTimes(2);
     const firstCall = rateLimiterConsumeSpy.mock.calls[0];
     const secondCall = rateLimiterConsumeSpy.mock.calls[1];
@@ -607,7 +649,6 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const data = await res.json();
     expect(data.ok).toBe(false);
     expect(data.error.code).toBe("provider_failure");
-    // Ensure no OpenAI or provider details leaked
     expect(JSON.stringify(data)).not.toMatch(/openai|gpt|sk-|model|prompt/i);
   });
 
@@ -773,8 +814,8 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
     expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
 
-    // 3b. Missing recordId -> 400 invalid_request_schema
-    const reqMissing = buildRequest({ body: { recordVersion: 1 } });
+    // 3b. Missing slug -> 400 invalid_request_schema
+    const reqMissing = buildRequest({ body: {} });
     const resMissing = await handler(reqMissing);
     expect(resMissing.status).toBe(400);
     const dataMissing = await resMissing.json();
@@ -783,8 +824,8 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
     expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
 
-    // 3c. Blank recordId -> 400 invalid_request_schema
-    const reqBlank = buildRequest({ body: { recordId: "   ", recordVersion: 1 } });
+    // 3c. Blank slug -> 400 invalid_request_schema
+    const reqBlank = buildRequest({ body: { slug: "   " } });
     const resBlank = await handler(reqBlank);
     expect(resBlank.status).toBe(400);
     const dataBlank = await resBlank.json();
@@ -795,7 +836,7 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
 
     // 3d. Unknown fields -> 400 invalid_request_schema
     const reqUnknown = buildRequest({
-      body: { recordId: "rec-1", recordVersion: 1, extraInjection: "hack" },
+      body: { slug: "exp-00123-2024-aa-tc", extraInjection: "hack" },
     });
     const resUnknown = await handler(reqUnknown);
     expect(resUnknown.status).toBe(400);
@@ -805,20 +846,20 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
     expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
 
-    // 3e. Invalid recordVersion -> 400 invalid_request_schema
-    const reqBadVersion = buildRequest({ body: { recordId: "rec-1", recordVersion: -1 } });
-    const resBadVersion = await handler(reqBadVersion);
-    expect(resBadVersion.status).toBe(400);
-    const dataBadVersion = await resBadVersion.json();
-    expect(dataBadVersion.ok).toBe(false);
-    expect(dataBadVersion.error.code).toBe("invalid_request_schema");
+    // 3e. Invalid slug format -> 400 invalid_request_schema
+    const reqBadSlug = buildRequest({ body: { slug: "INVALID-SLUG-UPPERCASE" } });
+    const resBadSlug = await handler(reqBadSlug);
+    expect(resBadSlug.status).toBe(400);
+    const dataBadSlug = await resBadSlug.json();
+    expect(dataBadSlug.ok).toBe(false);
+    expect(dataBadSlug.error.code).toBe("invalid_request_schema");
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
     expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
 
     // 3f. Oversized body -> 413 payload_too_large
     const largePadding = "x".repeat(MAX_BODY_BYTES + 10);
     const reqOversized = buildRequest({
-      rawBody: JSON.stringify({ recordId: "rec-1", recordVersion: 1, padding: largePadding }),
+      rawBody: JSON.stringify({ slug: "exp-00123-2024-aa-tc", padding: largePadding }),
     });
     const resOversized = await handler(reqOversized);
     expect(resOversized.status).toBe(413);
@@ -872,17 +913,18 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
     const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
-      body: { recordId: "rec-case-5", recordVersion: 2 },
+      body: { slug: "exp-00123-2024-aa-tc" },
     });
     const res = await handler(req);
     expect(res.status).toBe(200);
 
     const data = await res.json();
     expect(data.ok).toBe(true);
-    expect(data.data.recordId).toBe("rec-case-5");
-    expect(data.data.recordVersion).toBe(2);
+    expect(data.data.slug).toBe("exp-00123-2024-aa-tc");
+    expect("recordId" in data.data).toBe(false);
+    expect("recordVersion" in data.data).toBe(false);
     expect(data.data.interpretation).toEqual(validInterpretation);
-    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-case-5", 2);
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-valido-1", 1);
   });
 
   it("CASE 6: sesión válida + provider failure mock -> conserva public provider_failure contract", async () => {
@@ -905,7 +947,6 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
     });
     expect(orchestratorInterpretSpy).toHaveBeenCalled();
 
-    // No leakage of provider, OpenAI, model, prompt or internal details
     const text = JSON.stringify(data);
     expect(text).not.toMatch(/openai|gpt|sk-|model|prompt|adapter|timeout/i);
   });
@@ -942,12 +983,10 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
       },
     });
 
-    // Verify response headers
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("content-type")).toContain("application/json");
     expect(res.headers.get("set-cookie")).toBeNull();
 
-    // Comprehensive leak check against all forbidden fields
     const serializedBody = JSON.stringify(data);
     expect(serializedBody).not.toContain("secret-sid-do-not-leak-12345");
     expect(serializedBody).not.toContain("secret-sub-do-not-leak");
@@ -1001,12 +1040,462 @@ describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
       }),
     });
 
-    // Request with malformed JSON body - should get 401 authentication_required, NOT 400 malformed_json
     const req = buildRequest({ rawBody: "{ broken json" });
     const res = await handler(req);
     expect(res.status).toBe(401);
     const data = await res.json();
     expect(data.error.code).toBe("authentication_required");
     expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("HERMES-PROD-A2.3 Client Slug → Public Resolver → Canonical Record → Hermes", () => {
+  // CASE 1: anonymous + valid slug -> 401 authentication_required, resolver calls = 0, orchestrator calls = 0
+  it("CASE 1: anonymous + valid slug -> 401 authentication_required, resolver calls = 0, orchestrator calls = 0", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const resolverSpy = vi.fn().mockImplementation(defaultMockResolver);
+    const handler = createInterpretHandler({
+      runtimeFactory: () => runtime,
+      getSession: async () => ({
+        status: "unauthenticated",
+        sessionId: null,
+        providerSubjectId: null,
+        issuedAt: null,
+        expiresAt: null,
+        provider: null,
+      }),
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(401);
+    const data = await res.json();
+    expect(data.error.code).toBe("authentication_required");
+    expect(resolverSpy).not.toHaveBeenCalled();
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+  });
+
+  // CASE 2: authenticated + valid slug -> resolver returns canonical pair -> orchestrator called once with resolved recordId + recordVersion -> HTTP 200
+  it("CASE 2: authenticated + valid slug -> resolver returns canonical pair -> orchestrator called once with resolved recordId + recordVersion -> HTTP 200", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const resolverSpy = vi.fn(async (slug: unknown): Promise<ResolveCanonicalRecordBySlugResult> => {
+      if (slug === "exp-case-2-valid") {
+        return {
+          ok: true,
+          value: {
+            recordId: "canonical-rec-002",
+            recordVersion: 3,
+          },
+        };
+      }
+      return { ok: false, code: "not_found" };
+    });
+
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({ body: { slug: "exp-case-2-valid" } });
+    const res = await handler(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(data.data.slug).toBe("exp-case-2-valid");
+    expect("recordId" in data.data).toBe(false);
+    expect("recordVersion" in data.data).toBe(false);
+    expect(resolverSpy).toHaveBeenCalledWith("exp-case-2-valid");
+    expect(orchestratorInterpretSpy).toHaveBeenCalledTimes(1);
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("canonical-rec-002", 3);
+  });
+
+  // CASE 3: authenticated + client sends recordId + recordVersion only -> 400, resolver calls = 0, orchestrator calls = 0
+  it("CASE 3: authenticated + client sends recordId + recordVersion only -> 400, resolver calls = 0, orchestrator calls = 0", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const resolverSpy = vi.fn().mockImplementation(defaultMockResolver);
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({
+      body: {
+        recordId: "rec-canonical-001",
+        recordVersion: 1,
+      },
+    });
+    const res = await handler(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.error.code).toBe("invalid_request_schema");
+    expect(resolverSpy).not.toHaveBeenCalled();
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+  });
+
+  // CASE 4: authenticated + slug + recordId/version injection -> 400 strict-schema rejection, resolver calls = 0, orchestrator calls = 0
+  it("CASE 4: authenticated + slug + recordId/version injection -> 400 strict-schema rejection, resolver calls = 0, orchestrator calls = 0", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const resolverSpy = vi.fn().mockImplementation(defaultMockResolver);
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({
+      body: {
+        slug: "exp-00123-2024-aa-tc",
+        recordId: "rec-injected-id",
+        recordVersion: 99,
+      },
+    });
+    const res = await handler(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.error.code).toBe("invalid_request_schema");
+    expect(resolverSpy).not.toHaveBeenCalled();
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+  });
+
+  // CASE 5: authenticated + invalid slug -> 400, resolver/orchestrator = 0
+  it("CASE 5: authenticated + invalid slug -> 400, resolver/orchestrator = 0", async () => {
+    const invalidSlugs = [
+      "",
+      "   ",
+      "SLUG-MAYUSCULA",
+      "slug_con_guiones_bajos",
+      "ab",
+      "slug/con/slashes",
+      "slug con espacios",
+      null,
+      12345,
+      [],
+      {},
+    ];
+
+    for (const invalidSlug of invalidSlugs) {
+      const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+      const resolverSpy = vi.fn().mockImplementation(defaultMockResolver);
+      const handler = createAuthenticatedHandler({
+        runtimeFactory: () => runtime,
+        resolveCanonicalBySlug: resolverSpy,
+      });
+
+      const req = buildRequest({ body: { slug: invalidSlug } });
+      const res = await handler(req);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("invalid_request_schema");
+      expect(resolverSpy).not.toHaveBeenCalled();
+      expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    }
+  });
+
+  // CASE 6: authenticated + non-existing/unpublished/withdrawn slug -> resolver returns not_found -> HTTP 404 jurisprudence_not_found, orchestrator = 0, rate limiter NOT consumed
+  it("CASE 6: authenticated + non-existing/unpublished/withdrawn slug -> resolver returns not_found -> HTTP 404 jurisprudence_not_found, orchestrator = 0, rate limiter NOT consumed", async () => {
+    const { runtime, orchestratorInterpretSpy, rateLimiterConsumeSpy } = createMockRuntime();
+    const resolverSpy = vi.fn(async (): Promise<ResolveCanonicalRecordBySlugResult> => {
+      return { ok: false, code: "not_found" };
+    });
+
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({ body: { slug: "exp-no-publicado-o-retirado" } });
+    const res = await handler(req);
+    expect(res.status).toBe(404);
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "jurisprudence_not_found",
+        message: "No se encontró una resolución pública disponible para análisis.",
+      },
+    });
+
+    expect(resolverSpy).toHaveBeenCalledWith("exp-no-publicado-o-retirado");
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+  });
+
+  // CASE 7: authenticated + resolver throws -> safe 500, orchestrator = 0, no secret/DB/SQL leakage
+  it("CASE 7: authenticated + resolver throws -> safe 500, orchestrator = 0, no secret/DB/SQL leakage", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const resolverSpy = vi.fn(async () => {
+      throw new Error("PG::ConnectionFailure: postgres://user:super_secret_db_pass@postgres-primary:5432/buholex_db SELECT * FROM jurisprudence_public.published_records");
+    });
+
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "unexpected_internal_failure",
+        message: "Ocurrió un error inesperado al procesar la solicitud.",
+      },
+    });
+
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+
+    const text = JSON.stringify(data);
+    expect(text).not.toContain("super_secret_db_pass");
+    expect(text).not.toContain("postgres-primary");
+    expect(text).not.toContain("published_records");
+    expect(text).not.toMatch(/postgres|sql|select|stack|ConnectionFailure/i);
+  });
+
+  // CASE 8: authenticated + valid slug + subject rate limited -> resolver succeeds, 429, orchestrator = 0
+  it("CASE 8: authenticated + valid slug + subject rate limited -> resolver succeeds, 429, orchestrator = 0", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime({
+      subjectConsumeOutcome: {
+        allowed: false,
+        requestCount: 6,
+        retryAfterSeconds: 45,
+        resetInSeconds: 45,
+      },
+    });
+    const resolverSpy = vi.fn().mockImplementation(defaultMockResolver);
+
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("45");
+    const data = await res.json();
+    expect(data.error.code).toBe("rate_limited");
+    expect(resolverSpy).toHaveBeenCalledWith("exp-00123-2024-aa-tc");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+  });
+
+  // CASE 9: authenticated + valid slug + global rate limited -> resolver succeeds, 429, orchestrator = 0
+  it("CASE 9: authenticated + valid slug + global rate limited -> resolver succeeds, 429, orchestrator = 0", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime({
+      subjectConsumeOutcome: {
+        allowed: true,
+        requestCount: 1,
+        remaining: 4,
+        resetInSeconds: 60,
+      },
+      globalConsumeOutcome: {
+        allowed: false,
+        requestCount: 61,
+        retryAfterSeconds: 120,
+        resetInSeconds: 120,
+      },
+    });
+    const resolverSpy = vi.fn().mockImplementation(defaultMockResolver);
+
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("120");
+    const data = await res.json();
+    expect(data.error.code).toBe("rate_limited");
+    expect(resolverSpy).toHaveBeenCalledWith("exp-00123-2024-aa-tc");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+  });
+
+  // CASE 10: authenticated + valid slug + provider success mock -> public response success, no recordId/recordVersion exposed
+  it("CASE 10: authenticated + valid slug + provider success mock -> public response success, no recordId/recordVersion exposed", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(200);
+
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(data.data.slug).toBe("exp-00123-2024-aa-tc");
+    expect(data.data.interpretation).toEqual(validInterpretation);
+
+    // Verify recordId and recordVersion are completely absent
+    expect("recordId" in data.data).toBe(false);
+    expect("recordVersion" in data.data).toBe(false);
+    expect("id" in data.data).toBe(false);
+    expect(Object.keys(data.data).sort()).toEqual(["interpretation", "slug"].sort());
+
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-valido-1", 1);
+  });
+
+  // CASE 11: authenticated + valid slug + provider_failure -> existing 502 provider_failure contract preserved
+  it("CASE 11: authenticated + valid slug + provider_failure -> existing 502 provider_failure contract preserved", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime({
+      orchestratorResult: { ok: false, code: "provider_failure" },
+    });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(502);
+
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "provider_failure",
+        message: "El proveedor de análisis presentó una falla temporal.",
+      },
+    });
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-valido-1", 1);
+  });
+
+  // CASE 12: authenticated + valid slug + grounding_failed -> existing grounding failure contract preserved
+  it("CASE 12: authenticated + valid slug + grounding_failed -> existing grounding failure contract preserved", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime({
+      orchestratorResult: { ok: false, code: "grounding_failed" },
+    });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(422);
+
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "grounding_failed",
+        message: "La interpretación no pudo ser respaldada con citas exactas del texto canónico.",
+      },
+    });
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-valido-1", 1);
+  });
+
+  // CASE 13: authenticated + valid slug + record_version_mismatch from orchestrator -> preserve safe existing failure semantics (409), do not expose canonical identifiers
+  it("CASE 13: authenticated + valid slug + record_version_mismatch from orchestrator -> preserve safe existing failure semantics (409), do not expose canonical identifiers", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime({
+      orchestratorResult: { ok: false, code: "record_version_mismatch" },
+    });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(409);
+
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "record_version_mismatch",
+        message: "La versión del registro solicitada no coincide con la versión canónica actual.",
+      },
+    });
+
+    const serialized = JSON.stringify(data);
+    expect(serialized).not.toContain("rec-valido-1");
+    expect(serialized).not.toContain("recordVersion");
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-valido-1", 1);
+  });
+
+  // CASE 14: no-Origin direct authenticated client -> remains subject to auth -> if authenticated and otherwise valid, normal path may proceed
+  it("CASE 14: no-Origin direct authenticated client -> remains subject to auth -> normal path proceeds", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest({
+      headers: {}, // No Origin header
+      body: { slug: "exp-00123-2024-aa-tc" },
+    });
+    const res = await handler(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(data.data.slug).toBe("exp-00123-2024-aa-tc");
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-valido-1", 1);
+  });
+
+  // CASE 15: cross-origin authenticated browser request -> 403 before resolver DB query
+  it("CASE 15: cross-origin authenticated browser request -> 403 before resolver DB query", async () => {
+    const { runtime } = createMockRuntime();
+    const resolverSpy = vi.fn().mockImplementation(defaultMockResolver);
+    const handler = createAuthenticatedHandler({
+      runtimeFactory: () => runtime,
+      resolveCanonicalBySlug: resolverSpy,
+    });
+
+    const req = buildRequest({
+      url: "https://buholex.com/api/jurisprudence/interpret",
+      headers: { origin: "https://evil-attacker.com" },
+      body: { slug: "exp-00123-2024-aa-tc" },
+    });
+    const res = await handler(req);
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.error.code).toBe("origin_not_allowed");
+    expect(resolverSpy).not.toHaveBeenCalled();
+  });
+
+  // CASE 16: response serialization regression: serialized response contains neither "recordId" nor "recordVersion"
+  it("CASE 16: response serialization regression: serialized response contains neither 'recordId' nor 'recordVersion'", async () => {
+    const { runtime } = createMockRuntime();
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+    const res = await handler(req);
+    expect(res.status).toBe(200);
+
+    const rawJsonText = await res.text();
+    expect(rawJsonText).not.toContain("recordId");
+    expect(rawJsonText).not.toContain("recordVersion");
+    expect(rawJsonText).not.toContain("rec-valido-1");
+  });
+
+  // CASE 17: source-level regression: HTTP body schema contains slug and rejects canonical IDs
+  it("CASE 17: source-level regression: HTTP body schema contains slug and rejects canonical IDs", () => {
+    // 1. Valid slug only -> succeeds
+    const validResult = jurisprudenceHttpInterpretRequestBodySchema.safeParse({
+      slug: "exp-00123-2024-aa-tc",
+    });
+    expect(validResult.success).toBe(true);
+    if (validResult.success) {
+      expect(validResult.data.slug).toBe("exp-00123-2024-aa-tc");
+    }
+
+    // 2. Client sends canonical pair only -> rejected
+    const canonicalOnlyResult = jurisprudenceHttpInterpretRequestBodySchema.safeParse({
+      recordId: "rec-canonical-001",
+      recordVersion: 1,
+    });
+    expect(canonicalOnlyResult.success).toBe(false);
+
+    // 3. Client sends slug + recordId -> rejected by strict
+    const injectedRecordIdResult = jurisprudenceHttpInterpretRequestBodySchema.safeParse({
+      slug: "exp-00123-2024-aa-tc",
+      recordId: "rec-canonical-001",
+    });
+    expect(injectedRecordIdResult.success).toBe(false);
+
+    // 4. Client sends slug + recordVersion -> rejected by strict
+    const injectedVersionResult = jurisprudenceHttpInterpretRequestBodySchema.safeParse({
+      slug: "exp-00123-2024-aa-tc",
+      recordVersion: 1,
+    });
+    expect(injectedVersionResult.success).toBe(false);
+
+    // 5. Schema shape inspection: keys must be exclusively 'slug'
+    const schemaShapeKeys = Object.keys(jurisprudenceHttpInterpretRequestBodySchema.shape);
+    expect(schemaShapeKeys).toEqual(["slug"]);
   });
 });
