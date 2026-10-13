@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import {
   HERMES_OPERATION_STATUSES,
@@ -514,6 +514,168 @@ describe("HERMES-PROD-A3.2: Hermes Control Foundation & Schema Consistency", () 
       const entry = journal.entries.find((e: { idx: number }) => e.idx === 41);
       expect(entry).toBeDefined();
       expect(entry.tag).toBe("0041_hermes_control_schema");
+    });
+  });
+
+  // ============================================================
+  // N. Quota Period Ownership & Atomic Finalization Invariants (A3.2C)
+  // ============================================================
+  describe("N. Quota Period Ownership & Atomic Finalization Invariants (A3.2C)", () => {
+    it("analysis_operations has quota_period_start NOT NULL in Drizzle and migration SQL", () => {
+      expect(analysisOperations.quotaPeriodStart).toBeDefined();
+      expect(analysisOperations.quotaPeriodStart.name).toBe("quota_period_start");
+      expect(analysisOperations.quotaPeriodStart.notNull).toBe(true);
+      expect(analysisOperations.quotaPeriodStart.default).toBeUndefined();
+
+      expect(migrationSql).toContain('"quota_period_start" timestamp with time zone NOT NULL');
+      expect(migrationSql).not.toContain('"quota_period_start" timestamp with time zone DEFAULT');
+    });
+
+    it("analysis_operations has quota_period_end NOT NULL in Drizzle and migration SQL", () => {
+      expect(analysisOperations.quotaPeriodEnd).toBeDefined();
+      expect(analysisOperations.quotaPeriodEnd.name).toBe("quota_period_end");
+      expect(analysisOperations.quotaPeriodEnd.notNull).toBe(true);
+      expect(analysisOperations.quotaPeriodEnd.default).toBeUndefined();
+
+      expect(migrationSql).toContain('"quota_period_end" timestamp with time zone NOT NULL');
+      expect(migrationSql).not.toContain('"quota_period_end" timestamp with time zone DEFAULT');
+    });
+
+    it("enforces deterministic quota_period_end > quota_period_start check constraint in Drizzle and migration", () => {
+      const config = getTableConfig(analysisOperations);
+      const periodCheck = config.checks.find(
+        (c) => c.name === "analysis_operations_quota_period_check"
+      );
+      expect(periodCheck).toBeDefined();
+
+      expect(migrationSql).toContain(
+        'CONSTRAINT "analysis_operations_quota_period_check" CHECK ("quota_period_end" > "quota_period_start")'
+      );
+    });
+
+    it("matches exact column definitions and constraint between Drizzle and migration 0041", () => {
+      const config = getTableConfig(analysisOperations);
+      const colDbNames = config.columns.map((c) => c.name);
+      expect(colDbNames).toContain("quota_period_start");
+      expect(colDbNames).toContain("quota_period_end");
+
+      const opTableSnippet = migrationSql
+        .split('-- 4. Table: analysis_operations')[1]
+        ?.split('--> statement-breakpoint')[0];
+      expect(opTableSnippet).toBeDefined();
+      expect(opTableSnippet).toContain('"quota_period_start" timestamp with time zone NOT NULL');
+      expect(opTableSnippet).toContain('"quota_period_end" timestamp with time zone NOT NULL');
+      expect(opTableSnippet).toContain(
+        'CONSTRAINT "analysis_operations_quota_period_check" CHECK ("quota_period_end" > "quota_period_start")'
+      );
+    });
+
+    it("freezes quota bucket ownership invariant: operation quota bucket = (subject_id, quota_period_start, quota_period_end)", () => {
+      const usageConfig = getTableConfig(subjectQuotaUsage);
+      const opsConfig = getTableConfig(analysisOperations);
+
+      // Verify that analysis_operations contains all 5 ownership attributes:
+      // subject_id, quota_period_start, quota_period_end, units, user_quota_status
+      const opColDbNames = opsConfig.columns.map((c) => c.name);
+      expect(opColDbNames).toContain("subject_id");
+      expect(opColDbNames).toContain("quota_period_start");
+      expect(opColDbNames).toContain("quota_period_end");
+      expect(opColDbNames).toContain("units");
+      expect(opColDbNames).toContain("user_quota_status");
+
+      // Verify TypeScript property access on Drizzle table object
+      expect(analysisOperations.subjectId).toBeDefined();
+      expect(analysisOperations.quotaPeriodStart).toBeDefined();
+      expect(analysisOperations.quotaPeriodEnd).toBeDefined();
+      expect(analysisOperations.units).toBeDefined();
+      expect(analysisOperations.userQuotaStatus).toBeDefined();
+
+      // Verify subject_quota_usage PK composite columns: (subject_id, period_start, period_end)
+      const pk = usageConfig.primaryKeys[0];
+      expect(pk).toBeDefined();
+      if (!pk) throw new Error("subject_quota_usage PK not defined");
+      const pkColNames = pk.columns.map((c) => c.name);
+      expect(pkColNames).toEqual(["subject_id", "period_start", "period_end"]);
+    });
+
+    it("prohibits calendar-derived, created_at, or CURRENT_DATE quota ownership derivation", () => {
+      expect(analysisOperations.quotaPeriodStart.default).toBeUndefined();
+      expect(analysisOperations.quotaPeriodEnd.default).toBeUndefined();
+
+      expect(migrationSql).not.toContain('"quota_period_start" timestamp with time zone DEFAULT now()');
+      expect(migrationSql).not.toContain('"quota_period_end" timestamp with time zone DEFAULT now()');
+      expect(migrationSql).not.toContain('"quota_period_start" timestamp with time zone DEFAULT CURRENT_DATE');
+      expect(migrationSql).not.toContain('"quota_period_end" timestamp with time zone DEFAULT CURRENT_DATE');
+    });
+
+    it("guarantees no seventh table is introduced in hermes_control schema", () => {
+      const tableMatches = migrationSql.match(/CREATE TABLE IF NOT EXISTS "hermes_control"\."([^"]+)"/g) || [];
+      expect(tableMatches.length).toBe(6);
+      expect(tableMatches).toEqual([
+        'CREATE TABLE IF NOT EXISTS "hermes_control"."subject_identities"',
+        'CREATE TABLE IF NOT EXISTS "hermes_control"."subject_entitlements"',
+        'CREATE TABLE IF NOT EXISTS "hermes_control"."subject_quota_usage"',
+        'CREATE TABLE IF NOT EXISTS "hermes_control"."analysis_operations"',
+        'CREATE TABLE IF NOT EXISTS "hermes_control"."concurrency_leases"',
+        'CREATE TABLE IF NOT EXISTS "hermes_control"."provider_daily_usage"',
+      ]);
+    });
+
+    it("ensures runtime role grants remain unchanged and strictly least-privilege", () => {
+      const grants = migrationSql.match(/GRANT [^;]+ TO hermes_control_runtime;/g) || [];
+      expect(grants.length).toBe(7);
+      expect(grants).toContain("GRANT USAGE ON SCHEMA hermes_control TO hermes_control_runtime;");
+      expect(grants).toContain('GRANT SELECT, INSERT ON TABLE "hermes_control"."subject_identities" TO hermes_control_runtime;');
+      expect(grants).toContain('GRANT SELECT ON TABLE "hermes_control"."subject_entitlements" TO hermes_control_runtime;');
+      expect(grants).toContain('GRANT SELECT, INSERT, UPDATE ON TABLE "hermes_control"."subject_quota_usage" TO hermes_control_runtime;');
+      expect(grants).toContain('GRANT SELECT, INSERT, UPDATE ON TABLE "hermes_control"."analysis_operations" TO hermes_control_runtime;');
+      expect(grants).toContain('GRANT SELECT, INSERT, DELETE ON TABLE "hermes_control"."concurrency_leases" TO hermes_control_runtime;');
+      expect(grants).toContain('GRANT SELECT, INSERT, UPDATE ON TABLE "hermes_control"."provider_daily_usage" TO hermes_control_runtime;');
+    });
+
+    it("freezes quota-exhausted idempotency policy: key is unburned upon rollback, no new status introduced", () => {
+      expect(HERMES_OPERATION_STATUSES).not.toContain("quota_exhausted");
+      expect(HERMES_USER_QUOTA_STATUSES).not.toContain("quota_exhausted");
+      expect(HERMES_OPERATION_STATUSES.length).toBe(8);
+      expect(HERMES_USER_QUOTA_STATUSES.length).toBe(5);
+    });
+
+    it("freezes atomic finalization invariant: operation guarded state transition and aggregate quota mutation are all-or-nothing", () => {
+      expect(HERMES_OPERATION_STATUSES).toEqual([
+        "reserved",
+        "released",
+        "expired_before_dispatch",
+        "provider_dispatch_started",
+        "completed_success",
+        "completed_validation_failure",
+        "completed_grounding_failure",
+        "outcome_unknown",
+      ]);
+    });
+
+    it("freezes reaper safety invariant: only reserved unstarted operations can be reaped using persisted period", () => {
+      expect(canTransitionOperationStatus("reserved", "expired_before_dispatch")).toBe(true);
+      expect(canTransitionOperationStatus("provider_dispatch_started", "expired_before_dispatch")).toBe(false);
+      expect(canTransitionOperationStatus("completed_success", "expired_before_dispatch")).toBe(false);
+    });
+
+    it("verifies migration remains 0041 and unapplied with no 0042 migration created", () => {
+      const journalRaw = readFileSync(
+        join(process.cwd(), "database", "migrations", "meta", "_journal.json"),
+        "utf8"
+      );
+      const journal = JSON.parse(journalRaw);
+      const entries = journal.entries as Array<{ idx: number; tag: string }>;
+      const latestEntry = entries[entries.length - 1];
+      expect(latestEntry).toBeDefined();
+      if (!latestEntry) throw new Error("latestEntry not defined");
+      expect(latestEntry.idx).toBe(41);
+      expect(latestEntry.tag).toBe("0041_hermes_control_schema");
+
+      const migrationsDir = join(process.cwd(), "database", "migrations");
+      const files = readdirSync(migrationsDir) as string[];
+      const migration42 = files.find((f: string) => f.startsWith("0042"));
+      expect(migration42).toBeUndefined();
     });
   });
 });

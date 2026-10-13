@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS "hermes_control"."analysis_operations" (
 	"platform_cost_status" varchar(32) DEFAULT 'none' NOT NULL,
 	"user_quota_status" varchar(32) DEFAULT 'reserved' NOT NULL,
 	"units" integer DEFAULT 1 NOT NULL,
+	"quota_period_start" timestamp with time zone NOT NULL,
+	"quota_period_end" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"reserved_expires_at" timestamp with time zone NOT NULL,
 	"dispatch_started_at" timestamp with time zone,
@@ -66,7 +68,8 @@ CREATE TABLE IF NOT EXISTS "hermes_control"."analysis_operations" (
 	CONSTRAINT "analysis_operations_record_version_check" CHECK ("record_version" > 0),
 	CONSTRAINT "analysis_operations_status_check" CHECK ("status" IN ('reserved', 'released', 'expired_before_dispatch', 'provider_dispatch_started', 'completed_success', 'completed_validation_failure', 'completed_grounding_failure', 'outcome_unknown')),
 	CONSTRAINT "analysis_operations_platform_cost_status_check" CHECK ("platform_cost_status" IN ('none', 'indeterminate', 'assumed_incurred')),
-	CONSTRAINT "analysis_operations_user_quota_status_check" CHECK ("user_quota_status" IN ('unreserved', 'reserved', 'committed', 'policy_pending', 'released'))
+	CONSTRAINT "analysis_operations_user_quota_status_check" CHECK ("user_quota_status" IN ('unreserved', 'reserved', 'committed', 'policy_pending', 'released')),
+	CONSTRAINT "analysis_operations_quota_period_check" CHECK ("quota_period_end" > "quota_period_start")
 );
 --> statement-breakpoint
 

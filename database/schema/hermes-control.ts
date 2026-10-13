@@ -135,6 +135,8 @@ export const analysisOperations = hermesControlSchema.table(
       .notNull()
       .default("reserved"),
     units: integer("units").notNull().default(1),
+    quotaPeriodStart: timestamp("quota_period_start", { withTimezone: true }).notNull(),
+    quotaPeriodEnd: timestamp("quota_period_end", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     reservedExpiresAt: timestamp("reserved_expires_at", { withTimezone: true }).notNull(),
     dispatchStartedAt: timestamp("dispatch_started_at", { withTimezone: true }),
@@ -162,6 +164,10 @@ export const analysisOperations = hermesControlSchema.table(
     check(
       "analysis_operations_user_quota_status_check",
       sql`${table.userQuotaStatus} IN ('unreserved', 'reserved', 'committed', 'policy_pending', 'released')`
+    ),
+    check(
+      "analysis_operations_quota_period_check",
+      sql`${table.quotaPeriodEnd} > ${table.quotaPeriodStart}`
     ),
   ]
 );
