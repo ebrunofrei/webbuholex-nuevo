@@ -173,3 +173,24 @@ export async function withJurisprudenceInterpretationReadRole<
     { isolationLevel: "repeatable read", accessMode: "read only" }
   );
 }
+
+export type HermesControlTransaction = PgTransaction<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
+
+/**
+ * Executes a transaction under the least-privilege hermes_control_runtime role.
+ *
+ * Invariant: Caller connection role must be authorized to SET LOCAL ROLE
+ * hermes_control_runtime (e.g. hermes_control_login, an authorized member role,
+ * or an appropriately privileged administrative role). A3.2 does not provision
+ * a runtime connection or new DATABASE_* environment variable.
+ */
+export async function withHermesControlRole<T>(
+  db: PostgresJsDatabase<typeof schema>,
+  callback: (tx: HermesControlTransaction) => Promise<T>
+): Promise<T> {
+  return await db.transaction(async (tx) => {
+    // FAIL CLOSED: If SET LOCAL ROLE fails, an error is thrown and callback is NEVER executed.
+    await tx.execute(sql`SET LOCAL ROLE hermes_control_runtime`);
+    return await callback(tx);
+  });
+}
