@@ -28,3 +28,18 @@ export {
 export {
   HermesControlPersistenceError,
 } from "@/lib/hermes/control/hermes-control-errors";
+
+export {
+  PostgresHermesQuotaCoordinator,
+  type HermesQuotaCoordinator,
+  type HermesOperationReservationInput,
+  type HermesOperationReservationResult,
+  type HermesFinalizationResult,
+  type HermesExpiredReservationRecord,
+  type HermesExpiredReservationScanResult,
+  type PostgresHermesQuotaCoordinatorDependencies,
+  type HermesQuotaCoordinatorHandler,
+  type HermesAtomicQuotaUpsertFn,
+  HermesOperationReservationValidationError,
+  validateOperationReservationInput,
+} from "@/lib/hermes/control/hermes-quota-coordinator";
