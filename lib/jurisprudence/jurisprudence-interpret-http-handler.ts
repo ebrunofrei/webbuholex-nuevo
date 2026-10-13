@@ -7,13 +7,16 @@ import {
   createJurisprudenceInterpretationRuntime,
   type JurisprudenceInterpretationRuntime,
 } from "@/lib/jurisprudence/jurisprudence-interpretation-runtime";
+import { getWorkspaceSession } from "@/lib/auth/session";
+import type { WorkspaceSession } from "@/types/auth";
 
 export const MAX_BODY_BYTES = 2048;
 
 export interface InterpretHandlerDependencies {
-  readonly runtimeFactory?: () => JurisprudenceInterpretationRuntime;
-  readonly now?: () => string;
-  readonly generateRequestId?: () => string;
+  readonly runtimeFactory?: (() => JurisprudenceInterpretationRuntime) | undefined;
+  readonly now?: (() => string) | undefined;
+  readonly generateRequestId?: (() => string) | undefined;
+  readonly getSession?: (() => Promise<WorkspaceSession | null | undefined>) | undefined;
 }
 
 function errorResponse(
@@ -167,6 +170,8 @@ async function readBodyWithLimit(
 }
 
 export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) {
+  const getSession = deps.getSession ?? getWorkspaceSession;
+
   return async function handleJurisprudenceInterpretPost(request: Request): Promise<NextResponse> {
     try {
       // 0. Method validation
@@ -204,7 +209,27 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 3. Body size enforcement & parse
+      // 3. Auth Session Gate
+      let session: WorkspaceSession | null | undefined;
+      try {
+        session = await getSession();
+      } catch {
+        return errorResponse(
+          500,
+          "unexpected_internal_failure",
+          "Ocurrió un error inesperado al procesar la solicitud."
+        );
+      }
+
+      if (!session || session.status !== "authenticated") {
+        return errorResponse(
+          401,
+          "authentication_required",
+          "Debes iniciar sesión para utilizar esta función."
+        );
+      }
+
+      // 4. Body size enforcement & parse
       const bodyResult = await readBodyWithLimit(request, MAX_BODY_BYTES);
       if (!bodyResult.ok) {
         return errorResponse(
@@ -214,7 +239,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 4. Schema validation
+      // 5. Schema validation
       const parsedBody = jurisprudenceHttpInterpretRequestBodySchema.safeParse(bodyResult.json);
       if (!parsedBody.success) {
         return errorResponse(
@@ -226,7 +251,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
 
       const { recordId, recordVersion } = parsedBody.data;
 
-      // 5. Origin Policy Gate
+      // 6. Origin Policy Gate
       const originResult = validateOrigin(request);
       if (!originResult.ok) {
         return errorResponse(
@@ -236,7 +261,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 6. Runtime creation & Limiter Setup
+      // 7. Runtime creation & Limiter Setup
       let runtimeBundle: JurisprudenceInterpretationRuntime;
       try {
         runtimeBundle = deps.runtimeFactory
@@ -264,12 +289,12 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
 
       const { orchestrator, rateLimiter, rateLimitConfig } = runtimeBundle;
 
-      // 7. Extract Client IP and derive subject HMAC
+      // 8. Extract Client IP and derive subject HMAC
       const rawIp = extractClientIp(request.headers);
       const subjectHash = hashRateLimitSubject(rateLimitConfig.hmacSecret, rawIp);
       const globalSubjectHash = hashRateLimitSubject(rateLimitConfig.hmacSecret, "global");
 
-      // 8. Consume Subject Limiter
+      // 9. Consume Subject Limiter
       const subjectOutcome = await rateLimiter.consume({
         scope: "subject",
         subjectHash,
@@ -295,7 +320,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 9. Consume Global Limiter
+      // 10. Consume Global Limiter
       const globalOutcome = await rateLimiter.consume({
         scope: "global",
         subjectHash: globalSubjectHash,
@@ -321,7 +346,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 10. Execute Canonical Orchestration
+      // 11. Execute Canonical Orchestration
       const result = await orchestrator.interpret(recordId, recordVersion);
 
       if (!result.ok) {
@@ -371,7 +396,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         }
       }
 
-      // 11. Success Response
+      // 12. Success Response
       return NextResponse.json(
         {
           ok: true,

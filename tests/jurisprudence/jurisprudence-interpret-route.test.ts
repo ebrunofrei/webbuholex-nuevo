@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { createJurisprudenceInterpretationRuntime } from "@/lib/jurisprudence/jurisprudence-interpretation-runtime";
 import { createInterpretHandler, MAX_BODY_BYTES } from "@/lib/jurisprudence/jurisprudence-interpret-http-handler";
+import type { WorkspaceSession } from "@/types/auth";
 import type {
   JurisprudenceInterpretationRuntime,
   JurisprudenceInterpretationOrchestratorPort,
@@ -167,10 +167,33 @@ function buildRequest(init: {
   return new Request(url, requestInit);
 }
 
+const mockAuthenticatedSession: WorkspaceSession = {
+  status: "authenticated",
+  sessionId: "test-session-id",
+  providerSubjectId: "auth0|test-user-123",
+  issuedAt: "2026-01-01T00:00:00.000Z",
+  expiresAt: null,
+  provider: "auth0",
+};
+
+function createAuthenticatedHandler(overrides: {
+  runtimeFactory?: () => JurisprudenceInterpretationRuntime;
+  now?: () => string;
+  generateRequestId?: () => string;
+  getSession?: () => Promise<WorkspaceSession | null | undefined>;
+} = {}) {
+  return createInterpretHandler({
+    runtimeFactory: overrides.runtimeFactory,
+    now: overrides.now,
+    generateRequestId: overrides.generateRequestId,
+    getSession: overrides.getSession ?? (async () => mockAuthenticatedSession),
+  });
+}
+
 describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/interpret/route.ts)", () => {
   it("POST success with eligible source and valid interpretation", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
       body: { recordId: "rec-valido-1", recordVersion: 1 },
@@ -193,7 +216,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("GET unsupported / no accidental GET implementation", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({ method: "GET" });
     const res = await handler(req);
@@ -203,7 +226,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("malformed JSON -> 400", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({ rawBody: "{ malformed json" });
     const res = await handler(req);
@@ -216,7 +239,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("unknown field -> 400", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
       body: {
@@ -235,7 +258,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("missing recordId -> 400", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({ body: { recordVersion: 1 } });
     const res = await handler(req);
@@ -248,7 +271,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("blank recordId -> 400", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({ body: { recordId: "   ", recordVersion: 1 } });
     const res = await handler(req);
@@ -262,7 +285,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
   it("recordVersion safe integer semantics: accepts positive safe integers (1, 42, MAX_SAFE_INTEGER)", async () => {
     for (const validVersion of [1, 42, Number.MAX_SAFE_INTEGER]) {
       const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-      const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
       const req = buildRequest({ body: { recordId: "rec-1", recordVersion: validVersion } });
       const res = await handler(req);
@@ -283,7 +306,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
     for (const invalidVersion of invalidVersions) {
       const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-      const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
       const req = buildRequest({ body: { recordId: "rec-1", recordVersion: invalidVersion } });
       const res = await handler(req);
@@ -297,7 +320,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("unsupported media type -> 415", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
       headers: { "content-type": "text/plain" },
@@ -313,7 +336,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("oversized body -> 413", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const largePadding = "x".repeat(MAX_BODY_BYTES + 10);
     const req = buildRequest({
@@ -329,7 +352,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("oversized body without content-length header -> 413 on actual stream overflow", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const largePadding = "x".repeat(MAX_BODY_BYTES + 10);
     const bodyText = JSON.stringify({ recordId: "rec-1", recordVersion: 1, padding: largePadding });
@@ -356,7 +379,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("cross-origin browser request -> 403", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
       url: "https://buholex.com/api/jurisprudence/interpret",
@@ -372,7 +395,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("host spoofing regression: foreign Origin matching spoofed Host header must be rejected -> 403", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     // Case 1: Preview URL with attacker Origin and matching spoofed Host header
     const req1 = buildRequest({
@@ -407,7 +430,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("valid same-origin HTTPS browser request -> 200 allowed", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
       url: "https://buholex.com/api/jurisprudence/interpret",
@@ -420,7 +443,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("no-Origin direct client request -> 200 allowed through origin gate", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest(); // no Origin header
     const res = await handler(req);
@@ -430,7 +453,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
   it("malformed origin -> 403", async () => {
     const { runtime, orchestratorInterpretSpy } = createMockRuntime();
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
       headers: { origin: "not-a-valid-url" },
@@ -444,7 +467,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime, orchestratorInterpretSpy } = createMockRuntime({
       orchestratorResult: { ok: false, code: "record_not_found" },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -459,7 +482,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime, orchestratorInterpretSpy } = createMockRuntime({
       orchestratorResult: { ok: false, code: "record_version_mismatch" },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -467,13 +490,14 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const data = await res.json();
     expect(data.ok).toBe(false);
     expect(data.error.code).toBe("record_version_mismatch");
+    expect(orchestratorInterpretSpy).toHaveBeenCalled();
   });
 
   it("source too large -> 422", async () => {
     const { runtime } = createMockRuntime({
       orchestratorResult: { ok: false, code: "source_too_large" },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -492,7 +516,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
         resetInSeconds: 45,
       },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest({
       headers: { "x-real-ip": "203.0.113.195" },
@@ -529,7 +553,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
         resetInSeconds: 300,
       },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -560,7 +584,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
         reason: "limiter_unavailable",
       },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -575,7 +599,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime } = createMockRuntime({
       orchestratorResult: { ok: false, code: "provider_failure" },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -591,7 +615,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime } = createMockRuntime({
       orchestratorResult: { ok: false, code: "invalid_interpretation" },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -605,7 +629,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime } = createMockRuntime({
       orchestratorResult: { ok: false, code: "grounding_failed" },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -619,7 +643,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     const { runtime } = createMockRuntime({
       throwInOrchestrator: true,
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const req = buildRequest();
     const res = await handler(req);
@@ -639,7 +663,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
         }
       },
     });
-    const handler = createInterpretHandler({ runtimeFactory: () => runtime });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
 
     const rawIp = "198.51.100.42";
     const req = buildRequest({
@@ -651,5 +675,338 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(capturedSubjectHash).toBeDefined();
     expect(capturedSubjectHash).not.toContain(rawIp);
     expect(capturedSubjectHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+});
+
+describe("HERMES-PROD-A2.1 Server-Side Auth Gate", () => {
+  it("CASE 1: POST válido + sin sesión (unauthenticated) -> 401 authentication_required, provider calls = 0", async () => {
+    const { runtime, orchestratorInterpretSpy, rateLimiterConsumeSpy } = createMockRuntime();
+    const handler = createInterpretHandler({
+      runtimeFactory: () => runtime,
+      getSession: async () => ({
+        status: "unauthenticated",
+        sessionId: null,
+        providerSubjectId: null,
+        issuedAt: null,
+        expiresAt: null,
+        provider: null,
+      }),
+    });
+
+    const req = buildRequest();
+    const res = await handler(req);
+    expect(res.status).toBe(401);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("content-type")).toContain("application/json");
+
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "authentication_required",
+        message: "Debes iniciar sesión para utilizar esta función.",
+      },
+    });
+
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+  });
+
+  it("CASE 2: POST válido + sesión inválida/ausente (null, undefined, not_configured, loading) -> 401, provider calls = 0", async () => {
+    const invalidSessions: (WorkspaceSession | null | undefined)[] = [
+      null,
+      undefined,
+      {
+        status: "not_configured",
+        sessionId: null,
+        providerSubjectId: null,
+        issuedAt: null,
+        expiresAt: null,
+        provider: null,
+      },
+      {
+        status: "loading",
+        sessionId: null,
+        providerSubjectId: null,
+        issuedAt: null,
+        expiresAt: null,
+        provider: null,
+      },
+    ];
+
+    for (const invalidSession of invalidSessions) {
+      const { runtime, orchestratorInterpretSpy, rateLimiterConsumeSpy } = createMockRuntime();
+      const handler = createInterpretHandler({
+        runtimeFactory: () => runtime,
+        getSession: async () => invalidSession,
+      });
+
+      const req = buildRequest();
+      const res = await handler(req);
+      expect(res.status).toBe(401);
+
+      const data = await res.json();
+      expect(data).toEqual({
+        ok: false,
+        error: {
+          code: "authentication_required",
+          message: "Debes iniciar sesión para utilizar esta función.",
+        },
+      });
+
+      expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+      expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+    }
+  });
+
+  it("CASE 3: sesión válida + payload inválido -> conserva error de validación correspondiente, provider calls = 0", async () => {
+    const { runtime, orchestratorInterpretSpy, rateLimiterConsumeSpy } = createMockRuntime();
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    // 3a. Malformed JSON -> 400 malformed_json
+    const reqMalformed = buildRequest({ rawBody: "{ invalid json string" });
+    const resMalformed = await handler(reqMalformed);
+    expect(resMalformed.status).toBe(400);
+    const dataMalformed = await resMalformed.json();
+    expect(dataMalformed.ok).toBe(false);
+    expect(dataMalformed.error.code).toBe("malformed_json");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+
+    // 3b. Missing recordId -> 400 invalid_request_schema
+    const reqMissing = buildRequest({ body: { recordVersion: 1 } });
+    const resMissing = await handler(reqMissing);
+    expect(resMissing.status).toBe(400);
+    const dataMissing = await resMissing.json();
+    expect(dataMissing.ok).toBe(false);
+    expect(dataMissing.error.code).toBe("invalid_request_schema");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+
+    // 3c. Blank recordId -> 400 invalid_request_schema
+    const reqBlank = buildRequest({ body: { recordId: "   ", recordVersion: 1 } });
+    const resBlank = await handler(reqBlank);
+    expect(resBlank.status).toBe(400);
+    const dataBlank = await resBlank.json();
+    expect(dataBlank.ok).toBe(false);
+    expect(dataBlank.error.code).toBe("invalid_request_schema");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+
+    // 3d. Unknown fields -> 400 invalid_request_schema
+    const reqUnknown = buildRequest({
+      body: { recordId: "rec-1", recordVersion: 1, extraInjection: "hack" },
+    });
+    const resUnknown = await handler(reqUnknown);
+    expect(resUnknown.status).toBe(400);
+    const dataUnknown = await resUnknown.json();
+    expect(dataUnknown.ok).toBe(false);
+    expect(dataUnknown.error.code).toBe("invalid_request_schema");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+
+    // 3e. Invalid recordVersion -> 400 invalid_request_schema
+    const reqBadVersion = buildRequest({ body: { recordId: "rec-1", recordVersion: -1 } });
+    const resBadVersion = await handler(reqBadVersion);
+    expect(resBadVersion.status).toBe(400);
+    const dataBadVersion = await resBadVersion.json();
+    expect(dataBadVersion.ok).toBe(false);
+    expect(dataBadVersion.error.code).toBe("invalid_request_schema");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+
+    // 3f. Oversized body -> 413 payload_too_large
+    const largePadding = "x".repeat(MAX_BODY_BYTES + 10);
+    const reqOversized = buildRequest({
+      rawBody: JSON.stringify({ recordId: "rec-1", recordVersion: 1, padding: largePadding }),
+    });
+    const resOversized = await handler(reqOversized);
+    expect(resOversized.status).toBe(413);
+    const dataOversized = await resOversized.json();
+    expect(dataOversized.ok).toBe(false);
+    expect(dataOversized.error.code).toBe("payload_too_large");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+  });
+
+  it("CASE 4: sesión válida + rate limit excedido -> conserva comportamiento actual, provider calls = 0", async () => {
+    // 4a. Subject rate limit
+    const { runtime: runtimeSub, orchestratorInterpretSpy: spySub } = createMockRuntime({
+      subjectConsumeOutcome: {
+        allowed: false,
+        requestCount: 6,
+        retryAfterSeconds: 60,
+        resetInSeconds: 60,
+      },
+    });
+    const handlerSub = createAuthenticatedHandler({ runtimeFactory: () => runtimeSub });
+    const resSub = await handlerSub(buildRequest());
+    expect(resSub.status).toBe(429);
+    expect(resSub.headers.get("retry-after")).toBe("60");
+    const dataSub = await resSub.json();
+    expect(dataSub.ok).toBe(false);
+    expect(dataSub.error.code).toBe("rate_limited");
+    expect(spySub).not.toHaveBeenCalled();
+
+    // 4b. Global rate limit
+    const { runtime: runtimeGlob, orchestratorInterpretSpy: spyGlob } = createMockRuntime({
+      globalConsumeOutcome: {
+        allowed: false,
+        requestCount: 61,
+        retryAfterSeconds: 120,
+        resetInSeconds: 120,
+      },
+    });
+    const handlerGlob = createAuthenticatedHandler({ runtimeFactory: () => runtimeGlob });
+    const resGlob = await handlerGlob(buildRequest());
+    expect(resGlob.status).toBe(429);
+    expect(resGlob.headers.get("retry-after")).toBe("120");
+    const dataGlob = await resGlob.json();
+    expect(dataGlob.ok).toBe(false);
+    expect(dataGlob.error.code).toBe("rate_limited");
+    expect(spyGlob).not.toHaveBeenCalled();
+  });
+
+  it("CASE 5: sesión válida + request válido + provider success mock -> conserva HTTP 200 / ok true", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest({
+      body: { recordId: "rec-case-5", recordVersion: 2 },
+    });
+    const res = await handler(req);
+    expect(res.status).toBe(200);
+
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(data.data.recordId).toBe("rec-case-5");
+    expect(data.data.recordVersion).toBe(2);
+    expect(data.data.interpretation).toEqual(validInterpretation);
+    expect(orchestratorInterpretSpy).toHaveBeenCalledWith("rec-case-5", 2);
+  });
+
+  it("CASE 6: sesión válida + provider failure mock -> conserva public provider_failure contract", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime({
+      orchestratorResult: { ok: false, code: "provider_failure" },
+    });
+    const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+    const req = buildRequest();
+    const res = await handler(req);
+    expect(res.status).toBe(502);
+
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "provider_failure",
+        message: "El proveedor de análisis presentó una falla temporal.",
+      },
+    });
+    expect(orchestratorInterpretSpy).toHaveBeenCalled();
+
+    // No leakage of provider, OpenAI, model, prompt or internal details
+    const text = JSON.stringify(data);
+    expect(text).not.toMatch(/openai|gpt|sk-|model|prompt|adapter|timeout/i);
+  });
+
+  it("CASE 7: 401 response: NO filtra session/claims/token/cookies/secrets", async () => {
+    const { runtime } = createMockRuntime();
+    const handler = createInterpretHandler({
+      runtimeFactory: () => runtime,
+      getSession: async () => ({
+        status: "unauthenticated",
+        sessionId: "secret-sid-do-not-leak-12345",
+        providerSubjectId: "auth0|secret-sub-do-not-leak",
+        issuedAt: "2026-01-01T00:00:00.000Z",
+        expiresAt: "2026-01-02T00:00:00.000Z",
+        provider: "auth0",
+      }),
+    });
+
+    const req = buildRequest({
+      headers: {
+        cookie: "appSession=super_secret_cookie_token_987654321",
+        authorization: "Bearer secret_bearer_token_abcdef",
+      },
+    });
+    const res = await handler(req);
+    expect(res.status).toBe(401);
+
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "authentication_required",
+        message: "Debes iniciar sesión para utilizar esta función.",
+      },
+    });
+
+    // Verify response headers
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(res.headers.get("set-cookie")).toBeNull();
+
+    // Comprehensive leak check against all forbidden fields
+    const serializedBody = JSON.stringify(data);
+    expect(serializedBody).not.toContain("secret-sid-do-not-leak-12345");
+    expect(serializedBody).not.toContain("secret-sub-do-not-leak");
+    expect(serializedBody).not.toContain("super_secret_cookie_token");
+    expect(serializedBody).not.toContain("secret_bearer_token");
+    expect(serializedBody).not.toMatch(/auth0|cookie|token|bearer|claim|issuer|tenant|domain|stack/i);
+  });
+
+  it("CASE 8: authentication resolver throws unexpectedly -> fail closed -> NO provider call -> respuesta pública segura", async () => {
+    const { runtime, orchestratorInterpretSpy, rateLimiterConsumeSpy } = createMockRuntime();
+    const handler = createInterpretHandler({
+      runtimeFactory: () => runtime,
+      getSession: async () => {
+        throw new Error("CRITICAL_INTERNAL_AUTH0_CONNECTION_FAILED: secret-key-in-stack-trace");
+      },
+    });
+
+    const req = buildRequest();
+    const res = await handler(req);
+    expect(res.status).toBe(500);
+
+    const data = await res.json();
+    expect(data).toEqual({
+      ok: false,
+      error: {
+        code: "unexpected_internal_failure",
+        message: "Ocurrió un error inesperado al procesar la solicitud.",
+      },
+    });
+
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
+    expect(rateLimiterConsumeSpy).not.toHaveBeenCalled();
+
+    const serialized = JSON.stringify(data);
+    expect(serialized).not.toContain("CRITICAL_INTERNAL_AUTH0_CONNECTION_FAILED");
+    expect(serialized).not.toContain("secret-key-in-stack-trace");
+    expect(serialized).not.toMatch(/stack|panic|Auth0/i);
+  });
+
+  it("ORDER CHECK: unauthenticated request is rejected at auth gate BEFORE body reading / zod parsing", async () => {
+    const { runtime, orchestratorInterpretSpy } = createMockRuntime();
+    const handler = createInterpretHandler({
+      runtimeFactory: () => runtime,
+      getSession: async () => ({
+        status: "unauthenticated",
+        sessionId: null,
+        providerSubjectId: null,
+        issuedAt: null,
+        expiresAt: null,
+        provider: null,
+      }),
+    });
+
+    // Request with malformed JSON body - should get 401 authentication_required, NOT 400 malformed_json
+    const req = buildRequest({ rawBody: "{ broken json" });
+    const res = await handler(req);
+    expect(res.status).toBe(401);
+    const data = await res.json();
+    expect(data.error.code).toBe("authentication_required");
+    expect(orchestratorInterpretSpy).not.toHaveBeenCalled();
   });
 });
