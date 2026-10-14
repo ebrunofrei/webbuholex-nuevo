@@ -14,6 +14,7 @@ import {
   type ResolveCanonicalRecordBySlugResult,
   type JurisprudenceCanonicalRecordReference,
 } from "@/lib/jurisprudence/jurisprudence-public-slug-resolver";
+import { extractHermesSubjectIdentity } from "@/lib/hermes/control/hermes-subject-repository";
 
 export const MAX_BODY_BYTES = 2048;
 
@@ -239,6 +240,32 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
+      // 3b. Idempotency-Key Gate (A3.1 / A3.6)
+      const rawIdempotencyKey = request.headers.get("idempotency-key");
+      if (rawIdempotencyKey === null || rawIdempotencyKey === undefined) {
+        return errorResponse(
+          400,
+          "idempotency_key_required",
+          "Se requiere el encabezado Idempotency-Key."
+        );
+      }
+
+      const UUID_REGEX =
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+      if (
+        !UUID_REGEX.test(rawIdempotencyKey) ||
+        rawIdempotencyKey !== rawIdempotencyKey.trim()
+      ) {
+        return errorResponse(
+          400,
+          "idempotency_key_invalid",
+          "El encabezado Idempotency-Key debe ser un UUID válido sin espacios."
+        );
+      }
+
+      const idempotencyKey = rawIdempotencyKey;
+
       // 4. Body size enforcement & parse
       const bodyResult = await readBodyWithLimit(request, MAX_BODY_BYTES);
       if (!bodyResult.ok) {
@@ -324,7 +351,7 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      const { orchestrator, rateLimiter, rateLimitConfig } = runtimeBundle;
+      const { executionService, rateLimiter, rateLimitConfig } = runtimeBundle;
 
       // 9. Extract Client IP and derive subject HMAC
       const rawIp = extractClientIp(request.headers);
@@ -383,14 +410,24 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
         );
       }
 
-      // 12. Execute Canonical Orchestration
-      const result = await orchestrator.interpret(
-        canonicalRef.recordId,
-        canonicalRef.recordVersion
-      );
+      // 12. Execute Guarded Runtime Composition Pipeline (A3.6)
+      const identity = extractHermesSubjectIdentity(session);
+
+      const result = await executionService.executeJurisprudenceInterpretation({
+        identity,
+        idempotencyKey,
+        recordId: canonicalRef.recordId,
+        recordVersion: canonicalRef.recordVersion,
+      });
 
       if (!result.ok) {
         switch (result.code) {
+          case "idempotency_key_invalid":
+            return errorResponse(
+              400,
+              "idempotency_key_invalid",
+              "El encabezado Idempotency-Key debe ser un UUID válido sin espacios."
+            );
           case "record_not_found":
             return errorResponse(
               404,
@@ -409,29 +446,94 @@ export function createInterpretHandler(deps: InterpretHandlerDependencies = {}) 
               "source_too_large",
               "El texto canónico del registro supera el límite de procesamiento permitido."
             );
-          case "provider_failure":
+          case "feature_not_entitled":
+            return errorResponse(
+              403,
+              "feature_not_entitled",
+              "Tu plan actual no incluye acceso a la función de interpretación jurisprudencial."
+            );
+          case "account_inactive":
+            return errorResponse(
+              403,
+              "account_inactive",
+              "Tu suscripción o cuenta no se encuentra activa."
+            );
+          case "quota_exhausted":
+            return errorResponse(
+              429,
+              "quota_exhausted",
+              "Has agotado la cuota mensual de análisis jurisprudencial de tu plan."
+            );
+          case "duplicate_in_flight":
+          case "already_started":
+            return errorResponse(
+              409,
+              "duplicate_in_flight",
+              "Ya existe una operación de análisis en curso para esta solicitud."
+            );
+          case "already_completed":
+          case "already_finalized":
+            return errorResponse(
+              409,
+              "operation_already_completed",
+              "Esta operación ya fue completada previamente."
+            );
+          case "active_document_conflict":
+            return errorResponse(
+              409,
+              "active_document_conflict",
+              "Ya existe un análisis en progreso para este documento."
+            );
+          case "subject_concurrency_conflict":
+          case "concurrency_capacity_exceeded":
+            return errorResponse(
+              429,
+              "concurrency_limit_exceeded",
+              "Has alcanzado el límite de operaciones simultáneas. Por favor espera a que termine la operación actual."
+            );
+          case "daily_limit_exhausted":
+            return errorResponse(
+              429,
+              "daily_limit_exhausted",
+              "Se ha alcanzado el límite diario global de procesamiento del sistema. Intente mañana."
+            );
+          case "reservation_expired":
+            return errorResponse(
+              409,
+              "reservation_expired",
+              "La reserva de cuota para esta operación ha expirado. Inicia una nueva solicitud."
+            );
+          case "provider_transport_failure":
             return errorResponse(
               502,
               "provider_failure",
               "El proveedor de análisis presentó una falla temporal."
             );
-          case "invalid_interpretation":
+          case "validation_failure":
             return errorResponse(
               502,
               "invalid_interpretation",
               "La interpretación obtenida no cumple con la estructura esperada."
             );
-          case "grounding_failed":
+          case "grounding_failure":
             return errorResponse(
-              422,
+              502,
               "grounding_failed",
               "La interpretación no pudo ser respaldada con citas exactas del texto canónico."
             );
+          case "finalization_unavailable":
+            return errorResponse(
+              503,
+              "usage_control_unavailable",
+              "El servicio no pudo confirmar la finalización del análisis. Intente nuevamente más tarde."
+            );
+          case "subject_resolution_failed":
+          case "control_unavailable":
           default:
             return errorResponse(
-              500,
-              "unexpected_internal_failure",
-              "Ocurrió un error inesperado al procesar la interpretación."
+              503,
+              "usage_control_unavailable",
+              "El servicio de control de uso no está disponible temporalmente."
             );
         }
       }

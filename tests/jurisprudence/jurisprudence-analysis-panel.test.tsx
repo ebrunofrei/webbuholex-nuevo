@@ -1324,4 +1324,207 @@ describe("HERMES-PROD-A2.6: JurisprudenceAnalysisPanel Suite", () => {
       expect(extractIntentAnalyze(validParams)).toBe(true);
     });
   });
+
+  describe("HERMES-PROD-A3.6B-R1: Client Idempotency Key Invariants", () => {
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    it("explicit Analyze click creates one key and request contains canonical Idempotency-Key header", async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          ok: true,
+          data: {
+            slug: testSlug,
+            interpretation: validMockInterpretation,
+          },
+        }),
+      } as Response);
+
+      render(<JurisprudenceAnalysisPanel slug={testSlug} isAuthenticated={true} />);
+
+      const button = screen.getByRole("button", { name: "Analizar con Búho" });
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
+
+      const callArgs = fetchMock.mock.calls[0];
+      const headers = callArgs?.[1]?.headers as Record<string, string>;
+      expect(headers).toBeDefined();
+      expect(headers["Idempotency-Key"]).toBeDefined();
+      expect(headers["Idempotency-Key"]).toMatch(UUID_REGEX);
+    });
+
+    it("same logical request retry reuses key", async () => {
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          json: async () => ({
+            ok: false,
+            error: { code: "internal_error" },
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            ok: true,
+            data: {
+              slug: testSlug,
+              interpretation: validMockInterpretation,
+            },
+          }),
+        } as Response);
+
+      render(<JurisprudenceAnalysisPanel slug={testSlug} isAuthenticated={true} />);
+
+      // First explicit click
+      const analyzeBtn = screen.getByRole("button", { name: "Analizar con Búho" });
+      fireEvent.click(analyzeBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Reintentar análisis" })).toBeInTheDocument();
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const firstHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+      const firstKey = firstHeaders["Idempotency-Key"];
+      expect(firstKey).toMatch(UUID_REGEX);
+
+      // Retry same logical action
+      const retryBtn = screen.getByRole("button", { name: "Reintentar análisis" });
+      fireEvent.click(retryBtn);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      });
+
+      const secondHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
+      const secondKey = secondHeaders["Idempotency-Key"];
+      expect(secondKey).toBe(firstKey);
+    });
+
+    it("second explicit Analyze action receives a new key", async () => {
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            ok: true,
+            data: {
+              slug: testSlug,
+              interpretation: validMockInterpretation,
+            },
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            ok: true,
+            data: {
+              slug: testSlug,
+              interpretation: validMockInterpretation,
+            },
+          }),
+        } as Response);
+
+      render(<JurisprudenceAnalysisPanel slug={testSlug} isAuthenticated={true} />);
+
+      // First action
+      const analyzeBtn = screen.getByRole("button", { name: "Analizar con Búho" });
+      fireEvent.click(analyzeBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Volver a analizar" })).toBeInTheDocument();
+      });
+
+      const firstHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+      const firstKey = firstHeaders["Idempotency-Key"];
+
+      // Second explicit action
+      const reanalyzeBtn = screen.getByRole("button", { name: "Volver a analizar" });
+      fireEvent.click(reanalyzeBtn);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      });
+
+      const secondHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
+      const secondKey = secondHeaders["Idempotency-Key"];
+
+      expect(secondKey).toMatch(UUID_REGEX);
+      expect(secondKey).not.toBe(firstKey);
+    });
+
+    it("rerender does not generate dispatch or key", () => {
+      const { rerender } = render(
+        <JurisprudenceAnalysisPanel slug={testSlug} isAuthenticated={true} />,
+      );
+
+      rerender(<JurisprudenceAnalysisPanel slug={testSlug} isAuthenticated={true} />);
+      rerender(<JurisprudenceAnalysisPanel slug={testSlug} isAuthenticated={true} />);
+
+      expect(fetchMock).toHaveBeenCalledTimes(0);
+    });
+
+    it("double-click/inFlight protection still prevents duplicate action dispatch", async () => {
+      let resolveFetch!: (res: Response) => void;
+      const fetchPromise = new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+
+      fetchMock.mockReturnValue(fetchPromise);
+
+      render(<JurisprudenceAnalysisPanel slug={testSlug} isAuthenticated={true} />);
+
+      const button = screen.getByRole("button", { name: "Analizar con Búho" });
+      fireEvent.click(button);
+      fireEvent.click(button);
+      fireEvent.click(button);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Resolve the in-flight fetch
+      await act(async () => {
+        resolveFetch({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            ok: true,
+            data: {
+              slug: testSlug,
+              interpretation: validMockInterpretation,
+            },
+          }),
+        } as Response);
+      });
+    });
+
+    it("anonymous auth redirect intent behavior from A2.6 is preserved", () => {
+      const onNavigateSpy = vi.fn();
+      render(
+        <JurisprudenceAnalysisPanel
+          slug={testSlug}
+          isAuthenticated={false}
+          onNavigate={onNavigateSpy}
+        />,
+      );
+
+      const cta = screen.getByRole("button", { name: "Analizar con Búho" });
+      fireEvent.click(cta);
+
+      expect(onNavigateSpy).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(0);
+    });
+  });
 });

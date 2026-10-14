@@ -6,9 +6,17 @@ import type {
   JurisprudenceInterpretationRuntime,
   JurisprudenceInterpretationOrchestratorPort,
 } from "@/lib/jurisprudence/jurisprudence-interpretation-runtime";
+import type {
+  HermesExecuteJurisprudenceInput,
+  HermesRuntimeExecutionResult,
+  HermesRuntimeExecutionServicePort,
+} from "@/lib/hermes/runtime/hermes-runtime-execution-service";
 import type { JurisprudenceRateLimiterPort, JurisprudenceRateLimiterOutcome, RateLimiterConsumeInput } from "@/lib/security/jurisprudence-rate-limiter-port";
 import type { JurisprudenceRateLimitConfig } from "@/lib/security/jurisprudence-rate-limiter-config";
-import type { JurisprudenceInterpretationResult } from "@/lib/domain/services/jurisprudence-interpretation-orchestrator";
+import type {
+  JurisprudenceInterpretationResult,
+  JurisprudencePreparationResult,
+} from "@/lib/domain/services/jurisprudence-interpretation-orchestrator";
 import type { JurisprudenceInterpretation } from "@/lib/hermes/contracts/jurisprudence-interpretation";
 import type { ResolveCanonicalRecordBySlugResult } from "@/lib/jurisprudence/jurisprudence-public-slug-resolver";
 import { jurisprudenceHttpInterpretRequestBodySchema } from "@/lib/schemas/jurisprudence-http";
@@ -82,6 +90,9 @@ const defaultMockResolver = async (slug: unknown): Promise<ResolveCanonicalRecor
 };
 
 function createMockRuntime(overrides: {
+  executionResult?: HermesRuntimeExecutionResult;
+  onExecutionServiceCall?: (input: HermesExecuteJurisprudenceInput) => void;
+  throwInExecutionService?: boolean;
   orchestratorResult?: JurisprudenceInterpretationResult;
   subjectConsumeOutcome?: JurisprudenceRateLimiterOutcome;
   globalConsumeOutcome?: JurisprudenceRateLimiterOutcome;
@@ -92,6 +103,7 @@ function createMockRuntime(overrides: {
   runtime: JurisprudenceInterpretationRuntime;
   rateLimiterConsumeSpy: ReturnType<typeof vi.fn>;
   orchestratorInterpretSpy: ReturnType<typeof vi.fn>;
+  executionSpy: ReturnType<typeof vi.fn>;
 } {
   const rateLimitConfig: JurisprudenceRateLimitConfig = {
     hmacSecret: MOCK_HMAC_SECRET,
@@ -135,17 +147,68 @@ function createMockRuntime(overrides: {
   });
 
   const orchestrator: JurisprudenceInterpretationOrchestratorPort = {
-    interpret: orchestratorInterpretSpy,
+    prepareInterpretation: vi.fn(async (recordId: string, recordVersion: number): Promise<JurisprudencePreparationResult> => {
+      orchestratorInterpretSpy(recordId, recordVersion);
+      return {
+        ok: true,
+        recordId,
+        recordVersion,
+        sourceText: "canonical text",
+        request: {
+          messages: [
+            { role: "system", content: "sys policy", classification: "TRUSTED_SYSTEM_POLICY" },
+            { role: "user", content: "user legal text", classification: "USER_PROVIDED_LEGAL_TEXT" },
+          ],
+          structuredOutputIntent: "buholex_jurisprudence_interpretation",
+          metadata: { analysisId: recordId, locale: "es-PE" },
+        },
+      };
+    }),
+    validateGrounding: vi.fn(() => true),
+  };
+
+  const executionSpy = vi.fn(async (input: HermesExecuteJurisprudenceInput): Promise<HermesRuntimeExecutionResult> => {
+    overrides.onExecutionServiceCall?.(input);
+    if (overrides.throwInExecutionService) {
+      throw new Error("Unexpected database / execution panic");
+    }
+    if (overrides.executionResult) {
+      return overrides.executionResult;
+    }
+    const orchRes = await orchestratorInterpretSpy(input.recordId, input.recordVersion);
+    if (!orchRes.ok) {
+      if (orchRes.code === "provider_failure") {
+        return { ok: false, code: "provider_transport_failure" };
+      }
+      if (orchRes.code === "invalid_interpretation") {
+        return { ok: false, code: "validation_failure" };
+      }
+      if (orchRes.code === "grounding_failed") {
+        return { ok: false, code: "grounding_failure" };
+      }
+      return { ok: false, code: orchRes.code };
+    }
+    return {
+      ok: true,
+      operationId: "mock-op-id",
+      interpretation: orchRes.interpretation,
+    };
+  });
+
+  const executionService: HermesRuntimeExecutionServicePort = {
+    executeJurisprudenceInterpretation: executionSpy,
   };
 
   return {
     runtime: {
+      executionService,
       orchestrator,
       rateLimiter,
       rateLimitConfig,
     },
     rateLimiterConsumeSpy,
     orchestratorInterpretSpy,
+    executionSpy,
   };
 }
 
@@ -155,6 +218,7 @@ function buildRequest(init: {
   headers?: Record<string, string>;
   body?: unknown;
   rawBody?: string;
+  omitIdempotencyKey?: boolean;
 } = {}): Request {
   const method = init.method ?? "POST";
   const url = init.url ?? "https://buholex.com/api/jurisprudence/interpret";
@@ -162,6 +226,10 @@ function buildRequest(init: {
 
   if (!headers.has("content-type") && method === "POST") {
     headers.set("content-type", "application/json");
+  }
+
+  if (!headers.has("idempotency-key") && !init.omitIdempotencyKey) {
+    headers.set("idempotency-key", "11111111-1111-4111-8111-111111111111");
   }
 
   let body: BodyInit | undefined = undefined;
@@ -406,6 +474,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
     const headers = new Headers();
     headers.set("content-type", "application/json");
+    headers.set("idempotency-key", "11111111-1111-4111-8111-111111111111");
 
     const req = new Request("https://buholex.com/api/jurisprudence/interpret", {
       method: "POST",
@@ -666,7 +735,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
     expect(data.error.code).toBe("invalid_interpretation");
   });
 
-  it("grounding failure -> 422", async () => {
+  it("grounding failure -> safe 502", async () => {
     const { runtime } = createMockRuntime({
       orchestratorResult: { ok: false, code: "grounding_failed" },
     });
@@ -674,7 +743,7 @@ describe("Public Jurisprudence Interpretation Route (app/api/jurisprudence/inter
 
     const req = buildRequest();
     const res = await handler(req);
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(502);
     const data = await res.json();
     expect(data.ok).toBe(false);
     expect(data.error.code).toBe("grounding_failed");
@@ -1370,7 +1439,7 @@ describe("HERMES-PROD-A2.3 Client Slug → Public Resolver → Canonical Record 
 
     const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
     const res = await handler(req);
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(502);
 
     const data = await res.json();
     expect(data).toEqual({
@@ -1497,5 +1566,230 @@ describe("HERMES-PROD-A2.3 Client Slug → Public Resolver → Canonical Record 
     // 5. Schema shape inspection: keys must be exclusively 'slug'
     const schemaShapeKeys = Object.keys(jurisprudenceHttpInterpretRequestBodySchema.shape);
     expect(schemaShapeKeys).toEqual(["slug"]);
+  });
+
+  describe("HERMES-PROD-A3.6 HTTP Boundary & Control Mappings", () => {
+    it("missing Idempotency-Key -> 400 idempotency_key_required", async () => {
+      const { runtime, executionSpy } = createMockRuntime();
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({
+        body: { slug: "exp-00123-2024-aa-tc" },
+        omitIdempotencyKey: true,
+      });
+
+      const res = await handler(req);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("idempotency_key_required");
+      expect(executionSpy).not.toHaveBeenCalled();
+    });
+
+    it("malformed Idempotency-Key -> 400 idempotency_key_invalid", async () => {
+      const { runtime, executionSpy } = createMockRuntime();
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({
+        body: { slug: "exp-00123-2024-aa-tc" },
+        headers: { "idempotency-key": "not-a-valid-uuid-string" },
+      });
+
+      const res = await handler(req);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("idempotency_key_invalid");
+      expect(executionSpy).not.toHaveBeenCalled();
+    });
+
+    it("whitespace-padded Idempotency-Key -> 400 idempotency_key_invalid", async () => {
+      const { runtime, executionSpy } = createMockRuntime();
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({
+        body: { slug: "exp-00123-2024-aa-tc" },
+      });
+      const origGet = req.headers.get.bind(req.headers);
+      req.headers.get = (name: string) => {
+        if (name.toLowerCase() === "idempotency-key") {
+          return " 11111111-1111-4111-8111-111111111111 ";
+        }
+        return origGet(name);
+      };
+
+      const res = await handler(req);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("idempotency_key_invalid");
+      expect(executionSpy).not.toHaveBeenCalled();
+    });
+
+    it("valid UUID preserved exactly without normalization", async () => {
+      const { runtime, executionSpy } = createMockRuntime();
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const testKey = "22222222-2222-4222-8222-222222222222";
+      const req = buildRequest({
+        body: { slug: "exp-00123-2024-aa-tc" },
+        headers: { "idempotency-key": testKey },
+      });
+
+      const res = await handler(req);
+      expect(res.status).toBe(200);
+      expect(executionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotencyKey: testKey,
+        })
+      );
+    });
+
+    it("entitlement denial -> 403 feature_not_entitled / account_inactive", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "feature_not_entitled" },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(403);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("feature_not_entitled");
+    });
+
+    it("quota exhausted -> 429 quota_exhausted", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "quota_exhausted", requestedUnits: 1, monthlyQuota: 50 },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(429);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("quota_exhausted");
+    });
+
+    it("document conflict -> 409 active_document_conflict", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "active_document_conflict" },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(409);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("active_document_conflict");
+    });
+
+    it("already in progress / duplicate in flight -> 409 duplicate_in_flight", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "duplicate_in_flight" },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(409);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("duplicate_in_flight");
+    });
+
+    it("capacity/daily limits -> 429 concurrency_capacity_exceeded", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "concurrency_capacity_exceeded" },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(429);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("concurrency_limit_exceeded");
+    });
+
+    it("validation failure -> safe 502 invalid_interpretation", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "validation_failure" },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(502);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("invalid_interpretation");
+    });
+
+    it("grounding failure -> safe 502 grounding_failed", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "grounding_failure" },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(502);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("grounding_failed");
+    });
+
+    it("finalization unavailable -> safe 503 usage_control_unavailable", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: {
+          ok: false,
+          code: "finalization_unavailable",
+          operationId: "mock-op-123",
+          targetStatus: "outcome_unknown",
+          providerOutcomeKnown: false,
+        },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(503);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("usage_control_unavailable");
+    });
+
+    it("control unavailable -> 503 control_unavailable", async () => {
+      const { runtime } = createMockRuntime({
+        executionResult: { ok: false, code: "control_unavailable" },
+      });
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(503);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.error.code).toBe("usage_control_unavailable");
+    });
+
+    it("successful analysis -> 200 with Cache-Control no-store and no sensitive internal fields", async () => {
+      const { runtime } = createMockRuntime();
+      const handler = createAuthenticatedHandler({ runtimeFactory: () => runtime });
+
+      const req = buildRequest({ body: { slug: "exp-00123-2024-aa-tc" } });
+      const res = await handler(req);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toContain("no-store");
+
+      const bodyText = await res.text();
+      expect(bodyText).not.toContain("11111111-1111-4111-8111-111111111111");
+      expect(bodyText).not.toContain("mock-op-id");
+      expect(bodyText).not.toContain("auth0|test-user-123");
+    });
   });
 });

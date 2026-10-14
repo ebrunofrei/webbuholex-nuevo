@@ -163,6 +163,7 @@ export function JurisprudenceAnalysisPanel({
   const inFlightRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeIdempotencyKeyRef = useRef<string | null>(null);
 
   const [uiState, setUiState] = useState<HermesUiState>(() => {
     if (isAuthenticated && intentAnalyze) {
@@ -245,17 +246,27 @@ export function JurisprudenceAnalysisPanel({
     }
   };
 
-  const handleStartAnalysis = async () => {
+  const handleStartAnalysis = async (options?: { isRetry?: boolean }) => {
     // 1. Authoritative synchronous in-flight lock check before first await
     if (inFlightRef.current) return;
     inFlightRef.current = true;
 
-    // 2. Abort prior controller if any & create new AbortController
+    // 2. Canonical client idempotency key generation:
+    // Retries of the same logical error state reuse the existing key.
+    // Explicit new actions generate a fresh UUID.
+    const isRetry = options?.isRetry ?? (uiState.kind === "error");
+    const idempotencyKey =
+      isRetry && activeIdempotencyKeyRef.current
+        ? activeIdempotencyKeyRef.current
+        : crypto.randomUUID();
+    activeIdempotencyKeyRef.current = idempotencyKey;
+
+    // 3. Abort prior controller if any & create new AbortController
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // 3. Update React UI state
+    // 4. Update React UI state
     setUiState({ kind: "submitting" });
 
     try {
@@ -263,6 +274,7 @@ export function JurisprudenceAnalysisPanel({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
         },
         body: JSON.stringify({ slug }),
         signal: controller.signal,
@@ -373,7 +385,7 @@ export function JurisprudenceAnalysisPanel({
           <div className={styles.analysisActions}>
             <button
               type="button"
-              onClick={handleStartAnalysis}
+              onClick={() => handleStartAnalysis({ isRetry: false })}
               className={styles.primaryButton}
             >
               Iniciar análisis con Búho
@@ -422,7 +434,7 @@ export function JurisprudenceAnalysisPanel({
         <div className={styles.reanalyzeActions}>
           <button
             type="button"
-            onClick={handleStartAnalysis}
+            onClick={() => handleStartAnalysis({ isRetry: false })}
             className={styles.secondaryButton}
           >
             Volver a analizar
@@ -460,7 +472,7 @@ export function JurisprudenceAnalysisPanel({
             ) : (
               <button
                 type="button"
-                onClick={handleStartAnalysis}
+                onClick={() => handleStartAnalysis({ isRetry: true })}
                 disabled={countdown > 0}
                 className={styles.primaryButton}
               >
@@ -484,7 +496,7 @@ export function JurisprudenceAnalysisPanel({
       <div className={styles.analysisActions}>
         <button
           type="button"
-          onClick={handleStartAnalysis}
+          onClick={() => handleStartAnalysis({ isRetry: false })}
           className={styles.primaryButton}
         >
           Analizar con Búho

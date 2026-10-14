@@ -442,13 +442,16 @@ describe("OpenAI Hermes Adapter Diagnostics (HERMES-PROD-A1.10)", () => {
     };
 
     const orchestrator = new JurisprudenceInterpretationOrchestrator({
-      hermesProvider: adapter,
       jurisprudenceRepository: mockRepo,
     });
 
-    const result = await orchestrator.interpret("analysis-rec-777", 1);
+    const prep = await orchestrator.prepareInterpretation("analysis-rec-777", 1);
+    expect(prep.ok).toBe(true);
+    if (!prep.ok) throw new Error("preparation failed");
 
-    expect(result).toEqual({ ok: false, code: "provider_failure" });
+    const result = await adapter.generateStructuredOutput(prep.request);
+
+    expect(result.ok).toBe(false);
     const event = getSingleEvent();
     expect(event.failureClass).toBe("provider_http_5xx");
   });

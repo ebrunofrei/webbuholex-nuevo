@@ -1,5 +1,4 @@
-import type { HermesProviderPort } from "../../hermes/contracts/hermes-provider-port";
-import { jurisprudenceInterpretationSchema } from "../../hermes/contracts/jurisprudence-interpretation";
+import type { HermesRequest } from "../../hermes/contracts/hermes-envelope";
 import type { JurisprudenceInterpretation, Citation } from "../../hermes/contracts/jurisprudence-interpretation";
 import type { JurisprudenceInterpretationSourcePort } from "../repositories/jurisprudence-interpretation-source-port";
 import { buildJurisprudenceSystemPolicy } from "../../hermes/boundaries/jurisprudence-system-policy-boundary";
@@ -17,23 +16,46 @@ export type JurisprudenceInterpretationResult =
   | { readonly ok: true; readonly interpretation: JurisprudenceInterpretation }
   | { readonly ok: false; readonly code: JurisprudenceInterpretationErrorCode };
 
+export type JurisprudencePreparationErrorCode =
+  | "record_not_found"
+  | "record_version_mismatch"
+  | "source_too_large";
+
+export type JurisprudencePreparationResult =
+  | {
+      readonly ok: true;
+      readonly recordId: string;
+      readonly recordVersion: number;
+      readonly sourceText: string;
+      readonly request: HermesRequest;
+    }
+  | {
+      readonly ok: false;
+      readonly code: JurisprudencePreparationErrorCode;
+    };
+
 export interface JurisprudenceInterpretationOrchestratorProps {
-  hermesProvider: HermesProviderPort;
   jurisprudenceRepository: JurisprudenceInterpretationSourcePort;
 }
 
 export class JurisprudenceInterpretationOrchestrator {
-  private hermesProvider: HermesProviderPort;
-  private jurisprudenceRepository: JurisprudenceInterpretationSourcePort;
+  private readonly jurisprudenceRepository: JurisprudenceInterpretationSourcePort;
 
-  private static readonly MAX_SOURCE_LENGTH = 100000;
+  public static readonly MAX_SOURCE_LENGTH = 100000;
 
   constructor(props: JurisprudenceInterpretationOrchestratorProps) {
-    this.hermesProvider = props.hermesProvider;
     this.jurisprudenceRepository = props.jurisprudenceRepository;
   }
 
-  async interpret(recordId: string, recordVersion: number): Promise<JurisprudenceInterpretationResult> {
+  /**
+   * Read-only preparation of requested jurisprudence document for analysis.
+   * Resolves canonical record, validates version, checks size limits, and builds Hermes request.
+   * Never mutates state, reserves quota, or calls remote LLM providers.
+   */
+  async prepareInterpretation(
+    recordId: string,
+    recordVersion: number
+  ): Promise<JurisprudencePreparationResult> {
     const record = await this.jurisprudenceRepository.findById(recordId);
 
     if (!record) {
@@ -52,29 +74,31 @@ export class JurisprudenceInterpretationOrchestrator {
     const systemMessage = buildJurisprudenceSystemPolicy();
     const userMessage = buildJurisprudenceUserMessage(record);
 
-    const outcome = await this.hermesProvider.generateStructuredOutput({
+    const request: HermesRequest = {
       messages: [systemMessage, userMessage],
       structuredOutputIntent: "buholex_jurisprudence_interpretation",
-      metadata: { analysisId: recordId, locale: "es-PE" }
-    });
+      metadata: { analysisId: recordId, locale: "es-PE" },
+    };
 
-    if (!outcome.ok) {
-      return { ok: false, code: "provider_failure" };
-    }
+    return {
+      ok: true,
+      recordId,
+      recordVersion,
+      sourceText,
+      request,
+    };
+  }
 
-    const validated = jurisprudenceInterpretationSchema.safeParse(outcome.payload);
-    if (!validated.success) {
-      return { ok: false, code: "invalid_interpretation" };
-    }
-
-    const interpretation = validated.data;
-    const isGrounded = this.validateCitations(interpretation, sourceText);
-
-    if (!isGrounded) {
-      return { ok: false, code: "grounding_failed" };
-    }
-
-    return { ok: true, interpretation };
+  /**
+   * Deterministic citation grounding validation.
+   * Verifies that all citations and references in the structured interpretation
+   * are strictly grounded in the canonical source text.
+   */
+  validateGrounding(
+    interpretation: JurisprudenceInterpretation,
+    sourceText: string
+  ): boolean {
+    return this.validateCitations(interpretation, sourceText);
   }
 
   private validateCitations(interpretation: JurisprudenceInterpretation, sourceText: string): boolean {

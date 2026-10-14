@@ -34,6 +34,12 @@ class DummyRateLimiter implements JurisprudenceRateLimiterPort {
   }
 }
 
+const dummyService = {
+  async getInternalRecord(): Promise<JurisprudenceInternalRecordResultDto> {
+    throw new Error("not used in factory construction");
+  },
+};
+
 describe("createJurisprudenceInterpretationRuntime", () => {
   it("fails closed when HMAC secret is missing", () => {
     const env: Partial<NodeJS.ProcessEnv> = {
@@ -61,6 +67,8 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
       OPENAI_API_KEY: "sk-test-key",
       BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
     };
 
     const dummyProvider = new DummyHermesProvider();
@@ -92,6 +100,8 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       OPENAI_API_KEY: "sk-test-key",
       BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
       DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL: "postgresql://jurisprudence_interpretation_read_login:pwd@host:5432/db",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
     };
 
     const dummyProvider = new DummyHermesProvider();
@@ -231,14 +241,13 @@ describe("createJurisprudenceInterpretationRuntime", () => {
 
     expect(runtime.orchestrator).toBeDefined();
 
-    // Now execute interpret to prove findById uses the read path, invokes read getter and runner, and does not invoke write getter
-    const result = await runtime.orchestrator.interpret("rec-test-123", 1);
+    // Now execute prepareInterpretation to prove findById uses the read path, invokes read getter and runner, and does not invoke write getter
+    const result = await runtime.orchestrator.prepareInterpretation("rec-test-123", 1);
 
     expect(readGetterInvoked).toBe(true);
     expect(readRunnerInvoked).toBe(true);
     expect(writeGetterInvoked).toBe(false);
-    // Since dummyProvider returns unknown_provider_failure, the orchestrator successfully resolved the source and reached the provider
-    expect(result).toEqual({ ok: false, code: "provider_failure" });
+    expect(result.ok).toBe(true);
   });
 
   it("runtime source path throws if DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL is missing and no service/db injected", () => {
@@ -246,6 +255,8 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
       OPENAI_API_KEY: "sk-test-key",
       BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
       // Notice DATABASE_JURISPRUDENCE_INTERNAL_WRITE_URL is present, but INTERPRETATION_READ is missing!
       DATABASE_JURISPRUDENCE_INTERNAL_WRITE_URL: "postgresql://write:pwd@host:5432/db",
     };
@@ -273,6 +284,8 @@ describe("createJurisprudenceInterpretationRuntime", () => {
         OPENAI_API_KEY: "sk-test-key",
         BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
         DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL: customUrl,
+        HERMES_CONCURRENCY_LIMIT: "10",
+        HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
       };
 
       const dummyProvider = new DummyHermesProvider();
@@ -293,5 +306,78 @@ describe("createJurisprudenceInterpretationRuntime", () => {
         process.env.DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL = originalEnv;
       }
     }
+  });
+
+  it("lease = 90 with reservation absent/default 105 fails closed during runtime construction", () => {
+    const env: Partial<NodeJS.ProcessEnv> = {
+      JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
+      OPENAI_API_KEY: "sk-test-key",
+      BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+      HERMES_CONCURRENCY_LEASE_TTL_SECONDS: "90",
+      // HERMES_RESERVATION_TTL_SECONDS is absent -> defaults to 105
+    };
+
+    const dummyProvider = new DummyHermesProvider();
+    const dummyLimiter = new DummyRateLimiter();
+
+    expect(() =>
+      createJurisprudenceInterpretationRuntime({
+        env,
+        hermesProvider: dummyProvider,
+        rateLimiter: dummyLimiter,
+        applicationService: dummyService,
+      })
+    ).toThrow(/must be strictly greater than leaseTtlSeconds \(90\) \+ 15/);
+  });
+
+  it("lease = 90 with reservation = 110 succeeds during runtime construction", () => {
+    const env: Partial<NodeJS.ProcessEnv> = {
+      JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
+      OPENAI_API_KEY: "sk-test-key",
+      BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+      HERMES_CONCURRENCY_LEASE_TTL_SECONDS: "90",
+      HERMES_RESERVATION_TTL_SECONDS: "110",
+    };
+
+    const dummyProvider = new DummyHermesProvider();
+    const dummyLimiter = new DummyRateLimiter();
+
+    const runtime = createJurisprudenceInterpretationRuntime({
+      env,
+      hermesProvider: dummyProvider,
+      rateLimiter: dummyLimiter,
+      applicationService: dummyService,
+    });
+
+    expect(runtime.executionService).toBeDefined();
+  });
+
+  it("typed dependency injection of reservationTtlSeconds overrides default", () => {
+    const env: Partial<NodeJS.ProcessEnv> = {
+      JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
+      OPENAI_API_KEY: "sk-test-key",
+      BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+      HERMES_CONCURRENCY_LEASE_TTL_SECONDS: "90",
+    };
+
+    const dummyProvider = new DummyHermesProvider();
+    const dummyLimiter = new DummyRateLimiter();
+
+    // Injecting reservationTtlSeconds = 115 allows lease = 90 to construct cleanly without env var
+    const runtime = createJurisprudenceInterpretationRuntime({
+      env,
+      hermesProvider: dummyProvider,
+      rateLimiter: dummyLimiter,
+      applicationService: dummyService,
+      reservationTtlSeconds: 115,
+    });
+
+    expect(runtime.executionService).toBeDefined();
   });
 });
