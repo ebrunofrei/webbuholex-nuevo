@@ -43,3 +43,20 @@ export {
   HermesOperationReservationValidationError,
   validateOperationReservationInput,
 } from "@/lib/hermes/control/hermes-quota-coordinator";
+
+export {
+  PostgresHermesProviderBoundaryCoordinator,
+  type HermesProviderBoundaryCoordinator,
+  type HermesProviderBoundaryLimits,
+  type HermesProviderBoundaryResult,
+  type HermesLeaseReleaseResult,
+  type PostgresHermesProviderBoundaryCoordinatorDependencies,
+  type HermesProviderBoundaryCoordinatorHandler,
+  HermesProviderBoundaryValidationError,
+  validateProviderBoundaryLimits,
+  validateOperationId,
+  parseConcurrencyCount,
+  MIN_HERMES_LEASE_TTL_SECONDS,
+  MAX_HERMES_LEASE_TTL_SECONDS,
+  DEFAULT_HERMES_LEASE_TTL_SECONDS,
+} from "@/lib/hermes/control/hermes-provider-boundary-coordinator";
