@@ -24,6 +24,8 @@ import type {
   HermesOperationReservationResult,
   HermesFinalizationResult,
   HermesExpiredReservationScanResult,
+  HermesReconciliationResult,
+  HermesPostDispatchCandidateScanResult,
 } from "@/lib/hermes/control/hermes-quota-coordinator";
 import type {
   HermesProviderBoundaryCoordinator,
@@ -232,6 +234,17 @@ function createMockHarness(overrides: {
     }),
     findExpiredReservations: vi.fn(async (): Promise<HermesExpiredReservationScanResult> => {
       callOrder.push("quotaCoordinator.findExpiredReservations");
+      return { kind: "found", records: [] };
+    }),
+    reconcileOutcomeUnknownIfLeaseExpired: vi.fn(async (): Promise<HermesReconciliationResult> => {
+      callOrder.push("quotaCoordinator.reconcileOutcomeUnknownIfLeaseExpired");
+      return {
+        kind: "not_found",
+        operationId: VALID_OPERATION_ID,
+      };
+    }),
+    findPostDispatchOrphanCandidates: vi.fn(async (): Promise<HermesPostDispatchCandidateScanResult> => {
+      callOrder.push("quotaCoordinator.findPostDispatchOrphanCandidates");
       return { kind: "found", records: [] };
     }),
   };

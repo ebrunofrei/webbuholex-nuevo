@@ -394,6 +394,18 @@ function createFakeTx(store: StatefulQuotaStore): HermesControlTransaction {
                 return Promise.resolve(matched.slice(0, n));
               }
 
+              // Active lease lookup for reconciler authority: operation_id and expires_at > authorityNow
+              if (cols.includes("operation_id") && cols.includes("expires_at")) {
+                const eqPairs = extractEqPairs(condition);
+                const opIdPair = eqPairs.find((p) => p.col === "operation_id");
+                const opId = opIdPair ? String(opIdPair.val) : (vals[0] as string);
+                const authorityNow = (vals.find((v) => v instanceof Date) as Date | undefined) ?? new Date();
+                const matched = Array.from(store.leases.values()).filter(
+                  (l) => l.operationId === opId && l.expiresAt.getTime() > authorityNow.getTime()
+                );
+                return Promise.resolve(matched.slice(0, n));
+              }
+
               return Promise.resolve([]);
             },
 
@@ -422,8 +434,50 @@ function createFakeTx(store: StatefulQuotaStore): HermesControlTransaction {
 
             orderBy: () => ({
               limit: (n: number) => {
-                const now = (vals.find((v) => v instanceof Date) as Date | undefined) ?? new Date();
                 const allOps = Array.from(store.operations.values());
+                const condStr = sqlToString(condition);
+
+                // Orphan candidate scan: provider_dispatch_started + reserved + indeterminate + no active lease
+                if (
+                  cols.includes("provider_dispatch_started") ||
+                  vals.includes("provider_dispatch_started") ||
+                  condStr.includes("provider_dispatch_started")
+                ) {
+                  const scanNow =
+                    (vals.find((v) => v instanceof Date) as Date | undefined) ??
+                    store.authorityClock ??
+                    new Date();
+                  const candidates = allOps
+                    .filter((op) => {
+                      if (
+                        op.status !== "provider_dispatch_started" ||
+                        op.userQuotaStatus !== "reserved" ||
+                        op.platformCostStatus !== "indeterminate"
+                      ) {
+                        return false;
+                      }
+                      const hasActive = Array.from(store.leases.values()).some(
+                        (l) => l.operationId === op.id && l.expiresAt.getTime() > scanNow.getTime()
+                      );
+                      return !hasActive;
+                    })
+                    .sort((a, b) => {
+                      const aTime = a.dispatchStartedAt?.getTime() ?? 0;
+                      const bTime = b.dispatchStartedAt?.getTime() ?? 0;
+                      return aTime - bTime;
+                    })
+                    .map((op) => ({
+                      operationId: op.id,
+                      subjectId: op.subjectId,
+                      units: op.units,
+                      quotaPeriodStart: op.quotaPeriodStart,
+                      quotaPeriodEnd: op.quotaPeriodEnd,
+                    }));
+                  return Promise.resolve(candidates.slice(0, n));
+                }
+
+                // Stale reservation scan: reserved_expires_at <= now
+                const now = (vals.find((v) => v instanceof Date) as Date | undefined) ?? new Date();
                 const expired = allOps
                   .filter(
                     (op) =>
@@ -2661,6 +2715,412 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       expect(leaseLockHeldDuringExecution).toBe(true);
       expect(concurrentReleaseAttemptedDuringLock).toBe(true);
       expect(concurrentReleaseBlocked).toBe(true);
+    });
+  });
+
+  // ============================================================
+  // HERMES-PROD-A3.7C: Post-Dispatch Orphan Reconciler (Coordinator)
+  // ============================================================
+  describe("HERMES-PROD-A3.7C: Post-Dispatch Orphan Reconciler (Coordinator)", () => {
+    it("1. provider_dispatch_started + active lease -> lease_still_active, zero mutation", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      // Active lease expiring in 60 seconds
+      markFakeProviderDispatchStarted(op, store, "lease-active-1", referenceNow, new Date(referenceNow.getTime() + 60_000));
+      store.authorityClock = referenceNow;
+
+      const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(reconcileRes.kind).toBe("lease_still_active");
+      if (reconcileRes.kind === "lease_still_active") {
+        expect(reconcileRes.operationId).toBe(res.operationId);
+      }
+
+      // Zero mutation on operation
+      const opAfter = store.operations.get(res.operationId);
+      expect(opAfter?.status).toBe("provider_dispatch_started");
+      expect(opAfter?.userQuotaStatus).toBe("reserved");
+      expect(opAfter?.platformCostStatus).toBe("indeterminate");
+
+      // Zero mutation on quota
+      const usage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
+      expect(usage?.reservedUnits).toBe(1);
+      expect(usage?.pendingUnits).toBe(0);
+      expect(usage?.committedUnits).toBe(0);
+    });
+
+    it("2. provider_dispatch_started + expired lease row -> reconciled outcome_unknown", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      // Expired lease: expired 10 seconds before referenceNow
+      markFakeProviderDispatchStarted(
+        op,
+        store,
+        "lease-expired-2",
+        new Date(referenceNow.getTime() - 60_000),
+        new Date(referenceNow.getTime() - 10_000)
+      );
+      store.authorityClock = referenceNow;
+
+      const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(reconcileRes.kind).toBe("reconciled");
+      if (reconcileRes.kind === "reconciled") {
+        expect(reconcileRes.operationId).toBe(res.operationId);
+        expect(reconcileRes.status).toBe("outcome_unknown");
+        expect(reconcileRes.userQuotaStatus).toBe("policy_pending");
+        expect(reconcileRes.platformCostStatus).toBe("indeterminate");
+        expect(reconcileRes.units).toBe(1);
+      }
+
+      const opAfter = store.operations.get(res.operationId);
+      expect(opAfter?.status).toBe("outcome_unknown");
+      expect(opAfter?.userQuotaStatus).toBe("policy_pending");
+      expect(opAfter?.platformCostStatus).toBe("indeterminate");
+
+      // Quota updated: reserved decremented, pending incremented, committed unchanged
+      const usage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
+      expect(usage?.reservedUnits).toBe(0);
+      expect(usage?.pendingUnits).toBe(1);
+      expect(usage?.committedUnits).toBe(0);
+    });
+
+    it("3. provider_dispatch_started + no lease row -> reconciled outcome_unknown", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      // provider_dispatch_started, but no lease row in store
+      markFakeProviderDispatchStarted(op);
+      store.leases.clear();
+      store.authorityClock = referenceNow;
+
+      const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(reconcileRes.kind).toBe("reconciled");
+      if (reconcileRes.kind === "reconciled") {
+        expect(reconcileRes.status).toBe("outcome_unknown");
+        expect(reconcileRes.userQuotaStatus).toBe("policy_pending");
+        expect(reconcileRes.platformCostStatus).toBe("indeterminate");
+      }
+
+      const opAfter = store.operations.get(res.operationId);
+      expect(opAfter?.status).toBe("outcome_unknown");
+      expect(opAfter?.userQuotaStatus).toBe("policy_pending");
+    });
+
+    it("4. matching expired physical lease row is NOT deleted during reconciliation", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(
+        op,
+        store,
+        "lease-expired-4",
+        new Date(referenceNow.getTime() - 60_000),
+        new Date(referenceNow.getTime() - 10_000)
+      );
+      store.authorityClock = referenceNow;
+
+      expect(store.leases.has("lease-expired-4")).toBe(true);
+
+      const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(reconcileRes.kind).toBe("reconciled");
+
+      // Physical lease row remains intact
+      expect(store.leases.has("lease-expired-4")).toBe(true);
+    });
+
+    it("5. outcome_unknown/policy_pending already terminal -> already_finalized without lease check", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+
+      // Already outcome_unknown + policy_pending
+      op.status = "outcome_unknown";
+      op.userQuotaStatus = "policy_pending";
+      op.platformCostStatus = "indeterminate";
+      op.completedAt = referenceNow;
+
+      // Even if an active lease exists, same-target idempotency check comes FIRST
+      createActiveLease(store, op.id, op.subjectId, "active-lease-should-be-ignored");
+      store.authorityClock = referenceNow;
+
+      const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(reconcileRes.kind).toBe("already_finalized");
+      if (reconcileRes.kind === "already_finalized") {
+        expect(reconcileRes.status).toBe("outcome_unknown");
+        expect(reconcileRes.userQuotaStatus).toBe("policy_pending");
+      }
+    });
+
+    it("6-10. other terminal states return invalid_state with zero mutation", async () => {
+      const nonReconcilableStates: Array<{
+        status: HermesOperationStatus;
+        userQuotaStatus: HermesUserQuotaStatus;
+        platformCostStatus: HermesPlatformCostStatus;
+      }> = [
+        { status: "completed_success", userQuotaStatus: "committed", platformCostStatus: "assumed_incurred" },
+        { status: "completed_validation_failure", userQuotaStatus: "policy_pending", platformCostStatus: "assumed_incurred" },
+        { status: "completed_grounding_failure", userQuotaStatus: "policy_pending", platformCostStatus: "assumed_incurred" },
+        { status: "released", userQuotaStatus: "released", platformCostStatus: "none" },
+        { status: "expired_before_dispatch", userQuotaStatus: "released", platformCostStatus: "none" },
+      ];
+
+      for (const targetState of nonReconcilableStates) {
+        const store = createStatefulQuotaStore();
+        const coordinator = new PostgresHermesQuotaCoordinator({
+          roleRunner: store.roleRunner,
+          atomicQuotaUpsert: store.atomicQuotaUpsert,
+          now: () => referenceNow,
+        });
+
+        const res = await coordinator.reserveOperationQuota(canonicalInput);
+        if (res.kind !== "reserved") return;
+        const op = store.operations.get(res.operationId);
+        if (!op) return;
+
+        op.status = targetState.status;
+        op.userQuotaStatus = targetState.userQuotaStatus;
+        op.platformCostStatus = targetState.platformCostStatus;
+        op.completedAt = referenceNow;
+        store.leases.clear();
+
+        const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+        expect(reconcileRes.kind).toBe("invalid_state");
+        if (reconcileRes.kind === "invalid_state") {
+          expect(reconcileRes.currentStatus).toBe(targetState.status);
+          expect(reconcileRes.currentUserQuotaStatus).toBe(targetState.userQuotaStatus);
+        }
+
+        // Operation unmodified
+        const opAfter = store.operations.get(res.operationId);
+        expect(opAfter?.status).toBe(targetState.status);
+      }
+    });
+
+    it("11-15. accounting invariants: indeterminate cost, reserved - 1, pending + 1, committed unchanged, persisted quota period used", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op);
+      store.leases.clear();
+      store.authorityClock = referenceNow;
+
+      const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(reconcileRes.kind).toBe("reconciled");
+      if (reconcileRes.kind === "reconciled") {
+        // 11. platform cost indeterminate
+        expect(reconcileRes.platformCostStatus).toBe("indeterminate");
+      }
+
+      const usage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
+      // 12. reserved_units decremented
+      expect(usage?.reservedUnits).toBe(0);
+      // 13. pending_units incremented
+      expect(usage?.pendingUnits).toBe(1);
+      // 14. committed_units unchanged
+      expect(usage?.committedUnits).toBe(0);
+
+      // 15. persisted quota periods used
+      expect(op.quotaPeriodStart).toEqual(periodStart);
+      expect(op.quotaPeriodEnd).toEqual(periodEnd);
+    });
+
+    it("17-18. clock_timestamp captured strictly after operation row lock, CURRENT_TIMESTAMP/now() not used for authority", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op);
+      store.leases.clear();
+
+      store.lockSequence = [];
+      store.clockTimestampQueryCount = 0;
+      store.authorityClock = referenceNow;
+
+      await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+
+      // Lock sequence: analysis_operations_for_update BEFORE clock_timestamp
+      expect(store.lockSequence).toEqual([
+        "analysis_operations_for_update",
+        "clock_timestamp",
+      ]);
+      expect(store.clockTimestampQueryCount).toBe(1);
+    });
+
+    it("19-20. two reconcile calls / multi-worker race: first reconciled, second already_finalized, no double quota mutation", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op);
+      store.leases.clear();
+      store.authorityClock = referenceNow;
+
+      // Worker 1
+      const res1 = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(res1.kind).toBe("reconciled");
+
+      const usage1 = cloneQuotaUsage(store.quotaUsage);
+
+      // Worker 2
+      const res2 = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(res2.kind).toBe("already_finalized");
+
+      // Quota usage is exactly identical to after Worker 1 (zero double mutation)
+      expect(store.quotaUsage).toEqual(usage1);
+    });
+
+    it("21-24. candidate scan: excludes active lease, includes expired/no lease, excludes terminal rows", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      store.authorityClock = referenceNow;
+
+      // Op 1: active lease -> excluded
+      const r1 = await coordinator.reserveOperationQuota({ ...canonicalInput, idempotencyKey: "scan-1", recordId: "rec-1" });
+      if (r1.kind !== "reserved") return;
+      const op1 = store.operations.get(r1.operationId);
+      if (op1) markFakeProviderDispatchStarted(op1, store, "lease-scan-1", referenceNow, new Date(referenceNow.getTime() + 60_000));
+
+      // Op 2: expired lease -> included
+      const r2 = await coordinator.reserveOperationQuota({ ...canonicalInput, idempotencyKey: "scan-2", recordId: "rec-2" });
+      if (r2.kind !== "reserved") return;
+      const op2 = store.operations.get(r2.operationId);
+      if (op2) markFakeProviderDispatchStarted(op2, store, "lease-scan-2", new Date(referenceNow.getTime() - 60_000), new Date(referenceNow.getTime() - 10_000));
+
+      // Op 3: no lease -> included
+      const r3 = await coordinator.reserveOperationQuota({ ...canonicalInput, idempotencyKey: "scan-3", recordId: "rec-3" });
+      if (r3.kind !== "reserved") return;
+      const op3 = store.operations.get(r3.operationId);
+      if (op3) markFakeProviderDispatchStarted(op3); // No lease in store
+
+      // Op 4: terminal completed_success -> excluded
+      const r4 = await coordinator.reserveOperationQuota({ ...canonicalInput, idempotencyKey: "scan-4", recordId: "rec-4" });
+      if (r4.kind !== "reserved") return;
+      const op4 = store.operations.get(r4.operationId);
+      if (op4) {
+        op4.status = "completed_success";
+        op4.userQuotaStatus = "committed";
+        op4.platformCostStatus = "assumed_incurred";
+      }
+
+      const scanResult = await coordinator.findPostDispatchOrphanCandidates(50);
+      expect(scanResult.kind).toBe("found");
+      if (scanResult.kind === "found") {
+        const foundIds = scanResult.records.map((r) => r.operationId);
+        expect(foundIds).toContain(r2.operationId);
+        expect(foundIds).toContain(r3.operationId);
+        expect(foundIds).not.toContain(r1.operationId);
+        expect(foundIds).not.toContain(r4.operationId);
+      }
+    });
+
+    it("25-26. candidate scan limit validation: enforces safe positive integer 1..100 and fails closed", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      // Valid limit
+      const validRes = await coordinator.findPostDispatchOrphanCandidates(10);
+      expect(validRes.kind).toBe("found");
+
+      // Invalid limits: fail closed
+      const invalidLimits = [0, -1, -50, 101, 1000, 1.5, NaN, Infinity, -Infinity];
+      for (const badLimit of invalidLimits) {
+        const badRes = await coordinator.findPostDispatchOrphanCandidates(badLimit);
+        expect(badRes.kind).toBe("control_unavailable");
+      }
+    });
+
+    it("27. DB failure returns control_unavailable", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (op) markFakeProviderDispatchStarted(op);
+
+      store.failWithPostgresError = true;
+      const reconcileRes = await coordinator.reconcileOutcomeUnknownIfLeaseExpired(res.operationId);
+      expect(reconcileRes.kind).toBe("control_unavailable");
+
+      store.failWithPostgresError = true;
+      const scanRes = await coordinator.findPostDispatchOrphanCandidates(50);
+      expect(scanRes.kind).toBe("control_unavailable");
     });
   });
 });

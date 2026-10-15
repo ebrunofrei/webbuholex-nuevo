@@ -11,3 +11,4 @@ export * from "./hermes-entitlement-repository";
 export * from "./hermes-entitlement-policy";
 export * from "./hermes-quota-coordinator";
 export * from "./hermes-provider-boundary-coordinator";
+export * from "./hermes-post-dispatch-reconciler";

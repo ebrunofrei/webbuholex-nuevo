@@ -4,7 +4,7 @@
  * Phase: HERMES-PROD-A3.4 / HERMES-PROD-A3.4C
  */
 
-import { eq, and, gte, lte, inArray, sql } from "drizzle-orm";
+import { eq, and, gt, gte, lte, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/database/schema";
 import {
@@ -418,6 +418,67 @@ export type HermesExpiredReservationScanResult =
       readonly reason: "usage_control_unavailable";
     };
 
+/**
+ * Discriminated result of a post-dispatch orphan reconciliation attempt.
+ */
+export type HermesReconciliationResult =
+  | {
+      readonly kind: "reconciled";
+      readonly operationId: string;
+      readonly status: "outcome_unknown";
+      readonly userQuotaStatus: "policy_pending";
+      readonly platformCostStatus: "indeterminate";
+      readonly units: number;
+    }
+  | {
+      readonly kind: "already_finalized";
+      readonly operationId: string;
+      readonly status: "outcome_unknown";
+      readonly userQuotaStatus: "policy_pending";
+    }
+  | {
+      readonly kind: "lease_still_active";
+      readonly operationId: string;
+    }
+  | {
+      readonly kind: "invalid_state";
+      readonly operationId: string;
+      readonly currentStatus: HermesOperationStatus;
+      readonly currentUserQuotaStatus: HermesUserQuotaStatus;
+    }
+  | {
+      readonly kind: "not_found";
+      readonly operationId: string;
+    }
+  | {
+      readonly kind: "control_unavailable";
+      readonly reason: "usage_control_unavailable";
+    };
+
+/**
+ * Summary record of a post-dispatch orphan candidate found for reconciliation.
+ */
+export interface HermesPostDispatchCandidateRecord {
+  readonly operationId: string;
+  readonly subjectId: string;
+  readonly units: number;
+  readonly quotaPeriodStart: Date;
+  readonly quotaPeriodEnd: Date;
+}
+
+/**
+ * Discriminated result of a post-dispatch orphan candidate scan attempt.
+ */
+export type HermesPostDispatchCandidateScanResult =
+  | {
+      readonly kind: "found";
+      readonly records: readonly HermesPostDispatchCandidateRecord[];
+    }
+  | {
+      readonly kind: "control_unavailable";
+      readonly reason: "usage_control_unavailable";
+    };
+
 export type HermesAtomicQuotaUpsertFn = (
   tx: HermesControlTransaction,
   params: {
@@ -453,6 +514,12 @@ export interface HermesQuotaCoordinatorHandler {
     now?: Date,
     limit?: number
   ) => Promise<HermesExpiredReservationScanResult>;
+  readonly reconcileOutcomeUnknownIfLeaseExpired?: (
+    operationId: string
+  ) => Promise<HermesReconciliationResult>;
+  readonly findPostDispatchOrphanCandidates?: (
+    limit?: number
+  ) => Promise<HermesPostDispatchCandidateScanResult>;
 }
 
 export interface PostgresHermesQuotaCoordinatorDependencies {
@@ -495,6 +562,14 @@ export interface HermesQuotaCoordinator {
     now?: Date,
     limit?: number
   ): Promise<HermesExpiredReservationScanResult>;
+
+  reconcileOutcomeUnknownIfLeaseExpired(
+    operationId: string
+  ): Promise<HermesReconciliationResult>;
+
+  findPostDispatchOrphanCandidates(
+    limit?: number
+  ): Promise<HermesPostDispatchCandidateScanResult>;
 }
 
 /**
@@ -1137,6 +1212,34 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
     };
   }
 
+  async #findActiveLease(
+    tx: HermesControlTransaction,
+    operationId: string,
+    authorityNow: Date
+  ): Promise<{ leaseId: string } | null> {
+    const rows = await tx
+      .select({
+        leaseId: concurrencyLeases.leaseId,
+      })
+      .from(concurrencyLeases)
+      .where(
+        and(
+          eq(concurrencyLeases.operationId, operationId),
+          gt(concurrencyLeases.expiresAt, authorityNow)
+        )
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      leaseId: row.leaseId,
+    };
+  }
+
   async #captureAuthorityNow(tx: HermesControlTransaction): Promise<Date> {
     const result = await tx.execute<{ authority_now: unknown }>(
       sql`SELECT clock_timestamp() AS authority_now`
@@ -1369,6 +1472,251 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
       });
     } catch {
       return { kind: "control_unavailable", reason: "usage_control_unavailable" };
+    }
+  }
+
+  /**
+   * Reconciles a post-dispatch orphaned operation whose worker lease authority expired:
+   * 1. Lock analysis_operations FOR UPDATE
+   * 2. Validate source tuple coherence fail-closed
+   * 3. SAME-TARGET IDEMPOTENCY FIRST: already outcome_unknown/policy_pending -> already_finalized (zero lease requirement, zero mutation)
+   * 4. Different terminal state -> invalid_state (zero mutation)
+   * 5. Source must be provider_dispatch_started / indeterminate / reserved
+   * 6. Capture PostgreSQL wall-clock via clock_timestamp() AFTER operation lock
+   * 7. Check no active lease exists at authorityNow -> if active lease exists, return lease_still_active (zero mutation)
+   * 8. Canonical outcome_unknown accounting: reserved_units -= units, pending_units += units
+   * 9. Mutate analysis_operations to outcome_unknown / policy_pending / indeterminate with completedAt = authorityNow, updatedAt = authorityNow
+   * 10. Commit
+   */
+  async reconcileOutcomeUnknownIfLeaseExpired(
+    operationId: string
+  ): Promise<HermesReconciliationResult> {
+    if (this.#deps.handler?.reconcileOutcomeUnknownIfLeaseExpired) {
+      try {
+        return await this.#deps.handler.reconcileOutcomeUnknownIfLeaseExpired(operationId);
+      } catch {
+        return { kind: "control_unavailable", reason: "usage_control_unavailable" };
+      }
+    }
+
+    try {
+      const runner = this.#resolveRunner();
+
+      return await runner(async (tx) => {
+        // STEP 1: Lock analysis_operations FOR UPDATE
+        const op = await this.#lockOperation(tx, operationId);
+        // STEP 2: if not found: return not_found
+        if (!op) {
+          return { kind: "not_found", operationId };
+        }
+
+        // STEP 3: SAME TARGET IDEMPOTENCY FIRST
+        // If already:
+        // status = outcome_unknown
+        // platform_cost_status = indeterminate
+        // user_quota_status = policy_pending
+        // return already_finalized with ZERO lease requirement and ZERO mutation.
+        if (
+          op.status === "outcome_unknown" &&
+          op.userQuotaStatus === "policy_pending" &&
+          op.platformCostStatus === "indeterminate"
+        ) {
+          return {
+            kind: "already_finalized",
+            operationId,
+            status: "outcome_unknown",
+            userQuotaStatus: "policy_pending",
+          };
+        }
+
+        // STEP 4: If another terminal state: return invalid_state with ZERO mutation.
+        if (
+          op.status === "completed_success" ||
+          op.status === "completed_validation_failure" ||
+          op.status === "completed_grounding_failure" ||
+          op.status === "released" ||
+          op.status === "expired_before_dispatch"
+        ) {
+          return {
+            kind: "invalid_state",
+            operationId,
+            currentStatus: op.status,
+            currentUserQuotaStatus: op.userQuotaStatus,
+          };
+        }
+
+        // STEP 5: Only if source state remains canonically:
+        // status = provider_dispatch_started
+        // platform_cost_status = indeterminate
+        // user_quota_status = reserved
+        if (
+          op.status !== "provider_dispatch_started" ||
+          op.userQuotaStatus !== "reserved" ||
+          op.platformCostStatus !== "indeterminate" ||
+          !canTransitionOperationStatus(op.status, "outcome_unknown")
+        ) {
+          return {
+            kind: "invalid_state",
+            operationId,
+            currentStatus: op.status,
+            currentUserQuotaStatus: op.userQuotaStatus,
+          };
+        }
+
+        // Validate canonical provider_dispatch_started source row coherence
+        assertSourceOperationCoherent(op);
+
+        // STEP 6: Capture PostgreSQL real wall clock AFTER operation row lock
+        const authorityNow = await this.#captureAuthorityNow(tx);
+
+        // Step 6: Validate reconciler authority: NO active lease exists at authorityNow
+        const activeLease = await this.#findActiveLease(tx, operationId, authorityNow);
+        if (activeLease) {
+          return { kind: "lease_still_active", operationId };
+        }
+
+        assertValidOperationStatusCombination("outcome_unknown", "indeterminate", "policy_pending");
+
+        // Step 7: Mutate subject_quota_usage: reserved_units -= units, pending_units += units
+        const quotaUpdated = await tx
+          .update(subjectQuotaUsage)
+          .set({
+            reservedUnits: sql`${subjectQuotaUsage.reservedUnits} - ${op.units}`,
+            pendingUnits: sql`${subjectQuotaUsage.pendingUnits} + ${op.units}`,
+            updatedAt: sql`now()`,
+          })
+          .where(
+            and(
+              eq(subjectQuotaUsage.subjectId, op.subjectId),
+              eq(subjectQuotaUsage.periodStart, op.quotaPeriodStart),
+              eq(subjectQuotaUsage.periodEnd, op.quotaPeriodEnd),
+              gte(subjectQuotaUsage.reservedUnits, op.units)
+            )
+          )
+          .returning({ subjectId: subjectQuotaUsage.subjectId });
+
+        if (quotaUpdated.length !== 1) {
+          throw new HermesControlPersistenceError("quota_aggregate_mutation_mismatch");
+        }
+
+        // Step 8: Mutate analysis_operations to outcome_unknown terminal target
+        const opUpdated = await tx
+          .update(analysisOperations)
+          .set({
+            status: "outcome_unknown",
+            userQuotaStatus: "policy_pending",
+            platformCostStatus: "indeterminate",
+            completedAt: authorityNow,
+            updatedAt: authorityNow,
+          })
+          .where(
+            and(
+              eq(analysisOperations.id, operationId),
+              eq(analysisOperations.status, "provider_dispatch_started"),
+              eq(analysisOperations.userQuotaStatus, "reserved"),
+              eq(analysisOperations.platformCostStatus, "indeterminate")
+            )
+          )
+          .returning({ id: analysisOperations.id });
+
+        if (opUpdated.length !== 1) {
+          throw new HermesControlPersistenceError("operation_status_mutation_mismatch");
+        }
+
+        return {
+          kind: "reconciled",
+          operationId,
+          status: "outcome_unknown",
+          userQuotaStatus: "policy_pending",
+          platformCostStatus: "indeterminate",
+          units: op.units,
+        };
+      });
+    } catch {
+      return {
+        kind: "control_unavailable",
+        reason: "usage_control_unavailable",
+      };
+    }
+  }
+
+  /**
+   * Deterministically discovers candidate operations in provider_dispatch_started
+   * with no active lease at database wall-clock.
+   *
+   * Bounded by strict validated limit.
+   * Candidate discovery only: atomic authority is re-evaluated under row lock in
+   * reconcileOutcomeUnknownIfLeaseExpired.
+   */
+  async findPostDispatchOrphanCandidates(
+    limit?: number
+  ): Promise<HermesPostDispatchCandidateScanResult> {
+    const resolvedLimit = limit === undefined ? 50 : limit;
+    if (
+      typeof resolvedLimit !== "number" ||
+      !Number.isInteger(resolvedLimit) ||
+      !Number.isSafeInteger(resolvedLimit) ||
+      resolvedLimit < 1 ||
+      resolvedLimit > 100
+    ) {
+      return { kind: "control_unavailable", reason: "usage_control_unavailable" };
+    }
+
+    if (this.#deps.handler?.findPostDispatchOrphanCandidates) {
+      try {
+        return await this.#deps.handler.findPostDispatchOrphanCandidates(resolvedLimit);
+      } catch {
+        return { kind: "control_unavailable", reason: "usage_control_unavailable" };
+      }
+    }
+
+    try {
+      const runner = this.#resolveRunner();
+
+      return await runner(async (tx) => {
+        const scanNow = await this.#captureAuthorityNow(tx);
+
+        const rows = await tx
+          .select({
+            operationId: analysisOperations.id,
+            subjectId: analysisOperations.subjectId,
+            units: analysisOperations.units,
+            quotaPeriodStart: analysisOperations.quotaPeriodStart,
+            quotaPeriodEnd: analysisOperations.quotaPeriodEnd,
+          })
+          .from(analysisOperations)
+          .where(
+            and(
+              eq(analysisOperations.status, "provider_dispatch_started"),
+              eq(analysisOperations.userQuotaStatus, "reserved"),
+              eq(analysisOperations.platformCostStatus, "indeterminate"),
+              sql`NOT EXISTS (
+                SELECT 1
+                FROM ${concurrencyLeases}
+                WHERE ${concurrencyLeases.operationId} = ${analysisOperations.id}
+                  AND ${concurrencyLeases.expiresAt} > ${scanNow}
+              )`
+            )
+          )
+          .orderBy(analysisOperations.dispatchStartedAt, analysisOperations.id)
+          .limit(resolvedLimit);
+
+        return {
+          kind: "found",
+          records: rows.map((r) => ({
+            operationId: r.operationId,
+            subjectId: r.subjectId,
+            units: r.units,
+            quotaPeriodStart: r.quotaPeriodStart,
+            quotaPeriodEnd: r.quotaPeriodEnd,
+          })),
+        };
+      });
+    } catch {
+      return {
+        kind: "control_unavailable",
+        reason: "usage_control_unavailable",
+      };
     }
   }
 
