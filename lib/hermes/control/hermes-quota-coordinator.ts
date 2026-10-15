@@ -9,6 +9,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/database/schema";
 import {
   analysisOperations,
+  concurrencyLeases,
   subjectQuotaUsage,
 } from "@/database/schema/hermes-control";
 import { withHermesControlRole, type HermesControlTransaction } from "@/database/roles";
@@ -162,6 +163,19 @@ function parseNullableDate(val: unknown): Date | null {
   }
   if (val instanceof Date && !Number.isNaN(val.getTime())) {
     return val;
+  }
+  throw new HermesControlPersistenceError("persistence_inconsistency");
+}
+
+function parseRequiredDate(val: unknown): Date {
+  if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    return val;
+  }
+  if (typeof val === "string") {
+    const d = new Date(val);
+    if (!Number.isNaN(d.getTime())) {
+      return d;
+    }
   }
   throw new HermesControlPersistenceError("persistence_inconsistency");
 }
@@ -356,6 +370,10 @@ export type HermesFinalizationResult =
       readonly userQuotaStatus: HermesUserQuotaStatus;
     }
   | {
+      readonly kind: "lease_authority_lost";
+      readonly operationId: string;
+    }
+  | {
       readonly kind: "not_expired";
       readonly operationId: string;
       readonly reservedExpiresAt: Date;
@@ -415,15 +433,17 @@ export interface HermesQuotaCoordinatorHandler {
   readonly reserveOperationQuota?: (
     input: HermesOperationReservationInput
   ) => Promise<HermesOperationReservationResult>;
-  readonly commitSuccess?: (
-    operationId: string
+  readonly commitSuccessWithLease?: (
+    operationId: string,
+    leaseId: string
   ) => Promise<HermesFinalizationResult>;
   readonly releaseReservation?: (
     operationId: string
   ) => Promise<HermesFinalizationResult>;
-  readonly markPolicyPending?: (
+  readonly markPolicyPendingWithLease?: (
     operationId: string,
-    targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown"
+    targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown",
+    leaseId: string
   ) => Promise<HermesFinalizationResult>;
   readonly expireReservation?: (
     operationId: string,
@@ -451,17 +471,19 @@ export interface HermesQuotaCoordinator {
     input: HermesOperationReservationInput
   ): Promise<HermesOperationReservationResult>;
 
-  commitSuccess(
-    operationId: string
+  commitSuccessWithLease(
+    operationId: string,
+    leaseId: string
   ): Promise<HermesFinalizationResult>;
 
   releaseReservation(
     operationId: string
   ): Promise<HermesFinalizationResult>;
 
-  markPolicyPending(
+  markPolicyPendingWithLease(
     operationId: string,
-    targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown"
+    targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown",
+    leaseId: string
   ): Promise<HermesFinalizationResult>;
 
   expireReservation(
@@ -755,121 +777,28 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
   }
 
   /**
-   * Finalizes a successful interpretation:
+   * Finalizes a successful interpretation with lease fencing:
    * Validates coherent provider_dispatch_started source state,
+   * verifies active lease authority at PostgreSQL clock_timestamp(),
    * moves reserved_units -> committed_units using the operation's persisted quota period.
    */
-  async commitSuccess(operationId: string): Promise<HermesFinalizationResult> {
-    if (this.#deps.handler?.commitSuccess) {
+  async commitSuccessWithLease(
+    operationId: string,
+    leaseId: string
+  ): Promise<HermesFinalizationResult> {
+    if (this.#deps.handler?.commitSuccessWithLease) {
       try {
-        return await this.#deps.handler.commitSuccess(operationId);
+        return await this.#deps.handler.commitSuccessWithLease(operationId, leaseId);
       } catch {
         return { kind: "control_unavailable", reason: "usage_control_unavailable" };
       }
     }
 
-    try {
-      const runner = this.#resolveRunner();
-
-      return await runner(async (tx) => {
-        const op = await this.#lockOperation(tx, operationId);
-        if (!op) {
-          return { kind: "not_found", operationId };
-        }
-
-        // Enforce source row coherence and valid lifecycle timestamps fail-closed
-        assertSourceOperationCoherent(op);
-
-        if (op.status === "completed_success" && op.userQuotaStatus === "committed") {
-          return {
-            kind: "already_finalized",
-            operationId,
-            status: "completed_success",
-            userQuotaStatus: "committed",
-          };
-        }
-
-        if (op.status !== "provider_dispatch_started" || op.userQuotaStatus !== "reserved") {
-          return {
-            kind: "invalid_state",
-            operationId,
-            currentStatus: op.status,
-            currentUserQuotaStatus: op.userQuotaStatus,
-          };
-        }
-
-        if (!canTransitionOperationStatus(op.status, "completed_success")) {
-          return {
-            kind: "invalid_state",
-            operationId,
-            currentStatus: op.status,
-            currentUserQuotaStatus: op.userQuotaStatus,
-          };
-        }
-
-        assertValidOperationStatusCombination("completed_success", "assumed_incurred", "committed");
-        const transitionAt = this.#now();
-
-        // Aggregate mutation: reserved_units -= units, committed_units += units
-        const quotaUpdated = await tx
-          .update(subjectQuotaUsage)
-          .set({
-            reservedUnits: sql`${subjectQuotaUsage.reservedUnits} - ${op.units}`,
-            committedUnits: sql`${subjectQuotaUsage.committedUnits} + ${op.units}`,
-            updatedAt: sql`now()`, // Database audit timestamp
-          })
-          .where(
-            and(
-              eq(subjectQuotaUsage.subjectId, op.subjectId),
-              eq(subjectQuotaUsage.periodStart, op.quotaPeriodStart),
-              eq(subjectQuotaUsage.periodEnd, op.quotaPeriodEnd),
-              gte(subjectQuotaUsage.reservedUnits, op.units)
-            )
-          )
-          .returning({ subjectId: subjectQuotaUsage.subjectId });
-
-        if (quotaUpdated.length !== 1) {
-          throw new HermesControlPersistenceError("quota_aggregate_mutation_mismatch");
-        }
-
-        const opUpdated = await tx
-          .update(analysisOperations)
-          .set({
-            status: "completed_success",
-            userQuotaStatus: "committed",
-            platformCostStatus: "assumed_incurred",
-            completedAt: transitionAt,
-            updatedAt: transitionAt,
-          })
-          .where(
-            and(
-              eq(analysisOperations.id, operationId),
-              eq(analysisOperations.status, "provider_dispatch_started"),
-              eq(analysisOperations.userQuotaStatus, "reserved"),
-              eq(analysisOperations.platformCostStatus, "indeterminate")
-            )
-          )
-          .returning({ id: analysisOperations.id });
-
-        if (opUpdated.length !== 1) {
-          throw new HermesControlPersistenceError("operation_status_mutation_mismatch");
-        }
-
-        return {
-          kind: "finalized",
-          operationId,
-          status: "completed_success",
-          userQuotaStatus: "committed",
-          platformCostStatus: "assumed_incurred",
-          units: op.units,
-        };
-      });
-    } catch {
-      return {
-        kind: "control_unavailable",
-        reason: "usage_control_unavailable",
-      };
-    }
+    return await this.#finalizeOperationWithLease(
+      operationId,
+      "completed_success",
+      leaseId
+    );
   }
 
   /**
@@ -993,44 +922,98 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
   }
 
   /**
-   * Finalizes an ambiguous outcome into policy_pending review:
+   * Finalizes an ambiguous outcome into policy_pending review with lease fencing:
    * Moves reserved_units -> pending_units using the operation's persisted quota period.
-   * Requires coherent provider_dispatch_started source state.
+   * Requires lease authority and coherent provider_dispatch_started source state.
    */
-  async markPolicyPending(
+  async markPolicyPendingWithLease(
     operationId: string,
-    targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown"
+    targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown",
+    leaseId: string
   ): Promise<HermesFinalizationResult> {
-    if (this.#deps.handler?.markPolicyPending) {
+    if (this.#deps.handler?.markPolicyPendingWithLease) {
       try {
-        return await this.#deps.handler.markPolicyPending(operationId, targetStatus);
+        return await this.#deps.handler.markPolicyPendingWithLease(
+          operationId,
+          targetStatus,
+          leaseId
+        );
       } catch {
         return { kind: "control_unavailable", reason: "usage_control_unavailable" };
       }
     }
 
+    return await this.#finalizeOperationWithLease(
+      operationId,
+      targetStatus,
+      leaseId
+    );
+  }
+
+  /**
+   * Core lease-fenced terminal finalization transaction.
+   * Enforces exact canonical ordering:
+   * 1. Lock analysis_operations FOR UPDATE
+   * 2. SAME-TARGET IDEMPOTENCY FIRST (returns already_finalized without lease check)
+   * 3. Different-terminal / invalid-state check (returns invalid_state without lease check)
+   * 4. Source tuple validation: provider_dispatch_started / indeterminate / reserved
+   * 5. Lock matching concurrency_leases row FOR UPDATE by operation_id and lease_id
+   * 6. Missing lease -> lease_authority_lost (ZERO mutations)
+   * 7. Capture PostgreSQL wall-clock via clock_timestamp() AFTER lease row lock
+   * 8. Lease expired (expires_at <= authorityNow) -> lease_authority_lost (ZERO mutations)
+   * 9. Mutate subject_quota_usage
+   * 10. Mutate analysis_operations with completedAt = authorityNow, updatedAt = authorityNow
+   * 11. Commit
+   */
+  async #finalizeOperationWithLease(
+    operationId: string,
+    targetStatus:
+      | "completed_success"
+      | "completed_validation_failure"
+      | "completed_grounding_failure"
+      | "outcome_unknown",
+    leaseId: string
+  ): Promise<HermesFinalizationResult> {
     try {
       const runner = this.#resolveRunner();
 
       return await runner(async (tx) => {
+        // Step 1: Lock analysis_operations FOR UPDATE
         const op = await this.#lockOperation(tx, operationId);
         if (!op) {
           return { kind: "not_found", operationId };
         }
 
-        // Enforce source row coherence and valid lifecycle timestamps fail-closed
+        // Step 2: Validate lifecycle tuple coherence fail-closed
         assertSourceOperationCoherent(op);
 
-        if (op.status === targetStatus && op.userQuotaStatus === "policy_pending") {
+        const isSuccess = targetStatus === "completed_success";
+        const expectedQuotaStatus: HermesUserQuotaStatus = isSuccess ? "committed" : "policy_pending";
+        const expectedPlatformCostStatus: HermesPlatformCostStatus = isSuccess
+          ? "assumed_incurred"
+          : getExpectedCoherentStatuses(targetStatus).platformCostStatus;
+
+        assertValidOperationStatusCombination(targetStatus, expectedPlatformCostStatus, expectedQuotaStatus);
+
+        // Step 3: SAME TARGET IDEMPOTENCY FIRST
+        // If operation is already in the requested terminal target with its canonical quota state:
+        // return already_finalized WITHOUT lease lookup, lease authority requirement, quota mutation, or operation mutation.
+        if (op.status === targetStatus && op.userQuotaStatus === expectedQuotaStatus) {
           return {
             kind: "already_finalized",
             operationId,
             status: targetStatus,
-            userQuotaStatus: "policy_pending",
+            userQuotaStatus: expectedQuotaStatus,
           };
         }
 
-        if (!canTransitionOperationStatus(op.status, targetStatus) || op.userQuotaStatus !== "reserved") {
+        // Step 4: Different terminal / invalid state check (WITHOUT lease lookup or mutation)
+        if (
+          op.status !== "provider_dispatch_started" ||
+          op.userQuotaStatus !== "reserved" ||
+          op.platformCostStatus !== "indeterminate" ||
+          !canTransitionOperationStatus(op.status, targetStatus)
+        ) {
           return {
             kind: "invalid_state",
             operationId,
@@ -1039,18 +1022,36 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
           };
         }
 
-        const expected = getExpectedCoherentStatuses(targetStatus);
-        assertValidOperationStatusCombination(targetStatus, expected.platformCostStatus, expected.userQuotaStatus);
-        const transitionAt = this.#now();
+        // Step 5: Lock matching concurrency_leases row FOR UPDATE by operation_id and lease_id
+        const lease = await this.#lockMatchingLease(tx, operationId, leaseId);
+        if (!lease) {
+          return { kind: "lease_authority_lost", operationId };
+        }
 
-        // Aggregate mutation: reserved_units -= units, pending_units += units
+        // Step 6: Capture PostgreSQL real wall clock AFTER lease lock acquisition
+        const authorityNow = await this.#captureAuthorityNow(tx);
+
+        // Step 7: Compare lease expiry with authoritative database clock
+        if (lease.expiresAt.getTime() <= authorityNow.getTime()) {
+          return { kind: "lease_authority_lost", operationId };
+        }
+
+        // Step 8: Mutate subject_quota_usage
+        const quotaUpdateSet = isSuccess
+          ? {
+              reservedUnits: sql`${subjectQuotaUsage.reservedUnits} - ${op.units}`,
+              committedUnits: sql`${subjectQuotaUsage.committedUnits} + ${op.units}`,
+              updatedAt: sql`now()`,
+            }
+          : {
+              reservedUnits: sql`${subjectQuotaUsage.reservedUnits} - ${op.units}`,
+              pendingUnits: sql`${subjectQuotaUsage.pendingUnits} + ${op.units}`,
+              updatedAt: sql`now()`,
+            };
+
         const quotaUpdated = await tx
           .update(subjectQuotaUsage)
-          .set({
-            reservedUnits: sql`${subjectQuotaUsage.reservedUnits} - ${op.units}`,
-            pendingUnits: sql`${subjectQuotaUsage.pendingUnits} + ${op.units}`,
-            updatedAt: sql`now()`, // Database audit timestamp
-          })
+          .set(quotaUpdateSet)
           .where(
             and(
               eq(subjectQuotaUsage.subjectId, op.subjectId),
@@ -1065,19 +1066,20 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
           throw new HermesControlPersistenceError("quota_aggregate_mutation_mismatch");
         }
 
+        // Step 9: Mutate analysis_operations to terminal target
         const opUpdated = await tx
           .update(analysisOperations)
           .set({
             status: targetStatus,
-            userQuotaStatus: expected.userQuotaStatus,
-            platformCostStatus: expected.platformCostStatus,
-            completedAt: transitionAt,
-            updatedAt: transitionAt,
+            userQuotaStatus: expectedQuotaStatus,
+            platformCostStatus: expectedPlatformCostStatus,
+            completedAt: authorityNow,
+            updatedAt: authorityNow,
           })
           .where(
             and(
               eq(analysisOperations.id, operationId),
-              eq(analysisOperations.status, op.status),
+              eq(analysisOperations.status, "provider_dispatch_started"),
               eq(analysisOperations.userQuotaStatus, "reserved"),
               eq(analysisOperations.platformCostStatus, "indeterminate")
             )
@@ -1092,8 +1094,8 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
           kind: "finalized",
           operationId,
           status: targetStatus,
-          userQuotaStatus: expected.userQuotaStatus,
-          platformCostStatus: expected.platformCostStatus,
+          userQuotaStatus: expectedQuotaStatus,
+          platformCostStatus: expectedPlatformCostStatus,
           units: op.units,
         };
       });
@@ -1103,6 +1105,53 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
         reason: "usage_control_unavailable",
       };
     }
+  }
+
+  async #lockMatchingLease(
+    tx: HermesControlTransaction,
+    operationId: string,
+    leaseId: string
+  ): Promise<{ leaseId: string; expiresAt: Date } | null> {
+    const rows = await tx
+      .select({
+        leaseId: concurrencyLeases.leaseId,
+        expiresAt: concurrencyLeases.expiresAt,
+      })
+      .from(concurrencyLeases)
+      .where(
+        and(
+          eq(concurrencyLeases.operationId, operationId),
+          eq(concurrencyLeases.leaseId, leaseId)
+        )
+      )
+      .for("update");
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      leaseId: row.leaseId,
+      expiresAt: parseRequiredDate(row.expiresAt),
+    };
+  }
+
+  async #captureAuthorityNow(tx: HermesControlTransaction): Promise<Date> {
+    const result = await tx.execute<{ authority_now: unknown }>(
+      sql`SELECT clock_timestamp() AS authority_now`
+    );
+
+    if (!Array.isArray(result) || result.length !== 1) {
+      throw new HermesControlPersistenceError("persistence_inconsistency");
+    }
+
+    const row = result[0];
+    if (!isRecord(row)) {
+      throw new HermesControlPersistenceError("persistence_inconsistency");
+    }
+
+    return parseRequiredDate(row["authority_now"]);
   }
 
   /**

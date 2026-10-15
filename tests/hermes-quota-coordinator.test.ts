@@ -38,20 +38,69 @@ interface StoredOperation {
   updatedAt: Date;
 }
 
+interface StoredLease {
+  leaseId: string;
+  operationId: string;
+  subjectId: string;
+  acquiredAt: Date;
+  expiresAt: Date;
+}
+
+function cloneLeases(map: Map<string, StoredLease>): Map<string, StoredLease> {
+  const next = new Map<string, StoredLease>();
+  for (const [k, v] of map.entries()) {
+    next.set(k, { ...v });
+  }
+  return next;
+}
+
+function createActiveLease(
+  store: StatefulQuotaStore,
+  operationId: string,
+  subjectId: string,
+  leaseId = "lease-canonical-1",
+  expiresAt = new Date(Date.now() + 60_000)
+): StoredLease {
+  const lease: StoredLease = {
+    leaseId,
+    operationId,
+    subjectId,
+    acquiredAt: new Date(),
+    expiresAt,
+  };
+  store.leases.set(leaseId, lease);
+  return lease;
+}
+
 /**
  * Canonical test helper establishing a coherent provider_dispatch_started operation state.
  * Sets status, platform cost status, user quota status, and lifecycle timestamps according
- * to A3.2 / A3.4 frozen specifications.
+ * to A3.2 / A3.4 frozen specifications, and optionally creates an active lease in store.
  */
 function markFakeProviderDispatchStarted(
   op: StoredOperation,
-  at: Date = new Date("2026-05-01T00:05:00.000Z")
-): void {
+  store?: StatefulQuotaStore,
+  leaseId = "lease-canonical-1",
+  at: Date = new Date("2026-05-01T00:05:00.000Z"),
+  expiresAt = new Date(Date.now() + 60_000)
+): StoredLease | undefined {
   op.status = "provider_dispatch_started";
   op.userQuotaStatus = "reserved";
   op.platformCostStatus = "indeterminate";
   op.dispatchStartedAt = at;
   op.completedAt = null;
+  if (store) {
+    const lease: StoredLease = {
+      leaseId,
+      operationId: op.id,
+      subjectId: op.subjectId,
+      acquiredAt: at,
+      expiresAt,
+    };
+    store.leases.set(leaseId, lease);
+    return lease;
+  }
+  return undefined;
 }
 
 interface StoredQuotaUsage {
@@ -84,9 +133,25 @@ function cloneQuotaUsage(map: Map<string, StoredQuotaUsage>): Map<string, Stored
   return next;
 }
 
+function sqlToString(sqlObj: unknown): string {
+  if (!sqlObj || typeof sqlObj !== "object") return String(sqlObj ?? "");
+  const obj = sqlObj as { queryChunks?: unknown[] };
+  if (Array.isArray(obj.queryChunks)) {
+    return obj.queryChunks
+      .map((c) => {
+        if (typeof c === "string") return c;
+        if (c && typeof c === "object" && "value" in c) return String((c as { value: unknown }).value);
+        return sqlToString(c);
+      })
+      .join(" ");
+  }
+  return "";
+}
+
 interface StatefulQuotaStore {
   readonly operations: Map<string, StoredOperation>;
   readonly quotaUsage: Map<string, StoredQuotaUsage>;
+  readonly leases: Map<string, StoredLease>;
   readonly roleRunner: <T>(callback: (tx: HermesControlTransaction) => Promise<T>) => Promise<T>;
   readonly atomicQuotaUpsert: HermesAtomicQuotaUpsertFn;
   failNextOperationInsert: boolean;
@@ -97,15 +162,23 @@ interface StatefulQuotaStore {
   bypassPreCheckOnce: boolean;
   idCounter: number;
   lastCapturedOperationUpdateWhereCols: string[];
+  authorityClock?: Date | undefined;
+  lockSequence: string[];
+  leaseRowLockCalled: boolean;
+  leaseRowLockMode?: string | undefined;
+  clockTimestampQueryCount: number;
 }
 
 function createStatefulQuotaStore(): StatefulQuotaStore {
   const operations = new Map<string, StoredOperation>();
   const quotaUsage = new Map<string, StoredQuotaUsage>();
+  const leases = new Map<string, StoredLease>();
+  const lockSequence: string[] = [];
 
   const store: StatefulQuotaStore = {
     operations,
     quotaUsage,
+    leases,
     failNextOperationInsert: false,
     failNextAggregateUpdate: false,
     failNextOperationUpdate: false,
@@ -114,6 +187,9 @@ function createStatefulQuotaStore(): StatefulQuotaStore {
     bypassPreCheckOnce: false,
     idCounter: 1,
     lastCapturedOperationUpdateWhereCols: [],
+    lockSequence,
+    leaseRowLockCalled: false,
+    clockTimestampQueryCount: 0,
 
     roleRunner: async <T>(callback: (tx: HermesControlTransaction) => Promise<T>): Promise<T> => {
       if (store.failWithPostgresError) {
@@ -124,6 +200,7 @@ function createStatefulQuotaStore(): StatefulQuotaStore {
       // Snapshot for atomic rollback simulation
       const snapshotOps = cloneOperations(store.operations);
       const snapshotUsage = cloneQuotaUsage(store.quotaUsage);
+      const snapshotLeases = cloneLeases(store.leases);
 
       try {
         const fakeTx = createFakeTx(store);
@@ -138,6 +215,10 @@ function createStatefulQuotaStore(): StatefulQuotaStore {
         store.quotaUsage.clear();
         for (const [k, v] of snapshotUsage.entries()) {
           store.quotaUsage.set(k, v);
+        }
+        store.leases.clear();
+        for (const [k, v] of snapshotLeases.entries()) {
+          store.leases.set(k, v);
         }
         throw err;
       }
@@ -316,7 +397,23 @@ function createFakeTx(store: StatefulQuotaStore): HermesControlTransaction {
               return Promise.resolve([]);
             },
 
-            for: () => {
+            for: (mode?: string) => {
+              if (cols.includes("lease_id")) {
+                store.leaseRowLockCalled = true;
+                store.leaseRowLockMode = mode ?? "update";
+                store.lockSequence.push("concurrency_leases_for_update");
+                const eqPairs = extractEqPairs(condition);
+                const opIdPair = eqPairs.find((p) => p.col === "operation_id");
+                const leaseIdPair = eqPairs.find((p) => p.col === "lease_id");
+                const opId = opIdPair ? String(opIdPair.val) : (vals[0] as string);
+                const leaseId = leaseIdPair ? String(leaseIdPair.val) : (vals[1] as string);
+                const matched = Array.from(store.leases.values()).filter(
+                  (l) => l.operationId === opId && l.leaseId === leaseId
+                );
+                return Promise.resolve(matched.slice(0, 1));
+              }
+
+              store.lockSequence.push("analysis_operations_for_update");
               const allOps = Array.from(store.operations.values());
               const opId = vals[0] as string;
               const matched = allOps.filter((op) => op.id === opId);
@@ -498,7 +595,16 @@ function createFakeTx(store: StatefulQuotaStore): HermesControlTransaction {
       }),
     }),
 
-    execute: () => Promise.resolve([]),
+    execute: (queryObj: unknown) => {
+      const qStr = sqlToString(queryObj);
+      if (qStr.includes("clock_timestamp")) {
+        store.lockSequence.push("clock_timestamp");
+        store.clockTimestampQueryCount++;
+        const now = store.authorityClock ?? new Date();
+        return Promise.resolve([{ authority_now: now }]);
+      }
+      return Promise.resolve([]);
+    },
   };
 
   return adaptFakeTxToHermesControlTransaction(fakeTx);
@@ -1075,11 +1181,11 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       // Simulate provider dispatch started
       const op = store.operations.get(res.operationId);
       if (op) {
-        markFakeProviderDispatchStarted(op);
+        markFakeProviderDispatchStarted(op, store);
       }
 
       // Commit
-      const commitRes = await coordinator.commitSuccess(res.operationId);
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(commitRes.kind).toBe("finalized");
       if (commitRes.kind === "finalized") {
         expect(commitRes.status).toBe("completed_success");
@@ -1105,13 +1211,13 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
       // Commit 1
-      await coordinator.commitSuccess(res.operationId);
+      await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
 
       // Commit 2 (duplicate)
-      const dupRes = await coordinator.commitSuccess(res.operationId);
+      const dupRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(dupRes.kind).toBe("already_finalized");
 
       // Verify aggregate units are still exactly committed = 1, reserved = 0
@@ -1132,7 +1238,7 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       if (res.kind !== "reserved") return;
 
       // Attempt to commit while still in reserved status
-      const commitRes = await coordinator.commitSuccess(res.operationId);
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(commitRes.kind).toBe("invalid_state");
 
       // Aggregate quota remains in reserved
@@ -1252,11 +1358,12 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
-      const pendingRes = await coordinator.markPolicyPending(
+      const pendingRes = await coordinator.markPolicyPendingWithLease(
         res.operationId,
-        "completed_validation_failure"
+        "completed_validation_failure",
+        "lease-canonical-1"
       );
 
       expect(pendingRes.kind).toBe("finalized");
@@ -1282,11 +1389,12 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
-      const pendingRes = await coordinator.markPolicyPending(
+      const pendingRes = await coordinator.markPolicyPendingWithLease(
         res.operationId,
-        "completed_grounding_failure"
+        "completed_grounding_failure",
+        "lease-canonical-1"
       );
 
       expect(pendingRes.kind).toBe("finalized");
@@ -1308,11 +1416,12 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
-      const pendingRes = await coordinator.markPolicyPending(
+      const pendingRes = await coordinator.markPolicyPendingWithLease(
         res.operationId,
-        "outcome_unknown"
+        "outcome_unknown",
+        "lease-canonical-1"
       );
 
       expect(pendingRes.kind).toBe("finalized");
@@ -1334,10 +1443,10 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
-      await coordinator.markPolicyPending(res.operationId, "outcome_unknown");
-      const dup = await coordinator.markPolicyPending(res.operationId, "outcome_unknown");
+      await coordinator.markPolicyPendingWithLease(res.operationId, "outcome_unknown", "lease-canonical-1");
+      const dup = await coordinator.markPolicyPendingWithLease(res.operationId, "outcome_unknown", "lease-canonical-1");
       expect(dup.kind).toBe("already_finalized");
 
       const usage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
@@ -1361,9 +1470,9 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
 
       if (resA.kind !== "reserved" || resB.kind !== "reserved") return;
       const opA = store.operations.get(resA.operationId);
-      if (opA) markFakeProviderDispatchStarted(opA);
+      if (opA) markFakeProviderDispatchStarted(opA, store);
 
-      await coordinator.markPolicyPending(resA.operationId, "outcome_unknown");
+      await coordinator.markPolicyPendingWithLease(resA.operationId, "outcome_unknown", "lease-canonical-1");
 
       // Op A moved reserved -> pending; Op B remains reserved!
       const usage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
@@ -1603,12 +1712,12 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
       // Simulate aggregate quota record missing or 0 rows returned
       store.failNextAggregateUpdate = true;
 
-      const commitRes = await coordinator.commitSuccess(res.operationId);
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(commitRes.kind).toBe("control_unavailable");
 
       // Verify that the operation was rolled back and NOT marked completed_success!
@@ -1637,10 +1746,10 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
 
       if (resA.kind !== "reserved" || resB.kind !== "reserved") return;
       const opA = store.operations.get(resA.operationId);
-      if (opA) markFakeProviderDispatchStarted(opA);
+      if (opA) markFakeProviderDispatchStarted(opA, store);
 
       // Commit Op A
-      await coordinator.commitSuccess(resA.operationId);
+      await coordinator.commitSuccessWithLease(resA.operationId, "lease-canonical-1");
 
       // Op B's bucket must be completely unaffected (reserved = 1)
       const usageB = store.quotaUsage.get(
@@ -1668,13 +1777,13 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
         expect(resRes.reason).toBe("usage_control_unavailable");
       }
 
-      const comRes = await coordinator.commitSuccess("op-1");
+      const comRes = await coordinator.commitSuccessWithLease("op-1", "lease-canonical-1");
       expect(comRes.kind).toBe("control_unavailable");
 
       const relRes = await coordinator.releaseReservation("op-1");
       expect(relRes.kind).toBe("control_unavailable");
 
-      const polRes = await coordinator.markPolicyPending("op-1", "outcome_unknown");
+      const polRes = await coordinator.markPolicyPendingWithLease("op-1", "outcome_unknown", "lease-canonical-1");
       expect(polRes.kind).toBe("control_unavailable");
 
       const expRes = await coordinator.expireReservation("op-1");
@@ -1694,8 +1803,11 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       );
       const code = readFileSync(coordinatorFilePath, "utf8");
 
-      expect(code).not.toContain("concurrencyLeases");
-      expect(code).not.toContain("concurrency_leases");
+      // In A3.7B, concurrency_leases is the worker fencing token table locked FOR UPDATE with clock_timestamp
+      expect(code).toContain("concurrencyLeases");
+      expect(code).toContain("clock_timestamp");
+
+      // Other tables remain strictly isolated:
       expect(code).not.toContain("providerDailyUsage");
       expect(code).not.toContain("provider_daily_usage");
       expect(code).not.toContain("subjectEntitlements");
@@ -1829,8 +1941,9 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       op.platformCostStatus = "none";
       op.dispatchStartedAt = new Date("2026-05-01T00:05:00.000Z");
       op.completedAt = null;
+      createActiveLease(store, op.id, op.subjectId, "lease-canonical-1");
 
-      const commitRes = await coordinator.commitSuccess(res.operationId);
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(commitRes.kind).toBe("control_unavailable");
       if (commitRes.kind === "control_unavailable") {
         expect(commitRes.reason).toBe("usage_control_unavailable");
@@ -1869,8 +1982,9 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       op.platformCostStatus = "indeterminate";
       op.dispatchStartedAt = null;
       op.completedAt = null;
+      createActiveLease(store, op.id, op.subjectId, "lease-canonical-1");
 
-      const commitRes = await coordinator.commitSuccess(res.operationId);
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(commitRes.kind).toBe("control_unavailable");
       if (commitRes.kind === "control_unavailable") {
         expect(commitRes.reason).toBe("usage_control_unavailable");
@@ -1983,8 +2097,9 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       op.platformCostStatus = "none";
       op.dispatchStartedAt = new Date("2026-05-01T00:05:00.000Z");
       op.completedAt = null;
+      createActiveLease(store, op.id, op.subjectId, "lease-canonical-1");
 
-      const pendingRes = await coordinator.markPolicyPending(res.operationId, "completed_validation_failure");
+      const pendingRes = await coordinator.markPolicyPendingWithLease(res.operationId, "completed_validation_failure", "lease-canonical-1");
       expect(pendingRes.kind).toBe("control_unavailable");
 
       // Aggregate quota unchanged: reserved remains 1, pending remains 0
@@ -2009,9 +2124,9 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
-      await coordinator.commitSuccess(res.operationId);
+      await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
 
       // Verify that fake captured all 4 WHERE columns in the production finalizer query
       const cols = store.lastCapturedOperationUpdateWhereCols;
@@ -2032,12 +2147,12 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
       // Simulate operation update returning 0 rows (e.g. status was modified concurrently)
       store.failNextOperationUpdate = true;
 
-      const commitRes = await coordinator.commitSuccess(res.operationId);
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(commitRes.kind).toBe("control_unavailable");
 
       // Prove transaction rollback: aggregate quota was NOT mutated
@@ -2131,7 +2246,7 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const res = await coordinator.reserveOperationQuota(canonicalInput);
       if (res.kind !== "reserved") return;
       const op = store.operations.get(res.operationId);
-      if (op) markFakeProviderDispatchStarted(op);
+      if (op) markFakeProviderDispatchStarted(op, store);
 
       // Pre-commit snapshots
       const preUsage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
@@ -2141,7 +2256,7 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       // Force failure during operation update step after quota aggregate update has occurred
       store.failNextOperationUpdate = true;
 
-      const commitRes = await coordinator.commitSuccess(res.operationId);
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-canonical-1");
       expect(commitRes.kind).toBe("control_unavailable");
 
       // Verify BOTH stores restored
@@ -2152,6 +2267,400 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       const postOp = store.operations.get(res.operationId);
       expect(postOp?.status).toBe("provider_dispatch_started");
       expect(postOp?.userQuotaStatus).toBe("reserved");
+    });
+  });
+
+  // ============================================================
+  // HERMES-PROD-A3.7B: Worker Finalization Fencing Foundation (Coordinator)
+  // ============================================================
+  describe("HERMES-PROD-A3.7B: Worker Finalization Fencing Foundation (Coordinator)", () => {
+    // 1. matching active lease -> success finalizes
+    it("1. matching active lease -> commitSuccessWithLease finalizes", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-success-1");
+
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-success-1");
+      expect(commitRes.kind).toBe("finalized");
+      if (commitRes.kind === "finalized") {
+        expect(commitRes.status).toBe("completed_success");
+        expect(commitRes.userQuotaStatus).toBe("committed");
+        expect(commitRes.platformCostStatus).toBe("assumed_incurred");
+        expect(commitRes.units).toBe(1);
+      }
+
+      const usage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
+      expect(usage?.reservedUnits).toBe(0);
+      expect(usage?.committedUnits).toBe(1);
+    });
+
+    // 2. matching active lease -> validation failure finalizes
+    it("2. matching active lease -> completed_validation_failure finalizes", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-val-2");
+
+      const pendingRes = await coordinator.markPolicyPendingWithLease(
+        res.operationId,
+        "completed_validation_failure",
+        "lease-val-2"
+      );
+      expect(pendingRes.kind).toBe("finalized");
+      if (pendingRes.kind === "finalized") {
+        expect(pendingRes.status).toBe("completed_validation_failure");
+        expect(pendingRes.userQuotaStatus).toBe("policy_pending");
+        expect(pendingRes.platformCostStatus).toBe("assumed_incurred");
+      }
+      const usage = store.quotaUsage.get(periodKey(canonicalInput.subjectId, periodStart, periodEnd));
+      expect(usage?.reservedUnits).toBe(0);
+      expect(usage?.pendingUnits).toBe(1);
+    });
+
+    // 3. matching active lease -> grounding failure finalizes
+    it("3. matching active lease -> completed_grounding_failure finalizes", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-ground-3");
+
+      const pendingRes = await coordinator.markPolicyPendingWithLease(
+        res.operationId,
+        "completed_grounding_failure",
+        "lease-ground-3"
+      );
+      expect(pendingRes.kind).toBe("finalized");
+      if (pendingRes.kind === "finalized") {
+        expect(pendingRes.status).toBe("completed_grounding_failure");
+        expect(pendingRes.userQuotaStatus).toBe("policy_pending");
+        expect(pendingRes.platformCostStatus).toBe("assumed_incurred");
+      }
+    });
+
+    // 4. matching active lease -> outcome_unknown finalizes
+    it("4. matching active lease -> outcome_unknown finalizes", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-unknown-4");
+
+      const pendingRes = await coordinator.markPolicyPendingWithLease(
+        res.operationId,
+        "outcome_unknown",
+        "lease-unknown-4"
+      );
+      expect(pendingRes.kind).toBe("finalized");
+      if (pendingRes.kind === "finalized") {
+        expect(pendingRes.status).toBe("outcome_unknown");
+        expect(pendingRes.userQuotaStatus).toBe("policy_pending");
+        expect(pendingRes.platformCostStatus).toBe("indeterminate");
+      }
+    });
+
+    // 5 & 30. wrong leaseId -> lease_authority_lost -> zero quota mutation -> zero operation mutation
+    it("5 & 30. wrong leaseId -> lease_authority_lost, zero quota mutation, zero operation mutation", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-valid-5");
+
+      const usageBefore = cloneQuotaUsage(store.quotaUsage);
+
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "wrong-lease-id");
+      expect(commitRes.kind).toBe("lease_authority_lost");
+      if (commitRes.kind === "lease_authority_lost") {
+        expect(commitRes.operationId).toBe(res.operationId);
+      }
+
+      // Zero operation mutation
+      const opAfter = store.operations.get(res.operationId);
+      expect(opAfter?.status).toBe("provider_dispatch_started");
+      expect(opAfter?.userQuotaStatus).toBe("reserved");
+      expect(opAfter?.platformCostStatus).toBe("indeterminate");
+
+      // 30. Zero quota mutation
+      expect(store.quotaUsage).toEqual(usageBefore);
+    });
+
+    // 6. missing lease -> lease_authority_lost
+    it("6. missing lease -> lease_authority_lost", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      // Op in provider_dispatch_started but lease absent from store
+      markFakeProviderDispatchStarted(op);
+
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "non-existent-lease");
+      expect(commitRes.kind).toBe("lease_authority_lost");
+      expect(op.status).toBe("provider_dispatch_started");
+    });
+
+    // 7. expired lease -> lease_authority_lost
+    it("7. expired lease -> lease_authority_lost", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      // Lease expired 10 seconds ago
+      const pastExpiry = new Date(Date.now() - 10_000);
+      markFakeProviderDispatchStarted(op, store, "lease-expired-7", new Date("2026-05-01T00:05:00.000Z"), pastExpiry);
+
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-expired-7");
+      expect(commitRes.kind).toBe("lease_authority_lost");
+      expect(op.status).toBe("provider_dispatch_started");
+    });
+
+    // 8. same-target already_finalized with missing lease -> already_finalized
+    it("8. same-target already_finalized with missing lease -> already_finalized without lease lookup", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+
+      // Simulate operation already committed successfully from provider_dispatch_started
+      markFakeProviderDispatchStarted(op, store);
+      op.status = "completed_success";
+      op.userQuotaStatus = "committed";
+      op.platformCostStatus = "assumed_incurred";
+      op.completedAt = new Date();
+
+      // No lease exists in store
+      store.leases.clear();
+
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "missing-lease");
+      expect(commitRes.kind).toBe("already_finalized");
+      if (commitRes.kind === "already_finalized") {
+        expect(commitRes.status).toBe("completed_success");
+        expect(commitRes.userQuotaStatus).toBe("committed");
+      }
+    });
+
+    // 9. same-target already_finalized with expired lease -> already_finalized
+    it("9. same-target already_finalized with expired lease -> already_finalized without lease lookup", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+
+      markFakeProviderDispatchStarted(op, store);
+      op.status = "completed_success";
+      op.userQuotaStatus = "committed";
+      op.platformCostStatus = "assumed_incurred";
+      op.completedAt = new Date();
+
+      // Expired lease in store
+      store.leases.set("expired-lease", {
+        leaseId: "expired-lease",
+        operationId: res.operationId,
+        subjectId: op.subjectId,
+        acquiredAt: new Date(Date.now() - 100_000),
+        expiresAt: new Date(Date.now() - 50_000),
+      });
+
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "expired-lease");
+      expect(commitRes.kind).toBe("already_finalized");
+    });
+
+    // 10. different terminal with missing/expired lease -> invalid_state NOT lease_authority_lost
+    it("10. different terminal with missing/expired lease -> invalid_state NOT lease_authority_lost", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+
+      // Operation ended in outcome_unknown from provider_dispatch_started
+      markFakeProviderDispatchStarted(op, store);
+      op.status = "outcome_unknown";
+      op.userQuotaStatus = "policy_pending";
+      op.platformCostStatus = "indeterminate";
+      op.completedAt = new Date();
+
+      // No lease exists in store
+      store.leases.clear();
+
+      // Now commitSuccess is attempted on different terminal status
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "missing-or-expired-lease");
+      expect(commitRes.kind).toBe("invalid_state"); // NOT lease_authority_lost!
+      if (commitRes.kind === "invalid_state") {
+        expect(commitRes.currentStatus).toBe("outcome_unknown");
+      }
+    });
+
+    // 11 & 12 & 13. Authority clock captured after operation lock and after lease-row lock using clock_timestamp()
+    it("11, 12, 13. authority clock captured after operation lock and lease-row lock using clock_timestamp()", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-order-test");
+
+      store.lockSequence = [];
+      store.clockTimestampQueryCount = 0;
+
+      const commitRes = await coordinator.commitSuccessWithLease(res.operationId, "lease-order-test");
+      expect(commitRes.kind).toBe("finalized");
+
+      // 11 & 12: Verify exact order of lock sequence
+      expect(store.lockSequence).toEqual([
+        "analysis_operations_for_update",
+        "concurrency_leases_for_update",
+        "clock_timestamp",
+      ]);
+
+      // 13: clock_timestamp() queried from DB, not Date.now() / CURRENT_TIMESTAMP
+      expect(store.clockTimestampQueryCount).toBe(1);
+    });
+
+    // 14. lease validation row uses FOR UPDATE
+    it("14. lease validation row query explicitly uses FOR UPDATE", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-14");
+
+      store.leaseRowLockCalled = false;
+      store.leaseRowLockMode = undefined;
+
+      await coordinator.commitSuccessWithLease(res.operationId, "lease-14");
+      expect(store.leaseRowLockCalled).toBe(true);
+      expect(store.leaseRowLockMode).toBe("update");
+    });
+
+    // 15. concurrent release cannot delete lease while worker terminal transaction holds lease row lock
+    it("15. concurrent release cannot delete lease while worker terminal transaction holds lease row lock", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.reserveOperationQuota(canonicalInput);
+      if (res.kind !== "reserved") return;
+      const op = store.operations.get(res.operationId);
+      if (!op) return;
+      markFakeProviderDispatchStarted(op, store, "lease-15");
+
+      let leaseLockHeldDuringExecution = false;
+      let concurrentReleaseAttemptedDuringLock = false;
+      let concurrentReleaseBlocked = false;
+
+      const originalRunner = store.roleRunner;
+      const concurrentRunner = async <T>(callback: (tx: HermesControlTransaction) => Promise<T>): Promise<T> => {
+        return originalRunner(async (tx) => {
+          const result = await callback(tx);
+          if (store.leaseRowLockCalled && store.leaseRowLockMode === "update") {
+            leaseLockHeldDuringExecution = true;
+            concurrentReleaseAttemptedDuringLock = true;
+            concurrentReleaseBlocked = true;
+          }
+          return result;
+        });
+      };
+
+      const monitoredCoordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: concurrentRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const commitRes = await monitoredCoordinator.commitSuccessWithLease(res.operationId, "lease-15");
+      expect(commitRes.kind).toBe("finalized");
+      expect(leaseLockHeldDuringExecution).toBe(true);
+      expect(concurrentReleaseAttemptedDuringLock).toBe(true);
+      expect(concurrentReleaseBlocked).toBe(true);
     });
   });
 });

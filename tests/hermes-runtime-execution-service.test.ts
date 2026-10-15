@@ -180,28 +180,28 @@ function createMockHarness(overrides: {
         reservedExpiresAt: new Date(Date.now() + 105000),
       };
     }),
-    commitSuccess: vi.fn(async (): Promise<HermesFinalizationResult> => {
-      callOrder.push("quotaCoordinator.commitSuccess");
+    commitSuccessWithLease: vi.fn(async (opId: string = VALID_OPERATION_ID): Promise<HermesFinalizationResult> => {
+      callOrder.push("quotaCoordinator.commitSuccessWithLease");
       if (overrides.commitSuccessResult !== undefined) {
         return overrides.commitSuccessResult;
       }
       return {
         kind: "finalized",
-        operationId: VALID_OPERATION_ID,
+        operationId: opId,
         status: "completed_success",
         userQuotaStatus: "committed",
         platformCostStatus: "assumed_incurred",
         units: 1,
       };
     }),
-    markPolicyPending: vi.fn(async (_opId: string, targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown"): Promise<HermesFinalizationResult> => {
-      callOrder.push(`quotaCoordinator.markPolicyPending:${targetStatus}`);
+    markPolicyPendingWithLease: vi.fn(async (opId: string, targetStatus: "completed_validation_failure" | "completed_grounding_failure" | "outcome_unknown"): Promise<HermesFinalizationResult> => {
+      callOrder.push(`quotaCoordinator.markPolicyPendingWithLease:${targetStatus}`);
       if (overrides.markPolicyPendingResult !== undefined) {
         return overrides.markPolicyPendingResult;
       }
       return {
         kind: "finalized",
-        operationId: VALID_OPERATION_ID,
+        operationId: opId,
         status: targetStatus,
         userQuotaStatus: "policy_pending",
         platformCostStatus: "assumed_incurred",
@@ -586,7 +586,7 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
     // Verify strict invocation ordering: boundary started THEN provider called
     const boundaryIdx = h.callOrder.indexOf("providerBoundaryCoordinator.beginProviderDispatch");
     const providerIdx = h.callOrder.indexOf("providerPort.generateStructuredOutput");
-    const commitIdx = h.callOrder.indexOf("quotaCoordinator.commitSuccess");
+    const commitIdx = h.callOrder.indexOf("quotaCoordinator.commitSuccessWithLease");
     const leaseReleaseIdx = h.callOrder.indexOf("providerBoundaryCoordinator.releaseConcurrencyLease");
 
     expect(boundaryIdx).toBeGreaterThan(-1);
@@ -607,9 +607,10 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("provider_transport_failure");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledWith(
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
       VALID_OPERATION_ID,
-      "outcome_unknown"
+      "outcome_unknown",
+      "lease-123"
     );
   });
 
@@ -628,9 +629,10 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("validation_failure");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledWith(
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
       VALID_OPERATION_ID,
-      "completed_validation_failure"
+      "completed_validation_failure",
+      "lease-123"
     );
   });
 
@@ -646,19 +648,20 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("grounding_failure");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledWith(
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
       VALID_OPERATION_ID,
-      "completed_grounding_failure"
+      "completed_grounding_failure",
+      "lease-123"
     );
   });
 
-  // 19. success -> commitSuccess
-  it("19. success -> commitSuccess", async () => {
+  // 19. success -> commitSuccessWithLease
+  it("19. success -> commitSuccessWithLease", async () => {
     const h = createMockHarness();
     const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
 
     expect(result.ok).toBe(true);
-    expect(h.quotaCoordinator.commitSuccess).toHaveBeenCalledWith(VALID_OPERATION_ID);
+    expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledWith(VALID_OPERATION_ID, "lease-123");
     if (result.ok) {
       expect(result.operationId).toBe(VALID_OPERATION_ID);
       expect(result.interpretation.summary).toBe(validInterpretationPayload.summary);
@@ -669,7 +672,7 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
   it("20. same finalizer first attempt control_unavailable, second succeeds -> no provider retry", async () => {
     let attempt = 0;
     const h = createMockHarness();
-    vi.mocked(h.quotaCoordinator.commitSuccess).mockImplementation(async () => {
+    vi.mocked(h.quotaCoordinator.commitSuccessWithLease).mockImplementation(async () => {
       attempt++;
       if (attempt === 1) {
         return {
@@ -691,7 +694,7 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
 
     expect(result.ok).toBe(true);
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1); // Provider called only ONCE
-    expect(h.quotaCoordinator.commitSuccess).toHaveBeenCalledTimes(2);
+    expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledTimes(2);
     expect(h.sleep).toHaveBeenCalledWith(50);
   });
 
@@ -699,7 +702,7 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
   it("21. same finalizer acknowledgement ambiguity, second returns already_finalized -> treated as successful confirmation", async () => {
     let attempt = 0;
     const h = createMockHarness();
-    vi.mocked(h.quotaCoordinator.commitSuccess).mockImplementation(async () => {
+    vi.mocked(h.quotaCoordinator.commitSuccessWithLease).mockImplementation(async () => {
       attempt++;
       if (attempt === 1) {
         return {
@@ -719,13 +722,13 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
 
     expect(result.ok).toBe(true);
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.commitSuccess).toHaveBeenCalledTimes(2);
+    expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledTimes(2);
   });
 
   // 22. known success finalizer fails all bounded attempts -> finalization_unavailable -> never outcome_unknown -> provider called once
   it("22. known success finalizer fails all bounded attempts -> finalization_unavailable -> never outcome_unknown -> provider called once", async () => {
     const h = createMockHarness();
-    vi.mocked(h.quotaCoordinator.commitSuccess).mockResolvedValue({
+    vi.mocked(h.quotaCoordinator.commitSuccessWithLease).mockResolvedValue({
       kind: "control_unavailable",
       reason: "usage_control_unavailable",
     });
@@ -737,8 +740,8 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("finalization_unavailable");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.commitSuccess).toHaveBeenCalledTimes(3); // 3 bounded attempts
-    expect(h.quotaCoordinator.markPolicyPending).not.toHaveBeenCalled(); // NEVER downgraded to outcome_unknown
+    expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledTimes(3); // 3 bounded attempts
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).not.toHaveBeenCalled(); // NEVER downgraded to outcome_unknown
   });
 
   // 23. known validation failure finalizer fails -> never outcome_unknown
@@ -749,7 +752,7 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
         payload: { invalid: "malformed" },
       },
     });
-    vi.mocked(h.quotaCoordinator.markPolicyPending).mockResolvedValue({
+    vi.mocked(h.quotaCoordinator.markPolicyPendingWithLease).mockResolvedValue({
       kind: "control_unavailable",
       reason: "usage_control_unavailable",
     });
@@ -761,11 +764,12 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("finalization_unavailable");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledTimes(3);
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledTimes(3);
     // Verified: all 3 attempts were for "completed_validation_failure", NEVER outcome_unknown
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledWith(
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
       VALID_OPERATION_ID,
-      "completed_validation_failure"
+      "completed_validation_failure",
+      "lease-123"
     );
   });
 
@@ -774,7 +778,7 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
     const h = createMockHarness({
       groundingResult: false,
     });
-    vi.mocked(h.quotaCoordinator.markPolicyPending).mockResolvedValue({
+    vi.mocked(h.quotaCoordinator.markPolicyPendingWithLease).mockResolvedValue({
       kind: "control_unavailable",
       reason: "usage_control_unavailable",
     });
@@ -786,10 +790,11 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("finalization_unavailable");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledTimes(3);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledWith(
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledTimes(3);
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
       VALID_OPERATION_ID,
-      "completed_grounding_failure"
+      "completed_grounding_failure",
+      "lease-123"
     );
   });
 
@@ -965,8 +970,8 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
     expect(h.providerPort.generateStructuredOutput).not.toHaveBeenCalled();
   });
 
-  // 33. provider throws -> markPolicyPending(outcome_unknown) succeeds -> provider_transport_failure
-  it("33. provider throws -> markPolicyPending(outcome_unknown) succeeds -> provider_transport_failure, exactly 1 provider call", async () => {
+  // 33. provider throws -> markPolicyPendingWithLease(outcome_unknown) succeeds -> provider_transport_failure
+  it("33. provider throws -> markPolicyPendingWithLease(outcome_unknown) succeeds -> provider_transport_failure, exactly 1 provider call", async () => {
     const h = createMockHarness({
       providerThrow: new Error("Network drop during stream"),
     });
@@ -978,14 +983,15 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("provider_transport_failure");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledWith(
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
       VALID_OPERATION_ID,
       "outcome_unknown",
+      "lease-123"
     );
   });
 
-  // 34. provider throws -> markPolicyPending fails 3 times -> finalization_unavailable (providerOutcomeKnown: false)
-  it("34. provider throws -> markPolicyPending returns control_unavailable 3 times -> finalization_unavailable (providerOutcomeKnown: false)", async () => {
+  // 34. provider throws -> markPolicyPendingWithLease fails 3 times -> finalization_unavailable (providerOutcomeKnown: false)
+  it("34. provider throws -> markPolicyPendingWithLease returns control_unavailable 3 times -> finalization_unavailable (providerOutcomeKnown: false)", async () => {
     const h = createMockHarness({
       providerThrow: new Error("Network drop during stream"),
       markPolicyPendingResult: {
@@ -1006,11 +1012,11 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       }
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledTimes(3);
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledTimes(3);
   });
 
-  // 35. provider ok:false -> markPolicyPending(outcome_unknown) succeeds -> provider_transport_failure
-  it("35. provider ok:false -> markPolicyPending(outcome_unknown) succeeds -> provider_transport_failure, exactly 1 provider call", async () => {
+  // 35. provider ok:false -> markPolicyPendingWithLease(outcome_unknown) succeeds -> provider_transport_failure
+  it("35. provider ok:false -> markPolicyPendingWithLease(outcome_unknown) succeeds -> provider_transport_failure, exactly 1 provider call", async () => {
     const h = createMockHarness({
       providerResult: {
         ok: false,
@@ -1025,14 +1031,15 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       expect(result.code).toBe("provider_transport_failure");
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledWith(
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
       VALID_OPERATION_ID,
       "outcome_unknown",
+      "lease-123"
     );
   });
 
-  // 36. provider ok:false -> markPolicyPending fails 3 times -> finalization_unavailable (providerOutcomeKnown: false)
-  it("36. provider ok:false -> markPolicyPending returns control_unavailable 3 times -> finalization_unavailable (providerOutcomeKnown: false)", async () => {
+  // 36. provider ok:false -> markPolicyPendingWithLease fails 3 times -> finalization_unavailable (providerOutcomeKnown: false)", async () => {
+  it("36. provider ok:false -> markPolicyPendingWithLease returns control_unavailable 3 times -> finalization_unavailable (providerOutcomeKnown: false)", async () => {
     const h = createMockHarness({
       providerResult: {
         ok: false,
@@ -1056,7 +1063,7 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
       }
     }
     expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
-    expect(h.quotaCoordinator.markPolicyPending).toHaveBeenCalledTimes(3);
+    expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledTimes(3);
   });
 
   // 37. boundary control_unavailable does NOT issue releaseReservation
@@ -1612,5 +1619,246 @@ describe("HermesRuntimeExecutionService (HERMES-PROD-A3.6B)", () => {
         HERMES_RESERVATION_TTL_SECONDS: "9007199254740992",
       })
     ).toThrow(/between 90 and 120/);
+  });
+
+  // ============================================================
+  // HERMES-PROD-A3.7B: Worker Finalization Fencing Foundation (Runtime Execution)
+  // ============================================================
+  describe("HERMES-PROD-A3.7B: Worker Finalization Fencing Foundation (Runtime Execution)", () => {
+    // 16. beginProviderDispatch.started leaseId reaches commitSuccessWithLease
+    it("16. beginProviderDispatch.started leaseId reaches commitSuccessWithLease", async () => {
+      const h = createMockHarness();
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(true);
+      expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledWith(
+        VALID_OPERATION_ID,
+        "lease-123"
+      );
+    });
+
+    // 17. leaseId reaches validation failure finalizer
+    it("17. leaseId reaches validation failure finalizer", async () => {
+      const h = createMockHarness({
+        providerResult: {
+          ok: true,
+          payload: { invalid: "payload" },
+        },
+      });
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(false);
+      expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
+        VALID_OPERATION_ID,
+        "completed_validation_failure",
+        "lease-123"
+      );
+    });
+
+    // 18. leaseId reaches grounding failure finalizer
+    it("18. leaseId reaches grounding failure finalizer", async () => {
+      const h = createMockHarness({
+        groundingResult: false,
+      });
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(false);
+      expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
+        VALID_OPERATION_ID,
+        "completed_grounding_failure",
+        "lease-123"
+      );
+    });
+
+    // 19. leaseId reaches provider transport outcome_unknown finalizer
+    it("19. leaseId reaches provider transport outcome_unknown finalizer", async () => {
+      const h = createMockHarness({
+        providerThrow: new Error("Transport error"),
+      });
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(false);
+      expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledWith(
+        VALID_OPERATION_ID,
+        "outcome_unknown",
+        "lease-123"
+      );
+    });
+
+    // 20. lease_authority_lost after known success -> finalization_unavailable -> providerOutcomeKnown true -> NEVER outcome_unknown fallback
+    it("20. lease_authority_lost after known success -> finalization_unavailable -> providerOutcomeKnown true -> NEVER outcome_unknown fallback", async () => {
+      const h = createMockHarness({
+        commitSuccessResult: {
+          kind: "lease_authority_lost",
+          operationId: VALID_OPERATION_ID,
+        },
+      });
+
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("finalization_unavailable");
+        if (result.code === "finalization_unavailable") {
+          expect(result.targetStatus).toBe("completed_success");
+          expect(result.providerOutcomeKnown).toBe(true);
+          expect(result.operationId).toBe(VALID_OPERATION_ID);
+        }
+      }
+      // Never retried and never downgraded to outcome_unknown
+      expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledTimes(1);
+      expect(h.quotaCoordinator.markPolicyPendingWithLease).not.toHaveBeenCalled();
+      expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
+    });
+
+    // 21. lease_authority_lost after validation failure -> finalization_unavailable -> providerOutcomeKnown true
+    it("21. lease_authority_lost after validation failure -> finalization_unavailable -> providerOutcomeKnown true", async () => {
+      const h = createMockHarness({
+        providerResult: {
+          ok: true,
+          payload: { invalid: "payload" },
+        },
+        markPolicyPendingResult: {
+          kind: "lease_authority_lost",
+          operationId: VALID_OPERATION_ID,
+        },
+      });
+
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("finalization_unavailable");
+        if (result.code === "finalization_unavailable") {
+          expect(result.targetStatus).toBe("completed_validation_failure");
+          expect(result.providerOutcomeKnown).toBe(true);
+        }
+      }
+      expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledTimes(1);
+    });
+
+    // 22. lease_authority_lost after grounding failure -> finalization_unavailable -> providerOutcomeKnown true
+    it("22. lease_authority_lost after grounding failure -> finalization_unavailable -> providerOutcomeKnown true", async () => {
+      const h = createMockHarness({
+        groundingResult: false,
+        markPolicyPendingResult: {
+          kind: "lease_authority_lost",
+          operationId: VALID_OPERATION_ID,
+        },
+      });
+
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("finalization_unavailable");
+        if (result.code === "finalization_unavailable") {
+          expect(result.targetStatus).toBe("completed_grounding_failure");
+          expect(result.providerOutcomeKnown).toBe(true);
+        }
+      }
+      expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledTimes(1);
+    });
+
+    // 23. lease_authority_lost during transport-unknown finalizer -> finalization_unavailable -> target outcome_unknown -> providerOutcomeKnown false
+    it("23. lease_authority_lost during transport-unknown finalizer -> finalization_unavailable -> target outcome_unknown -> providerOutcomeKnown false", async () => {
+      const h = createMockHarness({
+        providerThrow: new Error("Transport socket hangup"),
+        markPolicyPendingResult: {
+          kind: "lease_authority_lost",
+          operationId: VALID_OPERATION_ID,
+        },
+      });
+
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("finalization_unavailable");
+        if (result.code === "finalization_unavailable") {
+          expect(result.targetStatus).toBe("outcome_unknown");
+          expect(result.providerOutcomeKnown).toBe(false);
+        }
+      }
+      expect(h.quotaCoordinator.markPolicyPendingWithLease).toHaveBeenCalledTimes(1);
+    });
+
+    // 24. provider called exactly once (even on lease_authority_lost)
+    it("24. provider called exactly once", async () => {
+      const h = createMockHarness({
+        commitSuccessResult: {
+          kind: "lease_authority_lost",
+          operationId: VALID_OPERATION_ID,
+        },
+      });
+
+      await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+      expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
+    });
+
+    // 25. provider never called from DB finalizer retries
+    it("25. provider never called from DB finalizer retries", async () => {
+      let attempts = 0;
+      const h = createMockHarness();
+      vi.mocked(h.quotaCoordinator.commitSuccessWithLease).mockImplementation(async () => {
+        attempts++;
+        if (attempts < 3) {
+          return { kind: "control_unavailable", reason: "usage_control_unavailable" };
+        }
+        return {
+          kind: "finalized",
+          operationId: VALID_OPERATION_ID,
+          status: "completed_success",
+          userQuotaStatus: "committed",
+          platformCostStatus: "assumed_incurred",
+          units: 1,
+        };
+      });
+
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+      expect(result.ok).toBe(true);
+      expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
+      expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledTimes(3);
+    });
+
+    // 26. releaseConcurrencyLease still executes finally
+    it("26. releaseConcurrencyLease still executes finally even after lease_authority_lost", async () => {
+      const h = createMockHarness({
+        commitSuccessResult: {
+          kind: "lease_authority_lost",
+          operationId: VALID_OPERATION_ID,
+        },
+      });
+
+      await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+      expect(h.providerBoundaryCoordinator.releaseConcurrencyLease).toHaveBeenCalledWith(
+        VALID_OPERATION_ID
+      );
+    });
+
+    // 29. ack-loss: first finalizer logically commits, retry same target after lease loss -> already_finalized
+    it("29. ack-loss: first finalizer logically commits, retry same target returns already_finalized -> execution succeeds", async () => {
+      let callCount = 0;
+      const h = createMockHarness();
+      vi.mocked(h.quotaCoordinator.commitSuccessWithLease).mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // Attempt 1: socket drop simulated after commit
+          return { kind: "control_unavailable", reason: "usage_control_unavailable" };
+        }
+        // Attempt 2: returns already_finalized from DB idempotency check
+        return {
+          kind: "already_finalized",
+          operationId: VALID_OPERATION_ID,
+          status: "completed_success",
+          userQuotaStatus: "committed",
+        };
+      });
+
+      const result = await h.service.executeJurisprudenceInterpretation(h.defaultInput);
+      expect(result.ok).toBe(true);
+      expect(h.quotaCoordinator.commitSuccessWithLease).toHaveBeenCalledTimes(2);
+      expect(h.providerPort.generateStructuredOutput).toHaveBeenCalledTimes(1);
+    });
   });
 });

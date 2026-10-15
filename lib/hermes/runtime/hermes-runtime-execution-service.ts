@@ -39,6 +39,7 @@ import type {
 import {
   type HermesProviderBoundaryCoordinator,
   type HermesProviderBoundaryLimits,
+  type HermesProviderBoundaryResult,
   MIN_HERMES_LEASE_TTL_SECONDS,
   MAX_HERMES_LEASE_TTL_SECONDS,
   DEFAULT_HERMES_LEASE_TTL_SECONDS,
@@ -556,49 +557,50 @@ export class HermesRuntimeExecutionService implements HermesRuntimeExecutionServ
       leaseTtlSeconds: this.#leaseTtlSeconds,
     };
 
-    let boundaryEntered = false;
+    let boundaryRes: HermesProviderBoundaryResult;
     try {
-      const boundaryRes = await this.#providerBoundaryCoordinator.beginProviderDispatch(
+      boundaryRes = await this.#providerBoundaryCoordinator.beginProviderDispatch(
         operationId,
         limits
       );
-
-      if (boundaryRes.kind === "started") {
-        boundaryEntered = true;
-      } else {
-        if (boundaryRes.kind === "subject_concurrency_conflict") {
-          await this.#safeReleaseReservation(operationId);
-          return { ok: false, code: "subject_concurrency_conflict" };
-        }
-        if (boundaryRes.kind === "concurrency_capacity_exceeded") {
-          await this.#safeReleaseReservation(operationId);
-          return { ok: false, code: "concurrency_capacity_exceeded" };
-        }
-        if (boundaryRes.kind === "daily_limit_exhausted") {
-          await this.#safeReleaseReservation(operationId);
-          return { ok: false, code: "daily_limit_exhausted" };
-        }
-        if (boundaryRes.kind === "reservation_expired") {
-          // Fresh expiry: use quota coordinator's trusted clock, NOT stale request-start referenceNow
-          await this.#safeExpireReservation(operationId);
-          return { ok: false, code: "reservation_expired", operationId };
-        }
-        if (boundaryRes.kind === "already_started") {
-          // Cardinal invariant: NEVER release reservation, NEVER redispatch on already_started
-          return { ok: false, code: "already_started", operationId };
-        }
-        if (boundaryRes.kind === "already_finalized") {
-          // Cardinal invariant: NEVER release reservation, NEVER redispatch on already_finalized
-          return { ok: false, code: "already_finalized", operationId };
-        }
-        // control_unavailable: transaction state may be ambiguous (e.g. commit drop),
-        // therefore DO NOT issue potentially unsafe releaseReservation. Leave for safe reconciliation/expiry.
-        return { ok: false, code: "control_unavailable" };
-      }
     } catch {
       // Persistence error calling beginProviderDispatch: boundary outcome is ambiguous; do NOT release
       return { ok: false, code: "control_unavailable" };
     }
+
+    if (boundaryRes.kind !== "started") {
+      if (boundaryRes.kind === "subject_concurrency_conflict") {
+        await this.#safeReleaseReservation(operationId);
+        return { ok: false, code: "subject_concurrency_conflict" };
+      }
+      if (boundaryRes.kind === "concurrency_capacity_exceeded") {
+        await this.#safeReleaseReservation(operationId);
+        return { ok: false, code: "concurrency_capacity_exceeded" };
+      }
+      if (boundaryRes.kind === "daily_limit_exhausted") {
+        await this.#safeReleaseReservation(operationId);
+        return { ok: false, code: "daily_limit_exhausted" };
+      }
+      if (boundaryRes.kind === "reservation_expired") {
+        // Fresh expiry: use quota coordinator's trusted clock, NOT stale request-start referenceNow
+        await this.#safeExpireReservation(operationId);
+        return { ok: false, code: "reservation_expired", operationId };
+      }
+      if (boundaryRes.kind === "already_started") {
+        // Cardinal invariant: NEVER release reservation, NEVER redispatch on already_started
+        return { ok: false, code: "already_started", operationId };
+      }
+      if (boundaryRes.kind === "already_finalized") {
+        // Cardinal invariant: NEVER release reservation, NEVER redispatch on already_finalized
+        return { ok: false, code: "already_finalized", operationId };
+      }
+      // control_unavailable: transaction state may be ambiguous (e.g. commit drop),
+      // therefore DO NOT issue potentially unsafe releaseReservation. Leave for safe reconciliation/expiry.
+      return { ok: false, code: "control_unavailable" };
+    }
+
+    const boundaryEntered = true;
+    const leaseId = boundaryRes.leaseId;
 
     // Steps 7-11: Provider Execution & Lifecycle (under try-finally for unconditional lease release)
     try {
@@ -608,7 +610,7 @@ export class HermesRuntimeExecutionService implements HermesRuntimeExecutionServ
         providerOutcome = await this.#providerPort.generateStructuredOutput(prepRes.request);
       } catch {
         const finalRes = await this.#finalizeWithRetry(operationId, "outcome_unknown", () =>
-          this.#quotaCoordinator.markPolicyPending(operationId, "outcome_unknown")
+          this.#quotaCoordinator.markPolicyPendingWithLease(operationId, "outcome_unknown", leaseId)
         );
         if (!finalRes.ok) {
           return {
@@ -629,7 +631,7 @@ export class HermesRuntimeExecutionService implements HermesRuntimeExecutionServ
       // Step 8: Provider transport/network failure handling
       if (!providerOutcome.ok) {
         const finalRes = await this.#finalizeWithRetry(operationId, "outcome_unknown", () =>
-          this.#quotaCoordinator.markPolicyPending(operationId, "outcome_unknown")
+          this.#quotaCoordinator.markPolicyPendingWithLease(operationId, "outcome_unknown", leaseId)
         );
         if (!finalRes.ok) {
           return {
@@ -654,9 +656,10 @@ export class HermesRuntimeExecutionService implements HermesRuntimeExecutionServ
           operationId,
           "completed_validation_failure",
           () =>
-            this.#quotaCoordinator.markPolicyPending(
+            this.#quotaCoordinator.markPolicyPendingWithLease(
               operationId,
-              "completed_validation_failure"
+              "completed_validation_failure",
+              leaseId
             )
         );
 
@@ -689,9 +692,10 @@ export class HermesRuntimeExecutionService implements HermesRuntimeExecutionServ
           operationId,
           "completed_grounding_failure",
           () =>
-            this.#quotaCoordinator.markPolicyPending(
+            this.#quotaCoordinator.markPolicyPendingWithLease(
               operationId,
-              "completed_grounding_failure"
+              "completed_grounding_failure",
+              leaseId
             )
         );
 
@@ -716,7 +720,7 @@ export class HermesRuntimeExecutionService implements HermesRuntimeExecutionServ
       const commitRes = await this.#finalizeWithRetry(
         operationId,
         "completed_success",
-        () => this.#quotaCoordinator.commitSuccess(operationId)
+        () => this.#quotaCoordinator.commitSuccessWithLease(operationId, leaseId)
       );
 
       if (!commitRes.ok) {
