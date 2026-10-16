@@ -5,8 +5,11 @@ import {
   POST,
   PUT,
   DELETE,
-  handleHermesReconciliationCronGet,
 } from "@/app/api/internal/cron/hermes-reconciliation/route";
+import * as routeExports from "@/app/api/internal/cron/hermes-reconciliation/route";
+import {
+  handleHermesReconciliationCronGet,
+} from "@/lib/hermes/control/hermes-reconciliation-cron-handler";
 import {
   isHermesReconciliationCronEnabled,
   readHermesReconciliationCronSecret,
@@ -499,6 +502,15 @@ describe("HERMES-PROD-A3.7D: Reconciliation Cron Host", () => {
       expect(res.status).toBe(405);
       const json = (await res.json()) as Record<string, unknown>;
       expect(json).toEqual({ error: "Method Not Allowed" });
+    });
+
+    it("15b. route.ts exports strictly allowed Next.js Route methods only", () => {
+      const allowedExports = new Set(["GET", "POST", "PUT", "DELETE"]);
+      const actualExports = Object.keys(routeExports);
+      expect(actualExports.sort()).toEqual(["DELETE", "GET", "POST", "PUT"]);
+      for (const exp of actualExports) {
+        expect(allowedExports.has(exp)).toBe(true);
+      }
     });
   });
 

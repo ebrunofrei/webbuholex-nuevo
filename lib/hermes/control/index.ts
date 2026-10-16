@@ -15,3 +15,4 @@ export * from "./hermes-post-dispatch-reconciler";
 export * from "./hermes-reconciliation-cron-config";
 export * from "./hermes-reconciliation-cron-logger";
 export * from "./hermes-reconciliation-cron-host";
+export * from "./hermes-reconciliation-cron-handler";
