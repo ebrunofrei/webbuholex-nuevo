@@ -663,23 +663,44 @@ describe("HERMES-PROD-A3.2: Hermes Control Foundation & Schema Consistency", () 
       expect(canTransitionOperationStatus("completed_success", "expired_before_dispatch")).toBe(false);
     });
 
-    it("verifies migration remains 0041 and unapplied with no 0042 migration created", () => {
+    it("verifies migration 0042 follows 0041 and grants strictly UPDATE on concurrency_leases", () => {
       const journalRaw = readFileSync(
         join(process.cwd(), "database", "migrations", "meta", "_journal.json"),
         "utf8"
       );
       const journal = JSON.parse(journalRaw);
       const entries = journal.entries as Array<{ idx: number; tag: string }>;
+      const entry41 = entries.find((e) => e.idx === 41);
+      const entry42 = entries.find((e) => e.idx === 42);
+
+      expect(entry41).toBeDefined();
+      expect(entry41?.tag).toBe("0041_hermes_control_schema");
+
+      expect(entry42).toBeDefined();
+      expect(entry42?.tag).toBe("0042_hermes_control_lease_lock_privilege");
+
       const latestEntry = entries[entries.length - 1];
-      expect(latestEntry).toBeDefined();
-      if (!latestEntry) throw new Error("latestEntry not defined");
-      expect(latestEntry.idx).toBe(41);
-      expect(latestEntry.tag).toBe("0041_hermes_control_schema");
+      expect(latestEntry?.idx).toBe(42);
 
       const migrationsDir = join(process.cwd(), "database", "migrations");
       const files = readdirSync(migrationsDir) as string[];
-      const migration42 = files.find((f: string) => f.startsWith("0042"));
-      expect(migration42).toBeUndefined();
+      const migration43 = files.find((f: string) => f.startsWith("0043"));
+      expect(migration43).toBeUndefined();
+
+      const migration42Path = join(migrationsDir, "0042_hermes_control_lease_lock_privilege.sql");
+      const migration42Sql = readFileSync(migration42Path, "utf8");
+      expect(migration42Sql).toContain('GRANT UPDATE ON TABLE "hermes_control"."concurrency_leases" TO hermes_control_runtime;');
+
+      // Ensure no unrelated or overreaching grants
+      const grants42 = migration42Sql.match(/GRANT [^;]+ TO [^;]+;/g) || [];
+      expect(grants42.length).toBe(1);
+      expect(grants42[0]).toBe('GRANT UPDATE ON TABLE "hermes_control"."concurrency_leases" TO hermes_control_runtime;');
+
+      expect(migration42Sql).not.toContain("ALL PRIVILEGES");
+      expect(migration42Sql).not.toContain("CREATE ROLE");
+      expect(migration42Sql).not.toContain("DROP");
+      expect(migration42Sql).not.toContain("REVOKE");
+      expect(migration42Sql).not.toContain("ALTER ROLE");
     });
   });
 

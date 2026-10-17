@@ -167,6 +167,7 @@ interface StatefulQuotaStore {
   leaseRowLockCalled: boolean;
   leaseRowLockMode?: string | undefined;
   clockTimestampQueryCount: number;
+  lastCapturedScanCondition?: unknown;
 }
 
 function createStatefulQuotaStore(): StatefulQuotaStore {
@@ -190,6 +191,7 @@ function createStatefulQuotaStore(): StatefulQuotaStore {
     lockSequence,
     leaseRowLockCalled: false,
     clockTimestampQueryCount: 0,
+    lastCapturedScanCondition: undefined,
 
     roleRunner: async <T>(callback: (tx: HermesControlTransaction) => Promise<T>): Promise<T> => {
       if (store.failWithPostgresError) {
@@ -443,6 +445,7 @@ function createFakeTx(store: StatefulQuotaStore): HermesControlTransaction {
                   vals.includes("provider_dispatch_started") ||
                   condStr.includes("provider_dispatch_started")
                 ) {
+                  store.lastCapturedScanCondition = condition;
                   const scanNow =
                     (vals.find((v) => v instanceof Date) as Date | undefined) ??
                     store.authorityClock ??
@@ -3121,6 +3124,237 @@ describe("HERMES-PROD-A3.4: Quota & Operation Coordinator", () => {
       store.failWithPostgresError = true;
       const scanRes = await coordinator.findPostDispatchOrphanCandidates(50);
       expect(scanRes.kind).toBe("control_unavailable");
+    });
+  });
+
+  // ============================================================
+  // HERMES-PROD-A3.7E-A7: Physical A6 Findings Remediation & Regressions
+  // ============================================================
+  describe("HERMES-PROD-A3.7E-A7: Physical A6 Findings Remediation & Regressions", () => {
+    it("A7-DEFECT-A1: findPostDispatchOrphanCandidates uses clock_timestamp() in SQL and binds ZERO JS Date parameters", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      const res = await coordinator.findPostDispatchOrphanCandidates(10);
+      expect(res.kind).toBe("found");
+
+      // Verify the condition passed into where(...) was captured
+      expect(store.lastCapturedScanCondition).toBeDefined();
+      const cond = store.lastCapturedScanCondition;
+
+      // 1. SQL string must contain native PostgreSQL clock_timestamp()
+      const condSqlStr = sqlToString(cond);
+      expect(condSqlStr).toContain("clock_timestamp()");
+
+      // 2. Extracted SQL values must contain ZERO Date instances (no JS Date parameter serialization)
+      const condValues = extractSqlValues(cond);
+      const dateValues = condValues.filter((v) => v instanceof Date);
+      expect(dateValues.length).toBe(0);
+
+      // 3. Proves no postgres.js serializer TypeError:
+      // Verify simulated postgres.js string serializer accepts all query parameter values
+      for (const val of condValues) {
+        expect(typeof val === "string" || typeof val === "number" || typeof val === "boolean").toBe(true);
+      }
+    });
+
+    it("A7-DEFECT-A2: candidate scan semantic cases (active excluded, expired included, missing included, terminal excluded)", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      store.authorityClock = referenceNow;
+
+      // Active lease: expires at referenceNow + 30s -> excluded
+      const r1 = await coordinator.reserveOperationQuota({
+        ...canonicalInput,
+        idempotencyKey: "a7-scan-active",
+        recordId: "rec-a7-1",
+      });
+      if (r1.kind !== "reserved") throw new Error("reserve failed");
+      const op1 = store.operations.get(r1.operationId);
+      if (op1) markFakeProviderDispatchStarted(op1, store, "lease-a7-active", referenceNow, new Date(referenceNow.getTime() + 30_000));
+
+      // Expired lease: expired at referenceNow - 10s -> eligible
+      const r2 = await coordinator.reserveOperationQuota({
+        ...canonicalInput,
+        idempotencyKey: "a7-scan-expired",
+        recordId: "rec-a7-2",
+      });
+      if (r2.kind !== "reserved") throw new Error("reserve failed");
+      const op2 = store.operations.get(r2.operationId);
+      if (op2) markFakeProviderDispatchStarted(op2, store, "lease-a7-expired", new Date(referenceNow.getTime() - 60_000), new Date(referenceNow.getTime() - 10_000));
+
+      // Missing lease: dispatched but no lease row -> eligible
+      const r3 = await coordinator.reserveOperationQuota({
+        ...canonicalInput,
+        idempotencyKey: "a7-scan-missing",
+        recordId: "rec-a7-3",
+      });
+      if (r3.kind !== "reserved") throw new Error("reserve failed");
+      const op3 = store.operations.get(r3.operationId);
+      if (op3) markFakeProviderDispatchStarted(op3);
+
+      // Terminal completed_success -> excluded
+      const r4 = await coordinator.reserveOperationQuota({
+        ...canonicalInput,
+        idempotencyKey: "a7-scan-completed",
+        recordId: "rec-a7-4",
+      });
+      if (r4.kind !== "reserved") throw new Error("reserve failed");
+      const op4 = store.operations.get(r4.operationId);
+      if (op4) {
+        op4.status = "completed_success";
+        op4.userQuotaStatus = "committed";
+        op4.platformCostStatus = "assumed_incurred";
+      }
+
+      // Non-dispatched reserved -> excluded
+      const r5 = await coordinator.reserveOperationQuota({
+        ...canonicalInput,
+        idempotencyKey: "a7-scan-undispatched",
+        recordId: "rec-a7-5",
+      });
+      if (r5.kind !== "reserved") throw new Error("reserve failed");
+
+      const scanResult = await coordinator.findPostDispatchOrphanCandidates(50);
+      expect(scanResult.kind).toBe("found");
+      if (scanResult.kind === "found") {
+        const foundIds = scanResult.records.map((r) => r.operationId);
+        expect(foundIds).toContain(r2.operationId);
+        expect(foundIds).toContain(r3.operationId);
+        expect(foundIds).not.toContain(r1.operationId);
+        expect(foundIds).not.toContain(r4.operationId);
+        expect(foundIds).not.toContain(r5.operationId);
+      }
+    });
+
+    it("A7-DEFECT-B1: worker terminal fencing preserves FOR UPDATE on concurrency_leases and does NOT weaken to share or key share", async () => {
+      const store = createStatefulQuotaStore();
+      const coordinator = new PostgresHermesQuotaCoordinator({
+        roleRunner: store.roleRunner,
+        atomicQuotaUpsert: store.atomicQuotaUpsert,
+        now: () => referenceNow,
+      });
+
+      store.authorityClock = referenceNow;
+
+      // 1. Worker success finalization
+      const rSuccess = await coordinator.reserveOperationQuota({
+        ...canonicalInput,
+        idempotencyKey: "a7-lock-success",
+        recordId: "rec-a7-lock-1",
+      });
+      if (rSuccess.kind !== "reserved") throw new Error("reserve failed");
+      const opSuccess = store.operations.get(rSuccess.operationId);
+      if (opSuccess) {
+        markFakeProviderDispatchStarted(
+          opSuccess,
+          store,
+          "lease-a7-lock-1",
+          referenceNow,
+          new Date(referenceNow.getTime() + 60_000)
+        );
+      }
+
+      store.leaseRowLockCalled = false;
+      store.leaseRowLockMode = undefined;
+      const successResult = await coordinator.commitSuccessWithLease(
+        rSuccess.operationId,
+        "lease-a7-lock-1"
+      );
+
+      expect(successResult.kind).toBe("finalized");
+      if (successResult.kind === "finalized") {
+        expect(successResult.status).toBe("completed_success");
+      }
+      expect(store.leaseRowLockCalled).toBe(true);
+      expect(store.leaseRowLockMode).toBe("update");
+      expect(store.leaseRowLockMode).not.toBe("share");
+      expect(store.leaseRowLockMode).not.toBe("key share");
+      expect(store.leaseRowLockMode).not.toBe("no key update");
+
+      // 2. Worker policy pending finalization
+      const rPending = await coordinator.reserveOperationQuota({
+        ...canonicalInput,
+        idempotencyKey: "a7-lock-pending",
+        recordId: "rec-a7-lock-2",
+      });
+      if (rPending.kind !== "reserved") throw new Error("reserve failed");
+      const opPending = store.operations.get(rPending.operationId);
+      if (opPending) {
+        markFakeProviderDispatchStarted(
+          opPending,
+          store,
+          "lease-a7-lock-2",
+          referenceNow,
+          new Date(referenceNow.getTime() + 60_000)
+        );
+      }
+
+      store.leaseRowLockCalled = false;
+      store.leaseRowLockMode = undefined;
+      const pendingResult = await coordinator.markPolicyPendingWithLease(
+        rPending.operationId,
+        "completed_validation_failure",
+        "lease-a7-lock-2"
+      );
+
+      expect(pendingResult.kind).toBe("finalized");
+      if (pendingResult.kind === "finalized") {
+        expect(pendingResult.status).toBe("completed_validation_failure");
+      }
+      expect(store.leaseRowLockCalled).toBe(true);
+      expect(store.leaseRowLockMode).toBe("update");
+      expect(store.leaseRowLockMode).not.toBe("share");
+      expect(store.leaseRowLockMode).not.toBe("key share");
+      expect(store.leaseRowLockMode).not.toBe("no key update");
+    });
+
+    it("A7-DEFECT-B2: static audit verifies zero ordinary UPDATE statements on concurrency_leases in production codebase", () => {
+      const coordinatorSrc = readFileSync(
+        join(process.cwd(), "lib", "hermes", "control", "hermes-quota-coordinator.ts"),
+        "utf8"
+      );
+      const boundarySrc = readFileSync(
+        join(process.cwd(), "lib", "hermes", "control", "hermes-provider-boundary-coordinator.ts"),
+        "utf8"
+      );
+
+      // Verify no tx.update(concurrencyLeases) or UPDATE concurrency_leases exists
+      expect(coordinatorSrc).not.toContain("update(concurrencyLeases)");
+      expect(boundarySrc).not.toContain("update(concurrencyLeases)");
+      expect(coordinatorSrc).not.toMatch(/UPDATE\s+["']?hermes_control["']?\.["']?concurrency_leases["']?/i);
+      expect(boundarySrc).not.toMatch(/UPDATE\s+["']?hermes_control["']?\.["']?concurrency_leases["']?/i);
+
+      // Verify row lock explicitly requests .for("update")
+      expect(coordinatorSrc).toContain('.for("update")');
+    });
+
+    it("A7-DEFECT-A3: static audit verifies findPostDispatchOrphanCandidates does not capture authority now or bind Date", () => {
+      const coordinatorSrc = readFileSync(
+        join(process.cwd(), "lib", "hermes", "control", "hermes-quota-coordinator.ts"),
+        "utf8"
+      );
+
+      // Extract the findPostDispatchOrphanCandidates method body
+      const methodMatch = coordinatorSrc.match(
+        /async findPostDispatchOrphanCandidates\([\s\S]*?\n  \}/
+      );
+      expect(methodMatch).toBeDefined();
+      const methodBody = methodMatch?.[0] ?? "";
+
+      expect(methodBody).toContain("clock_timestamp()");
+      expect(methodBody).not.toContain("captureAuthorityNow");
+      expect(methodBody).not.toContain("Date.now()");
+      expect(methodBody).not.toContain("new Date()");
     });
   });
 });

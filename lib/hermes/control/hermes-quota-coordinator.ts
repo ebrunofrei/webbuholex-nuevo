@@ -1674,8 +1674,6 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
       const runner = this.#resolveRunner();
 
       return await runner(async (tx) => {
-        const scanNow = await this.#captureAuthorityNow(tx);
-
         const rows = await tx
           .select({
             operationId: analysisOperations.id,
@@ -1694,7 +1692,7 @@ export class PostgresHermesQuotaCoordinator implements HermesQuotaCoordinator {
                 SELECT 1
                 FROM ${concurrencyLeases}
                 WHERE ${concurrencyLeases.operationId} = ${analysisOperations.id}
-                  AND ${concurrencyLeases.expiresAt} > ${scanNow}
+                  AND ${concurrencyLeases.expiresAt} > clock_timestamp()
               )`
             )
           )
