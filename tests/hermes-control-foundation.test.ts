@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
+import { withHermesControlRole } from "@/database/roles";
+import { sql } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type * as schema from "@/database/schema";
 import {
   HERMES_OPERATION_STATUSES,
   HERMES_PLATFORM_COST_STATUSES,
@@ -676,6 +680,69 @@ describe("HERMES-PROD-A3.2: Hermes Control Foundation & Schema Consistency", () 
       const files = readdirSync(migrationsDir) as string[];
       const migration42 = files.find((f: string) => f.startsWith("0042"));
       expect(migration42).toBeUndefined();
+    });
+  });
+
+  // ============================================================
+  // G. Role Helper Verification
+  // ============================================================
+  describe("G. Role Helper Verification", () => {
+    it("withHermesControlRole issues SET LOCAL ROLE hermes_control_runtime inside transaction", async () => {
+      const mockTx = {
+        execute: vi.fn(async () => undefined),
+      };
+
+      const mockDb = {
+        transaction: vi.fn(async (callback) => {
+          return await callback(mockTx);
+        }),
+      };
+
+      const callbackMock = vi.fn(async (tx) => {
+        expect(tx).toBe(mockTx);
+        return "operation_success";
+      });
+
+      const result = await withHermesControlRole(
+        mockDb as unknown as PostgresJsDatabase<typeof schema>,
+        callbackMock
+      );
+
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.execute).toHaveBeenCalledTimes(1);
+      const expectedSql = sql`SET LOCAL ROLE hermes_control_runtime`;
+      expect(mockTx.execute).toHaveBeenCalledWith(expectedSql);
+      expect(callbackMock).toHaveBeenCalledTimes(1);
+      expect(result).toBe("operation_success");
+    });
+
+    it("withHermesControlRole fails closed: if SET LOCAL ROLE fails, callback must never run", async () => {
+      const permissionDeniedError = new Error("permission denied for role hermes_control_runtime");
+      const mockTx = {
+        execute: vi.fn(async () => {
+          throw permissionDeniedError;
+        }),
+      };
+
+      const mockDb = {
+        transaction: vi.fn(async (callback) => {
+          return await callback(mockTx);
+        }),
+      };
+
+      const callbackMock = vi.fn(async () => {
+        return "should_never_run";
+      });
+
+      await expect(
+        withHermesControlRole(
+          mockDb as unknown as PostgresJsDatabase<typeof schema>,
+          callbackMock
+        )
+      ).rejects.toThrow(
+        "permission denied for role hermes_control_runtime"
+      );
+      expect(callbackMock).not.toHaveBeenCalled();
     });
   });
 });

@@ -31,6 +31,8 @@ import {
   readJurisprudenceAuthorizationDatabaseConfig,
   JurisprudenceInterpretationReadDatabaseRuntimeConfig,
   readJurisprudenceInterpretationReadDatabaseConfig,
+  HermesControlDatabaseRuntimeConfig,
+  readHermesControlDatabaseConfig,
 } from "./config";
 
 export interface DatabaseClientBundle {
@@ -366,5 +368,32 @@ export function getJurisprudenceInterpretationReadDatabase(
   }
   const created = createJurisprudenceInterpretationReadDatabaseClient(resolvedConfig);
   interpretationReadClientCache.set(resolvedConfig.url, created);
+  return created.db;
+}
+
+const hermesControlClientCache = new Map<string, DatabaseClientBundle>();
+
+export function createHermesControlDatabaseClient(config: HermesControlDatabaseRuntimeConfig): DatabaseClientBundle {
+  const sql = postgres(config.url, {
+    max: config.maxConnections,
+    idle_timeout: config.idleTimeoutSeconds,
+    connect_timeout: config.connectTimeoutSeconds,
+    prepare: config.prepare,
+    ssl: "require",
+  });
+  const db = drizzle(sql, { schema });
+  return { sql, db };
+}
+
+export function getHermesControlDatabase(
+  config?: HermesControlDatabaseRuntimeConfig
+): PostgresJsDatabase<typeof schema> {
+  const resolvedConfig = config ?? readHermesControlDatabaseConfig();
+  const cached = hermesControlClientCache.get(resolvedConfig.url);
+  if (cached) {
+    return cached.db;
+  }
+  const created = createHermesControlDatabaseClient(resolvedConfig);
+  hermesControlClientCache.set(resolvedConfig.url, created);
   return created.db;
 }

@@ -32,7 +32,8 @@ import type {
   JurisprudenceRepositoryReadAccess,
   JurisprudenceReadTransactionScope,
 } from "@/lib/jurisprudence/postgres-jurisprudence-repository";
-import { getDatabase } from "@/database/client";
+import { getHermesControlDatabase } from "@/database/client";
+import { readHermesControlDatabaseConfig } from "@/database/config";
 import {
   HermesRuntimeExecutionService,
   readHermesRuntimeLimitsConfig,
@@ -72,6 +73,7 @@ export interface JurisprudenceInterpretationRuntimeDependencies<
   readonly rateLimiter?: JurisprudenceRateLimiterPort | undefined;
   readonly env?: Partial<NodeJS.ProcessEnv> | undefined;
   readonly db?: PostgresJsDatabase<typeof schema> | undefined;
+  readonly hermesDb?: PostgresJsDatabase<typeof schema> | undefined;
   readonly subjectRepository?: HermesSubjectRepository | undefined;
   readonly entitlementRepository?: HermesEntitlementRepository | undefined;
   readonly quotaCoordinator?: HermesQuotaCoordinator | undefined;
@@ -181,32 +183,41 @@ export function createJurisprudenceInterpretationRuntime<
     jurisprudenceRepository: sourceAdapter,
   });
 
-  const roleRunner: HermesControlRoleRunner = async <T>(
-    callback: (tx: HermesControlTransaction) => Promise<T>
-  ): Promise<T> => {
-    const db = dependencies.db ?? getDatabase();
-    return withHermesControlRole(db, callback);
+  let memoizedRunner: HermesControlRoleRunner | undefined;
+  const getRoleRunner = (): HermesControlRoleRunner => {
+    if (!memoizedRunner) {
+      const hermesDb =
+        dependencies.hermesDb ??
+        getHermesControlDatabase(readHermesControlDatabaseConfig(env));
+
+      memoizedRunner = async <T>(
+        callback: (tx: HermesControlTransaction) => Promise<T>
+      ): Promise<T> => {
+        return withHermesControlRole(hermesDb, callback);
+      };
+    }
+    return memoizedRunner;
   };
 
   const subjectRepository =
     dependencies.subjectRepository ??
-    new PostgresHermesSubjectRepository({ roleRunner });
+    new PostgresHermesSubjectRepository({ roleRunner: getRoleRunner() });
 
   const entitlementRepository =
     dependencies.entitlementRepository ??
-    new PostgresHermesEntitlementRepository({ roleRunner });
+    new PostgresHermesEntitlementRepository({ roleRunner: getRoleRunner() });
 
   const quotaCoordinator =
     dependencies.quotaCoordinator ??
     new PostgresHermesQuotaCoordinator({
-      roleRunner,
+      roleRunner: getRoleRunner(),
       ...(dependencies.now !== undefined ? { now: dependencies.now } : {}),
     });
 
   const providerBoundaryCoordinator =
     dependencies.providerBoundaryCoordinator ??
     new PostgresHermesProviderBoundaryCoordinator({
-      roleRunner,
+      roleRunner: getRoleRunner(),
       ...(dependencies.now !== undefined ? { now: dependencies.now } : {}),
     });
 

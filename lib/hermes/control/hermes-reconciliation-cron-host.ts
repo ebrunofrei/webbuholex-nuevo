@@ -8,7 +8,7 @@
  * Zero remote provider dependencies.
  */
 
-import { getDatabase } from "@/database/client";
+import { getHermesControlDatabase } from "@/database/client";
 import { PostgresHermesQuotaCoordinator } from "./hermes-quota-coordinator";
 import { HermesPostDispatchReconciler } from "./hermes-post-dispatch-reconciler";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -25,7 +25,7 @@ export interface HermesReconciliationHostDependencies {
 export function createHermesPostDispatchReconciler(
   dependencies?: HermesReconciliationHostDependencies
 ): HermesPostDispatchReconciler {
-  const db = dependencies?.db ?? getDatabase();
+  const db = dependencies?.db ?? getHermesControlDatabase();
   const quotaCoordinator = new PostgresHermesQuotaCoordinator({ db });
   return new HermesPostDispatchReconciler({
     quotaCoordinator,

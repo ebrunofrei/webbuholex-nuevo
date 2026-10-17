@@ -11,6 +11,8 @@ import type { HermesProviderPort } from "@/lib/hermes/contracts/hermes-provider-
 import type { HermesRequest, HermesProviderOutcome } from "@/lib/hermes/contracts/hermes-envelope";
 import type { JurisprudenceRateLimiterPort, JurisprudenceRateLimiterOutcome, RateLimiterConsumeInput } from "@/lib/security/jurisprudence-rate-limiter-port";
 import type { GetInternalJurisprudenceRecordQuery, JurisprudenceInternalRecordResultDto } from "@/types/jurisprudence-application";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type * as schema from "@/database/schema";
 
 class DummyHermesProvider implements HermesProviderPort {
   async generateStructuredOutput(request: HermesRequest): Promise<HermesProviderOutcome> {
@@ -69,6 +71,7 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
       HERMES_CONCURRENCY_LIMIT: "10",
       HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+      DATABASE_HERMES_CONTROL_URL: "postgresql://hermes_control_login:pwd@host:6543/postgres",
     };
 
     const dummyProvider = new DummyHermesProvider();
@@ -100,6 +103,7 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       OPENAI_API_KEY: "sk-test-key",
       BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
       DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL: "postgresql://jurisprudence_interpretation_read_login:pwd@host:5432/db",
+      DATABASE_HERMES_CONTROL_URL: "postgresql://hermes_control_login:pwd@host:6543/postgres",
       HERMES_CONCURRENCY_LIMIT: "10",
       HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
     };
@@ -284,6 +288,7 @@ describe("createJurisprudenceInterpretationRuntime", () => {
         OPENAI_API_KEY: "sk-test-key",
         BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
         DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL: customUrl,
+        DATABASE_HERMES_CONTROL_URL: "postgresql://hermes_control_login:pwd@host:6543/postgres",
         HERMES_CONCURRENCY_LIMIT: "10",
         HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
       };
@@ -316,6 +321,7 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       HERMES_CONCURRENCY_LIMIT: "10",
       HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
       HERMES_CONCURRENCY_LEASE_TTL_SECONDS: "90",
+      DATABASE_HERMES_CONTROL_URL: "postgresql://hermes_control_login:pwd@host:6543/postgres",
       // HERMES_RESERVATION_TTL_SECONDS is absent -> defaults to 105
     };
 
@@ -341,6 +347,7 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
       HERMES_CONCURRENCY_LEASE_TTL_SECONDS: "90",
       HERMES_RESERVATION_TTL_SECONDS: "110",
+      DATABASE_HERMES_CONTROL_URL: "postgresql://hermes_control_login:pwd@host:6543/postgres",
     };
 
     const dummyProvider = new DummyHermesProvider();
@@ -364,6 +371,7 @@ describe("createJurisprudenceInterpretationRuntime", () => {
       HERMES_CONCURRENCY_LIMIT: "10",
       HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
       HERMES_CONCURRENCY_LEASE_TTL_SECONDS: "90",
+      DATABASE_HERMES_CONTROL_URL: "postgresql://hermes_control_login:pwd@host:6543/postgres",
     };
 
     const dummyProvider = new DummyHermesProvider();
@@ -379,5 +387,120 @@ describe("createJurisprudenceInterpretationRuntime", () => {
     });
 
     expect(runtime.executionService).toBeDefined();
+  });
+
+  it("fails closed when DATABASE_URL is present but DATABASE_HERMES_CONTROL_URL is missing", () => {
+    const env: Partial<NodeJS.ProcessEnv> = {
+      JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
+      OPENAI_API_KEY: "sk-test-key",
+      BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+      DATABASE_URL: "postgresql://generic:pwd@host:5432/main",
+      DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL: "postgresql://jurisprudence:pwd@host:5432/db",
+      // Notice DATABASE_HERMES_CONTROL_URL is omitted!
+    };
+
+    const dummyProvider = new DummyHermesProvider();
+    const dummyLimiter = new DummyRateLimiter();
+
+    expect(() =>
+      createJurisprudenceInterpretationRuntime({
+        env,
+        hermesProvider: dummyProvider,
+        rateLimiter: dummyLimiter,
+        applicationService: dummyService,
+      })
+    ).toThrowError("hermes_control_database_configuration_missing");
+  });
+
+  it("honors injected hermesDb dependency and does not require DATABASE_HERMES_CONTROL_URL in env", () => {
+    const env: Partial<NodeJS.ProcessEnv> = {
+      JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
+      OPENAI_API_KEY: "sk-test-key",
+      BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+      // DATABASE_HERMES_CONTROL_URL is absent
+    };
+
+    const dummyProvider = new DummyHermesProvider();
+    const dummyLimiter = new DummyRateLimiter();
+    const mockHermesDb = { execute: vi.fn(), query: {} } as unknown as PostgresJsDatabase<typeof schema>;
+
+    const runtime = createJurisprudenceInterpretationRuntime({
+      env,
+      hermesProvider: dummyProvider,
+      rateLimiter: dummyLimiter,
+      applicationService: dummyService,
+      hermesDb: mockHermesDb,
+    });
+
+    expect(runtime.executionService).toBeDefined();
+  });
+
+  it("fails closed when dependencies.db is supplied but dependencies.hermesDb is absent and DATABASE_HERMES_CONTROL_URL is missing", () => {
+    const env: Partial<NodeJS.ProcessEnv> = {
+      JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
+      OPENAI_API_KEY: "sk-test-key",
+      BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+      DATABASE_URL: "postgresql://generic:pwd@host:5432/main",
+      DATABASE_JURISPRUDENCE_INTERPRETATION_READ_URL: "postgresql://jurisprudence:pwd@host:5432/db",
+      // DATABASE_HERMES_CONTROL_URL is absent
+    };
+
+    const dummyProvider = new DummyHermesProvider();
+    const dummyLimiter = new DummyRateLimiter();
+    const genericDb = { execute: vi.fn(), query: {} } as unknown as PostgresJsDatabase<typeof schema>;
+
+    expect(() =>
+      createJurisprudenceInterpretationRuntime({
+        env,
+        hermesProvider: dummyProvider,
+        rateLimiter: dummyLimiter,
+        applicationService: dummyService,
+        db: genericDb,
+        // dependencies.hermesDb is intentionally omitted
+      })
+    ).toThrowError("hermes_control_database_configuration_missing");
+  });
+
+  it("when both dependencies.db and dependencies.hermesDb are supplied, Hermes components use hermesDb and do not touch generic db", () => {
+    const env: Partial<NodeJS.ProcessEnv> = {
+      JURISPRUDENCE_RATE_LIMIT_HMAC_SECRET: "hmac-secret-12345",
+      OPENAI_API_KEY: "sk-test-key",
+      BUHOLEX_JURISPRUDENCE_MODEL: "gpt-4o-2024-08-06",
+      HERMES_CONCURRENCY_LIMIT: "10",
+      HERMES_DAILY_PROVIDER_CALL_LIMIT: "1000",
+    };
+
+    const dummyProvider = new DummyHermesProvider();
+    const dummyLimiter = new DummyRateLimiter();
+
+    const mockGenericDb = {
+      transaction: vi.fn(),
+      execute: vi.fn(),
+      query: {},
+    } as unknown as PostgresJsDatabase<typeof schema>;
+
+    const mockHermesDb = {
+      transaction: vi.fn(),
+      execute: vi.fn(),
+      query: {},
+    } as unknown as PostgresJsDatabase<typeof schema>;
+
+    const runtime = createJurisprudenceInterpretationRuntime({
+      env,
+      hermesProvider: dummyProvider,
+      rateLimiter: dummyLimiter,
+      applicationService: dummyService,
+      db: mockGenericDb,
+      hermesDb: mockHermesDb,
+    });
+
+    expect(runtime.executionService).toBeDefined();
+    expect(mockGenericDb.transaction).not.toHaveBeenCalled();
   });
 });

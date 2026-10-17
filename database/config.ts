@@ -391,3 +391,27 @@ export function readJurisprudenceInterpretationReadDatabaseConfig(
     prepare: false,
   };
 }
+
+export type HermesControlDatabaseRuntimeConfig = DatabaseRuntimeConfig;
+
+export function readHermesControlDatabaseConfig(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): HermesControlDatabaseRuntimeConfig {
+  const url = source.DATABASE_HERMES_CONTROL_URL;
+  if (!url) {
+    throw new Error("hermes_control_database_configuration_missing");
+  }
+
+  const result = pgUrlSchema.safeParse(url);
+  if (!result.success) {
+    throw new Error("hermes_control_database_configuration_invalid");
+  }
+
+  return {
+    url: result.data,
+    maxConnections: 1,
+    idleTimeoutSeconds: 20,
+    connectTimeoutSeconds: 5,
+    prepare: false,
+  };
+}
