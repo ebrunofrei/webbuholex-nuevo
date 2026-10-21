@@ -242,7 +242,10 @@ describe("barreras estáticas y preservación", () => {
       "app/api/internal/cron/jurisprudence-publication/route.ts",
       "app/api/owl/admission/route.ts",
       "app/api/admin/payments/orders/[id]/checkout-session/route.ts",
-      "app/api/payments/checkout-session/resolve/route.ts"
+      "app/api/payments/checkout-session/resolve/route.ts",
+      "app/auth/callback/route.ts",
+      "app/auth/login/route.ts",
+      "app/auth/logout/route.ts"
     ];
 
     const authorizedJurisprudenceApiEntries = new Set([

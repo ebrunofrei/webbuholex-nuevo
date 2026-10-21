@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const authenticationProviderKindSchema = z.enum(["auth0_oidc"]);
+export const authenticationProviderKindSchema = z.enum(["auth0_oidc", "supabase_auth"]);
 export const authenticationEnvironmentSchema = z.enum(["test", "development", "staging", "production"]);
 export const authenticationSessionStrategySchema = z.enum(["stateful"]);
 export const authenticationRoleSourceSchema = z.enum(["internal_repository"]);

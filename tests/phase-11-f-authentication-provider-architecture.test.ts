@@ -459,7 +459,7 @@ describe("sesión, revocación y controles estáticos", () => {
   it("no modifica manifiestos ni incorpora otras dependencias de autenticación", () => {
     const packageSource = readFileSync(path.join(process.cwd(), "package.json"), "utf8");
     const lockSource = readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8");
-    expect(`${packageSource}\n${lockSource}`).not.toMatch(/next-auth|better-auth|@clerk\/nextjs|@supabase\/ssr/);
+    expect(`${packageSource}\n${lockSource}`).not.toMatch(/next-auth|better-auth|@clerk\/nextjs/);
   });
 
   it("no crea app/api, route.ts ni conexión con jurisprudencia", () => {
@@ -488,7 +488,10 @@ describe("sesión, revocación y controles estáticos", () => {
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
       "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
-      "app/api/jurisprudence/interpret/route.ts"
+      "app/api/jurisprudence/interpret/route.ts",
+      "app/auth/callback/route.ts",
+      "app/auth/login/route.ts",
+      "app/auth/logout/route.ts",
     ];
     const entries = readdirSync(path.join(process.cwd(), "app"), { recursive: true })
       .filter((entry): entry is string => typeof entry === "string");

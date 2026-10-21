@@ -4,6 +4,7 @@ import { loadAuthenticationConfiguration, type AuthenticationConfigurationSource
 import { loadAuth0ManagementApiConfiguration, type Auth0ManagementApiConfigurationSource } from "@/lib/auth0-management-api-configuration";
 import { Auth0ManagementApiIdentityStatusClient } from "@/lib/auth0-management-api-identity-status-client";
 import { Auth0ExternalIdentityProviderAdapter } from "@/lib/auth0-external-identity-provider-adapter";
+import { SupabaseExternalIdentityProviderAdapter } from "@/lib/supabase-external-identity-provider-adapter";
 import { PostgresJurisprudenceRoleAssignmentRepository } from "@/lib/authorization/postgres-jurisprudence-role-assignment-repository";
 import { ProviderBackedJurisprudenceAuthenticator } from "@/lib/provider-backed-jurisprudence-authenticator";
 import { getWorkspaceSession } from "@/lib/auth/session";
@@ -26,13 +27,46 @@ export function createJurisprudenceAuthenticationRuntime(
     now?: () => string;
     fetch?: typeof globalThis.fetch;
     getSession?: typeof getWorkspaceSession;
+    provider?: "auth0" | "supabase";
   }
 ): JurisprudenceAuthenticationRuntimeResult {
+  const provider =
+    options?.provider ??
+    (authConfigSource.AUTH_PROVIDER?.trim().toLowerCase() === "supabase" ? "supabase" : "auth0");
+
   const authConfig = loadAuthenticationConfiguration(authConfigSource);
   if (authConfig.status !== "configured" && authConfig.status !== "configured_for_test") {
     if (authConfig.status === "not_configured") return { status: "not_configured" };
     if (authConfig.status === "invalid") return { status: "invalid", reason: authConfig.reason };
     return { status: "invalid", reason: "unavailable" };
+  }
+
+  const now = options?.now ?? (() => new Date().toISOString());
+  const getSession = options?.getSession ?? getWorkspaceSession;
+  const roleRepository = new PostgresJurisprudenceRoleAssignmentRepository();
+
+  if (provider === "supabase" || authConfig.providerKind === "supabase_auth") {
+    const providerAdapter = new SupabaseExternalIdentityProviderAdapter(authConfig, getSession);
+    const authenticator = new ProviderBackedJurisprudenceAuthenticator({
+      configuration: authConfig,
+      provider: providerAdapter,
+      roles: roleRepository,
+      now,
+    });
+
+    let closed = false;
+
+    return {
+      status: "configured",
+      runtime: {
+        authenticator,
+        async close() {
+          if (closed) return;
+          closed = true;
+          await authenticator.close();
+        },
+      },
+    };
   }
 
   const managementConfig = loadAuth0ManagementApiConfiguration(managementConfigSource);
@@ -41,13 +75,9 @@ export function createJurisprudenceAuthenticationRuntime(
     return { status: "invalid", reason: managementConfig.reason };
   }
 
-  const now = options?.now ?? (() => new Date().toISOString());
   const fetchImpl = options?.fetch;
-  const getSession = options?.getSession ?? getWorkspaceSession;
-
   const statusClient = new Auth0ManagementApiIdentityStatusClient(managementConfig, fetchImpl ? { fetch: fetchImpl } : undefined);
   const providerAdapter = new Auth0ExternalIdentityProviderAdapter(authConfig, statusClient, getSession);
-  const roleRepository = new PostgresJurisprudenceRoleAssignmentRepository();
 
   const authenticator = new ProviderBackedJurisprudenceAuthenticator({
     configuration: authConfig,

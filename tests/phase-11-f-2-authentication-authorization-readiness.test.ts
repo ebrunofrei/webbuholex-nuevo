@@ -26,6 +26,8 @@ const projectManifestSchema = z.object({
     "react-dom": z.literal("19.1.6"),
     zod: z.string(),
     "@auth0/nextjs-auth0": z.string().optional(),
+    "@supabase/ssr": z.string().optional(),
+    "@supabase/supabase-js": z.string().optional(),
     "drizzle-orm": z.string().optional(),
     postgres: z.string().optional(),
     "server-only": z.string().optional(),
@@ -240,7 +242,10 @@ describe("barreras estáticas y preservación del proyecto", () => {
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
       "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
-      "app/api/jurisprudence/interpret/route.ts"
+      "app/api/jurisprudence/interpret/route.ts",
+      "app/auth/callback/route.ts",
+      "app/auth/login/route.ts",
+      "app/auth/logout/route.ts",
 ];
     const entries = readdirSync(path.join(process.cwd(), "app"), { recursive: true })
       .filter((entry): entry is string => typeof entry === "string");

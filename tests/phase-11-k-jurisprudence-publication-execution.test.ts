@@ -373,7 +373,10 @@ describe("barreras estáticas y preservación", () => {
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
       "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
-      "app/api/jurisprudence/interpret/route.ts"
+      "app/api/jurisprudence/interpret/route.ts",
+      "app/auth/callback/route.ts",
+      "app/auth/login/route.ts",
+      "app/auth/logout/route.ts"
     ];
     const routes = readdirSync(path.join(ROOT, "app"), { recursive: true }).filter((entry): entry is string => typeof entry === "string" && /(^|[\/\\])route\.ts$/.test(entry)).map((entry) => path.relative(ROOT, path.join(ROOT, "app", entry)).split(path.sep).join("/"));
     expect(routes.sort()).toEqual(authorizedRouteFiles.sort());

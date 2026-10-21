@@ -1,4 +1,4 @@
-export type ExternalIdentityProvider = "auth0";
+export type ExternalIdentityProvider = "auth0" | "supabase";
 
 export type OperatorStatus = "active" | "suspended";
 

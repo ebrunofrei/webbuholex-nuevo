@@ -1,35 +1,102 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { buildLoginRedirect, sanitizeWorkspaceReturnTo } from "@/lib/auth/return-to";
+import { getAuthProvider } from "@/lib/auth/provider";
 import { auth0 } from "@/lib/auth/auth0";
 import { mergeAuth0ResponseHeaders } from "@/lib/auth/merge-auth0-response";
+import { createSupabaseMiddlewareClient, getSupabaseEnv } from "@/lib/auth/supabase-server";
 
 export async function middleware(request: NextRequest) {
-  // 1. Ejecutar middleware de IdP para manejar rutas mágicas y rolling sessions
-  const authResponse = await auth0.middleware(request);
+  const provider = getAuthProvider();
 
-  // 2. Si la ruta pertenece exclusivamente al dominio del IdP, terminar anticipadamente
-  if (request.nextUrl.pathname.startsWith('/auth/')) {
-    return authResponse;
+  if (provider === "supabase") {
+    return await handleSupabaseMiddleware(request);
   }
 
-  // 3. Evaluar protección interna BúhoLex
-  if (request.nextUrl.pathname.startsWith('/app')) {
-    const session = await auth0.getSession(request);
+  return await handleAuth0Middleware(request);
+}
 
-    if (!session) {
-      // 4. Crear redirect seguro hacia experiencia de login propia
-      const returnTo = sanitizeWorkspaceReturnTo(request.nextUrl.pathname);
-      const targetResponse = NextResponse.redirect(new URL(buildLoginRedirect(returnTo), request.url));
+async function handleAuth0Middleware(request: NextRequest): Promise<NextResponse> {
+  const isProtectedRoute = request.nextUrl.pathname.startsWith('/app');
+  const isAuthRoute = request.nextUrl.pathname.startsWith('/auth/');
 
-      // 5. Preservar estado del SDK
-      mergeAuth0ResponseHeaders(authResponse, targetResponse);
+  try {
+    // 1. Ejecutar middleware de IdP para manejar rutas mágicas y rolling sessions
+    const authResponse = await auth0.middleware(request);
 
-      return targetResponse;
+    // 2. Si la ruta pertenece exclusivamente al dominio del IdP, terminar anticipadamente
+    if (isAuthRoute) {
+      return authResponse;
     }
+
+    // 3. Evaluar protección interna BúhoLex
+    if (isProtectedRoute) {
+      const session = await auth0.getSession(request);
+
+      if (!session) {
+        // 4. Crear redirect seguro hacia experiencia de login propia
+        const returnTo = sanitizeWorkspaceReturnTo(request.nextUrl.pathname);
+        const targetResponse = NextResponse.redirect(new URL(buildLoginRedirect(returnTo), request.url));
+
+        // 5. Preservar estado del SDK
+        mergeAuth0ResponseHeaders(authResponse, targetResponse);
+
+        return targetResponse;
+      }
+    }
+
+    // 6. Acceso permitido (Ruta pública o sesión válida)
+    return authResponse;
+  } catch {
+    // Si la configuración del proveedor no está disponible o falla:
+    // Para rutas protegidas: fallar cerrado
+    if (isProtectedRoute) {
+      const returnTo = sanitizeWorkspaceReturnTo(request.nextUrl.pathname);
+      return NextResponse.redirect(new URL(buildLoginRedirect(returnTo), request.url));
+    }
+
+    // Para rutas públicas: no tumbar el sitio
+    return NextResponse.next();
+  }
+}
+
+async function handleSupabaseMiddleware(request: NextRequest): Promise<NextResponse> {
+  const isProtectedRoute = request.nextUrl.pathname.startsWith('/app');
+
+  const env = getSupabaseEnv();
+  if (!env) {
+    if (isProtectedRoute) {
+      const returnTo = sanitizeWorkspaceReturnTo(request.nextUrl.pathname);
+      return NextResponse.redirect(new URL(buildLoginRedirect(returnTo), request.url));
+    }
+    return NextResponse.next();
   }
 
-  // 6. Acceso permitido (Ruta pública o sesión válida)
-  return authResponse;
+  const response = NextResponse.next({ request });
+  const { supabase, response: updatedResponse } = createSupabaseMiddlewareClient(request, response);
+  if (!supabase) {
+    if (isProtectedRoute) {
+      const returnTo = sanitizeWorkspaceReturnTo(request.nextUrl.pathname);
+      return NextResponse.redirect(new URL(buildLoginRedirect(returnTo), request.url));
+    }
+    return response;
+  }
+
+  try {
+    const { data } = await supabase.auth.getUser();
+
+    if (isProtectedRoute && !data.user) {
+      const returnTo = sanitizeWorkspaceReturnTo(request.nextUrl.pathname);
+      return NextResponse.redirect(new URL(buildLoginRedirect(returnTo), request.url));
+    }
+
+    return updatedResponse;
+  } catch {
+    if (isProtectedRoute) {
+      const returnTo = sanitizeWorkspaceReturnTo(request.nextUrl.pathname);
+      return NextResponse.redirect(new URL(buildLoginRedirect(returnTo), request.url));
+    }
+    return NextResponse.next();
+  }
 }
 
 export const config = {

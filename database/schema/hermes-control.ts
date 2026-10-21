@@ -23,13 +23,13 @@ export const subjectIdentities = hermesControlSchema.table(
   "subject_identities",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    provider: varchar("provider", { length: 32, enum: ["auth0"] }).notNull(),
+    provider: varchar("provider", { length: 32, enum: ["auth0", "supabase"] }).notNull(),
     providerSubjectId: varchar("provider_subject_id", { length: 128 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     unique("subject_identities_provider_subject_uniq").on(table.provider, table.providerSubjectId),
-    check("subject_identities_provider_check", sql`${table.provider} IN ('auth0')`),
+    check("subject_identities_provider_check", sql`${table.provider} IN ('auth0', 'supabase')`),
   ]
 );
 

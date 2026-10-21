@@ -679,13 +679,14 @@ describe("HERMES-PROD-A3.2: Hermes Control Foundation & Schema Consistency", () 
       expect(entry42).toBeDefined();
       expect(entry42?.tag).toBe("0042_hermes_control_lease_lock_privilege");
 
-      const latestEntry = entries[entries.length - 1];
-      expect(latestEntry?.idx).toBe(42);
+      const idx41 = entries.findIndex((e) => e.idx === 41);
+      expect(entries[idx41 + 1]?.idx).toBe(42);
+      expect(entries[idx41 + 1]?.tag).toBe("0042_hermes_control_lease_lock_privilege");
 
       const migrationsDir = join(process.cwd(), "database", "migrations");
       const files = readdirSync(migrationsDir) as string[];
-      const migration43 = files.find((f: string) => f.startsWith("0043"));
-      expect(migration43).toBeUndefined();
+      const migration42 = files.find((f: string) => f.startsWith("0042"));
+      expect(migration42).toBeDefined();
 
       const migration42Path = join(migrationsDir, "0042_hermes_control_lease_lock_privilege.sql");
       const migration42Sql = readFileSync(migration42Path, "utf8");

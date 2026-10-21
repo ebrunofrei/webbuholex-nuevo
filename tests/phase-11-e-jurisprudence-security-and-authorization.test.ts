@@ -723,7 +723,10 @@ describe("readiness y límites estáticos", () => {
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
       "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
-      "app/api/jurisprudence/interpret/route.ts"
+      "app/api/jurisprudence/interpret/route.ts",
+      "app/auth/callback/route.ts",
+      "app/auth/login/route.ts",
+      "app/auth/logout/route.ts",
 ];
     const appRoot = path.join(process.cwd(), "app");
     const entries = readdirSync(appRoot, { recursive: true })
@@ -811,7 +814,7 @@ describe("readiness y límites estáticos", () => {
     const packageSource = readFileSync(path.join(process.cwd(), "package.json"), "utf8");
     const lockSource = readFileSync(path.join(process.cwd(), "pnpm-lock.yaml"), "utf8");
     expect(middleware).not.toMatch(/jurisprudence|jurisprudencia/);
-    expect(`${packageSource}\n${lockSource}`).not.toMatch(/next-auth|@clerk|supabase|firebase|cognito|jsonwebtoken/i);
+    expect(`${packageSource}\n${lockSource}`).not.toMatch(/next-auth|@clerk|firebase|cognito|jsonwebtoken/i);
   });
 
   it("la factory protegida no abre ni importa SQLite", () => {

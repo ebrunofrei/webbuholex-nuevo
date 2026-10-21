@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getWorkspaceSession, extractValidMetadata } from "@/lib/auth/session";
 import { auth0 } from "@/lib/auth/auth0";
 
@@ -9,8 +9,19 @@ vi.mock("@/lib/auth/auth0", () => ({
 }));
 
 describe("getWorkspaceSession metadata boundary", () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
     vi.resetAllMocks();
+    process.env.AUTH0_DOMAIN = "test.auth0.com";
+    process.env.AUTH0_CLIENT_ID = "test-client";
+    process.env.AUTH0_CLIENT_SECRET = "test-secret";
+    process.env.AUTH0_SECRET = "test-secret";
+    process.env.APP_BASE_URL = "http://localhost:3000";
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
   });
 
   const validSession = {
@@ -119,7 +130,7 @@ describe("getWorkspaceSession metadata boundary", () => {
   it("12. no synthetic now()/UUID behavior", async () => {
     vi.mocked(auth0.getSession).mockResolvedValue(null);
     const session = await getWorkspaceSession();
-    expect(session.status).toBe("not_configured");
+    expect(session.status).toBe("unauthenticated");
     expect(session.sessionId).toBeNull();
     expect(session.issuedAt).toBeNull();
     expect(session.expiresAt).toBeNull();

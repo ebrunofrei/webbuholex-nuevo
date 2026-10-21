@@ -20,12 +20,13 @@ export const operators = authorizationSchema.table("operators", {
 });
 
 export const externalIdentityBindings = authorizationSchema.table("external_identity_bindings", {
-  provider: varchar("provider", { enum: ["auth0"] }).notNull(),
+  provider: varchar("provider", { enum: ["auth0", "supabase"] }).notNull(),
   externalSubjectId: varchar("external_subject_id").notNull(),
   operatorId: uuid("operator_id").notNull().references(() => operators.id, { onDelete: 'restrict' }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   unique("external_identity_bindings_prov_sub_idx").on(table.provider, table.externalSubjectId),
+  check("external_identity_bindings_provider_check", sql`${table.provider} IN ('auth0', 'supabase')`),
 ]);
 
 export const operatorCapabilities = authorizationSchema.table("operator_capabilities", {

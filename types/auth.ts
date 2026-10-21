@@ -6,7 +6,7 @@ export interface WorkspaceSession {
   providerSubjectId: string | null;
   issuedAt: string | null;
   expiresAt: string | null;
-  provider: "auth0" | null;
+  provider: "auth0" | "supabase" | null;
 }
 
 export interface WorkspaceGuardDecision {

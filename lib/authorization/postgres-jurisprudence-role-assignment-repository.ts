@@ -7,9 +7,12 @@ import { withJurisprudenceAuthorizationRole } from "@/database/roles";
 import { jurisprudenceRoleSchema } from "@/lib/schemas/jurisprudence-security";
 import { operators, externalIdentityBindings, operatorJurisprudenceRoles, operatorJurisprudenceRoleSets } from "@/database/schema/authorization";
 
-export function mapProviderToDatabaseIdentifier(providerKind: string): "auth0" {
+export function mapProviderToDatabaseIdentifier(providerKind: string): "auth0" | "supabase" {
   if (providerKind === "auth0_oidc") {
     return "auth0";
+  }
+  if (providerKind === "supabase_auth" || providerKind === "supabase") {
+    return "supabase";
   }
   throw new Error(`unsupported_provider_kind: ${providerKind}`);
 }

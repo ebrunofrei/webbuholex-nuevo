@@ -484,7 +484,10 @@ describe(
       "app/api/admin/jurisprudence/governance/source-bindings/route.ts",
       "app/api/admin/jurisprudence/governance/sources/route.ts",
       "app/api/admin/jurisprudence/publication/authorizations/commands/route.ts",
-      "app/api/jurisprudence/interpret/route.ts"
+      "app/api/jurisprudence/interpret/route.ts",
+      "app/auth/callback/route.ts",
+      "app/auth/login/route.ts",
+      "app/auth/logout/route.ts"
             ];
 
             const authorizedJurisprudenceApiEntries = new Set([

@@ -1,6 +1,23 @@
 import type { WorkspaceSession } from "@/types/auth";
 import { auth0 } from "@/lib/auth/auth0";
+import { getAuthProvider } from "@/lib/auth/provider";
+import { getSupabaseWorkspaceSession } from "@/lib/auth/supabase-session";
 
+
+/**
+ * Evaluates whether Auth0 is configured in the environment.
+ * Requires: AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_SECRET, APP_BASE_URL.
+ * Returns a strict boolean with zero secret leakage or logging.
+ */
+export function isAuth0Configured(env: Record<string, string | undefined> = process.env): boolean {
+  const domain = env.AUTH0_DOMAIN?.trim();
+  const clientId = env.AUTH0_CLIENT_ID?.trim();
+  const clientSecret = env.AUTH0_CLIENT_SECRET?.trim();
+  const secret = env.AUTH0_SECRET?.trim();
+  const appBaseUrl = env.APP_BASE_URL?.trim();
+
+  return Boolean(domain && clientId && clientSecret && secret && appBaseUrl);
+}
 
 export function extractValidMetadata(session: unknown): { sid: string; issuedAt: string; expiresAt: string | null } | null {
   if (!session || typeof session !== "object") return null;
@@ -45,12 +62,23 @@ export function extractValidMetadata(session: unknown): { sid: string; issuedAt:
   };
 }
 
-export async function getWorkspaceSession(): Promise<WorkspaceSession> {
+export async function getAuth0WorkspaceSession(): Promise<WorkspaceSession> {
+  if (!isAuth0Configured()) {
+    return {
+      status: "not_configured",
+      sessionId: null,
+      providerSubjectId: null,
+      issuedAt: null,
+      expiresAt: null,
+      provider: null,
+    };
+  }
+
   const session = await auth0.getSession();
 
   if (!session) {
     return {
-      status: "not_configured",
+      status: "unauthenticated",
       sessionId: null,
       providerSubjectId: null,
       issuedAt: null,
@@ -62,7 +90,7 @@ export async function getWorkspaceSession(): Promise<WorkspaceSession> {
   const meta = extractValidMetadata(session);
   if (!meta) {
     return {
-      status: "not_configured",
+      status: "unauthenticated",
       sessionId: null,
       providerSubjectId: null,
       issuedAt: null,
@@ -79,4 +107,14 @@ export async function getWorkspaceSession(): Promise<WorkspaceSession> {
     expiresAt: meta.expiresAt,
     provider: "auth0",
   };
+}
+
+export async function getWorkspaceSession(): Promise<WorkspaceSession> {
+  const provider = getAuthProvider();
+
+  if (provider === "supabase") {
+    return await getSupabaseWorkspaceSession();
+  }
+
+  return await getAuth0WorkspaceSession();
 }

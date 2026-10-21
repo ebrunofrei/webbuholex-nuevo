@@ -1,6 +1,6 @@
 import type { JurisprudenceRole } from "@/types/jurisprudence-security";
 
-export type AuthenticationProviderKind = "auth0_oidc";
+export type AuthenticationProviderKind = "auth0_oidc" | "supabase_auth";
 export type AuthenticationEnvironment = "test" | "development" | "staging" | "production";
 export type AuthenticationSessionStrategy = "stateful";
 export type AuthenticationRoleSource = "internal_repository";

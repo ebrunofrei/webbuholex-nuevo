@@ -23,7 +23,7 @@ export async function resolveTrustedAdminPrincipal(
 ): Promise<ResolveTrustedAdminPrincipalResult> {
   if (
     session.status !== "authenticated" ||
-    session.provider !== "auth0" ||
+    (session.provider !== "auth0" && session.provider !== "supabase") ||
     !session.providerSubjectId ||
     session.providerSubjectId.trim() === ""
   ) {

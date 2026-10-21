@@ -81,3 +81,13 @@ export function buildAuth0LoginPath(returnTo: string | null | undefined): string
   const safeReturnTo = sanitizeSafeReturnTo(returnTo);
   return `/auth/login?${new URLSearchParams({ returnTo: safeReturnTo }).toString()}`;
 }
+
+export function buildLoginPath(returnTo: string | null | undefined): string {
+  const safeReturnTo = sanitizeSafeReturnTo(returnTo);
+  return `/auth/login?${new URLSearchParams({ returnTo: safeReturnTo }).toString()}`;
+}
+
+export function buildLogoutPath(returnTo: string | null | undefined = DEFAULT_SAFE_RETURN_TO): string {
+  const safeReturnTo = sanitizeSafeReturnTo(returnTo);
+  return `/auth/logout?${new URLSearchParams({ returnTo: safeReturnTo }).toString()}`;
+}

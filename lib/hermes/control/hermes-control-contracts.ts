@@ -91,6 +91,7 @@ export type HermesEntitlementStatus = (typeof HERMES_ENTITLEMENT_STATUSES)[numbe
  */
 export const HERMES_IDENTITY_PROVIDERS = [
   "auth0",
+  "supabase",
 ] as const;
 
 export type HermesIdentityProvider = (typeof HERMES_IDENTITY_PROVIDERS)[number];
