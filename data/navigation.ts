@@ -27,6 +27,9 @@ export const workspaceNavigation: readonly NavigationItem[] = [
   { id: "workspace-library", label: "Biblioteca", href: "/app/biblioteca/", accessLevel: "authenticated", visibility: "reserved", icon: "library", activeMatch: "prefix" },
   { id: "workspace-products", label: "Productos", href: "/app/productos/", accessLevel: "authenticated", visibility: "reserved", icon: "products", activeMatch: "prefix" },
   { id: "workspace-services", label: "Servicios", href: "/app/servicios/", accessLevel: "authenticated", visibility: "reserved", icon: "services", activeMatch: "prefix" },
-  { id: "workspace-complaints", label: "Reclamos", href: "/app/reclamos", accessLevel: "authenticated", visibility: "visible", icon: "tools", activeMatch: "prefix", requiredCapability: "complaints:read" },
   { id: "workspace-account", label: "Cuenta", href: "/app/cuenta/", accessLevel: "authenticated", visibility: "reserved", icon: "account", activeMatch: "prefix" },
+] as const;
+
+export const adminNavigation: readonly NavigationItem[] = [
+  { id: "admin-complaints", label: "Reclamos", href: "/admin/reclamos", accessLevel: "authenticated", visibility: "visible", icon: "tools", activeMatch: "prefix", requiredCapability: "complaints:read" },
 ] as const;

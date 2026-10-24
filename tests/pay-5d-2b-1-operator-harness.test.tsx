@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { OperatorTokenHarness } from "@/components/payments/operator-token-harness";
-import CulqiSandboxTokenPage from "@/app/app/admin/sandbox/culqi-token/page";
+import CulqiSandboxTokenPage from "@/app/admin/sandbox/culqi-token/page";
 import { authorizeAdminPaymentsWrite } from "@/lib/payments/payments-admin-http-runtime";
 import { notFound, redirect } from "next/navigation";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -66,7 +66,7 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
       expect(element).toBeDefined();
     });
 
-    it("payments:write authorization missing redirects to /app", async () => {
+    it("payments:write authorization missing redirects to /admin", async () => {
       vi.stubEnv("VERCEL_ENV", "preview");
       vi.mocked(authorizeAdminPaymentsWrite).mockResolvedValue({ kind: "capability_missing" });
 
@@ -74,7 +74,18 @@ describe("PAY-5D.2B.1-R1 — CUSTOM CHECKOUT TOKENIZATION HARNESS", () => {
         await CulqiSandboxTokenPage();
       } catch {}
 
-      expect(redirect).toHaveBeenCalledWith("/app");
+      expect(redirect).toHaveBeenCalledWith("/admin");
+    });
+
+    it("authorization helper throws redirects to /admin", async () => {
+      vi.stubEnv("VERCEL_ENV", "preview");
+      vi.mocked(authorizeAdminPaymentsWrite).mockRejectedValue(new Error("Auth internal error"));
+
+      try {
+        await CulqiSandboxTokenPage();
+      } catch {}
+
+      expect(redirect).toHaveBeenCalledWith("/admin");
     });
 
     it("missing pk_test_* fails safely with Configuration Required warning", async () => {

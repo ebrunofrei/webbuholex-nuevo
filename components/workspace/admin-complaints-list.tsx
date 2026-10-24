@@ -306,7 +306,7 @@ export function AdminComplaintsList() {
                     <td>{formatDate(item.deadlineAt)}</td>
                     <td className={styles.colUpdatedAt}>{formatDateTime(item.updatedAt)}</td>
                     <td>
-                      <Link href={`/app/reclamos/${item.complaintId}`} className={styles.detailLink}>
+                      <Link href={`/admin/reclamos/${item.complaintId}`} className={styles.detailLink}>
                         Ver detalle
                       </Link>
                     </td>
@@ -338,7 +338,7 @@ export function AdminComplaintsList() {
                   <span className={styles.cardValue}>{formatDate(item.submittedAt)}</span>
                 </div>
                 <div className={styles.cardActionRow}>
-                  <Link href={`/app/reclamos/${item.complaintId}`} className={styles.detailLink}>
+                  <Link href={`/admin/reclamos/${item.complaintId}`} className={styles.detailLink}>
                     Ver detalle
                   </Link>
                 </div>

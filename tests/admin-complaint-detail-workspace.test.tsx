@@ -124,7 +124,7 @@ describe('AdminComplaintDetail Workspace Component', () => {
 
     // Back link
     const backLink = screen.getByRole('link', { name: '← Volver a reclamos' });
-    expect(backLink).toHaveAttribute('href', '/app/reclamos');
+    expect(backLink).toHaveAttribute('href', '/admin/reclamos');
   });
 
   it('renders legal entity and representative correctly', async () => {

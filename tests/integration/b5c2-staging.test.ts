@@ -97,6 +97,13 @@ vi.mock(
                   "simulated_authorization_persistence_failure",
                 ),
               ),
+            resolveActiveOperator: vi
+              .fn()
+              .mockRejectedValue(
+                new AuthorizationPersistenceError(
+                  "simulated_authorization_persistence_failure",
+                ),
+              ),
           } satisfies ReturnType<
             typeof original.createAuthorizationRepository
           >;

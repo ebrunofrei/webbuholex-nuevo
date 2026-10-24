@@ -49,6 +49,19 @@ export async function withComplaintsAuthorizationRole<T>(
   });
 }
 
+export type OperatorAuthorizationTransaction = PgTransaction<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
+
+export async function withOperatorAuthorizationRole<T>(
+  db: PostgresJsDatabase<typeof schema>,
+  callback: (tx: OperatorAuthorizationTransaction) => Promise<T>
+): Promise<T> {
+  return await db.transaction(async (tx) => {
+    // FAIL CLOSED: If SET LOCAL ROLE fails, an error is thrown and callback is NEVER executed.
+    await tx.execute(sql`SET LOCAL ROLE operator_authorization_runtime`);
+    return await callback(tx);
+  });
+}
+
 export async function withComplaintsAdminReadRole<T>(
   db: PostgresJsDatabase<typeof schema>,
   callback: (tx: ComplaintsTransaction) => Promise<T>

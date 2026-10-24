@@ -284,14 +284,14 @@ export function AdminComplaintDetail({ complaintId, canReview = false, canRespon
         ) : uiState.status === 404 ? (
           <div className={styles.alertInfo} role="alert">
             <p>{uiState.message}</p>
-            <Link href="/app/reclamos" className={styles.primaryButton} style={{ display: 'inline-block', textDecoration: 'none' }}>
+            <Link href="/admin/reclamos" className={styles.primaryButton} style={{ display: 'inline-block', textDecoration: 'none' }}>
               Volver a reclamos
             </Link>
           </div>
         ) : uiState.status === 403 ? (
           <div className={styles.alertError} role="alert">
             <p>{uiState.message}</p>
-            <Link href="/app/reclamos" className={styles.primaryButton} style={{ display: 'inline-block', textDecoration: 'none', marginTop: '1rem' }}>
+            <Link href="/admin/reclamos" className={styles.primaryButton} style={{ display: 'inline-block', textDecoration: 'none', marginTop: '1rem' }}>
               Volver a reclamos
             </Link>
           </div>
@@ -321,7 +321,7 @@ export function AdminComplaintDetail({ complaintId, canReview = false, canRespon
   return (
     <div className={styles.container}>
       <div className={styles.backLinkContainer}>
-        <Link href="/app/reclamos" className={styles.backLink}>
+        <Link href="/admin/reclamos" className={styles.backLink}>
           ← Volver a reclamos
         </Link>
       </div>

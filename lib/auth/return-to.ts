@@ -8,7 +8,8 @@ const workspaceFallback = DEFAULT_SAFE_RETURN_TO;
  *
  * Authorized return targets:
  * 1. Workspace routes: /app and /app/*
- * 2. Jurisprudence analysis route: /jurisprudencia/<VALID_PUBLIC_SLUG>?intent=analyze
+ * 2. Internal admin routes: /admin and /admin/*
+ * 3. Jurisprudence analysis route: /jurisprudencia/<VALID_PUBLIC_SLUG>?intent=analyze
  *
  * All other targets, including external domains, protocol-relative paths,
  * schemes, backslash redirects, unsupported intents, invalid slugs,
@@ -37,8 +38,13 @@ export function sanitizeSafeReturnTo(value: string | null | undefined): string {
     const parsed = new URL(candidate, "https://workspace.buholex.invalid");
     if (parsed.origin !== "https://workspace.buholex.invalid") return workspaceFallback;
 
-    // 1. Existing workspace destinations (/app and /app/*) - preserve existing semantics
-    if (parsed.pathname === "/app" || parsed.pathname.startsWith("/app/")) {
+    // 1. Existing workspace destinations (/app, /app/*) and admin backoffice (/admin, /admin/*)
+    if (
+      parsed.pathname === "/app" ||
+      parsed.pathname.startsWith("/app/") ||
+      parsed.pathname === "/admin" ||
+      parsed.pathname.startsWith("/admin/")
+    ) {
       return `${parsed.pathname}${parsed.search}${parsed.hash}`;
     }
 

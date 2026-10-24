@@ -462,6 +462,10 @@ describe("BÚHOLEX-AUTH-A0.2: Provider-Neutral Foundation Unit Tests", () => {
           kind: "authorized",
           operatorId: "op-uuid-1234",
         }),
+        resolveActiveOperator: vi.fn().mockResolvedValue({
+          kind: "authorized",
+          operatorId: "op-uuid-1234",
+        }),
       };
 
       const session: WorkspaceSession = {
@@ -492,6 +496,10 @@ describe("BÚHOLEX-AUTH-A0.2: Provider-Neutral Foundation Unit Tests", () => {
     it("resolveTrustedAdminPrincipal continues to accept auth0 session (backwards compatibility)", async () => {
       const mockRepo: OperatorAuthorizationRepository = {
         resolveAuthorizedOperator: vi.fn().mockResolvedValue({
+          kind: "authorized",
+          operatorId: "op-uuid-auth0",
+        }),
+        resolveActiveOperator: vi.fn().mockResolvedValue({
           kind: "authorized",
           operatorId: "op-uuid-auth0",
         }),

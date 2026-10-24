@@ -245,4 +245,15 @@ describe("HERMES-PROD-A2.4 / A2.4A safe returnTo + intent=analyze preservation c
     );
     expect(buildAuth0LoginPath("https://evil.example")).toBe("/auth/login?returnTo=%2Fapp");
   });
+
+  it("A0.4: supports /admin and /admin/* as safe internal return targets", () => {
+    expect(sanitizeWorkspaceReturnTo("/admin")).toBe("/admin");
+    expect(sanitizeWorkspaceReturnTo("/admin/")).toBe("/admin/");
+    expect(sanitizeWorkspaceReturnTo("/admin/reclamos")).toBe("/admin/reclamos");
+    expect(sanitizeWorkspaceReturnTo("/admin/reclamos/cmp-123")).toBe("/admin/reclamos/cmp-123");
+    expect(sanitizeWorkspaceReturnTo("/admin/sandbox/culqi-token")).toBe("/admin/sandbox/culqi-token");
+    expect(sanitizeWorkspaceReturnTo("/admin\\evil")).toBe(DEFAULT_SAFE_RETURN_TO);
+    expect(sanitizeWorkspaceReturnTo("//admin")).toBe(DEFAULT_SAFE_RETURN_TO);
+    expect(sanitizeWorkspaceReturnTo("/admin/../evil")).toBe(DEFAULT_SAFE_RETURN_TO);
+  });
 });

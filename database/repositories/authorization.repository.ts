@@ -1,12 +1,13 @@
 import { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { eq, and, exists } from "drizzle-orm";
 import * as schema from "../schema";
-import { withComplaintsAuthorizationRole } from "../roles";
+import { withComplaintsAuthorizationRole, withOperatorAuthorizationRole } from "../roles";
 import { AuthorizationPersistenceError } from "./authorization.errors";
 import type {
   ExternalIdentityProvider,
   AdminCapability,
-  AuthorizationRepositoryResult
+  AuthorizationRepositoryResult,
+  OperatorEligibilityResult
 } from "./authorization.types";
 
 export interface OperatorAuthorizationRepository {
@@ -15,6 +16,10 @@ export interface OperatorAuthorizationRepository {
     externalSubjectId: string,
     requiredCapability: AdminCapability
   ): Promise<AuthorizationRepositoryResult>;
+  resolveActiveOperator(
+    provider: ExternalIdentityProvider,
+    externalSubjectId: string
+  ): Promise<OperatorEligibilityResult>;
 }
 
 function findPostgresError(error: unknown, depth: number = 0): Record<string, unknown> | null {
@@ -99,6 +104,46 @@ export function createAuthorizationRepository(
 
           if (!row.hasCapability) {
             return { kind: "capability_missing" };
+          }
+
+          return { kind: "authorized", operatorId: row.operatorId };
+        });
+      } catch (error) {
+        throw translateDatabaseError(error);
+      }
+    },
+    async resolveActiveOperator(provider, externalSubjectId) {
+      try {
+        return await withOperatorAuthorizationRole(db, async (tx) => {
+          const result = await tx
+            .select({
+              operatorId: schema.operators.id,
+              status: schema.operators.status,
+            })
+            .from(schema.externalIdentityBindings)
+            .innerJoin(
+              schema.operators,
+              eq(schema.externalIdentityBindings.operatorId, schema.operators.id)
+            )
+            .where(
+              and(
+                eq(schema.externalIdentityBindings.provider, provider),
+                eq(schema.externalIdentityBindings.externalSubjectId, externalSubjectId)
+              )
+            )
+            .limit(1);
+
+          if (result.length === 0) {
+            return { kind: "operator_not_mapped" };
+          }
+
+          const row = result[0];
+          if (!row) {
+            return { kind: "operator_not_mapped" };
+          }
+
+          if (row.status !== "active") {
+            return { kind: "operator_inactive" };
           }
 
           return { kind: "authorized", operatorId: row.operatorId };

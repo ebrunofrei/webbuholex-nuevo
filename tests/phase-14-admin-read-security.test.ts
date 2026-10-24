@@ -30,6 +30,9 @@ describe("Phase 14.O.D.4.6-A.2 - Admin Read Security Foundation (Static/Unit)", 
           }
           return { kind: "capability_missing" };
         },
+        resolveActiveOperator: async () => {
+          return { kind: "authorized", operatorId: "123" };
+        },
       };
 
       const session = {
@@ -53,6 +56,9 @@ describe("Phase 14.O.D.4.6-A.2 - Admin Read Security Foundation (Static/Unit)", 
             return { kind: "authorized", operatorId: "456" };
           }
           return { kind: "capability_missing" };
+        },
+        resolveActiveOperator: async () => {
+          return { kind: "authorized", operatorId: "456" };
         },
       };
 

@@ -55,3 +55,51 @@ export async function resolveTrustedAdminPrincipal(
     throw error;
   }
 }
+
+export type ResolveAdminOperatorEligibilityResult =
+  | {
+      kind: "authorized";
+      principal: TrustedAdminPrincipal;
+    }
+  | { kind: "unauthenticated" }
+  | { kind: "operator_not_mapped" }
+  | { kind: "operator_inactive" }
+  | { kind: "authorization_unavailable" };
+
+export async function resolveAdminOperatorEligibility(
+  session: WorkspaceSession,
+  repository: OperatorAuthorizationRepository
+): Promise<ResolveAdminOperatorEligibilityResult> {
+  if (
+    session.status !== "authenticated" ||
+    (session.provider !== "auth0" && session.provider !== "supabase") ||
+    !session.providerSubjectId ||
+    session.providerSubjectId.trim() === ""
+  ) {
+    return { kind: "unauthenticated" };
+  }
+
+  try {
+    const result = await repository.resolveActiveOperator(
+      session.provider,
+      session.providerSubjectId.trim()
+    );
+
+    if (result.kind === "authorized") {
+      return {
+        kind: "authorized",
+        principal: {
+          operatorId: result.operatorId,
+          identitySource: "authenticated_session",
+        },
+      };
+    }
+
+    return result;
+  } catch (error) {
+    if (error instanceof AuthorizationPersistenceError) {
+      return { kind: "authorization_unavailable" };
+    }
+    throw error;
+  }
+}

@@ -2,13 +2,21 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { AdminComplaintsList } from '@/components/workspace/admin-complaints-list';
-import AdminComplaintsPage from '@/app/app/reclamos/page';
+import AdminComplaintsPage from '@/app/admin/reclamos/page';
+
+vi.mock('@/lib/complaints/complaints-admin-read-http-runtime', () => ({
+  authorizeAdminComplaintsRead: vi.fn().mockResolvedValue({
+    kind: 'authorized',
+    principal: { operatorId: 'op-123', identitySource: 'authenticated_session' },
+  }),
+}));
 
 const mockReplace = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mockReplace }),
-  usePathname: () => '/app/reclamos',
+  usePathname: () => '/admin/reclamos',
   useSearchParams: () => new URLSearchParams(),
+  redirect: vi.fn(),
 }));
 
 describe('Admin Complaints Workspace UI', () => {
@@ -30,8 +38,9 @@ describe('Admin Complaints Workspace UI', () => {
     vi.clearAllMocks();
   });
 
-  it('renders Reclamos title and does not create second h1 unexpectedly', () => {
-    render(<AdminComplaintsPage />);
+  it('renders Reclamos title and does not create second h1 unexpectedly', async () => {
+    const page = await AdminComplaintsPage();
+    render(page);
     const headings = screen.getAllByRole('heading', { level: 1 });
     expect(headings).toHaveLength(1);
     expect(headings[0]).toHaveTextContent('Reclamos');
@@ -90,7 +99,7 @@ describe('Admin Complaints Workspace UI', () => {
 
     const detailLinks = screen.getAllByRole('link', { name: 'Ver detalle' });
     expect(detailLinks.length).toBeGreaterThan(0);
-    expect(detailLinks[0]).toHaveAttribute('href', '/app/reclamos/cmp-123');
+    expect(detailLinks[0]).toHaveAttribute('href', '/admin/reclamos/cmp-123');
 
     expect(screen.queryByText('Responder')).not.toBeInTheDocument();
   });

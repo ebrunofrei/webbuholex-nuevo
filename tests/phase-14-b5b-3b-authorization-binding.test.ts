@@ -17,6 +17,7 @@ describe("Authorization Resolver Contract (B5B.3B.1)", () => {
   beforeEach(() => {
     mockRepository = {
       resolveAuthorizedOperator: vi.fn(),
+      resolveActiveOperator: vi.fn(),
     };
   });
 

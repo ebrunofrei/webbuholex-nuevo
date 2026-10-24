@@ -309,6 +309,13 @@
       "when": 1790300000000,
       "tag": "0043_supabase_auth_provider_support",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790350000000,
+      "tag": "0044_operator_authorization_runtime",
+      "breakpoints": true
     }
   ]
 }
