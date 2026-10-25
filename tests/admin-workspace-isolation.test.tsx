@@ -12,11 +12,11 @@ import {
 } from "@/lib/authorization/authorization-resolver";
 import { evaluateWorkspaceAccess } from "@/lib/auth/workspace-guard";
 import { WorkspacePlaceholder } from "@/components/workspace/workspace-placeholder";
-import LegacyAppComplaintsPage from "@/app/app/reclamos/page";
-import LegacyAppComplaintDetailPage from "@/app/app/reclamos/[complaintId]/page";
+import LegacyAppComplaintsPage, { dynamic as legacyComplaintsDynamic } from "@/app/app/reclamos/page";
+import LegacyAppComplaintDetailPage, { dynamic as legacyComplaintDetailDynamic } from "@/app/app/reclamos/[complaintId]/page";
 import AdminComplaintsPage from "@/app/admin/reclamos/page";
 import AdminComplaintDetailPage from "@/app/admin/reclamos/[complaintId]/page";
-import AdminBackofficeLayout from "@/app/admin/layout";
+import AdminBackofficeLayout, { dynamic as adminLayoutDynamic } from "@/app/admin/layout";
 import { CommercialHome } from "@/components/home/commercial-home";
 import type { WorkspaceSession } from "@/types/auth";
 import type { OperatorAuthorizationRepository } from "@/database/repositories/authorization.repository";
@@ -26,7 +26,7 @@ import type {
 } from "@/database/repositories/authorization.types";
 import { AuthorizationPersistenceError } from "@/database/repositories/authorization.errors";
 
-import LegacyAppCulqiSandboxTokenPage from "@/app/app/admin/sandbox/culqi-token/page";
+import LegacyAppCulqiSandboxTokenPage, { dynamic as legacyCulqiDynamic } from "@/app/app/admin/sandbox/culqi-token/page";
 import CulqiSandboxTokenPage from "@/app/admin/sandbox/culqi-token/page";
 import { sanitizeWorkspaceReturnTo, DEFAULT_SAFE_RETURN_TO } from "@/lib/auth/return-to";
 import { authorizeAdminPaymentsWrite } from "@/lib/payments/payments-admin-http-runtime";
@@ -700,6 +700,59 @@ describe("BÚHOLEX-AUTH-A0.4: Customer Workspace vs Internal Admin Structural Is
       } finally {
         vi.unstubAllEnvs();
       }
+    });
+  });
+
+  describe("12. Request-Time Dynamic Architecture & Build-Time DB Prohibition (BÚHOLEX-AUTH-A0.4-FIX5)", () => {
+    it("admin root layout explicitly configures dynamic = 'force-dynamic' as highest segment boundary", () => {
+      expect(adminLayoutDynamic).toBe("force-dynamic");
+    });
+
+    it("legacy authenticated redirect routes explicitly configure dynamic = 'force-dynamic'", () => {
+      expect(legacyComplaintsDynamic).toBe("force-dynamic");
+      expect(legacyComplaintDetailDynamic).toBe("force-dynamic");
+      expect(legacyCulqiDynamic).toBe("force-dynamic");
+    });
+
+    it("proves authorization database client is not evaluated on module import and only runs on request invocation", async () => {
+      const dbClientModule = await import("@/database/client");
+      expect(typeof dbClientModule.getAuthorizationDatabase).toBe("function");
+    });
+
+    it("proves /admin layout executes operator authorization strictly at request-time", async () => {
+      const validSession: WorkspaceSession = {
+        status: "authenticated",
+        sessionId: "sess-op-1",
+        providerSubjectId: "op-sub-1",
+        issuedAt: "2026-10-25T00:00:00Z",
+        expiresAt: null,
+        provider: "supabase",
+      };
+      mockSession = validSession;
+      setMockRepoState({ kind: "authorized", operatorId: "op-1" });
+
+      const element = await AdminBackofficeLayout({ children: React.createElement("div", null, "Contenido Admin") });
+      expect(element).toBeDefined();
+      expect(mockRepo.resolveActiveOperator).toHaveBeenCalledWith("supabase", "op-sub-1");
+      expect(mockRedirect).not.toHaveBeenCalled();
+    });
+
+    it("unauthorized user invoking /admin layout at request-time is redirected to /app", async () => {
+      const validSession: WorkspaceSession = {
+        status: "authenticated",
+        sessionId: "sess-user-1",
+        providerSubjectId: "user-sub-1",
+        issuedAt: "2026-10-25T00:00:00Z",
+        expiresAt: null,
+        provider: "supabase",
+      };
+      mockSession = validSession;
+      setMockRepoState({ kind: "operator_not_mapped" });
+
+      await expect(
+        AdminBackofficeLayout({ children: React.createElement("div", null, "Contenido Admin") })
+      ).rejects.toThrow("NEXT_REDIRECT:/app");
+      expect(mockRedirect).toHaveBeenCalledWith("/app");
     });
   });
 });

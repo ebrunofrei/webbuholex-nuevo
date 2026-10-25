@@ -8,6 +8,8 @@ import { resolveAdminOperatorEligibility } from "@/lib/authorization/authorizati
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminBackofficeLayout({ children }: { children: React.ReactNode }) {
   await requireWorkspaceSession("/admin");
 

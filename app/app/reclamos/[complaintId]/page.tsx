@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { authorizeAdminComplaintsRead } from '@/lib/complaints/complaints-admin-read-http-runtime';
 
+export const dynamic = "force-dynamic";
+
 interface PageProps {
   params: Promise<{
     complaintId: string;
