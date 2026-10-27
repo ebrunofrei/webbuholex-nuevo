@@ -17,6 +17,8 @@ import LegacyAppComplaintDetailPage, { dynamic as legacyComplaintDetailDynamic }
 import AdminComplaintsPage from "@/app/admin/reclamos/page";
 import AdminComplaintDetailPage from "@/app/admin/reclamos/[complaintId]/page";
 import AdminBackofficeLayout, { dynamic as adminLayoutDynamic } from "@/app/admin/layout";
+import PrivateWorkspaceLayout from "@/app/app/layout";
+import { getAuthorizationDatabase } from "@/database/client";
 import { CommercialHome } from "@/components/home/commercial-home";
 import type { WorkspaceSession } from "@/types/auth";
 import type { OperatorAuthorizationRepository } from "@/database/repositories/authorization.repository";
@@ -147,8 +149,8 @@ describe("BÚHOLEX-AUTH-A0.4: Customer Workspace vs Internal Admin Structural Is
       expect(capItems).toHaveLength(0);
     });
 
-    it("allows authenticated customer without operator binding to resolve customer navigation", async () => {
-      const customerSession: WorkspaceSession = {
+    it("proves /app authenticated customer layout does NOT call getAuthorizationDatabase()", async () => {
+      mockSession = {
         status: "authenticated",
         sessionId: "sess-cust-1",
         providerSubjectId: "cust-sub-123",
@@ -156,15 +158,47 @@ describe("BÚHOLEX-AUTH-A0.4: Customer Workspace vs Internal Admin Structural Is
         expiresAt: null,
         provider: "supabase",
       };
-
       setMockRepoState({ kind: "operator_not_mapped" });
+      vi.mocked(getAuthorizationDatabase).mockClear();
 
-      const resolved = await resolveAuthorizedNavigation(workspaceNavigation, customerSession, mockRepo);
-      expect(resolved.length).toBeGreaterThan(0);
-      expect(resolved.some((item) => item.id === "workspace-home")).toBe(true);
-      expect(resolved.some((item) => item.id === "workspace-assistant")).toBe(true);
-      // No complaints item
-      expect(resolved.some((item) => item.href.includes("reclamos"))).toBe(false);
+      const element = await PrivateWorkspaceLayout({
+        children: <div data-testid="customer-child">Customer Workspace</div>,
+      });
+      render(element);
+
+      expect(screen.getByTestId("customer-child")).toBeInTheDocument();
+      expect(getAuthorizationDatabase).not.toHaveBeenCalled();
+      expect(mockRepo.resolveActiveOperator).not.toHaveBeenCalled();
+      expect(mockRepo.resolveAuthorizedOperator).not.toHaveBeenCalled();
+    });
+
+    it("proves /app authenticated customer does NOT require operator mapping and is not redirected", async () => {
+      mockSession = {
+        status: "authenticated",
+        sessionId: "sess-cust-unbound",
+        providerSubjectId: "cust-unbound-guid",
+        issuedAt: "2026-10-26T00:00:00Z",
+        expiresAt: null,
+        provider: "supabase",
+      };
+      setMockRepoState({ kind: "operator_not_mapped" });
+      mockRedirect.mockClear();
+
+      const element = await PrivateWorkspaceLayout({
+        children: <div data-testid="unbound-customer-view">Unbound Customer</div>,
+      });
+      render(element);
+
+      expect(screen.getByTestId("unbound-customer-view")).toBeInTheDocument();
+      expect(mockRedirect).not.toHaveBeenCalled();
+    });
+
+    it("proves /app customer navigation does not expose Reclamos or admin modules", () => {
+      const visibleCustomerItems = workspaceNavigation.filter((item) => item.visibility !== "hidden");
+      expect(visibleCustomerItems.length).toBeGreaterThan(0);
+      expect(visibleCustomerItems.some((item) => item.id.includes("admin") || item.href.includes("admin"))).toBe(false);
+      expect(visibleCustomerItems.some((item) => item.id.includes("reclamos") || item.href.includes("reclamos"))).toBe(false);
+      expect(visibleCustomerItems.some((item) => item.requiredCapability !== undefined)).toBe(false);
     });
   });
 
@@ -298,6 +332,24 @@ describe("BÚHOLEX-AUTH-A0.4: Customer Workspace vs Internal Admin Structural Is
       render(element);
       expect(screen.getByTestId("admin-child")).toBeInTheDocument();
       expect(screen.getByText("BúhoLex Admin")).toBeInTheDocument();
+    });
+
+    it("proves /admin still requires operator authorization DB and resolves operator", async () => {
+      mockSession = {
+        status: "authenticated",
+        sessionId: "sess-1",
+        providerSubjectId: "active-op-sub",
+        issuedAt: "2026-10-22T00:00:00Z",
+        expiresAt: null,
+        provider: "supabase",
+      };
+      setMockRepoState({ kind: "authorized", operatorId: "op-uuid-1" });
+      vi.mocked(getAuthorizationDatabase).mockClear();
+
+      const element = await AdminBackofficeLayout({ children: <div data-testid="admin-child">Admin Content</div> });
+      expect(element).toBeDefined();
+      expect(getAuthorizationDatabase).toHaveBeenCalled();
+      expect(mockRepo.resolveActiveOperator).toHaveBeenCalledWith("supabase", "active-op-sub");
     });
   });
 
