@@ -1,0 +1,3 @@
+# BúhoLex Canonical Jurisprudence PDF Extractor Dependencies
+# Pinned canonical engine for deterministic, reproducible ingestion (no LLM, no OCR)
+pypdfium2==4.30.0

@@ -55,7 +55,7 @@ export const jurisprudenceOriginFormatSchema = z.enum(["pdf", "html", "docx", "t
 export const jurisprudenceSearchSortSchema = z.enum(["relevance", "date_desc", "date_asc", "editorial_relevance"]);
 export const jurisprudenceSearchDataStatusSchema = z.enum(["unavailable", "empty", "available", "partial"]);
 
-const canonicalInstitutionSchema = z.object({
+export const canonicalInstitutionSchema = z.object({
   id: z.string().trim().min(1).max(160),
   name: z.string().trim().min(2).max(300),
   shortName: z.string().trim().min(2).max(160),

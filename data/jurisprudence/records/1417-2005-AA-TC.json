@@ -5,6 +5,14 @@
   "editorialTitle": "No toda controversia pensionaria corresponde al proceso de amparo",
   "processType": "Acción de amparo",
   "court": "Tribunal Constitucional del Perú",
+  "institution": {
+    "id": "tribunal-constitucional-peru",
+    "name": "Tribunal Constitucional del Perú",
+    "shortName": "TC",
+    "country": "Perú",
+    "kind": "constitutional_court",
+    "officialHomepage": "https://www.tc.gob.pe"
+  },
   "chamber": "Pleno Jurisdiccional",
   "decisionDate": "2005-07-08",
   "publicationDate": "2005-07-12",
@@ -24,6 +32,12 @@
   "sourceDocumentId": "9B0B8F171A825110C6C5FB23049731743639F436402FB1AF13D5B0A7102F2F48",
   "sourceVerificationStatus": "official_source_verified",
   "sourceVerifiedAt": "2026-08-02",
+  "authority": {
+    "resolutionCategory": "constitutional_judgment",
+    "legalAuthority": "constitutional_precedent",
+    "authorityEvidence": "El fundamento 47 declara que los criterios jurídicos contenidos en el fundamento 37 constituyen precedente vinculante conforme al artículo VII del Título Preliminar del Código Procesal Constitucional; adicionalmente, el numeral 5 del fallo declara vinculantes las reglas procesales previstas en los fundamentos 54 a 58.",
+    "authorityVerifiedAt": "2026-08-02T00:00:00.000Z"
+  },
   "relevantFacts": [
     "El demandante solicitó una pensión de jubilación adelantada por reducción de personal.",
     "La ONP desconoció las aportaciones efectuadas durante 1964 y 1965 y consideró que no alcanzaría el mínimo de veinte años.",

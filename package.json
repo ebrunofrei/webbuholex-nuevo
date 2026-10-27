@@ -18,7 +18,8 @@
     "db:check": "drizzle-kit check",
     "db:migrate:staging": "node --env-file-if-exists=.env.local scripts/complaints-migrate-staging.mjs",
     "db:migrate:jurisprudence:staging": "node --env-file-if-exists=.env.local scripts/jurisprudence-migrate-staging.mjs",
-    "db:migrate:production": "node scripts/complaints-migrate-production.mjs"
+    "db:migrate:production": "node scripts/complaints-migrate-production.mjs",
+    "jurisprudence:ingest:production": "tsx scripts/jurisprudence-ingest-production.ts"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "4.26.0",
