@@ -106,7 +106,7 @@ export const ComplaintConfirmationSchema = z.object({
   emailDeliveryRequested: z.boolean(),
 }).strict();
 
-export const ComplaintSubmissionSchema = z.object({
+export const ComplaintSubmissionV1Schema = z.object({
   schemaVersion: z.literal("1.0"),
   consumer: ComplaintConsumerSchema,
   subject: ComplaintSubjectSchema,
@@ -114,6 +114,26 @@ export const ComplaintSubmissionSchema = z.object({
   confirmation: ComplaintConfirmationSchema,
   idempotencyKey: ComplaintIdempotencyKeySchema,
 }).strict();
+
+export const ComplaintDeclarationsV2Schema = z.object({
+  truthfulnessConfirmed: z.literal(true),
+  emailDeliveryRequested: z.boolean(),
+}).strict();
+
+export const ComplaintSubmissionV2Schema = z.object({
+  schemaVersion: z.literal("2.0"),
+  consumer: ComplaintConsumerSchema,
+  subject: ComplaintSubjectSchema,
+  complaint: ComplaintDetailsSchema,
+  declarations: ComplaintDeclarationsV2Schema,
+  idempotencyKey: ComplaintIdempotencyKeySchema,
+  privacyNoticePresented: z.literal(true),
+}).strict();
+
+export const ComplaintSubmissionSchema = z.discriminatedUnion("schemaVersion", [
+  ComplaintSubmissionV1Schema,
+  ComplaintSubmissionV2Schema,
+]);
 
 export const ComplaintProviderResponseSchema = z.object({
   responseText: trimmedString(COMPLAINT_LIMITS.facts).optional(),
@@ -135,4 +155,7 @@ export type ComplaintLegalEntityConsumerInput = z.infer<typeof LegalEntityConsum
 export type ComplaintSubjectInput = z.infer<typeof ComplaintSubjectSchema>;
 export type ComplaintDetailsInput = z.infer<typeof ComplaintDetailsSchema>;
 export type ComplaintConfirmationInput = z.infer<typeof ComplaintConfirmationSchema>;
+export type ComplaintDeclarationsV2Input = z.infer<typeof ComplaintDeclarationsV2Schema>;
+export type ComplaintSubmissionV1Input = z.infer<typeof ComplaintSubmissionV1Schema>;
+export type ComplaintSubmissionV2Input = z.infer<typeof ComplaintSubmissionV2Schema>;
 export type ComplaintSubmissionInput = z.infer<typeof ComplaintSubmissionSchema>;

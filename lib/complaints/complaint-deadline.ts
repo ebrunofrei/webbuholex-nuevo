@@ -8,9 +8,48 @@ export function calculatePreliminaryComplaintDeadline(params: {
     throw new Error("Solo se permite la zona horaria America/Lima");
   }
 
-  const submitDate = new Date(params.submittedAt);
-  if (isNaN(submitDate.getTime())) {
-    throw new Error("Fecha de envío inválida");
+  let year: number;
+  let month: number;
+  let day: number;
+
+  const dateOnlyMatch = params.submittedAt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch && dateOnlyMatch[1] && dateOnlyMatch[2] && dateOnlyMatch[3]) {
+    year = parseInt(dateOnlyMatch[1], 10);
+    month = parseInt(dateOnlyMatch[2], 10) - 1;
+    day = parseInt(dateOnlyMatch[3], 10);
+
+    const testDate = new Date(Date.UTC(year, month, day));
+    if (
+      testDate.getUTCFullYear() !== year ||
+      testDate.getUTCMonth() !== month ||
+      testDate.getUTCDate() !== day
+    ) {
+      throw new Error("Fecha de envío inexistente");
+    }
+  } else {
+    const submitDate = new Date(params.submittedAt);
+    if (isNaN(submitDate.getTime())) {
+      throw new Error("Fecha de envío inválida");
+    }
+
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: params.timeZone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    });
+    const parts = formatter.formatToParts(submitDate);
+    const yearStr = parts.find(p => p.type === "year")?.value;
+    const monthStr = parts.find(p => p.type === "month")?.value;
+    const dayStr = parts.find(p => p.type === "day")?.value;
+
+    if (!yearStr || !monthStr || !dayStr) {
+      throw new Error("Fecha de envío inválida");
+    }
+
+    year = parseInt(yearStr, 10);
+    month = parseInt(monthStr, 10) - 1;
+    day = parseInt(dayStr, 10);
   }
 
   const validatedHolidays = new Set<string>();
@@ -34,18 +73,6 @@ export function calculatePreliminaryComplaintDeadline(params: {
 
   // Work with UTC to avoid local timezone issues of the runner
   let daysToAdd = params.businessDays;
-
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: params.timeZone,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
-  const parts = formatter.formatToParts(submitDate);
-  const year = parseInt(parts.find(p => p.type === "year")!.value, 10);
-  const month = parseInt(parts.find(p => p.type === "month")!.value, 10) - 1;
-  const day = parseInt(parts.find(p => p.type === "day")!.value, 10);
-
   const currentDate = new Date(Date.UTC(year, month, day));
 
   while (daysToAdd > 0) {

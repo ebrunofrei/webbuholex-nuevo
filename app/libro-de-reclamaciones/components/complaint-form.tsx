@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useRef, useId } from "react";
-import { ComplaintSubmissionSchema } from "@/lib/complaints/complaint.schemas";
+import { ComplaintSubmissionV2Schema } from "@/lib/complaints/complaint.schemas";
 import {
   COMPLAINT_DOCUMENT_TYPES,
   COMPLAINT_REPRESENTATIVE_ROLES,
   COMPLAINT_SUBJECT_KINDS,
   COMPLAINT_CHANNELS,
 } from "@/lib/complaints/complaint.constants";
+import {
+  generateComplaintReceiptHtml,
+  type ComplaintReceiptData,
+} from "@/lib/complaints/complaint-receipt";
 
 type FormStatus =
   | "idle"
@@ -31,17 +35,21 @@ export function ComplaintForm() {
 
   const [response, setResponse] = useState<{ sheetNumber: string; privateToken?: string } | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [receiptData, setReceiptData] = useState<ComplaintReceiptData | null>(null);
+  const [downloadingCopy, setDownloadingCopy] = useState(false);
 
   const resetForm = () => {
     setStatus("idle");
     setIdempotencyKey("");
     setResponse(null);
+    setReceiptData(null);
     setFieldErrors({});
     setGlobalError(null);
     setConsumerType("natural_person");
     setIsMinor(false);
     setAmountApplicability("not_applicable");
     setCopyStatus("idle");
+    setDownloadingCopy(false);
   };
 
   const handleCopy = async () => {
@@ -52,6 +60,64 @@ export function ComplaintForm() {
       setTimeout(() => setCopyStatus("idle"), 2000);
     } catch {
       setCopyStatus("error");
+    }
+  };
+
+  const handleDownloadCopy = () => {
+    if (!receiptData) return;
+    try {
+      setDownloadingCopy(true);
+      const html = generateComplaintReceiptHtml(receiptData);
+      if (typeof window !== "undefined" && typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Hoja-de-Reclamacion-${receiptData.sheetNumber}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } finally {
+      setDownloadingCopy(false);
+    }
+  };
+
+  const handlePrint = () => {
+    if (!receiptData || typeof window === "undefined") return;
+    try {
+      const html = generateComplaintReceiptHtml(receiptData);
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.setAttribute("aria-hidden", "true");
+      document.body.appendChild(iframe);
+
+      const frameDoc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!frameDoc || !iframe.contentWindow) {
+        document.body.removeChild(iframe);
+        return;
+      }
+
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 1000);
+    } catch {
+      window.print();
     }
   };
 
@@ -73,7 +139,7 @@ export function ComplaintForm() {
 
     // Build the DTO explicitly to avoid UI-only or internal fields.
     const dto: Record<string, unknown> = {
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
       idempotencyKey: currentKey,
       consumer: {
         consumerType: consumerType,
@@ -95,11 +161,11 @@ export function ComplaintForm() {
         facts: formData.get("complaint.facts"),
         requestedResolution: formData.get("complaint.requestedResolution"),
       },
-      confirmation: {
-        truthfulnessConfirmed: formData.get("confirmation.truthfulnessConfirmed") === "on",
-        submissionConfirmed: formData.get("confirmation.submissionConfirmed") === "on",
-        emailDeliveryRequested: formData.get("confirmation.emailDeliveryRequested") === "on",
+      declarations: {
+        truthfulnessConfirmed: formData.get("declarations.truthfulnessConfirmed") === "on",
+        emailDeliveryRequested: false,
       },
+      privacyNoticePresented: true,
     };
 
     if (consumerType === "natural_person") {
@@ -135,7 +201,7 @@ export function ComplaintForm() {
     }
 
     // Client-side validation
-    const parsed = ComplaintSubmissionSchema.safeParse(dto);
+    const parsed = ComplaintSubmissionV2Schema.safeParse(dto);
 
     if (!parsed.success) {
       const errors: Record<string, string> = {};
@@ -173,10 +239,12 @@ export function ComplaintForm() {
 
       if (res.status === 201) {
         const data = await res.json();
+        setReceiptData(data.receipt);
         setResponse({ sheetNumber: data.sheetNumber, privateToken: data.privateToken });
         setStatus("created");
       } else if (res.status === 200) {
         const data = await res.json();
+        setReceiptData(null);
         setResponse({ sheetNumber: data.sheetNumber });
         setStatus("already_exists");
       } else {
@@ -205,6 +273,7 @@ export function ComplaintForm() {
     if (path.startsWith("consumer.representative.")) return path.replace("consumer.representative.", "representative.");
     if (path.startsWith("subject.")) return path;
     if (path.startsWith("complaint.")) return path;
+    if (path.startsWith("declarations.")) return path;
     if (path.startsWith("confirmation.")) return path;
     return path;
   };
@@ -221,7 +290,7 @@ export function ComplaintForm() {
         <p className="complaints-result__message">
           {status === "created"
             ? "Su solicitud ha sido registrada exitosamente en nuestro sistema."
-            : "Esta solicitud ya fue recibida anteriormente y se encuentra en proceso."}
+            : `Esta solicitud ya había sido registrada con la hoja N.° ${response?.sheetNumber}.`}
         </p>
 
         <div className="complaints-result__sheet">
@@ -256,6 +325,111 @@ export function ComplaintForm() {
                     Copiar código
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {receiptData && (
+          <div
+            className="complaints-result__receipt-card"
+            style={{
+              marginTop: "24px",
+              border: "1px solid var(--bl-border, #e2e8f0)",
+              borderRadius: "8px",
+              background: "var(--bl-bg-card, #f8fafc)",
+              padding: "20px",
+              textAlign: "left",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+                gap: "12px",
+                borderBottom: "1px solid var(--bl-border, #e2e8f0)",
+                paddingBottom: "12px",
+                marginBottom: "16px",
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--bl-text, #0f172a)", margin: 0 }}>
+                  Constancia de la Hoja de Reclamación
+                </h3>
+                <p style={{ fontSize: "0.85rem", color: "var(--bl-text-muted, #64748b)", margin: "4px 0 0 0" }}>
+                  {receiptData.provider.legalName} — RUC {receiptData.provider.ruc}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    background: "var(--bl-primary, #0f172a)",
+                    color: "#ffffff",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "0.85rem",
+                    fontWeight: "600",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {receiptData.sheetNumber}
+                </span>
+                <p style={{ fontSize: "0.75rem", color: "var(--bl-text-muted, #64748b)", margin: "4px 0 0 0" }}>
+                  {receiptData.submittedAt}
+                </p>
+              </div>
+            </div>
+
+            <dl style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "8px 12px", fontSize: "0.875rem", margin: 0 }}>
+              <dt style={{ color: "var(--bl-text-muted, #64748b)", fontWeight: "500" }}>Consumidor:</dt>
+              <dd style={{ margin: 0, fontWeight: "600" }}>{receiptData.consumer.fullNameOrLegalName} ({receiptData.consumer.documentType}: {receiptData.consumer.documentNumber})</dd>
+
+              <dt style={{ color: "var(--bl-text-muted, #64748b)", fontWeight: "500" }}>Bien contratado:</dt>
+              <dd style={{ margin: 0 }}>{receiptData.subject.kindLabel} — {receiptData.subject.description}</dd>
+
+              <dt style={{ color: "var(--bl-text-muted, #64748b)", fontWeight: "500" }}>Tipo:</dt>
+              <dd style={{ margin: 0, fontWeight: "600" }}>{receiptData.complaint.kindLabel}</dd>
+
+              <dt style={{ color: "var(--bl-text-muted, #64748b)", fontWeight: "500" }}>Hechos:</dt>
+              <dd style={{ margin: 0, whiteSpace: "pre-wrap" }}>{receiptData.complaint.facts}</dd>
+
+              <dt style={{ color: "var(--bl-text-muted, #64748b)", fontWeight: "500" }}>Pedido:</dt>
+              <dd style={{ margin: 0, whiteSpace: "pre-wrap" }}>{receiptData.complaint.requestedResolution}</dd>
+
+              <dt style={{ color: "var(--bl-text-muted, #64748b)", fontWeight: "500" }}>Plazo legal:</dt>
+              <dd style={{ margin: 0, color: "var(--bl-text-muted, #64748b)", fontSize: "0.8rem" }}>
+                {receiptData.legalTerms.deadlineNotice}
+              </dd>
+            </dl>
+
+            <div style={{ marginTop: "16px", padding: "12px", background: "#f1f5f9", borderRadius: "6px", fontSize: "0.8rem", color: "var(--bl-text-muted, #475569)" }}>
+              <p style={{ margin: 0 }}>
+                Conserve esta constancia como acreditación fidedigna de la presentación de su reclamación ante BúhoLex.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "16px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleDownloadCopy}
+                disabled={downloadingCopy}
+                className="button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Descargar constancia (.html)
+              </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                Imprimir constancia
               </button>
             </div>
           </div>
@@ -563,6 +737,9 @@ export function ComplaintForm() {
 
           <div className="complaints-field">
             <label htmlFor={`${formId}-complaint.facts`} className="complaints-label">Detalle de los hechos</label>
+            <p className="complaints-hint" style={{fontSize: "0.8125rem", color: "var(--bl-text-muted, #64748b)", margin: "0 0 8px 0"}}>
+              Evita incluir datos sensibles o datos personales de terceros que no sean necesarios para sustentar tu reclamo o queja.
+            </p>
             <textarea id={`${formId}-complaint.facts`} name="complaint.facts" className="complaints-textarea complaints-textarea--facts" {...getAriaProps("complaint.facts")}></textarea>
             <InputError name="complaint.facts" />
           </div>
@@ -577,33 +754,30 @@ export function ComplaintForm() {
 
       {/* D. Declaraciones */}
       <fieldset className="complaints-fieldset">
-        <legend className="complaints-fieldset__legend">D. Declaraciones y confirmación</legend>
+        <legend className="complaints-fieldset__legend">D. Declaraciones</legend>
 
         <div className="complaints-checkbox-group" style={{flexDirection: "column", gap: "16px"}}>
           <div className="complaints-check">
-            <input type="checkbox" id={`${formId}-confirmation.truthfulnessConfirmed`} name="confirmation.truthfulnessConfirmed" className="complaints-check__input" {...getAriaProps("confirmation.truthfulnessConfirmed")} />
+            <input type="checkbox" id={`${formId}-declarations.truthfulnessConfirmed`} name="declarations.truthfulnessConfirmed" className="complaints-check__input" {...getAriaProps("declarations.truthfulnessConfirmed")} />
             <div>
-              <label htmlFor={`${formId}-confirmation.truthfulnessConfirmed`} className="complaints-check__label">Declaro que los datos consignados son verdaderos.</label>
-              <InputError name="confirmation.truthfulnessConfirmed" />
+              <label htmlFor={`${formId}-declarations.truthfulnessConfirmed`} className="complaints-check__label">Declaro que los datos consignados son verdaderos.</label>
+              <InputError name="declarations.truthfulnessConfirmed" />
             </div>
           </div>
 
-          <div className="complaints-check">
-            <input type="checkbox" id={`${formId}-confirmation.submissionConfirmed`} name="confirmation.submissionConfirmed" className="complaints-check__input" {...getAriaProps("confirmation.submissionConfirmed")} />
-            <div>
-              <label htmlFor={`${formId}-confirmation.submissionConfirmed`} className="complaints-check__label">
-                He leído y acepto los <a href="/terminos" className="text-link">Términos y Condiciones</a> y la <a href="/privacidad" className="text-link">Política de Privacidad</a>.
-              </label>
-              <InputError name="confirmation.submissionConfirmed" />
-            </div>
-          </div>
-
-          <div className="complaints-check">
-            <input type="checkbox" id={`${formId}-confirmation.emailDeliveryRequested`} name="confirmation.emailDeliveryRequested" className="complaints-check__input" />
-            <label htmlFor={`${formId}-confirmation.emailDeliveryRequested`} className="complaints-check__label">Solicito el envío de una copia de esta hoja a mi correo electrónico (sujeto a disponibilidad técnica del servicio).</label>
+          <div className="complaints-copy-notice" style={{ fontSize: "0.875rem", color: "var(--bl-text-muted, #64748b)" }}>
+            <p>Al finalizar el registro podrás descargar o imprimir gratuitamente una copia de tu Hoja de Reclamación.</p>
           </div>
         </div>
       </fieldset>
+
+      {/* Aviso de Privacidad informativo */}
+      <div className="complaints-privacy-notice" style={{margin: "20px 0 8px 0", fontSize: "0.875rem", color: "var(--bl-text-muted, #64748b)"}}>
+        <p>
+          El tratamiento de los datos consignados en este Libro de Reclamaciones se realiza conforme a la{" "}
+          <a href="/privacidad" className="text-link">Política de Privacidad</a> de BúhoLex.
+        </p>
+      </div>
 
       {/* E. Envío */}
       <div className="complaints-submit-wrapper">

@@ -1,13 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
   createComplaintPayloadSnapshot,
+  createComplaintPayloadSnapshotV1,
+  createComplaintPayloadSnapshotV2,
   mapComplaintDomainToInsert,
   mapInitialComplaintStatusHistoryToInsert,
   mapComplaintReceiptOutboxToInsert,
   mapComplaintCreatedAuditEventToInsert,
-  MapComplaintDomainToInsertInput
+  MapComplaintDomainToInsertInput,
+  LegalContextInputV2,
 } from "../database/mappers/complaints";
 import { canonicalizeJson } from "../lib/complaints/canonical-json";
+import { hashCanonicalJson } from "../lib/complaints/crypto";
 
 type TestSnapshot = {
   idempotencyKey?: unknown;
@@ -489,6 +493,160 @@ describe("Complaints Database Mappers", () => {
       expect((result.metadata as Record<string, unknown>).token).toBeUndefined();
       expect((result.metadata as Record<string, unknown>).email).toBeUndefined();
       expect((result as unknown as Record<string, unknown>).id).toBeUndefined();
+    });
+
+    it("permite especificar snapshotVersion 2.0", () => {
+      const result = mapComplaintCreatedAuditEventToInsert({
+        complaintId: "123",
+        createdBy: "sys",
+        snapshotVersion: "2.0",
+      });
+      expect(result.eventType).toBe("created");
+      expect(result.metadata).toEqual({ snapshotVersion: "2.0" });
+    });
+  });
+
+  describe("Snapshot V2 y Versionado Legal Server-Authoritative", () => {
+    const validLegalContext: LegalContextInputV2 = {
+      privacyPolicyVersion: "1.0",
+      privacyPolicyPublishedAt: null,
+      privacyPolicyEffectiveAt: null,
+      privacyPolicyPath: "/privacidad",
+    };
+
+    const validV2Input = {
+      schemaVersion: "2.0",
+      consumer: {
+        consumerType: "natural_person",
+        firstNames: "María",
+        lastNames: "López",
+        documentType: "dni",
+        documentNumber: "87654321",
+        email: "maria@example.com",
+        address: "Av. Brasil 456",
+        isMinor: false,
+      },
+      subject: {
+        kind: "service",
+        description: "Servicio de asesoría",
+        amountApplicability: "not_applicable",
+        amount: null,
+        currency: "PEN",
+      },
+      complaint: {
+        kind: "complaint",
+        facts: "Demora en la atención",
+        requestedResolution: "Mejorar tiempos de respuesta",
+      },
+      declarations: {
+        truthfulnessConfirmed: true,
+        emailDeliveryRequested: true,
+      },
+      privacyNoticePresented: true,
+    };
+
+    it("construye un Snapshot V2 canónico con legalContext server-authoritative", () => {
+      const snap = createComplaintPayloadSnapshot(validV2Input, validLegalContext);
+
+      expect(snap.schemaVersion).toBe("2.0");
+      expect(snap).toHaveProperty("declarations");
+      expect(snap).toHaveProperty("legalContext");
+      expect(snap).not.toHaveProperty("confirmation");
+
+      if (snap.schemaVersion === "2.0") {
+        expect(snap.declarations).toEqual({
+          truthfulnessConfirmed: true,
+          emailDeliveryRequested: true,
+        });
+        expect(snap.legalContext).toEqual({
+          privacyNoticePresented: true,
+          privacyPolicyVersion: "1.0",
+          privacyPolicyPublishedAt: null,
+          privacyPolicyEffectiveAt: null,
+          privacyPolicyPath: "/privacidad",
+        });
+      }
+    });
+
+    it("falla si se intenta crear Snapshot V2 sin legalContext", () => {
+      expect(() => createComplaintPayloadSnapshot(validV2Input)).toThrow("complaint_mapper_legal_context_required");
+    });
+
+    it("el hash canónico SHA-256 cubre el legalContext y cambia ante modificaciones", () => {
+      const snap1 = createComplaintPayloadSnapshot(validV2Input, validLegalContext);
+      const hash1 = hashCanonicalJson(snap1);
+
+      const modifiedLegalContext: LegalContextInputV2 = {
+        ...validLegalContext,
+        privacyPolicyVersion: "1.1",
+      };
+      const snap2 = createComplaintPayloadSnapshot(validV2Input, modifiedLegalContext);
+      const hash2 = hashCanonicalJson(snap2);
+
+      expect(hash1.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(hash2.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(hash1.sha256).not.toBe(hash2.sha256);
+    });
+
+    it("el hash canónico SHA-256 cambia si cambian las declaraciones", () => {
+      const snap1 = createComplaintPayloadSnapshot(validV2Input, validLegalContext);
+      const hash1 = hashCanonicalJson(snap1);
+
+      const snap2 = createComplaintPayloadSnapshot({
+        ...validV2Input,
+        declarations: {
+          truthfulnessConfirmed: true,
+          emailDeliveryRequested: false,
+        },
+      }, validLegalContext);
+      const hash2 = hashCanonicalJson(snap2);
+
+      expect(hash1.sha256).not.toBe(hash2.sha256);
+    });
+
+    it("preserva compatibilidad hacia atrás con snapshots V1 históricos sin inventar legalContext", () => {
+      const v1HistoricalInput = {
+        schemaVersion: "1.0",
+        consumer: { firstNames: "Juan", email: "juan@example.com" },
+        subject: { kind: "product", description: "Libro físico" },
+        complaint: { facts: "No entregado", requestedResolution: "Envío" },
+        confirmation: {
+          truthfulnessConfirmed: true,
+          submissionConfirmed: true,
+          emailDeliveryRequested: false,
+        },
+      };
+
+      const snapV1 = createComplaintPayloadSnapshot(v1HistoricalInput);
+      expect(snapV1.schemaVersion).toBe("1.0");
+      expect(snapV1).toHaveProperty("confirmation");
+      expect(snapV1).not.toHaveProperty("declarations");
+      expect(snapV1).not.toHaveProperty("legalContext");
+    });
+
+    it("mapComplaintDomainToInsert soporta Snapshot V2 con schemaVersion 2.0", () => {
+      const snapV2 = createComplaintPayloadSnapshot(validV2Input, validLegalContext);
+      const validHash = "b".repeat(64);
+
+      const insertInput: MapComplaintDomainToInsertInput = {
+        payloadSnapshot: snapV2,
+        payloadHash: validHash,
+        privateTokenHash: validHash,
+        tokenHashKeyVersion: 1,
+        idempotencyKeyHash: validHash,
+        idempotencyHashKeyVersion: 1,
+        sheetYear: 2026,
+        sheetSequence: 42,
+        sheetNumber: "LR-2026-000042",
+        deadlineAt: "2026-11-20",
+        submittedAt: new Date("2026-10-28T14:00:00Z"),
+      };
+
+      const result = mapComplaintDomainToInsert(insertInput);
+      expect(result.schemaVersion).toBe("2.0");
+      expect(result.sheetNumber).toBe("LR-2026-000042");
+      expect(result.payloadSnapshot).toEqual(snapV2);
+      expect(result.payloadHash).toBe(validHash);
     });
   });
 });

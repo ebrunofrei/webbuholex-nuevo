@@ -149,6 +149,7 @@ export async function POST(request: Request) {
           status: "created",
           sheetNumber: result.sheetNumber,
           privateToken: result.privateToken,
+          receipt: result.receipt,
         },
         { status: 201, headers: { "Cache-Control": "no-store", "Content-Type": "application/json" } }
       );

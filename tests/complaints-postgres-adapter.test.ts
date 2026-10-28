@@ -63,7 +63,7 @@ describe("Complaints Postgres Adapter", () => {
         sheetNumber: "LR-2026-001",
         status: "received",
         submittedAt: mockDate,
-        deadlineAt: "2026-08-06"
+        deadlineAt: "2026-08-06",
       };
       const mockSelect = vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([mockRow]) })) })) }));
       const mockDb = {

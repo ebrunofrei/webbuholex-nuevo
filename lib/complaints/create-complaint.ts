@@ -2,11 +2,13 @@ import "server-only";
 import { ComplaintsRepository } from "@/database/repositories/complaints.repository";
 import { Clock, VersionedHmacSecret, CreateComplaintResult } from "@/database/repositories/complaints.types";
 import { RandomBytesSource, createComplaintPrivateToken } from "./complaint-identifiers";
-import { createComplaintPayloadSnapshot } from "@/database/mappers/complaints";
+import { createComplaintPayloadSnapshot, LegalContextInputV2 } from "@/database/mappers/complaints";
 import { buildComplaintSubmission } from "./complaint.builder";
 import { deriveComplaintAccessTokenDigest, deriveComplaintIdempotencyDigest, hashCanonicalJson } from "./crypto";
 import { calculatePreliminaryComplaintDeadline } from "./complaint-deadline";
 import { ComplaintsValidationError, ComplaintsInternalError } from "./complaints-errors";
+import { LEGAL_DOCUMENTS } from "@/lib/legal/legal-documents";
+import { buildComplaintReceiptFromSnapshot } from "./complaint-receipt";
 
 export interface CreateComplaintDependencies {
   readonly repository: ComplaintsRepository;
@@ -31,7 +33,7 @@ export async function createComplaint(
     throw new ComplaintsValidationError("complaint_validation_failed");
   }
 
-  const normalized = buildResult.value as unknown as Record<string, unknown>;
+  const normalized = buildResult.value;
 
   const now = deps.clock.now();
   if (!(now instanceof Date) || isNaN(now.getTime())) {
@@ -77,7 +79,15 @@ export async function createComplaint(
     keyVersion: deps.idempotencySecret.version,
   });
 
-  const snapshot = createComplaintPayloadSnapshot(normalized);
+  const legalPrivacy = LEGAL_DOCUMENTS.privacy;
+  const legalContext: LegalContextInputV2 = {
+    privacyPolicyVersion: legalPrivacy.version,
+    privacyPolicyPublishedAt: legalPrivacy.publishedAt,
+    privacyPolicyEffectiveAt: legalPrivacy.effectiveAt,
+    privacyPolicyPath: legalPrivacy.canonicalPath,
+  };
+
+  const snapshot = createComplaintPayloadSnapshot(normalized, legalContext);
   const hashResult = hashCanonicalJson(snapshot);
 
   const repoResult = await deps.repository.createComplaint({
@@ -103,6 +113,12 @@ export async function createComplaint(
     };
   }
 
+  const receipt = buildComplaintReceiptFromSnapshot({
+    sheetNumber: repoResult.sheetNumber,
+    submittedAt: repoResult.submittedAt,
+    payloadSnapshot: snapshot,
+  });
+
   return {
     kind: "created",
     complaintId: repoResult.complaintId,
@@ -111,5 +127,6 @@ export async function createComplaint(
     submittedAt: repoResult.submittedAt,
     deadlineAt: repoResult.deadlineAt,
     privateToken,
+    receipt,
   };
 }

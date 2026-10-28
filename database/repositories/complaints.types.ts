@@ -1,5 +1,6 @@
 import type { ComplaintStatus } from "@/lib/complaints/complaint.types";
-import type { ComplaintPayloadSnapshotV1 } from "../mappers/complaints";
+import type { ComplaintPayloadSnapshot } from "../mappers/complaints";
+import type { ComplaintReceiptData } from "@/lib/complaints/complaint-receipt";
 
 export interface Clock {
   now(): Date;
@@ -37,6 +38,7 @@ export type CreateComplaintResult =
       readonly submittedAt: Date;
       readonly deadlineAt: string;
       readonly privateToken: string;
+      readonly receipt: ComplaintReceiptData;
     }
   | {
       readonly kind: "already_exists";
@@ -96,7 +98,7 @@ export interface ComplaintsOutboxWorkerPersistenceAdapter {
 }
 
 export interface CreateComplaintRepositoryInput {
-  readonly payloadSnapshot: ComplaintPayloadSnapshotV1;
+  readonly payloadSnapshot: ComplaintPayloadSnapshot;
   readonly payloadHash: string;
   readonly privateTokenHash: string;
   readonly tokenHashKeyVersion: number;

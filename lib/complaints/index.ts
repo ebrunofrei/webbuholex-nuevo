@@ -7,3 +7,5 @@ export * from "./complaint-identifiers";
 export * from "./complaint-deadline";
 export * from "./complaint.errors";
 export * from "./complaint.builder";
+export * from "./complaint-receipt";
+export * from "./complaint-holidays";

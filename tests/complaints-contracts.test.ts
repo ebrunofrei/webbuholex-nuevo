@@ -507,9 +507,26 @@ describe("Complaints Contracts", () => {
       const input = { ...builderBase, confirmation: { truthfulnessConfirmed: true, submissionConfirmed: true, emailDeliveryRequested: false } };
       const result = buildComplaintSubmission(input);
       expect(result.ok).toBe(true);
-      if (result.ok) {
+      if (result.ok && result.value.schemaVersion === "1.0") {
         expect(result.value.confirmation).toBeDefined();
         expect(result.value.confirmation.truthfulnessConfirmed).toBe(true);
+      }
+    });
+
+    it("declarations tratado explícitamente en V2", () => {
+      const baseWithoutConfirmation: Record<string, unknown> = { ...builderBase };
+      delete baseWithoutConfirmation.confirmation;
+      const v2Input = {
+        ...baseWithoutConfirmation,
+        schemaVersion: "2.0",
+        declarations: { truthfulnessConfirmed: true, emailDeliveryRequested: false },
+        privacyNoticePresented: true,
+      };
+      const result = buildComplaintSubmission(v2Input);
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value.schemaVersion === "2.0") {
+        expect(result.value.declarations).toBeDefined();
+        expect(result.value.declarations.truthfulnessConfirmed).toBe(true);
       }
     });
 
@@ -654,6 +671,66 @@ describe("Complaints Contracts", () => {
       } finally {
         JSON.parse = oldParse;
       }
+    });
+  });
+
+  describe("V2 privacyNoticePresented requirement", () => {
+    const validV2 = {
+      schemaVersion: "2.0" as const,
+      idempotencyKey: "12345678",
+      consumer: {
+        consumerType: "natural_person" as const,
+        firstNames: "María",
+        lastNames: "García",
+        documentType: "dni" as const,
+        documentNumber: "12345678",
+        email: "maria@example.com",
+        address: "Lima, Perú",
+        isMinor: false,
+      },
+      subject: {
+        kind: "service" as const,
+        description: "Consultoría digital",
+        amountApplicability: "not_applicable" as const,
+        amount: null,
+        currency: "PEN" as const,
+      },
+      complaint: {
+        kind: "claim" as const,
+        facts: "Hechos descritos con precisión.",
+        requestedResolution: "Resolución solicitada.",
+      },
+      declarations: {
+        truthfulnessConfirmed: true as const,
+        emailDeliveryRequested: false,
+      },
+      privacyNoticePresented: true as const,
+    };
+
+    it("valida exitosamente V2 cuando privacyNoticePresented es literal true", () => {
+      const result = ComplaintSubmissionSchema.safeParse(validV2);
+      expect(result.success).toBe(true);
+    });
+
+    it("falla V2 si privacyNoticePresented es omitido", () => {
+      const missingNotice: Record<string, unknown> = { ...validV2 };
+      delete missingNotice.privacyNoticePresented;
+      const result = ComplaintSubmissionSchema.safeParse(missingNotice);
+      expect(result.success).toBe(false);
+    });
+
+    it("falla V2 si privacyNoticePresented es false o diferente de true", () => {
+      const invalidNotice = {
+        ...validV2,
+        privacyNoticePresented: false,
+      };
+      const result = ComplaintSubmissionSchema.safeParse(invalidNotice);
+      expect(result.success).toBe(false);
+    });
+
+    it("preserva compatibilidad con V1 histórica", () => {
+      const resultV1 = ComplaintSubmissionSchema.safeParse(validBase);
+      expect(resultV1.success).toBe(true);
     });
   });
 });

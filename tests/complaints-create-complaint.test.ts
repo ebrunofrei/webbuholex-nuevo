@@ -17,14 +17,14 @@ describe("Complaints Use Case - createComplaint", () => {
 
   beforeEach(() => {
     mockRepo = {
-      createComplaint: vi.fn().mockResolvedValue({
+      createComplaint: vi.fn().mockImplementation(async () => ({
         kind: "created",
         complaintId: "c-1",
         sheetNumber: "LR-2026-000001",
         status: "received",
         submittedAt: new Date("2026-08-06T12:00:00Z"),
         deadlineAt: "2026-08-27",
-      }),
+      })),
     };
 
     deps = {
@@ -172,20 +172,22 @@ describe("Complaints Use Case - createComplaint", () => {
     expect(repoCall).not.toHaveProperty("holidays");
   });
 
-  it("already_exists no añade token, token no aparece en JSON de already_exists", async () => {
-    mockRepo.createComplaint = vi.fn().mockResolvedValue({
+  it("already_exists no añade token ni receipt, no aparecen en JSON de already_exists", async () => {
+    mockRepo.createComplaint = vi.fn().mockImplementation(async () => ({
       kind: "already_exists",
       complaintId: "c-1",
       sheetNumber: "LR-2026-000001",
       status: "received",
       submittedAt: new Date(),
       deadlineAt: "2026-08-27",
-    });
+    }));
 
     const res = await createComplaint(defaultInput, "idem-key-1234567890", deps);
     expect(res.kind).toBe("already_exists");
     expect(res).not.toHaveProperty("privateToken");
+    expect(res).not.toHaveProperty("receipt");
     expect(JSON.stringify(res)).not.toContain("privateToken");
+    expect(JSON.stringify(res)).not.toContain("receipt");
   });
 
   it("repositorio llamado una vez", async () => {
@@ -256,5 +258,64 @@ describe("Complaints Use Case - createComplaint", () => {
     expect(snapshotStr).not.toContain("c-hacked");
     expect(snapshotStr).not.toContain("closed");
     expect(snapshotStr).not.toContain("leak");
+  });
+
+  it("seguridad idempotencia: first request 201 vs replay 200 (sin token ni receipt ni PII, no muta registro, key != credencial de lectura)", async () => {
+    const originalSubmittedAt = new Date("2026-08-06T12:00:00Z");
+
+    // First request: created
+    const firstResult = await createComplaint(defaultInput, "idem-replay-key-123456", deps);
+    expect(firstResult.kind).toBe("created");
+    if (firstResult.kind !== "created") return;
+
+    expect(firstResult.sheetNumber).toBe("LR-2026-000001");
+    expect(firstResult.receipt).toBeDefined();
+    expect(firstResult.receipt.sheetNumber).toBe("LR-2026-000001");
+    expect(firstResult.receipt.complaint.facts).toBe("Recibí dañado");
+    expect(firstResult.privateToken).toBeDefined();
+
+    // Second request with same idempotency key but different input data
+    const secondInputDifferent = {
+      ...defaultInput,
+      consumer: {
+        ...defaultInput.consumer,
+        firstNames: "Carlos",
+        lastNames: "Modificado",
+      },
+      complaint: {
+        ...defaultInput.complaint,
+        facts: "HECHOS MODIFICADOS EN SEGUNDO REQUEST QUE NO DEBEN ALTERAR NADA",
+      },
+    };
+
+    // Repo returns already_exists with persisted sheetNumber and submittedAt
+    mockRepo.createComplaint = vi.fn().mockResolvedValue({
+      kind: "already_exists",
+      complaintId: "c-1",
+      sheetNumber: "LR-2026-000001",
+      status: "received",
+      submittedAt: originalSubmittedAt,
+      deadlineAt: "2026-08-27",
+    });
+
+    const replayResult = await createComplaint(secondInputDifferent, "idem-replay-key-123456", deps);
+    expect(replayResult.kind).toBe("already_exists");
+    if (replayResult.kind !== "already_exists") return;
+
+    // Must have same sheetNumber
+    expect(replayResult.sheetNumber).toBe(firstResult.sheetNumber);
+
+    // Security: idempotency key != access credential
+    // Must NOT have privateToken
+    expect(replayResult).not.toHaveProperty("privateToken");
+    // Must NOT have receipt
+    expect(replayResult).not.toHaveProperty("receipt");
+    // Must NOT leak consumer PII or complaint facts
+    expect(replayResult).not.toHaveProperty("consumer");
+    expect(replayResult).not.toHaveProperty("complaint");
+    expect(replayResult).not.toHaveProperty("payloadSnapshot");
+
+    // SubmittedAt matches original persisted time
+    expect(replayResult.submittedAt).toEqual(originalSubmittedAt);
   });
 });

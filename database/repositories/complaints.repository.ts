@@ -60,13 +60,14 @@ export function createComplaintsRepository(adapter: ComplaintsPersistenceAdapter
           const auditInsert = mapComplaintCreatedAuditEventToInsert({
             complaintId: summary.id,
             createdBy: "system",
+            snapshotVersion: input.payloadSnapshot.schemaVersion,
           });
           await tx.insertCreatedAuditEvent(auditInsert);
 
-          const consumerObj = input.payloadSnapshot.consumer as Record<string, unknown> | undefined;
+          const consumer = input.payloadSnapshot.consumer;
           let email = "";
-          if (consumerObj && typeof consumerObj.email === "string") {
-            email = consumerObj.email;
+          if (consumer && typeof consumer === "object" && "email" in consumer && typeof consumer.email === "string") {
+            email = consumer.email;
           }
 
           const outboxInsert = mapComplaintReceiptOutboxToInsert({

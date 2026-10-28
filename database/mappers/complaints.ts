@@ -8,10 +8,54 @@ export interface ComplaintPayloadSnapshotV1 {
   readonly confirmation: unknown;
 }
 
+export interface ComplaintPayloadSnapshotV2 {
+  readonly schemaVersion: "2.0";
+  readonly consumer: unknown;
+  readonly subject: unknown;
+  readonly complaint: unknown;
+  readonly declarations: {
+    readonly truthfulnessConfirmed: true;
+    readonly emailDeliveryRequested: boolean;
+  };
+  readonly legalContext: {
+    readonly privacyNoticePresented: true;
+    readonly privacyPolicyVersion: string;
+    readonly privacyPolicyPublishedAt: string | null;
+    readonly privacyPolicyEffectiveAt: string | null;
+    readonly privacyPolicyPath: "/privacidad";
+  };
+}
+
+export type ComplaintPayloadSnapshot = ComplaintPayloadSnapshotV1 | ComplaintPayloadSnapshotV2;
+
+export interface LegalContextInputV2 {
+  readonly privacyPolicyVersion: string;
+  readonly privacyPolicyPublishedAt: string | null;
+  readonly privacyPolicyEffectiveAt: string | null;
+  readonly privacyPolicyPath: "/privacidad";
+}
+
 export function createComplaintPayloadSnapshot(
-  normalized: Record<string, unknown>
+  normalized: unknown,
+  legalContext?: LegalContextInputV2
+): ComplaintPayloadSnapshot {
+  assertPlainObject(normalized);
+
+  const schemaVersion = normalized.schemaVersion;
+  if (schemaVersion === "2.0" || ("declarations" in normalized && !("confirmation" in normalized))) {
+    if (!legalContext) {
+      throw new Error("complaint_mapper_legal_context_required");
+    }
+    return createComplaintPayloadSnapshotV2(normalized, legalContext);
+  }
+
+  return createComplaintPayloadSnapshotV1(normalized);
+}
+
+export function createComplaintPayloadSnapshotV1(
+  normalized: unknown
 ): ComplaintPayloadSnapshotV1 {
-  validateSnapshotRoot(normalized);
+  assertPlainObject(normalized);
 
   return {
     schemaVersion: "1.0",
@@ -22,82 +66,144 @@ export function createComplaintPayloadSnapshot(
   };
 }
 
+export function createComplaintPayloadSnapshotV2(
+  normalized: unknown,
+  legalContext: LegalContextInputV2
+): ComplaintPayloadSnapshotV2 {
+  assertPlainObject(normalized);
+
+  return {
+    schemaVersion: "2.0",
+    consumer: buildConsumer(normalized.consumer),
+    subject: buildSubject(normalized.subject),
+    complaint: buildComplaint(normalized.complaint),
+    declarations: buildDeclarationsV2(normalized.declarations),
+    legalContext: buildLegalContextV2(legalContext),
+  };
+}
+
 function buildConsumer(input: unknown): unknown {
-  const obj = validateAndCastObject(input);
+  assertPlainObject(input);
   const result: Record<string, unknown> = {};
 
-  copyProp(obj, result, "consumerType");
-  copyProp(obj, result, "firstNames");
-  copyProp(obj, result, "lastNames");
-  copyProp(obj, result, "documentType");
-  copyProp(obj, result, "documentNumber");
-  copyProp(obj, result, "email");
-  copyProp(obj, result, "phone");
-  copyProp(obj, result, "address");
-  copyProp(obj, result, "isMinor");
+  copyProp(input, result, "consumerType");
+  copyProp(input, result, "firstNames");
+  copyProp(input, result, "lastNames");
+  copyProp(input, result, "documentType");
+  copyProp(input, result, "documentNumber");
+  copyProp(input, result, "email");
+  copyProp(input, result, "phone");
+  copyProp(input, result, "address");
+  copyProp(input, result, "isMinor");
 
-  if (Object.prototype.hasOwnProperty.call(obj, "representative") && obj.representative !== undefined) {
-    if (obj.representative === null) {
+  if (Object.prototype.hasOwnProperty.call(input, "representative") && input.representative !== undefined) {
+    if (input.representative === null) {
       result.representative = null;
     } else {
-      const repObj = validateAndCastObject(obj.representative);
+      assertPlainObject(input.representative);
       const repResult: Record<string, unknown> = {};
-      copyProp(repObj, repResult, "firstNames");
-      copyProp(repObj, repResult, "lastNames");
-      copyProp(repObj, repResult, "documentType");
-      copyProp(repObj, repResult, "documentNumber");
-      copyProp(repObj, repResult, "relationship");
+      copyProp(input.representative, repResult, "firstNames");
+      copyProp(input.representative, repResult, "lastNames");
+      copyProp(input.representative, repResult, "documentType");
+      copyProp(input.representative, repResult, "documentNumber");
+      copyProp(input.representative, repResult, "relationship");
       result.representative = repResult;
     }
   }
 
-  copyProp(obj, result, "legalName");
-  copyProp(obj, result, "ruc");
-  copyProp(obj, result, "representativeFirstNames");
-  copyProp(obj, result, "representativeLastNames");
-  copyProp(obj, result, "representativeDocumentType");
-  copyProp(obj, result, "representativeDocumentNumber");
-  copyProp(obj, result, "representativeRole");
+  copyProp(input, result, "legalName");
+  copyProp(input, result, "ruc");
+  copyProp(input, result, "representativeFirstNames");
+  copyProp(input, result, "representativeLastNames");
+  copyProp(input, result, "representativeDocumentType");
+  copyProp(input, result, "representativeDocumentNumber");
+  copyProp(input, result, "representativeRole");
 
   return result;
 }
 
 function buildSubject(input: unknown): unknown {
-  const obj = validateAndCastObject(input);
+  assertPlainObject(input);
   const result: Record<string, unknown> = {};
 
-  copyProp(obj, result, "kind");
-  copyProp(obj, result, "description");
-  copyProp(obj, result, "amountApplicability");
-  copyProp(obj, result, "amount");
-  copyProp(obj, result, "currency");
-  copyProp(obj, result, "transactionDate");
-  copyProp(obj, result, "referenceNumber");
-  copyProp(obj, result, "channel");
+  copyProp(input, result, "kind");
+  copyProp(input, result, "description");
+  copyProp(input, result, "amountApplicability");
+  copyProp(input, result, "amount");
+  copyProp(input, result, "currency");
+  copyProp(input, result, "transactionDate");
+  copyProp(input, result, "referenceNumber");
+  copyProp(input, result, "channel");
 
   return result;
 }
 
 function buildComplaint(input: unknown): unknown {
-  const obj = validateAndCastObject(input);
+  assertPlainObject(input);
   const result: Record<string, unknown> = {};
 
-  copyProp(obj, result, "kind");
-  copyProp(obj, result, "facts");
-  copyProp(obj, result, "requestedResolution");
+  copyProp(input, result, "kind");
+  copyProp(input, result, "facts");
+  copyProp(input, result, "requestedResolution");
 
   return result;
 }
 
 function buildConfirmation(input: unknown): unknown {
-  const obj = validateAndCastObject(input);
+  assertPlainObject(input);
   const result: Record<string, unknown> = {};
 
-  copyProp(obj, result, "truthfulnessConfirmed");
-  copyProp(obj, result, "submissionConfirmed");
-  copyProp(obj, result, "emailDeliveryRequested");
+  copyProp(input, result, "truthfulnessConfirmed");
+  copyProp(input, result, "submissionConfirmed");
+  copyProp(input, result, "emailDeliveryRequested");
 
   return result;
+}
+
+function buildDeclarationsV2(input: unknown): {
+  readonly truthfulnessConfirmed: true;
+  readonly emailDeliveryRequested: boolean;
+} {
+  assertPlainObject(input);
+  const result: Record<string, unknown> = {};
+
+  copyProp(input, result, "truthfulnessConfirmed");
+  copyProp(input, result, "emailDeliveryRequested");
+
+  if (result.truthfulnessConfirmed !== true || typeof result.emailDeliveryRequested !== "boolean") {
+    throw new Error("complaint_mapper_input_invalid");
+  }
+
+  return {
+    truthfulnessConfirmed: true,
+    emailDeliveryRequested: result.emailDeliveryRequested,
+  };
+}
+
+function buildLegalContextV2(input: unknown): ComplaintPayloadSnapshotV2["legalContext"] {
+  assertPlainObject(input);
+
+  const version = input.privacyPolicyVersion;
+  const publishedAt = input.privacyPolicyPublishedAt;
+  const effectiveAt = input.privacyPolicyEffectiveAt;
+  const path = input.privacyPolicyPath;
+
+  if (
+    typeof version !== "string" ||
+    (publishedAt !== null && typeof publishedAt !== "string") ||
+    (effectiveAt !== null && typeof effectiveAt !== "string") ||
+    path !== "/privacidad"
+  ) {
+    throw new Error("complaint_mapper_input_invalid");
+  }
+
+  return {
+    privacyNoticePresented: true,
+    privacyPolicyVersion: version,
+    privacyPolicyPublishedAt: publishedAt,
+    privacyPolicyEffectiveAt: effectiveAt,
+    privacyPolicyPath: "/privacidad",
+  };
 }
 
 function copyProp(source: Record<string, unknown>, target: Record<string, unknown>, key: string) {
@@ -110,29 +216,23 @@ function copyProp(source: Record<string, unknown>, target: Record<string, unknow
   }
 }
 
-function validateAndCastObject(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+function assertPlainObject(value: unknown): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("complaint_mapper_input_invalid");
   }
 
-  const proto = Object.getPrototypeOf(input);
+  const proto = Object.getPrototypeOf(value);
   if (proto !== Object.prototype) {
     throw new Error("complaint_mapper_input_invalid");
   }
 
-  if (Object.prototype.hasOwnProperty.call(input, "toJSON")) {
+  if (Object.prototype.hasOwnProperty.call(value, "toJSON")) {
     throw new Error("complaint_mapper_input_invalid");
   }
-
-  return input as Record<string, unknown>;
-}
-
-function validateSnapshotRoot(input: Record<string, unknown>) {
-  validateAndCastObject(input);
 }
 
 export interface MapComplaintDomainToInsertInput {
-  readonly payloadSnapshot: ComplaintPayloadSnapshotV1;
+  readonly payloadSnapshot: ComplaintPayloadSnapshot;
   readonly payloadHash: string;
 
   readonly privateTokenHash: string;
@@ -152,7 +252,7 @@ export interface MapComplaintDomainToInsertInput {
 export function mapComplaintDomainToInsert(
   input: MapComplaintDomainToInsertInput
 ): typeof complaints.$inferInsert {
-  validateMapComplaintDomainToInsertInput(input as unknown as Record<string, unknown>);
+  validateMapComplaintDomainToInsertInput(input);
 
   return {
     schemaVersion: input.payloadSnapshot.schemaVersion,
@@ -172,7 +272,8 @@ export function mapComplaintDomainToInsert(
   };
 }
 
-function validateMapComplaintDomainToInsertInput(input: Record<string, unknown>) {
+function validateMapComplaintDomainToInsertInput(input: unknown): asserts input is MapComplaintDomainToInsertInput {
+  assertPlainObject(input);
   const allowedKeys = [
     "payloadSnapshot", "payloadHash", "privateTokenHash", "tokenHashKeyVersion",
     "idempotencyKeyHash", "idempotencyHashKeyVersion", "sheetYear", "sheetSequence",
@@ -247,15 +348,16 @@ export function mapComplaintReceiptOutboxToInsert(input: {
 export function mapComplaintCreatedAuditEventToInsert(input: {
   readonly complaintId: string;
   readonly createdBy: string;
+  readonly snapshotVersion?: string;
 }): typeof complaintAuditEvents.$inferInsert {
-  if (Object.keys(input).some(k => !["complaintId", "createdBy"].includes(k))) {
+  if (Object.keys(input).some(k => !["complaintId", "createdBy", "snapshotVersion"].includes(k))) {
      throw new Error("complaint_mapper_input_invalid");
   }
   return {
     complaintId: input.complaintId,
     eventType: "created",
     createdBy: input.createdBy,
-    metadata: { snapshotVersion: "1.0" },
+    metadata: { snapshotVersion: input.snapshotVersion ?? "1.0" },
   };
 }
 

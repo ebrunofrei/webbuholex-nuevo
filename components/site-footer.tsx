@@ -20,7 +20,12 @@ const footerGroups = [
   },
   {
     title: "Legal",
-    links: [{ label: "Privacidad", href: "/privacidad/" }, { label: "Términos", href: "/terminos/" }],
+    links: [
+      { label: "Términos", href: "/terminos" },
+      { label: "Privacidad", href: "/privacidad" },
+      { label: "Cookies", href: "/cookies" },
+      { label: "Libro de Reclamaciones", href: "/libro-de-reclamaciones" },
+    ],
   },
 ] as const;
 

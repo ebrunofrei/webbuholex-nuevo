@@ -1,9 +1,16 @@
 import { z } from "zod";
-import { ComplaintSubmissionSchema, ComplaintProviderResponseSchema } from "./complaint.schemas";
+import {
+  ComplaintSubmissionSchema,
+  ComplaintSubmissionV1Schema,
+  ComplaintSubmissionV2Schema,
+  ComplaintProviderResponseSchema,
+} from "./complaint.schemas";
 import { COMPLAINT_STATUSES } from "./complaint.constants";
 import { PublicError } from "./complaint.errors";
 
 export type NormalizedComplaintSubmission = z.infer<typeof ComplaintSubmissionSchema>;
+export type NormalizedComplaintSubmissionV1 = z.infer<typeof ComplaintSubmissionV1Schema>;
+export type NormalizedComplaintSubmissionV2 = z.infer<typeof ComplaintSubmissionV2Schema>;
 export type ComplaintProviderResponse = z.infer<typeof ComplaintProviderResponseSchema>;
 export type ComplaintStatus = (typeof COMPLAINT_STATUSES)[number];
 
@@ -12,7 +19,7 @@ export type ComplaintPrivateToken = string;
 
 export interface ComplaintRecord {
   id: string;
-  schemaVersion: "1.0";
+  schemaVersion: "1.0" | "2.0";
   sheetNumber: ComplaintSheetNumber;
   privateTokenHash: string; // Token secreto, solo su hash
   consumer: NormalizedComplaintSubmission["consumer"];
@@ -21,7 +28,7 @@ export interface ComplaintRecord {
   status: ComplaintStatus;
   submittedAt: string;
   deadlineAt: string;
-  responseChannel: NormalizedComplaintSubmission["confirmation"]["emailDeliveryRequested"] extends true ? "email" : "email" | "other";
+  responseChannel: "email" | "other";
   providerResponse?: ComplaintProviderResponse;
   createdAt: string;
   updatedAt: string;

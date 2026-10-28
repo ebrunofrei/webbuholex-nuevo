@@ -67,7 +67,7 @@ describe("Complaints Database Repository", () => {
       sheetNumber: "LR-2026-000001",
       status: "received" as const,
       submittedAt: new Date(),
-      deadlineAt: "2026-08-27"
+      deadlineAt: "2026-08-27",
     }));
 
     const repo = createComplaintsRepository(mockAdapter);
@@ -171,7 +171,7 @@ describe("Complaints Database Repository", () => {
           sheetNumber: "LR-2026-000001",
           status: "received",
           submittedAt: new Date(),
-          deadlineAt: "2026-08-27"
+          deadlineAt: "2026-08-27",
         });
 
       const repo = createComplaintsRepository(mockAdapter);

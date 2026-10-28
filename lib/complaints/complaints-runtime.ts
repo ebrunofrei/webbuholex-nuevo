@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import { CreateComplaintResult } from "@/database/repositories/complaints.types";
 import { ComplaintPersistenceError, SanitizedDatabaseConstraintError } from "@/database/repositories/complaints.errors";
 import { ComplaintsServiceUnavailableError } from "./complaints-errors";
+import { getOperationalHolidays } from "./complaint-holidays";
 
 export async function submitComplaintRuntime(
   input: unknown,
@@ -38,7 +39,7 @@ export async function submitComplaintRuntime(
     randomBytes: (size: number) => crypto.randomBytes(size),
     tokenSecret: { version: 1, secret: finalTokenSecret },
     idempotencySecret: { version: 1, secret: finalIdempotencySecret },
-    holidays: new Set<string>(),
+    holidays: getOperationalHolidays(),
   };
 
   try {

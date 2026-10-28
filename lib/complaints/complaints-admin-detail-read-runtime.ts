@@ -118,7 +118,7 @@ export async function getAdminComplaintDetailRuntime(
 
     const { complaint, providerResponse, timeline, informationRequests } = result;
 
-    if (complaint.schema_version !== "1.0") {
+    if (complaint.schema_version !== "1.0" && complaint.schema_version !== "2.0") {
       return { kind: "unsupported_schema", version: complaint.schema_version };
     }
 

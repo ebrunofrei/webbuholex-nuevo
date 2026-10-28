@@ -113,6 +113,45 @@ describe("POST /api/complaints", () => {
     expect(res.status).toBe(422);
   });
 
+  const mockReceipt = {
+    sheetNumber: "LR-2026-000001",
+    submittedAt: "06/08/2026 07:00:00",
+    initialStatus: "Recibido",
+    provider: {
+      name: "BúhoLex",
+      legalName: "BUHOLEX S.A.C.",
+      ruc: "20600000001",
+      legalAddress: "Av. Manuel Olguín 335, Oficina 1205, Santiago de Surco, Lima, Perú",
+      contactEmail: "contacto@buholex.com",
+    },
+    consumer: {
+      consumerType: "natural_person" as const,
+      fullNameOrLegalName: "Juan Pérez",
+      documentType: "DNI",
+      documentNumber: "12345678",
+      email: "juan@example.com",
+      address: "Av Peru 123",
+    },
+    subject: {
+      kind: "producto" as const,
+      kindLabel: "Producto",
+      description: "Contrato",
+      amountDisplay: "No aplicable",
+    },
+    complaint: {
+      kind: "reclamo" as const,
+      kindLabel: "Reclamo",
+      facts: "Detalle",
+      requestedResolution: "Solución",
+    },
+    legalTerms: {
+      deadlineDays: 15,
+      deadlineNotice: "15 días hábiles",
+      legalBasisNotice: "DS 011-2011-PCM",
+      indecopiNotice: "INDECOPI",
+    },
+  };
+
   it("creación exitosa retorna 201 y oculta internals", async () => {
     vi.mocked(runtimeModule.submitComplaintRuntime).mockResolvedValue({
       kind: "created",
@@ -121,7 +160,8 @@ describe("POST /api/complaints", () => {
       status: "received",
       submittedAt: new Date(),
       deadlineAt: "2026-08-27",
-      privateToken: "synth-token-123"
+      privateToken: "synth-token-123",
+      receipt: mockReceipt,
     });
 
     const req = createRequest({
@@ -137,13 +177,16 @@ describe("POST /api/complaints", () => {
       success: true,
       status: "created",
       sheetNumber: "LR-2026-000001",
-      privateToken: "synth-token-123"
+      privateToken: "synth-token-123",
+      receipt: mockReceipt,
     });
     expect(json).not.toHaveProperty("complaintId");
     expect(json).not.toHaveProperty("payloadHash");
+    expect(json).not.toHaveProperty("privateTokenHash");
+    expect(json).not.toHaveProperty("idempotencyKeyHash");
   });
 
-  it("replay idempotente retorna 200 sin privateToken", async () => {
+  it("replay idempotente retorna 200 sin privateToken ni receipt ni PII", async () => {
     vi.mocked(runtimeModule.submitComplaintRuntime).mockResolvedValue({
       kind: "already_exists",
       complaintId: "c-123",
@@ -167,7 +210,15 @@ describe("POST /api/complaints", () => {
       status: "already_exists",
       sheetNumber: "LR-2026-000001",
     });
+    expect(json).not.toHaveProperty("receipt");
     expect(json).not.toHaveProperty("privateToken");
+    expect(json).not.toHaveProperty("payloadSnapshot");
+    expect(json).not.toHaveProperty("consumer");
+    expect(json).not.toHaveProperty("complaint");
+    expect(json).not.toHaveProperty("complaintId");
+    expect(json).not.toHaveProperty("payloadHash");
+    expect(json).not.toHaveProperty("privateTokenHash");
+    expect(json).not.toHaveProperty("idempotencyKeyHash");
   });
 
   it("error de validación de dominio devuelve 422", async () => {

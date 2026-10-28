@@ -3,7 +3,11 @@ import { PageHero } from "@/components/page-hero";
 import { createPageMetadata } from "@/lib/metadata";
 import { ComplaintForm } from "./components/complaint-form";
 
-export const metadata: Metadata = createPageMetadata("Libro de Reclamaciones", "Libro de Reclamaciones de BúhoLex en preparación.", "/libro-de-reclamaciones/");
+export const metadata: Metadata = createPageMetadata(
+  "Libro de Reclamaciones",
+  "Libro de Reclamaciones Virtual de BúhoLex para registrar reclamos y quejas.",
+  "/libro-de-reclamaciones"
+);
 
 export default function Page() {
   return (

@@ -195,6 +195,25 @@ export function buildComplaintSubmission(input: unknown): BuildComplaintResult {
       normalized.confirmation = cfObj;
     }
 
+    const declarationsRaw = readOwnDataProperty(input, "declarations");
+    if (declarationsRaw !== undefined) {
+      assertOrdinaryObject(declarationsRaw);
+      const dObj: Record<string, unknown> = {};
+
+      const truthfulnessConfirmed = readOwnDataProperty(declarationsRaw, "truthfulnessConfirmed");
+      if (truthfulnessConfirmed !== undefined) dObj.truthfulnessConfirmed = truthfulnessConfirmed;
+
+      const emailDeliveryRequested = readOwnDataProperty(declarationsRaw, "emailDeliveryRequested");
+      if (emailDeliveryRequested !== undefined) dObj.emailDeliveryRequested = emailDeliveryRequested;
+
+      normalized.declarations = dObj;
+    }
+
+    const privacyNoticePresented = readOwnDataProperty(input, "privacyNoticePresented");
+    if (privacyNoticePresented !== undefined) {
+      normalized.privacyNoticePresented = privacyNoticePresented;
+    }
+
     const parsed = ComplaintSubmissionSchema.safeParse(normalized);
     if (!parsed.success) {
       return { ok: false, error: COMPLAINT_VALIDATION_FAILED };

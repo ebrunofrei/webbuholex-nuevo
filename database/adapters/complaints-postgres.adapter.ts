@@ -8,7 +8,8 @@ import type {
   ComplaintStatusHistoryInsertInput,
   ComplaintOutboxInsertInput,
   ComplaintAuditInsertInput,
-  ComplaintsOutboxWorkerPersistenceAdapter
+  ComplaintsOutboxWorkerPersistenceAdapter,
+  ExistingComplaintSummary,
 } from "../repositories/complaints.types";
 import { SanitizedDatabaseConstraintError, createComplaintPersistenceError } from "../repositories/complaints.errors";
 import { ComplaintsTransaction, withComplaintsApiRole, withComplaintsAdminRole } from "../roles";
@@ -138,6 +139,16 @@ class DrizzleComplaintTransactionExecutor implements ComplaintTransactionExecuto
   }
 }
 
+function isComplaintStatus(status: string): status is ComplaintStatus {
+  return (
+    status === "received" ||
+    status === "under_review" ||
+    status === "awaiting_information" ||
+    status === "answered" ||
+    status === "closed"
+  );
+}
+
 function createCoreAdapter(
   runInRole: <T>(callback: (tx: ComplaintsTransaction) => Promise<T>) => Promise<T>
 ): ComplaintsPersistenceAdapter {
@@ -145,7 +156,7 @@ function createCoreAdapter(
     async findByIdempotencyDigest(
       digest: string,
       keyVersion: number
-    ): Promise<{ id: string; sheetNumber: string; status: "received" | "under_review" | "awaiting_information" | "answered" | "closed"; submittedAt: Date; deadlineAt: string } | null> {
+    ): Promise<ExistingComplaintSummary | null> {
       try {
         return await runInRole(async (tx) => {
           const rows = await tx
@@ -174,14 +185,20 @@ function createCoreAdapter(
             !row ||
             typeof row.id !== "string" ||
             typeof row.sheetNumber !== "string" ||
-            typeof row.status !== "string" ||
+            !isComplaintStatus(row.status) ||
             !(row.submittedAt instanceof Date) ||
             typeof row.deadlineAt !== "string"
           ) {
             return null;
           }
 
-          return row as { id: string; sheetNumber: string; status: "received" | "under_review" | "awaiting_information" | "answered" | "closed"; submittedAt: Date; deadlineAt: string };
+          return {
+            id: row.id,
+            sheetNumber: row.sheetNumber,
+            status: row.status,
+            submittedAt: row.submittedAt,
+            deadlineAt: row.deadlineAt,
+          };
         });
       } catch (error) {
         throw translateDatabaseError(error);

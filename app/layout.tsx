@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { SiteFrame } from "@/components/site-frame";
 import { siteConfig } from "@/lib/site-config";
+import { Analytics } from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <a className="skip-link" href="#contenido">Saltar al contenido principal</a>
         <SiteFrame>{children}</SiteFrame>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema).replace(/</g, "\\u003c") }} />
+        <Analytics />
       </body>
     </html>
   );
