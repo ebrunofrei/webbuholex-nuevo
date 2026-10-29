@@ -5,6 +5,8 @@ import { TermsAndConditionsV1 } from "@/lib/legal/terms/v1";
 import { CookieNoticeV1 } from "@/lib/legal/cookies/v1";
 import { render, screen } from "@testing-library/react";
 
+const LEGAL_V1_RELEASE_TIMESTAMP = "2026-10-28T22:15:28-05:00";
+
 describe("Registro Central de Documentos Legales", () => {
   it("contiene los tres contratos legales canónicos tipados", () => {
     expect(LEGAL_DOCUMENTS).toHaveProperty("privacy");
@@ -24,16 +26,21 @@ describe("Registro Central de Documentos Legales", () => {
     expect(LEGAL_DOCUMENTS.cookies.canonicalPath).toBe("/cookies");
   });
 
-  it("gate de despliegue: publishedAt y effectiveAt permanecen null y no inventados", () => {
-    // REGLA CRÍTICA: No inventar fechas antes del despliegue en producción.
-    expect(LEGAL_DOCUMENTS.privacy.publishedAt).toBeNull();
-    expect(LEGAL_DOCUMENTS.privacy.effectiveAt).toBeNull();
+  it("custodia las fechas oficiales e inmutables del release legal V1.0", () => {
+    expect(LEGAL_DOCUMENTS.privacy.version).toBe("1.0");
+    expect(LEGAL_DOCUMENTS.privacy.publishedAt).toBe(LEGAL_V1_RELEASE_TIMESTAMP);
+    expect(LEGAL_DOCUMENTS.privacy.effectiveAt).toBe(LEGAL_V1_RELEASE_TIMESTAMP);
+    expect(LEGAL_DOCUMENTS.privacy.canonicalPath).toBe("/privacidad");
 
-    expect(LEGAL_DOCUMENTS.terms.publishedAt).toBeNull();
-    expect(LEGAL_DOCUMENTS.terms.effectiveAt).toBeNull();
+    expect(LEGAL_DOCUMENTS.terms.version).toBe("1.0");
+    expect(LEGAL_DOCUMENTS.terms.publishedAt).toBe(LEGAL_V1_RELEASE_TIMESTAMP);
+    expect(LEGAL_DOCUMENTS.terms.effectiveAt).toBe(LEGAL_V1_RELEASE_TIMESTAMP);
+    expect(LEGAL_DOCUMENTS.terms.canonicalPath).toBe("/terminos");
 
-    expect(LEGAL_DOCUMENTS.cookies.publishedAt).toBeNull();
-    expect(LEGAL_DOCUMENTS.cookies.effectiveAt).toBeNull();
+    expect(LEGAL_DOCUMENTS.cookies.version).toBe("1.0");
+    expect(LEGAL_DOCUMENTS.cookies.publishedAt).toBe(LEGAL_V1_RELEASE_TIMESTAMP);
+    expect(LEGAL_DOCUMENTS.cookies.effectiveAt).toBe(LEGAL_V1_RELEASE_TIMESTAMP);
+    expect(LEGAL_DOCUMENTS.cookies.canonicalPath).toBe("/cookies");
   });
 
   it("getLegalDocument devuelve el documento solicitado", () => {
