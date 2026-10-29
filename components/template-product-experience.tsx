@@ -28,7 +28,7 @@ export function TemplateProductExperience({ product }: { product: TemplateMarket
       <header className="product-public-hero" id="resumen">
         <div className="container product-public-hero-grid">
           <div>
-            <div className="product-breadcrumb"><Link href="/plantillas/">Plantillas</Link><span>/</span><Link href="/plantillas/legales/">Legales</Link><span>/</span><strong>{product.code}</strong></div>
+            <div className="product-breadcrumb"><Link href="/plantillas">Plantillas</Link><span>/</span><Link href="/plantillas/legales">Legales</Link><span>/</span><strong>{product.code}</strong></div>
             <span className="preview-badge">{product.availabilityLabel}</span>
             <p className="eyebrow">{product.matter} · {product.jurisdiction}</p>
             <h1>{product.commercialTitle}</h1>
@@ -77,7 +77,7 @@ export function TemplateProductExperience({ product }: { product: TemplateMarket
           </section>
 
           <section className="product-accordion-section" id="preguntas" aria-labelledby="faq-title"><p className="eyebrow">Preguntas frecuentes</p><h2 id="faq-title">Lo esencial antes de elegir</h2>{product.frequentlyAskedQuestions.map((item) => <details key={item.question}><summary><span>{item.question}</span><b aria-hidden="true">+</b></summary><p>{item.answer}</p></details>)}</section>
-          <Link href="/plantillas/">Volver al catálogo de plantillas</Link>
+          <Link href="/plantillas">Volver al catálogo de plantillas</Link>
         </div>
 
         <aside className="product-commercial-summary" aria-labelledby="commercial-summary-title">
@@ -85,7 +85,7 @@ export function TemplateProductExperience({ product }: { product: TemplateMarket
           <h2 id="commercial-summary-title">{product.commercialTitle}</h2>
           <p>{product.packageCounts.contracts} contratos editables, {product.packageCounts.annexes} anexos y documentos auxiliares.</p>
           <dl><div><dt>Jurisdicción</dt><dd>{product.jurisdiction}</dd></div><div><dt>Versión</dt><dd>{product.version}</dd></div><div><dt>Licencia</dt><dd>Pendiente</dd></div><div><dt>Precio</dt><dd>Pendiente</dd></div></dl>
-          <Link href="/consulta-profesional/" className="button product-disabled-action">Solicitar personalización</Link>
+          <Link href="/consulta-profesional" className="button product-disabled-action">Solicitar personalización</Link>
           <p className="commercial-pending-note">Vista previa editorial. No disponible para compra o descarga.</p>
           <div className="commercial-safety"><span>Sin compra activa</span><span>Sin descarga pública</span></div>
         </aside>

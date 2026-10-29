@@ -6,7 +6,12 @@ import { rentalHousingProductPackage } from "@/data/product-packages";
 import { rentalHousingContract } from "@/data/template-catalog";
 import { createPageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = createPageMetadata("Panel editorial BL-LEG-CON-001", "Control editorial privado del producto.", "/editorial/plantillas/BL-LEG-CON-001/");
+export const metadata: Metadata = createPageMetadata(
+  "Panel editorial BL-LEG-CON-001",
+  "Control editorial privado del producto.",
+  "/editorial/plantillas/BL-LEG-CON-001",
+  { noindex: true, nofollow: true },
+);
 
 export default function RentalHousingEditorialPage() {
   if (process.env.NODE_ENV !== "development") notFound();

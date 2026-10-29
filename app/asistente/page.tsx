@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createPageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = createPageMetadata("Asistente Jurídico BúhoLex", "Este espacio ofrecerá orientación inicial, ayuda para explorar contenidos y acceso a canales profesionales de BúhoLex.", "/asistente/");
+export const metadata: Metadata = createPageMetadata(
+  "Asistente Jurídico BúhoLex",
+  "Este espacio ofrecerá orientación inicial, ayuda para explorar contenidos y acceso a canales profesionales de BúhoLex.",
+  "/asistente",
+  { noindex: true },
+);
 
 export default function AssistantPage() {
   return (
@@ -40,7 +45,7 @@ export default function AssistantPage() {
         <div style={{ maxWidth: "800px", margin: "0 auto", textAlign: "center", backgroundColor: "rgba(255,255,255,0.05)", padding: "3rem 2rem", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)" }}>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "1rem" }}>¿Necesita evaluación para su caso?</h2>
           <p style={{ color: "#cbd5e1", marginBottom: "2rem" }}>Conozca nuestros servicios profesionales sujetos a revisión individual.</p>
-          <Link href="/servicios/" style={{ display: "inline-block", backgroundColor: "#ffffff", color: "#0f172a", padding: "0.75rem 1.5rem", borderRadius: "8px", fontWeight: 600, textDecoration: "none" }}>
+          <Link href="/servicios" style={{ display: "inline-block", backgroundColor: "#ffffff", color: "#0f172a", padding: "0.75rem 1.5rem", borderRadius: "8px", fontWeight: 600, textDecoration: "none" }}>
             Ver servicios disponibles
           </Link>
         </div>

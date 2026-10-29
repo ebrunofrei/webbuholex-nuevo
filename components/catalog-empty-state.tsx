@@ -21,8 +21,8 @@ export function CatalogEmptyState({ category }: CatalogEmptyStateProps) {
         <h2 id="catalog-empty-title">Todavía no hay {label} publicadas</h2>
         <p>Antes de aparecer aquí, cada documento debe ser anonimizado, revisado jurídicamente, contrastado con la normativa vigente y autorizado para publicación.</p>
         <div className="empty-actions">
-          <Link className="button" href="/consulta-profesional/">Solicitar una solución documental</Link>
-          <Link className="text-link" href="/contacto/">Proponer material para revisión <span aria-hidden="true">→</span></Link>
+          <Link className="button" href="/consulta-profesional">Solicitar una solución documental</Link>
+          <Link className="text-link" href="/contacto">Proponer material para revisión <span aria-hidden="true">→</span></Link>
         </div>
       </div>
     </section>

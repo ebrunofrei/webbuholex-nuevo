@@ -31,7 +31,7 @@ export function ServiceDetail({
       <section className={styles.detailHero}>
         <div className={styles.detailHeroContainer}>
           <Link
-            href="/servicios/"
+            href="/servicios"
             className={styles.detailBackLink}
           >
             <span aria-hidden="true">←</span>

@@ -10,8 +10,18 @@ export const metadata: Metadata = {
   description: siteConfig.description,
   applicationName: "BúhoLex",
   icons: { icon: "/icon.svg", shortcut: "/icon.svg" },
-  alternates: { canonical: "/" },
-  robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
+  alternates: { canonical: siteConfig.url },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   openGraph: { type: "website", locale: "es_PE", siteName: "BúhoLex", title: "BúhoLex | Criterio jurídico para decisiones reales", description: siteConfig.description, images: [{ url: "/og.png", width: 1736, height: 906, alt: "BúhoLex, criterio jurídico para decisiones reales" }] },
   twitter: { card: "summary_large_image", title: "BúhoLex", description: siteConfig.description, images: ["/og.png"] },
 };

@@ -6,7 +6,7 @@ import { searchJurisprudencePublicAction } from "@/lib/jurisprudence/postgres-ju
 export const metadata: Metadata = createPageMetadata(
   "Jurisprudencia",
   "El corpus jurisprudencial se encuentra actualmente en fase de preparación y revisión. Consulta resoluciones incorporadas al catálogo público de BúhoLex.",
-  "/jurisprudencia/",
+  "/jurisprudencia",
 );
 
 export default function JurisprudencePage() {

@@ -223,7 +223,7 @@ export function HomeExperience({
               profesional.
             </p>
 
-            <Link href="/asistente/">
+            <Link href="/asistente">
               Consultar al Asistente Legal{" "}
               <span aria-hidden="true">→</span>
             </Link>
@@ -265,7 +265,7 @@ export function HomeExperience({
               y aplicabilidad. No se publicarán citas sin fuente verificada.
             </p>
 
-            <Link href="/jurisprudencia/">
+            <Link href="/jurisprudencia">
               Conocer el enfoque editorial{" "}
               <span aria-hidden="true">→</span>
             </Link>
@@ -283,9 +283,9 @@ export function HomeExperience({
           </h2>
 
           <div>
-            <Link href="/asistente/">Consultar</Link>
-            <Link href="/plantillas/">Explorar plantillas</Link>
-            <Link href="/consulta-profesional/">
+            <Link href="/asistente">Consultar</Link>
+            <Link href="/plantillas">Explorar plantillas</Link>
+            <Link href="/consulta-profesional">
               Solicitar atención
             </Link>
           </div>

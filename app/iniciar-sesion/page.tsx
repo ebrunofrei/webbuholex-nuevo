@@ -5,7 +5,12 @@ import { accessBoundaries } from "@/data/access-boundaries";
 import { createPageMetadata } from "@/lib/metadata";
 import { buildLoginPath } from "@/lib/auth/return-to";
 
-export const metadata: Metadata = createPageMetadata("Acceso al Espacio Virtual Inteligente", "Acceso futuro al entorno personal de BúhoLex.", "/iniciar-sesion/");
+export const metadata: Metadata = createPageMetadata(
+  "Acceso al Espacio Virtual Inteligente",
+  "Acceso futuro al entorno personal de BúhoLex.",
+  "/iniciar-sesion",
+  { noindex: true, nofollow: true },
+);
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 

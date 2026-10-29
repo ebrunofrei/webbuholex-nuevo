@@ -14,7 +14,7 @@ export async function generateMetadata({
   return createPageMetadata(
     "Detalle jurisprudencial",
     "Consulta estructurada de resolución jurisprudencial incorporada al catálogo público de BúhoLex.",
-    `/jurisprudencia/${slug}/`,
+    `/jurisprudencia/${slug}`,
   );
 }
 

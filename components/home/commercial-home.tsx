@@ -11,7 +11,7 @@ export function CommercialHome() {
         <h1 className={styles.heroTitle}>Bienvenido a tu plataforma jurídica interactiva</h1>
       </header>
       <div className={styles.heroDualContainer}>
-        <Link className={`${styles.choice} ${styles.publicChoice}`} href="/explorar/">
+        <Link className={`${styles.choice} ${styles.publicChoice}`} href="/explorar">
           <div className={styles.choiceContent}>
             <p>ÁREA PÚBLICA</p>
             <h2>Acceder a tu Información pública</h2>

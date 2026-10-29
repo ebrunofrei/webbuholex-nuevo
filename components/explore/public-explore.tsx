@@ -2,15 +2,15 @@ import Link from "next/link";
 import styles from "./public-explore.module.css";
 
 const publicDestinations = [
-  { title: "Jurisprudencia", description: "Se prepara un corpus estructurado de resoluciones y criterios jurídicos.", href: "/jurisprudencia/", status: "En preparación" },
-  { title: "Manuales y guías", description: "Recursos de consulta y orientación general.", href: "/biblioteca/", status: "En preparación" },
-  { title: "Legislación", description: "Códigos y normativa organizada.", href: "/codigos/", status: "En preparación" },
-  { title: "Plantillas y productos", description: "Conoce las categorías y documentos que BúhoLex prepara para futuras publicaciones.", href: "/plantillas/", status: "Vista informativa" },
-  { title: "Servicios", description: "Servicios jurídicos, empresariales, administrativos, técnicos y digitales.", href: "/servicios/", status: "Disponible" },
-  { title: "Herramientas públicas", description: "Se prepara un asistente para orientación jurídica digital básica.", href: "/asistente/", status: "En preparación" },
-  { title: "Artículos", description: "Análisis y contenidos editoriales.", href: "/blog/", status: "En preparación" },
-  { title: "Institución", description: "Identidad, criterios y responsabilidad.", href: "/nosotros/", status: "Disponible" },
-  { title: "Contacto", description: "Canales corporativos autorizados de BúhoLex.", href: "/contacto/", status: "Disponible" },
+  { title: "Jurisprudencia", description: "Se prepara un corpus estructurado de resoluciones y criterios jurídicos.", href: "/jurisprudencia", status: "En preparación" },
+  { title: "Manuales y guías", description: "Recursos de consulta y orientación general.", href: "/biblioteca", status: "En preparación" },
+  { title: "Legislación", description: "Códigos y normativa organizada.", href: "/codigos", status: "En preparación" },
+  { title: "Plantillas y productos", description: "Conoce las categorías y documentos que BúhoLex prepara para futuras publicaciones.", href: "/plantillas", status: "Vista informativa" },
+  { title: "Servicios", description: "Servicios jurídicos, empresariales, administrativos, técnicos y digitales.", href: "/servicios", status: "Disponible" },
+  { title: "Herramientas públicas", description: "Se prepara un asistente para orientación jurídica digital básica.", href: "/asistente", status: "En preparación" },
+  { title: "Artículos", description: "Análisis y contenidos editoriales.", href: "/blog", status: "En preparación" },
+  { title: "Institución", description: "Identidad, criterios y responsabilidad.", href: "/nosotros", status: "Disponible" },
+  { title: "Contacto", description: "Canales corporativos autorizados de BúhoLex.", href: "/contacto", status: "Disponible" },
 ] as const;
 
 function statusTone(status: (typeof publicDestinations)[number]["status"]) {

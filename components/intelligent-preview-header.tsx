@@ -21,8 +21,8 @@ export function IntelligentPreviewHeader() {
 
         <nav className={styles.nav} aria-label="Navegación del espacio inteligente">
           <Link href="/" className={styles.navLink}>Inicio</Link>
-          <Link href="/explorar/" className={styles.navLink}>Información pública</Link>
-          <Link href="/consulta-profesional/" className={styles.cta}>Solicitar evaluación</Link>
+          <Link href="/explorar" className={styles.navLink}>Información pública</Link>
+          <Link href="/consulta-profesional" className={styles.cta}>Solicitar evaluación</Link>
         </nav>
       </div>
     </header>

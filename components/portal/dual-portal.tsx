@@ -17,7 +17,7 @@ export function DualPortal() {
       </header>
 
       <div className={styles.choices} data-active={activeZone ?? "none"} aria-label="Elija una zona de BúhoLex">
-        <Link className={`${styles.choice} ${styles.publicChoice}`} href="/explorar/" onPointerEnter={() => setActiveZone("public")} onPointerLeave={() => setActiveZone(null)} onFocus={() => setActiveZone("public")} onBlur={() => setActiveZone(null)}>
+        <Link className={`${styles.choice} ${styles.publicChoice}`} href="/explorar" onPointerEnter={() => setActiveZone("public")} onPointerLeave={() => setActiveZone(null)} onFocus={() => setActiveZone("public")} onBlur={() => setActiveZone(null)}>
           <div><p>INFORMACIÓN PÚBLICA</p><h1>Conocimiento jurídico abierto</h1><span>Jurisprudencia, manuales, legislación, herramientas, productos y servicios de libre consulta.</span></div>
           <strong className={styles.choiceAction}>EXPLORAR <i aria-hidden="true">→</i></strong>
         </Link>
@@ -28,7 +28,7 @@ export function DualPortal() {
           </div>
         </div>
 
-        <Link className={`${styles.choice} ${styles.intelligentChoice}`} href="/iniciar-sesion/" onPointerEnter={() => setActiveZone("intelligent")} onPointerLeave={() => setActiveZone(null)} onFocus={() => setActiveZone("intelligent")} onBlur={() => setActiveZone(null)}>
+        <Link className={`${styles.choice} ${styles.intelligentChoice}`} href="/iniciar-sesion" onPointerEnter={() => setActiveZone("intelligent")} onPointerLeave={() => setActiveZone(null)} onFocus={() => setActiveZone("intelligent")} onBlur={() => setActiveZone(null)}>
           <div><p>ESPACIO VIRTUAL INTELIGENTE</p><h2>Trabajo jurídico personalizado</h2><span>Análisis, proyectos, automatización y asistencia personalizada.</span><small>Acceso personal en preparación.</small></div>
           <strong className={styles.choiceAction}>INGRESAR <i aria-hidden="true">→</i></strong>
         </Link>

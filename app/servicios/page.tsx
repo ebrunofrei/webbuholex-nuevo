@@ -8,7 +8,7 @@ import { buildWhatsAppUrl } from "@/lib/contact-links";
 import { siteConfig } from "@/lib/site-config";
 import styles from "./servicios-page.module.css";
 
-export const metadata: Metadata = createPageMetadata("Servicios jurídicos", "Orientación, revisión documental y atención profesional según la complejidad del caso.", "/servicios/");
+export const metadata: Metadata = createPageMetadata("Servicios jurídicos", "Orientación, revisión documental y atención profesional según la complejidad del caso.", "/servicios");
 export default function ServicesPage() {
   return (
     <>
@@ -19,7 +19,7 @@ export default function ServicesPage() {
           <h2 id="cta-title" style={{ fontSize: "2rem", marginBottom: "1rem" }}>¿Listo para coordinar su evaluación?</h2>
           <p style={{ color: "var(--color-text-muted)", marginBottom: "2rem" }}>Contáctenos para revisar su caso y enviarle una propuesta formal.</p>
           <div style={{ display: "flex", gap: "1rem", justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
-            <Link className="button" href="/consulta-profesional/">Ir al formulario de evaluación</Link>
+            <Link className="button" href="/consulta-profesional">Ir al formulario de evaluación</Link>
             <a className="button button-secondary" href={buildWhatsAppUrl()}>{siteConfig.contact.whatsapp.display}</a>
           </div>
         </div>

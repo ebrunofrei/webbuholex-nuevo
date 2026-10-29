@@ -6,16 +6,16 @@ const footerGroups = [
   {
     title: "Explorar",
     links: [
-      { label: "Servicios", href: "/servicios/" },
-      { label: "Jurisprudencia", href: "/jurisprudencia/" },
+      { label: "Servicios", href: "/servicios" },
+      { label: "Jurisprudencia", href: "/jurisprudencia" },
     ],
   },
   {
     title: "Atención",
     links: [
-      { label: "Asistente Legal", href: "/asistente/" },
-      { label: "Consulta profesional", href: "/consulta-profesional/" },
-      { label: "Contacto", href: "/contacto/" },
+      { label: "Asistente Legal", href: "/asistente" },
+      { label: "Consulta profesional", href: "/consulta-profesional" },
+      { label: "Contacto", href: "/contacto" },
     ],
   },
   {

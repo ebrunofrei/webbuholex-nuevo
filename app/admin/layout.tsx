@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { requireWorkspaceSession } from "@/lib/auth/workspace-guard";
 import { getWorkspaceSession } from "@/lib/auth/session";
 import { adminNavigation } from "@/data/navigation";
@@ -9,6 +10,14 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+    noarchive: true,
+  },
+};
 
 export default async function AdminBackofficeLayout({ children }: { children: React.ReactNode }) {
   await requireWorkspaceSession("/admin");

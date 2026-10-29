@@ -1,6 +1,15 @@
+import type { Metadata } from "next";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { requireWorkspaceSession } from "@/lib/auth/workspace-guard";
 import { workspaceNavigation } from "@/data/navigation";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+    noarchive: true,
+  },
+};
 
 export default async function PrivateWorkspaceLayout({ children }: { children: React.ReactNode }) {
   await requireWorkspaceSession("/app");

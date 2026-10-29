@@ -5,14 +5,40 @@ import { auth0 } from "@/lib/auth/auth0";
 import { mergeAuth0ResponseHeaders } from "@/lib/auth/merge-auth0-response";
 import { createSupabaseMiddlewareClient, getSupabaseEnv } from "@/lib/auth/supabase-server";
 
+export function matchesRoutePrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+const PRIVATE_ROBOTS_PREFIXES = [
+  "/app",
+  "/admin",
+  "/editorial",
+  "/api",
+  "/auth",
+] as const;
+
+function isPrivateRobotsPath(pathname: string): boolean {
+  return PRIVATE_ROBOTS_PREFIXES.some((prefix) => matchesRoutePrefix(pathname, prefix));
+}
+
+function applyPrivateRobotsHeaders(pathname: string, response: NextResponse): NextResponse {
+  if (isPrivateRobotsPath(pathname)) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  }
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const provider = getAuthProvider();
 
+  let response: NextResponse;
   if (provider === "supabase") {
-    return await handleSupabaseMiddleware(request);
+    response = await handleSupabaseMiddleware(request);
+  } else {
+    response = await handleAuth0Middleware(request);
   }
 
-  return await handleAuth0Middleware(request);
+  return applyPrivateRobotsHeaders(request.nextUrl.pathname, response);
 }
 
 async function handleAuth0Middleware(request: NextRequest): Promise<NextResponse> {

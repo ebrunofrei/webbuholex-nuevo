@@ -91,7 +91,7 @@ export function JurisprudencePublicPage({ searchGateway, searchAction }: { reado
         <div className={styles.container}>
           <p>CAPACIDADES AVANZADAS</p>
           <h2 id="intelligent-actions-title">Analizar exige cuenta, fuentes verificadas y control editorial</h2>
-          <div>{["Analizar una sentencia", "Comparar resoluciones", "Preguntar al Asistente", "Evaluar aplicabilidad"].map((label) => <Link key={label} href="/iniciar-sesion/">{label}<span aria-hidden="true">→</span></Link>)}</div>
+          <div>{["Analizar una sentencia", "Comparar resoluciones", "Preguntar al Asistente", "Evaluar aplicabilidad"].map((label) => <Link key={label} href="/iniciar-sesion">{label}<span aria-hidden="true">→</span></Link>)}</div>
         </div>
       </section>
       <div className={styles.container}><JurisprudenceAssistedDemo /></div>

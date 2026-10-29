@@ -6,7 +6,12 @@ import { rentalHousingContract } from "@/data/template-catalog";
 import { createPageMetadata } from "@/lib/metadata";
 import { buildTemplateMarketplaceProduct } from "@/lib/template-marketplace";
 
-export const metadata: Metadata = createPageMetadata(rentalHousingContract.commercialTitle, rentalHousingContract.shortDescription, `/plantillas/legales/${rentalHousingContract.slug}/`);
+export const metadata: Metadata = createPageMetadata(
+  rentalHousingContract.commercialTitle,
+  rentalHousingContract.shortDescription,
+  `/plantillas/legales/${rentalHousingContract.slug}`,
+  { noindex: true },
+);
 
 export default function RentalHousingContractPage() {
   if (process.env.NODE_ENV !== "development") notFound();
